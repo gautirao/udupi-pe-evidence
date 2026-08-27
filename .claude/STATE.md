@@ -42,6 +42,7 @@ Guardrails for the milestone:
 - NONE — paused per user request before Issue 1 implementation.
 
 ## Recent Completions (last 6)
+- #2345 (visual-cluster marker cards leak stale residential hero content into schools journey) → PR #2358 OPEN, awaiting review (2026-08-27) [/quick]
 - #2177 (City Launch checksum-drift false positive blocking promotion) → PR #2178 OPEN, READY_AWAITING_OWNER_MANUAL_TEST (2026-08-15) [/quick]
 - #2175 (City Launch rerun succeeds but leaves admin on dead old-revision screen) → PR #2176 merged 4eb7ecb0 (2026-08-15)
 - #2151 (City Launch preview city-identity + Agri corridor bugs) → PR #2167 merged, plus follow-ups #2169/#2170/#2171 → PRs #2173/#2172/#2174 all merged (2026-08-15)

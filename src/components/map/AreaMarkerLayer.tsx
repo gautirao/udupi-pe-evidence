@@ -970,7 +970,6 @@ function makeAreaVisualClusterCard(
   const titleAttr = anyNameTruncated ? `title="${fullNamesLabel}"` : '';
   const listingsLabel = escapeHtml(formatListingCount(totalListingCount));
   const countLabelHtml = escapeHtml(countLabel);
-  const ariaLabel = `${fullNamesLabel}, ${countLabelHtml}, ${listingsLabel}`;
 
   // Issue #2330 — Zoom in now renders via the shared `markerShellHtml` shell
   // (light cream/lavender identity + white footer in accent text), replacing
@@ -979,6 +978,14 @@ function makeAreaVisualClusterCard(
   // journey flag `accent` was derived from) rather than adding a second
   // journey parameter to this function's signature.
   const isSchools = journeyAttr !== '';
+  // Issue #2345 — `ariaLabel` fed the same unconditional residential
+  // listings phrase into the marker's accessible name regardless of journey,
+  // a second (screen-reader-facing) leak of the stale-content bug alongside
+  // `heroRow`. Schools-journey cards omit it here too, matching `heroRow`'s
+  // `isSchools` gate.
+  const ariaLabel = isSchools
+    ? `${fullNamesLabel}, ${countLabelHtml}`
+    : `${fullNamesLabel}, ${countLabelHtml}, ${listingsLabel}`;
   // `accent` (COPPER_500/PLUM_600) is the caller's pre-resolved journey
   // accent, kept for signature compatibility with both call sites; the
   // shared shell resolves its OWN footer text/icon colour (COPPER_600/
@@ -1010,8 +1017,20 @@ function makeAreaVisualClusterCard(
     totalListingCount > 0 ? escapeHtml(totalListingCount === 1 ? 'listing' : 'listings') : undefined;
   const zeroPhraseHtml = totalListingCount > 0 ? undefined : listingsLabel;
 
-  const heroRow =
-    zeroPhraseHtml != null
+  // Issue #2345 — the residential listings hero (count/unit line, and the
+  // 'No listings yet' zero-phrase) is OMITTED entirely in the schools
+  // journey. This card never shows a school-count metric either (see the
+  // locked module doc above: summing member `schoolCount`s would
+  // double-count across areas), so a schools-journey card correctly shows
+  // NO hero metric at all — identity name + the existing "+N areas"
+  // count-label badge + footer only. Before this fix, `heroRow` had no
+  // journey branch, so a residential listings number stayed visible after
+  // switching to the schools journey (the marker's `setIcon` DID fire on
+  // journey switch — journeyAttr/accent differ — but the swapped-in HTML
+  // still carried the stale residential metric).
+  const heroRow = isSchools
+    ? ''
+    : zeroPhraseHtml != null
       ? `<span style="font-family:${FONT_SANS_ATTR};font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${C_MUTED};margin-top:2px;">${zeroPhraseHtml}</span>`
       : `<span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">` +
         `<span style="font-family:${FONT_MONO_ATTR};font-size:20px;font-weight:800;line-height:1;letter-spacing:-0.02em;">${heroNumberHtml}</span>` +
@@ -1021,7 +1040,7 @@ function makeAreaVisualClusterCard(
   const identityHtml =
     `<span style="font-family:${FONT_SANS_ATTR};font-size:12.5px;font-weight:700;letter-spacing:-0.01em;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:${nameMaxWidthPx}px;">${namesLabel}</span>` +
     heroRow +
-    `<span style="font-family:${FONT_SANS_ATTR};margin-top:${zeroPhraseHtml != null ? 4 : 3}px;padding:1px 9px;border-radius:${RADIUS_FULL};background:rgba(27,42,69,0.08);font-size:10px;font-weight:600;color:${GREY_700};white-space:nowrap;">${countLabelHtml}</span>`;
+    `<span style="font-family:${FONT_SANS_ATTR};margin-top:${isSchools || zeroPhraseHtml != null ? 4 : 3}px;padding:1px 9px;border-radius:${RADIUS_FULL};background:rgba(27,42,69,0.08);font-size:10px;font-weight:600;color:${GREY_700};white-space:nowrap;">${countLabelHtml}</span>`;
 
   // Issue #2088 (commits 2+3) — ported to the shared markerPrimitives
   // fragments + markerTokens constants (byte-identical for every attribute

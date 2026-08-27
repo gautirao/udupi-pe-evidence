@@ -12,6 +12,14 @@ Date: YYYY-MM-DD | Sprint: <name or standalone/quick> | Route: <agent chain>
 ---
 -->
 
+## PR #2358 — fix(#2345): stop visual-cluster marker cards leaking stale content into schools journey
+Date: 2026-08-27 | Sprint: standalone/quick | Route: frontend-engineer (single-worker task, no code-reviewer pass this cycle — open PR, awaiting review)
+- What: `makeAreaVisualClusterCard` (`AreaMarkerLayer.tsx`) gates its `heroRow` (visible "N LISTINGS"/"No listings yet") and `ariaLabel` (accessible name) behind `isSchools`, so schools-journey cards show identity + "+N areas" badge + footer only, with no residential hero content
+- Why: `heroRow` had no journey branch at all, so switching journeys left non-selected marker cards showing stale residential content even though `setIcon` correctly fired with the new accent/`data-journey` attribute; a second independent leak in `ariaLabel` carried the same stale text into the accessible name
+- Deviations: NONE — only `makeAreaVisualClusterCard`'s body touched, per issue scope; call sites and other card builders untouched
+- Risks: NONE — new regression test (4/4, fails pre-fix/passes post-fix, both call sites, zero and non-zero counts); 170/170 sibling map marker suites; 570/570 full `src/components/map/__tests__/` directory; pre-push e2e gate passed clean (30/30, 1 skipped, no --no-verify)
+---
+
 ## PR #2178 — fix(#2177): stamp City Launch checksum from DB-round-tripped rows, not in-memory entities
 Date: 2026-08-15 | Sprint: standalone/quick | Route: backend-engineer → code-reviewer (APPROVE) → backend-engineer (fold-in: extend detach fix to remaining 2 tables) → code-reviewer (APPROVE)
 - What: `CityLaunchGraphWriter` now re-queries all 9 sandbox tables from their repositories (with explicit `entityManager.detach()` first, to defeat Hibernate's same-transaction identity map) before stamping `persisted_revision_checksum`, instead of hashing in-memory `.save()`-returned entities for 7 of 9 tables
