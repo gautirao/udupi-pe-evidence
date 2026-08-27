@@ -527,6 +527,26 @@ class ListingCrudServiceTest {
                 .findByCreatedByAndArchivedAtIsNullOrderByCreatedAtDesc(any(), any());
     }
 
+    // #2361: status=ARCHIVED must query without the archivedAt IS NULL predicate, otherwise
+    // archived listings can never match (archiving always sets archived_at alongside status).
+    @Test
+    void getListingsByOwner_withArchivedStatus_callsFindByCreatedByAndStatusWithoutArchivedAtConstraint() {
+        UUID userId = UUID.randomUUID();
+        Pageable pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<Listing> expected = new PageImpl<>(List.of());
+        when(listingRepository.findByCreatedByAndStatus(userId, "ARCHIVED", pageable))
+                .thenReturn(expected);
+
+        Page<Listing> result = crudService.getListingsByOwner(userId, "ARCHIVED", pageable);
+
+        assertThat(result).isSameAs(expected);
+        verify(listingRepository).findByCreatedByAndStatus(userId, "ARCHIVED", pageable);
+        verify(listingRepository, never())
+                .findByCreatedByAndStatusAndArchivedAtIsNull(any(), any(), any());
+        verify(listingRepository, never())
+                .findByCreatedByAndArchivedAtIsNullOrderByCreatedAtDesc(any(), any());
+    }
+
     // --- RE-75: getListingStats ---
 
     @Test

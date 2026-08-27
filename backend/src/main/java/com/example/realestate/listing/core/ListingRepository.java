@@ -50,8 +50,17 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
     /**
      * Returns non-archived listings for a given owner filtered by status.
      * Used by GET /api/listings/mine?status=... to filter without surfacing archived listings.
+     * NOTE: not applicable to status=ARCHIVED — archiving always sets archived_at, so this
+     * predicate can never match an ARCHIVED listing. Use {@link #findByCreatedByAndStatus} instead.
      */
     Page<Listing> findByCreatedByAndStatusAndArchivedAtIsNull(UUID createdBy, String status, Pageable pageable);
+
+    /**
+     * Returns listings for a given owner filtered by status, with no archived_at constraint.
+     * Used by GET /api/listings/mine?status=ARCHIVED so the broker's "Archived" tab can surface
+     * listings that were archived (status=ARCHIVED implies archived_at IS NOT NULL).
+     */
+    Page<Listing> findByCreatedByAndStatus(UUID createdBy, String status, Pageable pageable);
 
     /**
      * Counts non-archived LIVE listings for the per-owner listing limit check.

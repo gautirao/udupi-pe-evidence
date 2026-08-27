@@ -840,14 +840,19 @@ public class ListingCrudService {
     }
 
     /**
-     * Return paginated non-archived listings owned by the given user.
+     * Return paginated listings owned by the given user.
      * When {@code status} is non-null, only listings with that status are returned.
-     * Archived listings are always excluded regardless of the status filter.
+     * For any status other than ARCHIVED, archived listings are always excluded.
+     * Requesting status=ARCHIVED explicitly surfaces the owner's archived listings
+     * (archiving always sets archived_at, so the exclusion would otherwise be self-defeating).
      * Sort order is determined by the supplied {@link Pageable} (default: createdAt DESC).
      */
     @Transactional(readOnly = true)
     public Page<Listing> getListingsByOwner(UUID createdBy, String status, Pageable pageable) {
         if (status != null && !status.isBlank()) {
+            if (ListingStatus.ARCHIVED.toDbValue().equals(status)) {
+                return listingRepository.findByCreatedByAndStatus(createdBy, status, pageable);
+            }
             return listingRepository.findByCreatedByAndStatusAndArchivedAtIsNull(createdBy, status, pageable);
         }
         return listingRepository.findByCreatedByAndArchivedAtIsNullOrderByCreatedAtDesc(createdBy, pageable);
