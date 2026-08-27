@@ -141,40 +141,34 @@ describe('AuthCallback page — consumer invariants for getSafeReturnTo', () => 
     expect(getSafeReturnToSpy).toHaveReturnedWith('/listing/42');
   });
 
-  it('pinned-risky backslash returnTo: sanitiser passes it through, but AuthCallback still never uses a location assignment', async () => {
+  it('hardened backslash returnTo: sanitiser rejects it, AuthCallback never navigates off-origin (#2232)', async () => {
     mockGetSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } } });
 
     renderCallbackAt(`/auth/callback?returnTo=${encodeURIComponent('/\\evil.com')}`);
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/\\evil.com', { replace: true });
+      expect(mockNavigate).toHaveBeenCalledWith('/discover', { replace: true });
     });
 
+    expect(mockNavigate).not.toHaveBeenCalledWith('/\\evil.com', { replace: true });
     expect(locationAssignSpy).not.toHaveBeenCalled();
     expect(locationReplaceSpy).not.toHaveBeenCalled();
     expect(hrefSpy).not.toHaveBeenCalled();
-    // Falsifiability: this is the test that would catch the exact regression class
-    // qa-fast flagged — if AuthCallback.tsx were ever changed to do
-    // `window.location.href = resolveTarget(...)` (or .assign/.replace) instead of,
-    // or in addition to, navigate(), this hostile backslash value would flow into a
-    // real location assignment and this test goes red. A test that only asserted
-    // navigate() was called would NOT catch that regression.
   });
 
-  it('pinned-risky uppercase-scheme returnTo: sanitiser passes it through, but AuthCallback still never uses a location assignment', async () => {
+  it('hardened uppercase-scheme returnTo: sanitiser rejects it, AuthCallback never navigates off-origin (#2232)', async () => {
     mockGetSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } } });
 
     renderCallbackAt(`/auth/callback?returnTo=${encodeURIComponent('/HTTP://evil.com')}`);
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/HTTP://evil.com', { replace: true });
+      expect(mockNavigate).toHaveBeenCalledWith('/discover', { replace: true });
     });
 
+    expect(mockNavigate).not.toHaveBeenCalledWith('/HTTP://evil.com', { replace: true });
     expect(locationAssignSpy).not.toHaveBeenCalled();
     expect(locationReplaceSpy).not.toHaveBeenCalled();
     expect(hrefSpy).not.toHaveBeenCalled();
-    // Falsifiability: same class as above — a future switch to a raw location
-    // assignment for this uppercase-scheme value would turn this test red.
   });
 
   it('falls back to role-aware default landing when returnTo is absent (uses auth-state-change path)', async () => {

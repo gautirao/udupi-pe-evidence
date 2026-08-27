@@ -31,8 +31,25 @@ export function getRoleAwareDefaultLanding(
 /** Sanitise returnTo URL parameter. */
 export function getSafeReturnTo(rawReturnTo: string | null | undefined): string | null {
   if (!rawReturnTo) return null;
-  if (rawReturnTo.startsWith('/') && !rawReturnTo.startsWith('//') && !rawReturnTo.startsWith('/http')) {
-    return rawReturnTo;
+
+  // Normalise backslashes to forward slashes before validating: browsers
+  // historically treat a leading "/\" the same as "//" (protocol-relative),
+  // so "/\evil.com" and "/\/evil.com" must be judged as if they were "//evil.com".
+  // Also strip ASCII tab/CR/LF, matching the WHATWG URL parser's own stripping
+  // behaviour — without this, "/ht\ntp://evil.com" breaks the contiguous
+  // scheme-char regex below and would otherwise pass through unrejected.
+  const normalized = rawReturnTo.replace(/\\/g, '/').replace(/[\t\r\n]/g, '');
+
+  if (!normalized.startsWith('/') || normalized.startsWith('//')) {
+    return null;
   }
-  return null;
+
+  // Reject any scheme-like prefix immediately after the leading slash
+  // (e.g. "/http://evil.com", "/HTTP://evil.com", "/javascript:alert(1)"),
+  // matched case-insensitively since URL schemes are case-insensitive.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(normalized.slice(1))) {
+    return null;
+  }
+
+  return rawReturnTo;
 }

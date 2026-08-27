@@ -50,24 +50,55 @@ describe('getSafeReturnTo', () => {
     });
   });
 
-  describe('current behaviour pinned (NOT asserted safe — see consumer-analysis annotations)', () => {
-    // The string guard only checks for a leading '/', not-'//', not-'/http'.
-    // A backslash after the leading slash passes the guard and IS returned as-is.
-    // This is safe TODAY only because every consumer (Auth.tsx, AuthCallback.tsx) routes
-    // the value through react-router's navigate() — which does not interpret backslashes
-    // as scheme/host separators the way a raw `window.location.href = x` assignment would.
-    // If any future consumer switched to a location assignment, this value could become
-    // a live open redirect (browsers historically normalise leading `/\` to `//`).
-    it('passes a backslash-prefixed value through unchanged (guard does not special-case backslash)', () => {
-      expect(getSafeReturnTo('/\\evil.com')).toBe('/\\evil.com');
+  describe('hardened against open-redirect bypass variants (#2232)', () => {
+    // Backslashes are normalised to forward slashes before validation, so a
+    // leading "/\" is judged the same as "//" (protocol-relative) and rejected —
+    // matching how browsers have historically normalised "/\" to "//".
+    it('rejects a backslash-prefixed value', () => {
+      expect(getSafeReturnTo('/\\evil.com')).toBeNull();
     });
 
-    // The '/http' check is case-sensitive (String.prototype.startsWith has no
-    // case-insensitive option), so an uppercase scheme bypasses the block-list entirely.
-    // Same safety reasoning as above: safe only because consumption is via navigate(),
-    // never a raw location assignment.
-    it('passes an uppercase-scheme value through unchanged (guard is case-sensitive)', () => {
-      expect(getSafeReturnTo('/HTTP://evil.com')).toBe('/HTTP://evil.com');
+    // Scheme detection is now case-insensitive, so an uppercase (or mixed-case)
+    // scheme prefix is rejected just like the lowercase form.
+    it('rejects an uppercase-scheme value', () => {
+      expect(getSafeReturnTo('/HTTP://evil.com')).toBeNull();
+    });
+
+    it('rejects a mixed-case scheme value', () => {
+      expect(getSafeReturnTo('/Https://evil.com')).toBeNull();
+    });
+
+    it('rejects each hostile variant listed in issue #2232', () => {
+      const hostileVariants = [
+        '/\\evil.com',
+        '/\\/evil.com',
+        '/HTTP://evil.com',
+        '//evil.com',
+        'https://evil.com',
+      ];
+      for (const hostile of hostileVariants) {
+        expect(getSafeReturnTo(hostile)).toBeNull();
+      }
+    });
+
+    // Security-review follow-up: a tab/CR/LF inside the scheme breaks the
+    // contiguous-scheme-char regex, so these must be stripped before the
+    // scheme check runs (matching the WHATWG URL parser's own stripping
+    // behaviour) or the payload would otherwise pass through unrejected.
+    it('rejects a scheme prefix split by an embedded tab character', () => {
+      expect(getSafeReturnTo('/ht\ttp://evil.com')).toBeNull();
+    });
+
+    it('rejects a scheme prefix split by an embedded newline character', () => {
+      expect(getSafeReturnTo('/ht\ntp://evil.com')).toBeNull();
+    });
+
+    it('rejects a scheme prefix split by an embedded carriage return', () => {
+      expect(getSafeReturnTo('/ht\rtp://evil.com')).toBeNull();
+    });
+
+    it('rejects a javascript: scheme split by an embedded tab character', () => {
+      expect(getSafeReturnTo('/java\tscript:alert(1)')).toBeNull();
     });
   });
 
@@ -77,10 +108,10 @@ describe('getSafeReturnTo', () => {
       expect(getSafeReturnTo('///evil.com')).toBeNull();
     });
 
-    it('passes a slash-backslash-slash value through unchanged (does not start with "//")', () => {
-      // '/\\/evil.com' starts with '/', not '//', not '/http' -> accepted verbatim.
-      // Label: accept (same backslash-normalisation caveat as above).
-      expect(getSafeReturnTo('/\\/evil.com')).toBe('/\\/evil.com');
+    it('rejects a slash-backslash-slash value (normalises to "///evil.com")', () => {
+      // '/\\/evil.com' normalises (backslash -> forward slash) to '///evil.com',
+      // which starts with '//' -> rejected. Label: reject (#2232 hardening).
+      expect(getSafeReturnTo('/\\/evil.com')).toBeNull();
     });
 
     it('passes a URL-encoded double-slash value through unchanged (guard checks literal chars, not decoded)', () => {

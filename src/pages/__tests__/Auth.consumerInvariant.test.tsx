@@ -147,44 +147,36 @@ describe('Auth page — consumer invariants for getSafeReturnTo', () => {
     // checks the SPY's actual real return value, not a guess) would fail.
   });
 
-  it('pinned-risky backslash returnTo: sanitiser passes it through, but Auth.tsx still never uses a location assignment', async () => {
+  it('hardened backslash returnTo: sanitiser rejects it, Auth.tsx never navigates off-origin (#2232)', async () => {
     mockUseAuth.mockReturnValue({ user: { id: 'u1' }, isAdmin: false, isBroker: false });
 
     renderAuthAt(`/auth?returnTo=${encodeURIComponent('/\\evil.com')}`);
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/\\evil.com', { replace: true });
+      expect(mockNavigate).toHaveBeenCalledWith('/discover', { replace: true });
     });
 
-    // getSafeReturnTo genuinely returns this value verbatim (see authUtils test) —
-    // the safety net here is entirely that Auth.tsx routes it through navigate(),
-    // never through a location assignment.
+    // getSafeReturnTo now rejects this value (see authUtils test) — Auth.tsx falls
+    // back to the role-aware default landing instead of the hostile value.
+    expect(mockNavigate).not.toHaveBeenCalledWith('/\\evil.com', { replace: true });
     expect(locationAssignSpy).not.toHaveBeenCalled();
     expect(locationReplaceSpy).not.toHaveBeenCalled();
     expect(hrefSpy).not.toHaveBeenCalled();
-    // Falsifiability: this is the test that would catch the exact regression class
-    // qa-fast flagged — if Auth.tsx were ever changed to do
-    // `window.location.href = explicitTarget` (or .assign/.replace) instead of, or
-    // in addition to, `navigate(explicitTarget, ...)`, this hostile backslash value
-    // would flow into a real location assignment and this test goes red. A test that
-    // only asserted navigate() was called would NOT catch that regression, because
-    // navigate() would still have been called too.
   });
 
-  it('pinned-risky uppercase-scheme returnTo: sanitiser passes it through, but Auth.tsx still never uses a location assignment', async () => {
+  it('hardened uppercase-scheme returnTo: sanitiser rejects it, Auth.tsx never navigates off-origin (#2232)', async () => {
     mockUseAuth.mockReturnValue({ user: { id: 'u1' }, isAdmin: false, isBroker: false });
 
     renderAuthAt(`/auth?returnTo=${encodeURIComponent('/HTTP://evil.com')}`);
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/HTTP://evil.com', { replace: true });
+      expect(mockNavigate).toHaveBeenCalledWith('/discover', { replace: true });
     });
 
+    expect(mockNavigate).not.toHaveBeenCalledWith('/HTTP://evil.com', { replace: true });
     expect(locationAssignSpy).not.toHaveBeenCalled();
     expect(locationReplaceSpy).not.toHaveBeenCalled();
     expect(hrefSpy).not.toHaveBeenCalled();
-    // Falsifiability: same class as above — a future switch to a raw location
-    // assignment for this uppercase-scheme value would turn this test red.
   });
 
   it('alias: accepts ?redirect= when ?returnTo= is absent', async () => {
