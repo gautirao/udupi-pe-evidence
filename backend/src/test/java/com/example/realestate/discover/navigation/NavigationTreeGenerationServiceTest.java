@@ -61,9 +61,15 @@ class NavigationTreeGenerationServiceTest {
      * NavigationTreeGeneratorTest's collidingClusterNodeKeyIsDisambiguated fixture), so each
      * CLUSTER has one "extra" descendant area beyond its 2 representatives to swap reps onto. */
     private static SandboxArea area(long id, String areaKey, String name, double lat) {
+        return area(id, areaKey, name, lat, "ACTIVE");
+    }
+
+    /** #2313: lifecycle-status-parameterized variant, used to build an INACTIVE (soft-excluded)
+     * fixture alongside ACTIVE siblings. */
+    private static SandboxArea area(long id, String areaKey, String name, double lat, String lifecycleStatus) {
         SandboxArea a = new SandboxArea(
                 REVISION_ID, areaKey, name, "district", lat, 77.0, lat - 0.01, 76.99, lat + 0.01, 77.01,
-                "OSM", "way", 1L, "ACTIVE");
+                "OSM", "way", 1L, lifecycleStatus);
         setId(a, id);
         return a;
     }
@@ -281,6 +287,50 @@ class NavigationTreeGenerationServiceTest {
         assertThat(areaLeaves).hasSize(6);
         Set<String> leafAreaKeys = areaLeaves.stream().map(GeneratedNode::areaKey).collect(Collectors.toSet());
         Set<String> expectedAreaKeys = areas.stream().map(SandboxArea::getAreaKey).collect(Collectors.toSet());
+        assertThat(leafAreaKeys).isEqualTo(expectedAreaKeys);
+    }
+
+    // ── #2313: soft-excluded (lifecycle_status != ACTIVE) areas must not enter the tree ───────────
+
+    @Test
+    @DisplayName("[#2313] a membership resolving to an INACTIVE SandboxArea (soft-excluded outlier, "
+            + "e.g. Mukkidipeta) is SKIPPED exactly like a data-quality orphan — generation completes "
+            + "without throwing, the INACTIVE area contributes NO node, and every ACTIVE sibling in "
+            + "the same region still gets its AREA leaf")
+    void generateAndStoreForRevision_inactiveAreaIsExcludedNotFatal() {
+        List<SandboxArea> areas = new ArrayList<>(sixAreas());
+        // A 7th area in the same region, soft-excluded via lifecycle_status — mirrors Mukkidipeta's
+        // V129 migration (areas.lifecycle_status = 'INACTIVE'), not a hard delete.
+        SandboxArea inactiveArea = area(7L, "north|outlier", "Outlier", 90.0, "INACTIVE");
+        areas.add(inactiveArea);
+        List<SandboxCityRegion> regions = oneRegion();
+        List<SandboxCityRegionMembership> memberships = membershipsFor(areas);
+
+        NavigationPolicyReader policyReader = mock(NavigationPolicyReader.class);
+        when(policyReader.findPolicy(CITY_ID)).thenReturn(Optional.of(threeChildPolicy()));
+        when(policyReader.findSortedDirectionLabelPairs(CITY_SLUG)).thenReturn(List.of());
+
+        NavigationTreeSandboxWriter sandboxWriter = mock(NavigationTreeSandboxWriter.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<GeneratedNode>> captor = ArgumentCaptor.forClass(List.class);
+        when(sandboxWriter.persist(eq(REVISION_ID), captor.capture()))
+                .thenReturn(List.of(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L));
+
+        SandboxNavigationOverrideRepository overrideRepository = mock(SandboxNavigationOverrideRepository.class);
+        when(overrideRepository.findByRevisionIdOrderByApplyOrderAsc(REVISION_ID)).thenReturn(List.of());
+
+        NavigationTreeGenerationService service = buildService(policyReader, sandboxWriter, overrideRepository);
+
+        // Must not throw despite the INACTIVE area's membership resolving to no active SandboxArea.
+        service.generateAndStoreForRevision(REVISION_ID, CITY_ID, CITY_SLUG, areas, regions, memberships, GENERATED_AT);
+
+        List<GeneratedNode> generated = captor.getValue();
+        List<GeneratedNode> areaLeaves = generated.stream().filter(n -> "AREA".equals(n.nodeType())).toList();
+        // Exactly the 6 ACTIVE areas — the INACTIVE outlier contributes zero leaves.
+        assertThat(areaLeaves).hasSize(6);
+        Set<String> leafAreaKeys = areaLeaves.stream().map(GeneratedNode::areaKey).collect(Collectors.toSet());
+        assertThat(leafAreaKeys).doesNotContain(inactiveArea.getAreaKey());
+        Set<String> expectedAreaKeys = sixAreas().stream().map(SandboxArea::getAreaKey).collect(Collectors.toSet());
         assertThat(leafAreaKeys).isEqualTo(expectedAreaKeys);
     }
 

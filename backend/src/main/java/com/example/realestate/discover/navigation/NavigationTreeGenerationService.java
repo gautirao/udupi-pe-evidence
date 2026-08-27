@@ -51,6 +51,11 @@ public class NavigationTreeGenerationService {
 
     private static final Logger log = LoggerFactory.getLogger(NavigationTreeGenerationService.class);
 
+    // #2313: mirrors CityLaunchPreviewService's ACTIVE_STATUS gate — a soft-excluded
+    // (lifecycle_status != ACTIVE) area must not enter this revision's navigation tree, even
+    // though it stays in the captured areas list for other consumers (schools/listings/agri).
+    private static final String ACTIVE_STATUS = "ACTIVE";
+
     private final NavigationPolicyReader policyReader;
     private final NavigationTreeGenerator generator;
     private final NavigationTreeValidationService validationService;
@@ -103,6 +108,7 @@ public class NavigationTreeGenerationService {
         // generateCity:126-129); do NOT add a `.values()`/entrySet() iteration over this map without
         // re-establishing an explicit sort first.
         Map<String, SandboxArea> areaByKey = areas.stream()
+                .filter(a -> ACTIVE_STATUS.equals(a.getLifecycleStatus()))
                 .collect(Collectors.toMap(SandboxArea::getAreaKey, a -> a, (a, b) -> a));
 
         // #2157: SandboxCityRegionMembership stores sandbox_area_id (an FK to SandboxArea.getId()),
