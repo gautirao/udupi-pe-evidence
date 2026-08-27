@@ -1205,12 +1205,50 @@ describe('Issue #1943 Slice B — AreaPanner hierarchy camera-fit branch (canoni
     // from the container (leaflet-src.js:3980-3987), not one edge's share of
     // it, so it must equal the resolver's full inset: 2*padH horizontally,
     // 2*padV + bottomOcclusionPx vertically (240x80 at the desktop padding/
-    // zero-occlusion values this fixture renders under).
+    // zero-occlusion values this fixture renders under), PLUS (issue #2314)
+    // the max card footprint across the node's anchors — `oneChildAnchor`'s
+    // single anchor carries footprintWidthPx: 150 / footprintHeightPx: 130,
+    // giving a total of 390x210.
     expect(mapStub.getBoundsZoom).toHaveBeenCalledWith(
       expect.anything(),
       false,
-      { x: 240, y: 80 },
+      { x: 390, y: 210 },
     );
+  });
+
+  // T-B11 (issue #2314) — `derivedMinZoom` must account for the REAL
+  // destination-card footprint, not treat anchors as dimensionless points:
+  // (a) a larger card footprint feeds a larger padding into getBoundsZoom
+  // than a smaller one for an otherwise-identical envelope, and (b) across
+  // several anchors with DIFFERING footprints, the MAX width/height wins
+  // (never an under-estimate from averaging or picking an arbitrary anchor).
+  it('T-B11: getBoundsZoom padding grows with the anchors’ real card footprint, using the MAX across anchors', () => {
+    renderWithPan(
+      makeCanonicalPayload({ hierarchyChildAnchors: oneChildAnchor }) as SeqAreaPoint,
+    );
+    const [, , smallPadding] = mapStub.getBoundsZoom.mock.calls[0];
+    // oneChildAnchor: footprintWidthPx 150 / footprintHeightPx 130 (see T-B9).
+    expect(smallPadding).toEqual({ x: 240 + 150, y: 80 + 130 });
+
+    mapStub.getBoundsZoom.mockClear();
+    renderWithPan(
+      makeCanonicalPayload({
+        hierarchyChildAnchors: [
+          { lat: 12.971, lon: 77.594, footprintWidthPx: 150, footprintHeightPx: 130 },
+          // A second, deliberately LARGER card on the same envelope — the
+          // derived floor must widen to cover this one too, not the first.
+          { lat: 12.972, lon: 77.595, footprintWidthPx: 260, footprintHeightPx: 200 },
+        ],
+        consumedSeqRef: { current: 0 },
+      }) as SeqAreaPoint,
+    );
+    const [, , largePadding] = mapStub.getBoundsZoom.mock.calls[0];
+    expect(largePadding).toEqual({ x: 240 + 260, y: 80 + 200 });
+    // The larger footprint must produce a STRICTLY wider padding than the
+    // smaller one — proving the calculation is genuinely footprint-aware,
+    // not a flat constant that happens to equal one fixture's numbers.
+    expect(largePadding.x).toBeGreaterThan(smallPadding.x);
+    expect(largePadding.y).toBeGreaterThan(smallPadding.y);
   });
 
   it('T-B9: getBoundsZoom is queried against the child-anchor union when panToArea.bbox is null (Udupi synthetic-root case)', () => {

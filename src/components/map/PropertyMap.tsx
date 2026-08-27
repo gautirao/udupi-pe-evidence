@@ -1567,6 +1567,35 @@ function AreaPanner({
               )
               .map((anchor) => [anchor.lat, anchor.lon] as [number, number]);
         let derivedMinZoom = LEAF_FIT_MIN_ZOOM;
+        // Issue #2314 — `getBoundsZoom` below only ever sees LAT/LON POINTS
+        // (`envelopeLatLngs`), so left unmodified this floor is a
+        // dimensionless-point containment zoom: it has no allowance for the
+        // actual rendered destination-card footprint, and is therefore
+        // systematically ~1 zoom level too high relative to what a camera
+        // fit that accounts for real card pixel size could achieve.
+        // `panToArea.hierarchyChildAnchors` already carries each anchor's
+        // own `footprintWidthPx`/`footprintHeightPx` (calibrated upstream by
+        // `useDiscoverCameraController.ts` via the SAME
+        // `estimateDestinationCardFootprint` the resolver itself uses — see
+        // that module's own over-estimating, "never under" safe-direction
+        // doc), so reuse it rather than re-deriving card size here. Cards
+        // anchor bottom-centre at their point (`cardRectAt`,
+        // hierarchyCameraFit.ts:237-240: `translate(-50%,-100%)`), i.e. a
+        // card extends `±widthPx/2` horizontally and the FULL `heightPx`
+        // upward — never below. Since Leaflet's `getBoundsZoom` padding is a
+        // single symmetric inset per dimension (not edge-selective, see the
+        // FIX 2 comment just below), the max footprint's full width and full
+        // height are folded into the horizontal/vertical padding totals so
+        // the worst-case card — whichever anchor happens to sit at the
+        // envelope's edge — is guaranteed room, general across any city's
+        // node shape (no hard-coded city or zoom value).
+        let maxFootprintWidthPx = 0;
+        let maxFootprintHeightPx = 0;
+        for (const anchor of panToArea.hierarchyChildAnchors) {
+          if (anchor.lat == null || anchor.lon == null) continue;
+          maxFootprintWidthPx = Math.max(maxFootprintWidthPx, anchor.footprintWidthPx);
+          maxFootprintHeightPx = Math.max(maxFootprintHeightPx, anchor.footprintHeightPx);
+        }
         // Guarded the same way `isMapSized()` guards `map.getSize` above:
         // real Leaflet always defines both `L.latLngBounds` and
         // `map.getBoundsZoom`; a test double that omits either falls back to
@@ -1606,11 +1635,15 @@ function AreaPanner({
             // level too high and clip the envelope. Mirrors this file's own
             // `fitBounds` call further down in this same effect, which achieves
             // the same total by passing `paddingTopLeft`/`paddingBottomRight`
-            // separately and letting Leaflet sum them.
+            // separately and letting Leaflet sum them. Issue #2314 —
+            // `maxFootprintWidthPx`/`maxFootprintHeightPx` (computed above)
+            // extend this same total inset with the worst-case card
+            // footprint, so the floor accounts for real card pixel size
+            // instead of treating anchors as dimensionless points.
             const containmentZoom = map.getBoundsZoom(
               envelopeBounds,
               false,
-              L.point(padH * 2, padV * 2 + bottomOcclusionPx),
+              L.point(padH * 2 + maxFootprintWidthPx, padV * 2 + bottomOcclusionPx + maxFootprintHeightPx),
             );
             if (Number.isFinite(containmentZoom)) {
               derivedMinZoom = Math.max(0, Math.min(Math.floor(containmentZoom), LEAF_FIT_MAX_ZOOM));
