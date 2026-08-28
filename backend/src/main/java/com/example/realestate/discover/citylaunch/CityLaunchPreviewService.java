@@ -529,10 +529,11 @@ public class CityLaunchPreviewService {
      */
     @Transactional(readOnly = true)
     public PreviewIdentityResponse getPreviewIdentity(int cityId, long revisionId) {
-        loadPreviewableRevision(cityId, revisionId);
+        CityLaunchRevision revision = loadPreviewableRevision(cityId, revisionId);
 
         List<PreviewIdentityResponse> rows = jdbcOperations.query(CITY_IDENTITY_SQL,
-                (rs, i) -> new PreviewIdentityResponse(cityId, rs.getString("slug"), rs.getString("name")),
+                (rs, i) -> new PreviewIdentityResponse(
+                        cityId, rs.getString("slug"), rs.getString("name"), revision.getClonedFromRevisionId()),
                 cityId);
         if (rows.isEmpty()) {
             throw notFound();

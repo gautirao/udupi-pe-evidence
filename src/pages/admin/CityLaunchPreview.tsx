@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { AlertCircle, Loader2, ShieldAlert } from 'lucide-react';
+import { AlertCircle, Copy, Loader2, ShieldAlert } from 'lucide-react';
 import MapDiscovery from '@/pages/MapDiscovery';
 import { DiscoverDataSourceProvider } from '@/features/discover/state/DiscoverDataSourceContext';
 import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
@@ -22,7 +22,7 @@ import {
   VALIDATION_CHECK_ITEMS,
   type CityLaunchValidationCheckKey,
 } from '@/hooks/useCityLaunchValidation';
-import { usePreviewCityIdentity } from '@/hooks/useCityLaunch';
+import { usePreviewCityIdentity, useEditRevision } from '@/hooks/useCityLaunch';
 import CityLaunchReadiness from '@/pages/admin/CityLaunchReadiness';
 
 /**
@@ -91,6 +91,7 @@ export default function CityLaunchPreview() {
   // #2151 Track 1 — resolved BEFORE the DiscoverDataSourceProvider below is ever
   // constructed, so preview mode never threads a stale/default city identity.
   const identity = usePreviewCityIdentity(cityId, revisionId);
+  const editRevision = useEditRevision(cityId);
 
   if (!isValid) {
     return <InvalidPreviewState message="Invalid preview link — city or revision id is missing." />;
@@ -128,6 +129,22 @@ export default function CityLaunchPreview() {
   // (distinct from the 5-check `editable` flag above, which tracks the
   // validation checklist rather than override eligibility).
   const overridesEditable = validation?.lifecycleStatus === 'PREPARED';
+  const clonedFromRevisionId = identity.data.clonedFromRevisionId;
+  // Issue #2121 AC5 — "Edit revision" is offered for/from the current LIVE (PROMOTED,
+  // supersededBy==null) revision — that's exactly `isLiveRevision`. `clonedFromRevisionId` is
+  // set permanently at clone-time and never cleared by any backend path, so gating on it here
+  // (as a prior revision of this fix did) would make Edit-revision a one-shot-per-city
+  // feature: once an edited candidate is promoted to LIVE, the button would vanish forever for
+  // that city. The edit-then-promote cycle must stay repeatable.
+  const canEditRevision = isLiveRevision;
+  // A PREPARED (not-yet-promoted) candidate that was created via Edit-revision. Mutually
+  // exclusive with the "Currently live" banner below — once a clone is itself promoted,
+  // isLiveRevision takes precedence and this provenance line is redundant.
+  const showEditedFromBanner = clonedFromRevisionId != null && !isLiveRevision;
+
+  function handleEditRevision() {
+    editRevision.mutate(revisionId);
+  }
 
   if (view === 'readiness' && validation) {
     return (
@@ -221,6 +238,31 @@ export default function CityLaunchPreview() {
               <AlertDescription className="text-green-800">
                 This is the current launched revision. It's read-only here — the validation
                 checklist reflects its state at launch time.
+                {canEditRevision && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 block border-green-400 bg-white text-green-900 hover:bg-green-100"
+                    disabled={editRevision.isPending}
+                    onClick={handleEditRevision}
+                    data-testid="edit-revision-button"
+                  >
+                    {editRevision.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Edit revision
+                  </Button>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {showEditedFromBanner && (
+            <Alert className="mt-4" data-testid="edited-from-banner">
+              <Copy className="h-4 w-4" />
+              <AlertTitle>Edited from live</AlertTitle>
+              <AlertDescription>
+                This candidate was edited from revision {clonedFromRevisionId}. Whether that
+                source revision is still live has not been re-checked here.
               </AlertDescription>
             </Alert>
           )}

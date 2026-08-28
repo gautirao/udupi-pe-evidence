@@ -92,6 +92,15 @@ public class CityLaunchRevision {
     @Column(name = "superseded_by")
     private Long supersededBy;
 
+    /**
+     * Non-null when this revision was created by admin "Edit revision" (#2121) as a
+     * byte-faithful copy of that revision's {@code sandbox_*} row set, rather than freshly
+     * derived from canonical geography via {@code CityLaunchPreparationService.prepare()}/{@code
+     * rerunSuperseding()}. See V130.
+     */
+    @Column(name = "cloned_from_revision_id")
+    private Long clonedFromRevisionId;
+
     // ── Validation checklist (V120, #1911 PR4) ──────────────────────────────────────────────────
     // Written ONLY via CityLaunchRevisionRepository's guarded @Modifying queries — never via
     // save() — so these fields intentionally have NO public setters (see class javadoc).
@@ -152,6 +161,7 @@ public class CityLaunchRevision {
     public Instant getPromotedAt() { return promotedAt; }
     public String getFailureReason() { return failureReason; }
     public Long getSupersededBy() { return supersededBy; }
+    public Long getClonedFromRevisionId() { return clonedFromRevisionId; }
     public boolean isLandingValidated() { return landingValidated; }
     public boolean isRegionsValidated() { return regionsValidated; }
     public boolean isAreaGroupsValidated() { return areaGroupsValidated; }
@@ -178,4 +188,5 @@ public class CityLaunchRevision {
     public void setPromotedAt(Instant promotedAt) { this.promotedAt = promotedAt; }
     public void setFailureReason(String failureReason) { this.failureReason = failureReason; }
     public void setSupersededBy(Long supersededBy) { this.supersededBy = supersededBy; }
+    public void setClonedFromRevisionId(Long clonedFromRevisionId) { this.clonedFromRevisionId = clonedFromRevisionId; }
 }

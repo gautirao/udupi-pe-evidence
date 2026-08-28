@@ -19,8 +19,18 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import CityLaunchPreview from '../CityLaunchPreview';
 import { useDiscoverSource, useDiscoverActionsEnabled } from '@/features/discover/state/DiscoverDataSourceContext';
 import { useDiscoverNav } from '@/features/discover/context/useDiscoverContext';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import type { ValidationStateDto } from '@/hooks/useCityLaunchValidation';
+
+// #2121 delta round — the real `useToast()` hook's `toast()` export is a plain module-scope
+// function reference read directly inside the hook body, not an indirection `vi.spyOn` can
+// intercept, so the Edit-revision 409-discrimination tests below (which assert on the exact
+// toast title/description shown for each distinct 409 cause) need `toast` itself mocked.
+const mockToast = vi.hoisted(() => vi.fn());
+vi.mock('@/hooks/use-toast', () => ({
+  useToast: () => ({ toast: mockToast, toasts: [], dismiss: vi.fn() }),
+  toast: mockToast,
+}));
 
 vi.mock('@/pages/MapDiscovery', () => ({
   default: function MockMapDiscovery() {
@@ -117,6 +127,7 @@ const {
     // without touching every individual test.
     citySlug: 'udupi',
     cityName: 'Udupi',
+    clonedFromRevisionId: null,
   },
   // #2151 Track 1 — GET .../preview/identity fixture. CityLaunchPreview resolves this BEFORE
   // mounting the Discover subtree, so every test that renders a real (non-error-state) preview
@@ -125,15 +136,19 @@ const {
     cityId: 7,
     citySlug: 'udupi',
     cityName: 'Udupi',
+    clonedFromRevisionId: null,
   },
   // #2151 Track 1 — per-cityId identity lookup so the city-identity tests can render at
   // DISTINCT cityIds (Udupi vs Bangalore) and prove real per-city resolution, not a fixture
   // that's coincidentally always right for one hardcoded city.
   CITY_IDENTITY_BY_ID: {
-    1: { cityId: 1, citySlug: 'bangalore', cityName: 'Bangalore' },
-    3: { cityId: 3, citySlug: 'udupi', cityName: 'Udupi' },
-    7: { cityId: 7, citySlug: 'udupi', cityName: 'Udupi' },
-  } as Record<number, { cityId: number; citySlug: string; cityName: string }>,
+    1: { cityId: 1, citySlug: 'bangalore', cityName: 'Bangalore', clonedFromRevisionId: null },
+    3: { cityId: 3, citySlug: 'udupi', cityName: 'Udupi', clonedFromRevisionId: null },
+    7: { cityId: 7, citySlug: 'udupi', cityName: 'Udupi', clonedFromRevisionId: null },
+  } as Record<
+    number,
+    { cityId: number; citySlug: string; cityName: string; clonedFromRevisionId: number | null }
+  >,
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -288,7 +303,19 @@ vi.mock('@/lib/api', () => ({
     patch: vi.fn(),
     delete: vi.fn(),
   },
-  ApiError: class ApiError extends Error {},
+  // Mirrors the real ApiError's constructor (message, status, body) — needed so
+  // `err instanceof ApiError && err.status === <code>` branches under test (e.g. #2121's
+  // 409 handling) actually see a populated `.status`, not undefined.
+  ApiError: class ApiError extends Error {
+    status: number;
+    body: unknown;
+    constructor(message: string, status: number, body: unknown) {
+      super(message);
+      this.name = 'ApiError';
+      this.status = status;
+      this.body = body;
+    }
+  },
 }));
 
 function renderAtPreviewRoute(cityId: string, revisionId: string) {
@@ -1052,5 +1079,223 @@ describe('CityLaunchPreview — area-groups isolation with the REAL MapDiscovery
         { skipAuth: false },
       );
     });
+  });
+});
+
+// ─── Issue #2121 — "Edit revision" safe-clone workflow.
+//
+// POST .../revisions/{revisionId}/edit clones the current LIVE revision's sandbox rows into a
+// new PREPARED candidate. Per AC5, the action is offered for/from the current LIVE (PROMOTED,
+// supersededBy==null) revision — i.e. exactly `isLiveRevision` — regardless of whether that
+// revision was itself originally cloned from an earlier LIVE: the edit-then-promote cycle must
+// stay repeatable, not one-shot-per-city. These tests exercise the button's visibility gate,
+// the POST + navigate success path, the 409-error surfacing (no swallow, no navigation), and
+// the provenance banner wording for a true-LIVE vs an edited-from-live candidate.
+describe('CityLaunchPreview — Edit revision (Issue #2121)', () => {
+  const CITY_ID = 7;
+  const REVISION_ID = 42;
+
+  const LIVE_VALIDATION_STATE = {
+    revisionId: REVISION_ID,
+    cityId: CITY_ID,
+    revisionNumber: 3,
+    lifecycleStatus: 'PROMOTED',
+    checks: {
+      landing: true,
+      regions: true,
+      areaGroups: true,
+      areas: true,
+      listing: true,
+      agriDestinations: true,
+    },
+    allValidated: true,
+    editable: false,
+    preparedAt: '2026-07-01T00:00:00Z',
+    validatedAt: '2026-07-01T01:00:00Z',
+    supersededBy: null,
+  };
+
+  const SUPERSEDED_VALIDATION_STATE = {
+    ...LIVE_VALIDATION_STATE,
+    lifecycleStatus: 'SUPERSEDED',
+    editable: false,
+    supersededBy: 99,
+  };
+
+  const FRESH_PREPARED_VALIDATION_STATE = {
+    ...LIVE_VALIDATION_STATE,
+    lifecycleStatus: 'PREPARED',
+    editable: true,
+    supersededBy: null,
+  };
+
+  function identityFor(clonedFromRevisionId: number | null) {
+    return { cityId: CITY_ID, citySlug: 'udupi', cityName: 'Udupi', clonedFromRevisionId };
+  }
+
+  function mockApiGet(
+    validationState: typeof LIVE_VALIDATION_STATE,
+    clonedFromRevisionId: number | null,
+  ) {
+    vi.mocked(api.get).mockImplementation(async (path: string) => {
+      if (path.endsWith('/preview/identity')) return identityFor(clonedFromRevisionId);
+      if (path.endsWith('/validation')) return validationState;
+      return DEFAULT_VALIDATION_STATE_DTO;
+    });
+  }
+
+  beforeEach(() => {
+    vi.mocked(api.get).mockReset();
+    vi.mocked(api.post).mockReset();
+    vi.mocked(api.put).mockReset();
+    mockToast.mockClear();
+  });
+
+  it('renders the Edit revision button for the true current LIVE revision', async () => {
+    mockApiGet(LIVE_VALIDATION_STATE, null);
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+
+    expect(await screen.findByTestId('edit-revision-button')).toBeInTheDocument();
+  });
+
+  it('renders the Edit revision button for a candidate cloned from LIVE once it is itself promoted to LIVE (repeatable edit-then-promote, AC5)', async () => {
+    mockApiGet(LIVE_VALIDATION_STATE, 41);
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+
+    await screen.findByTestId('live-revision-banner');
+    expect(await screen.findByTestId('edit-revision-button')).toBeInTheDocument();
+  });
+
+  it('does NOT render the Edit revision button for a superseded revision', async () => {
+    mockApiGet(SUPERSEDED_VALIDATION_STATE, null);
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+
+    await screen.findByTestId('superseded-banner');
+    expect(screen.queryByTestId('edit-revision-button')).not.toBeInTheDocument();
+  });
+
+  it('does NOT render the Edit revision button for a freshly-generated PREPARED revision', async () => {
+    mockApiGet(FRESH_PREPARED_VALIDATION_STATE, null);
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('checkbox')).toHaveLength(6);
+    });
+    expect(screen.queryByTestId('edit-revision-button')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('live-revision-banner')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('edited-from-banner')).not.toBeInTheDocument();
+  });
+
+  it('shows the "Currently live" banner (unchanged) for the true LIVE revision, with no edited-from banner', async () => {
+    mockApiGet(LIVE_VALIDATION_STATE, null);
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+
+    const banner = await screen.findByTestId('live-revision-banner');
+    expect(banner).toHaveTextContent(/currently live/i);
+    expect(screen.queryByTestId('edited-from-banner')).not.toBeInTheDocument();
+  });
+
+  it('shows the "edited from" provenance banner for a not-yet-promoted candidate cloned from live, distinct from the LIVE banner', async () => {
+    mockApiGet(FRESH_PREPARED_VALIDATION_STATE, 41);
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+
+    const banner = await screen.findByTestId('edited-from-banner');
+    expect(banner).toHaveTextContent(/edited from revision 41/i);
+    expect(screen.queryByTestId('live-revision-banner')).not.toBeInTheDocument();
+  });
+
+  it('clicking Edit revision POSTs .../revisions/{revisionId}/edit and navigates to the new candidate preview on 201 success', async () => {
+    mockApiGet(LIVE_VALIDATION_STATE, null);
+    vi.mocked(api.post).mockResolvedValue({ revisionId: 100, status: 'prepared' });
+
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+    await userEvent.click(await screen.findByTestId('edit-revision-button'));
+
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledWith(
+        `/api/admin/city-launch/cities/${CITY_ID}/revisions/${REVISION_ID}/edit`,
+      );
+    });
+
+    // Navigation proof: the route re-resolves at the NEW revisionId (100), which is only
+    // possible if the router actually navigated there — confirmed by the validation rail
+    // re-fetching for revision 100.
+    await waitFor(() => {
+      expect(vi.mocked(api.get).mock.calls.map(([p]) => String(p))).toContain(
+        `/api/admin/city-launch/cities/${CITY_ID}/revisions/100/validation`,
+      );
+    });
+  });
+
+  it('a 409 (stale revision) error is surfaced, not swallowed, and does not navigate', async () => {
+    mockApiGet(LIVE_VALIDATION_STATE, null);
+    const conflictError = new ApiError('Revision is stale', 409, { error: 'STALE_REVISION' });
+    vi.mocked(api.post).mockRejectedValue(conflictError);
+
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+    await userEvent.click(await screen.findByTestId('edit-revision-button'));
+
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledWith(
+        `/api/admin/city-launch/cities/${CITY_ID}/revisions/${REVISION_ID}/edit`,
+      );
+    });
+
+    // Never navigated away — still on the same revision's validation path, never revision 100.
+    const calledPaths = vi.mocked(api.get).mock.calls.map(([p]) => String(p));
+    expect(
+      calledPaths.some((p) => p.includes(`/revisions/100/`)),
+    ).toBe(false);
+    expect(await screen.findByTestId('live-revision-banner')).toBeInTheDocument();
+
+    // Reload-and-retry advice is correct here — a stale snapshot IS fixed by reloading.
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'This revision is no longer current',
+          description: expect.stringContaining('Reload and try again'),
+        }),
+      );
+    });
+  });
+
+  // Advisory-fix follow-up (code-review delta round) — CityLaunchCandidateService#editFromLive
+  // throws a SECOND, distinct 409 when the LIVE revision has no sandbox_* rows to clone at all
+  // (a legacy revision predating the sandbox model). Reloading hits this exact same 409 forever,
+  // so telling the admin to "reload and try again" (the stale-snapshot copy above) is actively
+  // wrong advice here. GlobalExceptionHandler#handleResponseStatus flattens both 409s into the
+  // same `{"error": <reason string>}` shape with no discrete error code, so the two are
+  // discriminated by the reason text the backend actually throws.
+  it('a 409 (LIVE has no sandbox rows to clone) error gets distinct, non-"reload" advice', async () => {
+    mockApiGet(LIVE_VALIDATION_STATE, null);
+    const emptySandboxError = new ApiError('Conflict', 409, {
+      error:
+        'The current LIVE revision has no sandbox geography rows to clone (a legacy revision '
+        + 'predating the sandbox tables) — cannot create an editable candidate',
+    });
+    vi.mocked(api.post).mockRejectedValue(emptySandboxError);
+
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+    await userEvent.click(await screen.findByTestId('edit-revision-button'));
+
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledWith(
+        `/api/admin/city-launch/cities/${CITY_ID}/revisions/${REVISION_ID}/edit`,
+      );
+    });
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: expect.stringMatching(/can.?t be edited/i),
+          description: expect.not.stringContaining('Reload and try again'),
+        }),
+      );
+    });
+
+    // Still surfaced as an error, not swallowed, and no navigation away.
+    const calledPaths = vi.mocked(api.get).mock.calls.map(([p]) => String(p));
+    expect(calledPaths.some((p) => p.includes('/revisions/100/'))).toBe(false);
+    expect(await screen.findByTestId('live-revision-banner')).toBeInTheDocument();
   });
 });

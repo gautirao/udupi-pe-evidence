@@ -34,14 +34,17 @@ public class AdminCityLaunchController {
     private final CityLaunchReadService readService;
     private final CityLaunchPreparationService preparationService;
     private final CityLaunchSseService sseService;
+    private final CityLaunchCandidateService candidateService;
 
     public AdminCityLaunchController(
             CityLaunchReadService readService,
             CityLaunchPreparationService preparationService,
-            CityLaunchSseService sseService) {
+            CityLaunchSseService sseService,
+            CityLaunchCandidateService candidateService) {
         this.readService = readService;
         this.preparationService = preparationService;
         this.sseService = sseService;
+        this.candidateService = candidateService;
     }
 
     /** GET /api/admin/city-launch/cities — every city's derived launch status. */
@@ -91,5 +94,22 @@ public class AdminCityLaunchController {
         log.info("POST /api/admin/city-launch/cities/{}/revisions/{}/rerun adminId={}",
                 cityId, revisionId, caller.userId());
         return preparationService.rerunSuperseding(cityId, revisionId, caller.userId());
+    }
+
+    /**
+     * POST .../cities/{cityId}/revisions/{revisionId}/edit — 201 Created; derives a new, editable
+     * {@code PREPARED} candidate revision as a byte-faithful copy of the current LIVE (PROMOTED,
+     * not-yet-superseded) revision's own sandbox rows (#2121). {@code revisionId} must be the
+     * CURRENT LIVE revision id — 404 if the city has no LIVE revision, 409 if {@code revisionId} is
+     * stale (a different revision is now LIVE) or if LIVE has no sandbox rows to clone (a legacy
+     * pre-sandbox revision).
+     */
+    @IsAdmin
+    @PostMapping("/cities/{cityId}/revisions/{revisionId}/edit")
+    @ResponseStatus(HttpStatus.CREATED)
+    public PrepareResponse editFromLive(@PathVariable int cityId, @PathVariable long revisionId, CallerInfo caller) {
+        log.info("POST /api/admin/city-launch/cities/{}/revisions/{}/edit adminId={}",
+                cityId, revisionId, caller.userId());
+        return candidateService.editFromLive(cityId, revisionId, caller.userId());
     }
 }

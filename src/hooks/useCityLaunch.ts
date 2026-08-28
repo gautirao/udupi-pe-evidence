@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, ApiError, API_BASE_URL } from '@/lib/api';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -112,6 +113,12 @@ export interface PreviewIdentityDto {
   cityId: number;
   citySlug: string;
   cityName: string;
+  // Issue #2121 — non-null when this revision was created via admin "Edit revision" as a
+  // byte-faithful clone of that revision's sandbox_* rows; null for a fresh-generated or
+  // true-LIVE revision. Mirrors backend PreviewIdentityResponse#clonedFromRevisionId. Note:
+  // this payload does NOT say whether the source revision is still live or has since been
+  // superseded — do not infer currency from this field alone.
+  clonedFromRevisionId: number | null;
 }
 
 function previewIdentityQueryKey(cityId: number, revisionId: number) {
@@ -141,6 +148,98 @@ export function usePreviewCityIdentity(cityId: number, revisionId: number) {
       ),
     enabled,
     staleTime: 60_000,
+  });
+}
+
+interface EditRevisionResponse {
+  revisionId: number;
+  status: string;
+}
+
+/**
+ * `CityLaunchCandidateService#editFromLive` throws a plain `ResponseStatusException` (no
+ * structured error code, unlike `CITY_PREREQUISITES_NOT_GENERATED` above) for two distinct 409
+ * causes, both flattened by `GlobalExceptionHandler#handleResponseStatus` into the same
+ * `{"error": <reason string>}` shape:
+ *   - the LIVE snapshot went stale (a newer revision was promoted since this page loaded) —
+ *     reloading actually fixes this
+ *   - LIVE has no `sandbox_*` rows to clone (a legacy revision predating the sandbox model) —
+ *     this is permanent; reloading hits the exact same 409 forever
+ * Since there's no discrete error code to key off, this discriminates on the distinguishing
+ * substring of the reason text the backend actually throws for each branch — see
+ * `CityLaunchCandidateService#editFromLive`'s two 409-throwing branches.
+ */
+function isEmptyLiveSandboxConflict(error: ApiError): boolean {
+  const body = error.body;
+  const reason =
+    typeof body === 'object' && body !== null && typeof (body as { error?: unknown }).error === 'string'
+      ? (body as { error: string }).error
+      : '';
+  return reason.includes('no sandbox geography rows to clone');
+}
+
+/**
+ * POST .../revisions/{revisionId}/edit — Issue #2121 "Edit revision" safe-clone workflow.
+ * Clones the caller's snapshotted LIVE revision's sandbox_* rows into a brand-new PREPARED
+ * candidate revision, so an admin can edit-in-place off production without ever mutating
+ * the live revision itself.
+ *
+ * The `revisionId` passed to `.mutate()` must be the admin's current snapshot of the LIVE
+ * revision id — the backend re-validates server-side and can reject with:
+ *   - 409 if it's gone stale (a newer revision was promoted since this page loaded)
+ *   - 404 if the city has no LIVE revision at all
+ *   - 409 if LIVE has no sandbox rows to clone (a legacy revision predating the sandbox model)
+ *
+ * On success (201) navigates straight to the new candidate revision's own preview route so
+ * the admin lands on the clone, not the (now possibly stale) page they clicked from.
+ */
+export function useEditRevision(cityId: number) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const navigate = useNavigate();
+
+  return useMutation<EditRevisionResponse, ApiError, number>({
+    mutationFn: (revisionId) =>
+      api.post<EditRevisionResponse>(
+        `/api/admin/city-launch/cities/${cityId}/revisions/${revisionId}/edit`,
+      ),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: CITY_LAUNCH_LIST_QUERY_KEY });
+      navigate(`/admin/city-launch/${cityId}/preview/${data.revisionId}`);
+    },
+    onError: (err) => {
+      if (err instanceof ApiError && err.status === 409) {
+        if (isEmptyLiveSandboxConflict(err)) {
+          toast({
+            title: 'This revision can\'t be edited',
+            description:
+              'The live revision predates the sandbox model and has no geography rows to clone. Reloading will not fix this — contact engineering.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        toast({
+          title: 'This revision is no longer current',
+          description:
+            'The live revision changed since this page loaded. Reload and try again.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (err instanceof ApiError && err.status === 404) {
+        toast({
+          title: 'No live revision to edit',
+          description: 'This city has no current live revision to clone from.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: 'Failed to start editing this revision',
+        description: err.message,
+        variant: 'destructive',
+      });
+    },
   });
 }
 
