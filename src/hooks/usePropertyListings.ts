@@ -520,6 +520,12 @@ export function useUpdateListing() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['property-listings'] });
+      // #2370: the admin inventory table (src/pages/admin/Listings.tsx) reads
+      // from useAdminListings (queryKey ['admin-listings']), a different cache
+      // bucket than the one this hook was already invalidating. Without this,
+      // a save/publish/unpublish in the admin editor left the table showing
+      // stale data until a manual reload.
+      queryClient.invalidateQueries({ queryKey: ['admin-listings'] });
       toast({
         title: 'Listing Updated',
         description: 'The property listing has been updated successfully.',

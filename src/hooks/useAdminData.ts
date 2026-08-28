@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useState, useCallback } from 'react';
 import type { Json, Tables } from '@/integrations/supabase/types';
 import { propertyListingSelect } from '@/integrations/supabase/propertyListingColumns';
+import type { InventoryTab, InventorySortKey, QualityBucket } from '@/lib/listingInventory';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8085';
 
@@ -324,11 +325,26 @@ export function useResetPostForReprocessing() {
 // Tables<'property_listings'> is codegen'd straight from the schema and
 // still lists them as required `string | null`, which would otherwise be a
 // lie for every row this hook returns.
-type AdminListingRow = Omit<Tables<'property_listings'>, 'contact_phone' | 'contact_info'> & {
+export type AdminListingRow = Omit<Tables<'property_listings'>, 'contact_phone' | 'contact_info'> & {
   contact_phone?: string | null;
   contact_info?: string | null;
   raw_posts: { images: Json | null } | null;
   reraValid?: boolean;
+  /**
+   * Issue #2370 — these columns are real (see PROPERTY_LISTING_COLUMNS, and
+   * they ARE selected here via propertyListingSelect()), but are absent from
+   * the Supabase codegen'd `Tables<'property_listings'>` Row type: the type
+   * generator hasn't been re-run since these columns were added, so codegen
+   * only knows about ~50 of the table's 161 real columns. Typed explicitly
+   * here rather than regenerating the schema (out of scope for this UI
+   * change) or fabricating them — the runtime values are genuine.
+   */
+  listing_number: number | null;
+  quality_score: number | null;
+  quality_breakdown: Json | null;
+  quality_computed_at: string | null;
+  super_built_area: number | null;
+  super_built_area_unit: string | null;
 };
 
 export function useAdminListings(limit = 100) {
@@ -347,6 +363,288 @@ export function useAdminListings(limit = 100) {
       return data as unknown as AdminListingRow[];
     },
     enabled: isAdmin,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Server-side paginated/filtered/sorted admin inventory (#2370)
+//
+// `useAdminListings` above snapshots at most `limit` rows into memory — fine
+// for ProcessPosts.tsx's small triage list, but wrong for the full Listings
+// inventory page once real inventory exceeds that snapshot: every filter,
+// search, sort, tab count, and pagination control derived from a truncated
+// in-memory array silently loses older rows. The hooks below push
+// pagination/filtering/sorting/counts down to the Supabase query boundary so
+// the UI reflects the real table, not a fixed-size window of it.
+// ---------------------------------------------------------------------------
+
+/**
+ * Server-side equivalent of `needsAttention()` in listingInventory.ts,
+ * expressed as a PostgREST `or()` filter string. Mirrors:
+ *   status === 'REJECTED'
+ *   || (is_valid === true && status !== 'LIVE')
+ *   || (quality_score != null && quality_score < 50)
+ *   || (locality is a non-empty string && (latitude or longitude is null))
+ *
+ * Documented gap: `hasMissingCoordinates` trims the locality string
+ * client-side before checking it's non-empty; PostgREST's `neq.""` only
+ * excludes the exact empty string, so a whitespace-only locality (e.g. " ")
+ * would count as "present" here but not in the pure client-side function.
+ * This is an intentionally accepted edge case (whitespace-only locality
+ * values are not expected in real scraped/submitted data).
+ */
+const NEEDS_ATTENTION_OR_FILTER =
+  'status.eq.REJECTED,and(is_valid.eq.true,status.neq.LIVE),quality_score.lt.50,and(locality.not.is.null,locality.neq."",or(latitude.is.null,longitude.is.null))';
+
+/**
+ * Server-side equivalent of `matchesSearch()` in listingInventory.ts for the
+ * fields that are real, indexable columns (title/locality/seller_type).
+ *
+ * Documented gap: the pure client-side `matchesSearch` also matches a
+ * *substring* of the formatted display id (`formatDisplayId(listing_number)`,
+ * e.g. "PROP-101"), so a bare "1" would substring-match "PROP-101",
+ * "PROP-210", etc. PostgREST has no ilike-on-computed-expression support for
+ * a plain integer column, so only an exact display-id match ("PROP-101" /
+ * "prop-101") or an exact numeric listing_number match ("101") is
+ * translated here — the fuzzy-substring-of-a-number case is dropped. This
+ * covers the realistic admin workflow (typing the exact display id or
+ * listing number) without a false sense of exhaustive substring search.
+ */
+export function buildAdminListingsSearchFilter(rawQuery: string): string | null {
+  const q = rawQuery.trim();
+  if (!q) return null;
+
+  // Two escaping passes are required, in order:
+  //  1. Postgres ILIKE escaping — a literal backslash, "%" or "_" in the
+  //     search term must not be read as an ILIKE escape/wildcard character.
+  //  2. PostgREST filter-grammar escaping — the value is embedded in a
+  //     `column.ilike."value"` clause inside a comma-joined `.or()` list, so
+  //     any backslash/quote produced by pass 1 (or present in the raw term)
+  //     must be escaped again, and the value wrapped in double quotes so
+  //     grammar-reserved characters (",", ".", ":", "(", ")") inside it are
+  //     treated as literal content rather than filter syntax.
+  const ilikeEscaped = q.replace(/[\\%_]/g, (c) => `\\${c}`);
+  const postgrestEscaped = ilikeEscaped.replace(/[\\"]/g, (c) => `\\${c}`);
+  const quotedValue = `"%${postgrestEscaped}%"`;
+  const clauses = [
+    `title.ilike.${quotedValue}`,
+    `locality.ilike.${quotedValue}`,
+    `seller_type.ilike.${quotedValue}`,
+  ];
+
+  const displayIdMatch = /^prop-?(\d+)$/i.exec(q);
+  if (displayIdMatch) {
+    clauses.push(`listing_number.eq.${displayIdMatch[1]}`);
+  } else if (/^\d+$/.test(q)) {
+    clauses.push(`listing_number.eq.${q}`);
+  }
+
+  return clauses.join(',');
+}
+
+export interface AdminListingsQueryParams {
+  page: number;
+  pageSize: number;
+  tab: InventoryTab;
+  q: string;
+  sort: InventorySortKey;
+  propertyType: string;
+  locality: string;
+  sellerType: string;
+  lifecycleStatus: string;
+  visibility: 'all' | 'public' | 'hidden';
+  quality: QualityBucket | 'all';
+}
+
+export interface AdminListingsPageResult {
+  items: AdminListingRow[];
+  totalCount: number;
+}
+
+/**
+ * Paginated, server-filtered, server-sorted admin inventory page. Replaces
+ * `useAdminListings(FETCH_LIMIT)` + client-side `.filter()/.sort()/.slice()`
+ * as the data source for the Listings inventory table: `count: 'exact'` on
+ * the `.select()` gives a real total (not a "200+ maybe more" guess), and
+ * `.range()` fetches only the requested page.
+ */
+export function useAdminListingsPage(params: AdminListingsQueryParams) {
+  const { isAdmin } = useAuth();
+
+  return useQuery({
+    queryKey: ['admin-listings-page', params],
+    queryFn: async (): Promise<AdminListingsPageResult> => {
+      let query = supabase
+        .from('property_listings')
+        .select(propertyListingSelect('raw_posts(images)'), { count: 'exact' });
+
+      if (params.tab === 'published') query = query.eq('status', 'LIVE');
+      else if (params.tab === 'pending') query = query.eq('status', 'PENDING_REVIEW');
+      else if (params.tab === 'archived') query = query.eq('status', 'ARCHIVED');
+      else if (params.tab === 'needs-attention') query = query.or(NEEDS_ATTENTION_OR_FILTER);
+
+      if (params.lifecycleStatus !== 'all') query = query.eq('status', params.lifecycleStatus);
+      if (params.propertyType !== 'all') {
+        // Supabase codegen's `property_type` enum is stale (only 5 of the
+        // real ~15 PropertyType values — same known gap documented on
+        // AdminListingRow above and on usePropertyListings.ts:322's
+        // `.in('seller_type', ...)` call). `params.propertyType` only ever
+        // comes from `propertyTypeOptions`, itself sourced from real
+        // distinct column values, so this is a safe, intentional widening.
+        query = query.eq('property_type', params.propertyType as Tables<'property_listings'>['property_type']);
+      }
+      if (params.locality !== 'all') query = query.eq('locality', params.locality);
+      if (params.sellerType !== 'all') query = query.eq('seller_type', params.sellerType);
+
+      if (params.visibility === 'public') query = query.eq('status', 'LIVE').eq('is_valid', true);
+      else if (params.visibility === 'hidden') query = query.or('status.neq.LIVE,is_valid.eq.false');
+
+      if (params.quality === 'high') query = query.gte('quality_score', 80);
+      else if (params.quality === 'medium') query = query.gte('quality_score', 50).lt('quality_score', 80);
+      else if (params.quality === 'low') query = query.lt('quality_score', 50);
+      else if (params.quality === 'unscored') query = query.is('quality_score', null);
+
+      const searchFilter = buildAdminListingsSearchFilter(params.q);
+      if (searchFilter) query = query.or(searchFilter);
+
+      if (params.sort === 'updated-desc') query = query.order('updated_at', { ascending: false });
+      else if (params.sort === 'updated-asc') query = query.order('updated_at', { ascending: true });
+      else if (params.sort === 'created-desc') query = query.order('created_at', { ascending: false });
+      else if (params.sort === 'price-desc') query = query.order('price', { ascending: false, nullsFirst: false });
+      else if (params.sort === 'completeness-desc')
+        query = query.order('quality_score', { ascending: false, nullsFirst: false });
+
+      const from = (params.page - 1) * params.pageSize;
+      const to = from + params.pageSize - 1;
+      const { data, error, count } = await query.range(from, to);
+
+      if (error) throw error;
+      return { items: (data ?? []) as unknown as AdminListingRow[], totalCount: count ?? 0 };
+    },
+    enabled: isAdmin,
+    placeholderData: (previousData) => previousData,
+  });
+}
+
+export interface AdminListingsTabCounts {
+  all: number;
+  published: number;
+  pending: number;
+  'needs-attention': number;
+  archived: number;
+}
+
+/**
+ * Real per-tab counts over the *entire* inventory (not just the current
+ * page), via lightweight `head: true` count-only queries — no row data is
+ * transferred, just the count.
+ */
+export function useAdminListingsTabCounts() {
+  const { isAdmin } = useAuth();
+
+  return useQuery({
+    queryKey: ['admin-listings-tab-counts'],
+    queryFn: async (): Promise<AdminListingsTabCounts> => {
+      function baseCountQuery() {
+        return supabase.from('property_listings').select('id', { count: 'exact', head: true });
+      }
+      async function countWhere(
+        apply?: (q: ReturnType<typeof baseCountQuery>) => ReturnType<typeof baseCountQuery>,
+      ) {
+        const base = baseCountQuery();
+        const { count, error } = await (apply ? apply(base) : base);
+        if (error) throw error;
+        return count ?? 0;
+      }
+
+      const [all, published, pending, needsAttentionCount, archived] = await Promise.all([
+        countWhere(),
+        countWhere((q) => q.eq('status', 'LIVE')),
+        countWhere((q) => q.eq('status', 'PENDING_REVIEW')),
+        countWhere((q) => q.or(NEEDS_ATTENTION_OR_FILTER)),
+        countWhere((q) => q.eq('status', 'ARCHIVED')),
+      ]);
+
+      return { all, published, pending, 'needs-attention': needsAttentionCount, archived };
+    },
+    enabled: isAdmin,
+  });
+}
+
+const FILTER_OPTIONS_SCAN_LIMIT = 5000;
+
+export interface AdminListingFilterOptions {
+  propertyTypes: string[];
+  localities: string[];
+  sellerTypes: string[];
+}
+
+/**
+ * Distinct filter-dropdown values across the *full* inventory. PostgREST has
+ * no `SELECT DISTINCT`, so this selects only the 3 needed columns (cheap —
+ * no joined images, no wide row) across up to `FILTER_OPTIONS_SCAN_LIMIT`
+ * rows and dedupes client-side.
+ *
+ * Documented gap: this is still a bounded scan, not a true distinct-values
+ * query — an inventory with more than `FILTER_OPTIONS_SCAN_LIMIT` rows could
+ * theoretically have a property_type/locality/seller_type value that only
+ * appears past that window and so wouldn't show up as a filter option. This
+ * is a large, deliberately-chosen ceiling (25x the old 200-row snapshot) to
+ * cover realistic inventory sizes without a dedicated distinct-values view
+ * or RPC, which is out of scope for this fix.
+ */
+export function useAdminListingFilterOptions() {
+  const { isAdmin } = useAuth();
+
+  return useQuery({
+    queryKey: ['admin-listings-filter-options'],
+    queryFn: async (): Promise<AdminListingFilterOptions> => {
+      const { data, error } = await supabase
+        .from('property_listings')
+        .select('property_type, locality, seller_type')
+        .limit(FILTER_OPTIONS_SCAN_LIMIT);
+
+      if (error) throw error;
+      const rows = (data ?? []) as Array<{
+        property_type: string;
+        locality: string | null;
+        seller_type: string | null;
+      }>;
+
+      return {
+        propertyTypes: Array.from(new Set(rows.map((r) => r.property_type))).sort(),
+        localities: Array.from(new Set(rows.map((r) => r.locality).filter((v): v is string => !!v))).sort(),
+        sellerTypes: Array.from(new Set(rows.map((r) => r.seller_type).filter((v): v is string => !!v))).sort(),
+      };
+    },
+    enabled: isAdmin,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Direct-by-id fetch for the `?edit=<id>` deep link. Used when the requested
+ * id isn't present in the currently loaded page of `useAdminListingsPage` —
+ * without this, a listing outside the current page/window was
+ * indistinguishable from a genuinely deleted/non-existent one (#2370).
+ */
+export function useAdminListingById(id: string | null) {
+  const { isAdmin } = useAuth();
+
+  return useQuery({
+    queryKey: ['admin-listing-by-id', id],
+    queryFn: async (): Promise<AdminListingRow | null> => {
+      if (!id) return null;
+      const { data, error } = await supabase
+        .from('property_listings')
+        .select(propertyListingSelect('raw_posts(images)'))
+        .eq('id', id)
+        .maybeSingle();
+
+      if (error) throw error;
+      return (data as unknown as AdminListingRow) ?? null;
+    },
+    enabled: isAdmin && !!id,
   });
 }
 
