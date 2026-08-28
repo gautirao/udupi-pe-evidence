@@ -144,6 +144,20 @@ type MapDataSlice = Pick<
   | 'discoverAreas'
   | 'areaListings'
   | 'isLoadingAreaListings'
+  // Issue #2353 — threaded so AreaFirstJourneyPanel can pass the map's
+  // ALREADY-FETCHED area-listings error state down to AreaLeafListingsSurface,
+  // which otherwise has no way to distinguish "the map's fetch errored" from
+  // "genuinely zero listings" when consuming the map's data instead of its own.
+  | 'isErrorAreaListings'
+  // Issue #2353 — the SAME query's refetch, so a consumer of `areaListings`
+  // as its primary data source can offer a working Retry-on-error instead of
+  // a dead button.
+  | 'refetchAreaListings'
+  // Issue #2353 (code-review fix) — the SAME query's isFetching, so a
+  // consumer of `areaListings` as its primary data source can surface a
+  // `keepPreviousData` refresh-in-flight state (stale cards + new fetch
+  // pending) instead of presenting it as fully settled.
+  | 'isFetchingAreaListings'
   | 'areasLoading'
   | 'agriAreasData'
   | 'isLoadingAgriAreas'
@@ -352,6 +366,8 @@ type PanelGeographyView = Pick<
   | 'selectedArea'
   | 'areaListings'
   | 'isLoadingAreaListings'
+  | 'isErrorAreaListings'
+  | 'isFetchingAreaListings'
   | 'areaResultSummaryText'
   | 'areasLoading'
   | 'discoverAreasForPanel'
@@ -376,6 +392,8 @@ type PanelGeographyCommands = Pick<
   | 'refetchRegionScopedGroups'
   | 'armRegionSelect'
   | 'selectGroupMemberArea'
+  // Issue #2353 — see MapDataSlice's own doc comment.
+  | 'refetchAreaListings'
 >;
 
 /**
@@ -532,6 +550,8 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       discoverAreas,
       areaListings,
       isLoadingAreaListings,
+      isErrorAreaListings,
+      isFetchingAreaListings,
       areasLoading,
       agriAreasData,
       isLoadingAgriAreas,
@@ -586,6 +606,8 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       selectedArea,
       areaListings,
       isLoadingAreaListings,
+      isErrorAreaListings,
+      isFetchingAreaListings,
       areaResultSummaryText,
       areasLoading,
       discoverAreasForPanel,
@@ -656,6 +678,7 @@ export function buildPanelSurfaceCommands(
     navigation: { setHoveredNavigationNodeKey, setFocusedClusterMemberAreaKeys },
     journeySwitch: { handleSelectJourney, selectGroupMemberArea },
     geography: { refetchRegionScopedGroups },
+    mapData: { refetchAreaListings },
     agri: { refetchRegionalAreaGroups, refetchAgriGroupListings },
     results: { refetchGroupResults },
     school: { handleAreaFirstBack, journeyCommands },
@@ -685,6 +708,7 @@ export function buildPanelSurfaceCommands(
       refetchRegionScopedGroups,
       armRegionSelect,
       selectGroupMemberArea,
+      refetchAreaListings,
     },
     results: { refetchGroupResults, setPage, handleBoundedSearch },
     agri: { refetchAgriGroupListings, refetchRegionalAreaGroups },

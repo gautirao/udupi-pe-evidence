@@ -31,6 +31,30 @@ export interface AreaFirstJourneyPanelView {
     DiscoverPanelSurfaceView['navigation'],
     'areasNavigationJourney' | 'hoveredNavigationNodeKey' | 'focusedClusterMemberAreaKeys'
   >;
+  /**
+   * Issue #2353 — the map's ALREADY-FETCHED area-listings (`useDiscoverMapData`,
+   * keyed on the SAME `effectiveSelectedArea` bridge this journey's own AREA
+   * leaf resolves to), threaded down so `DiscoverAreasJourneyPanel`'s
+   * `AreaLeafListingsSurface` can consume it instead of issuing a second,
+   * identically-scoped `useDiscoverCityListings` query. See that component's
+   * own doc comment for the fallback contract. `selectedArea` is threaded
+   * alongside so the surface can verify `areaListings` is actually keyed to
+   * the SAME area it resolved (code-review fix — `resolveEffectiveSelectedArea`
+   * can diverge from the node-resolved leaf when a URL carries both a legacy
+   * `areaKey=` and `node=`; without this check the surface would silently
+   * render one area's listings under another area's heading).
+   */
+  geography: Pick<
+    DiscoverPanelSurfaceView['geography'],
+    | 'areaListings'
+    | 'isLoadingAreaListings'
+    | 'isErrorAreaListings'
+    | 'selectedArea'
+    // Issue #2353 (code-review fix) — the SAME query's isFetching, so the
+    // surface can distinguish "showing stale keepPreviousData while a
+    // refetch is in flight" from "fully settled" on the prop path.
+    | 'isFetchingAreaListings'
+  >;
   filters: Pick<DiscoverPanelSurfaceView['filters'], 'filters'>;
   schools: DiscoverPanelSurfaceView['schools'];
   results: Pick<DiscoverPanelSurfaceView['results'], 'listingDataLoading'>;
@@ -53,7 +77,12 @@ export interface AreaFirstJourneyPanelCommands {
     | 'selectJourney'
   >;
   filters: Pick<DiscoverPanelSurfaceCommands['filters'], 'handleFiltersChange'>;
-  geography: Pick<DiscoverPanelSurfaceCommands['geography'], 'handleAreaFirstBack'>;
+  geography: Pick<
+    DiscoverPanelSurfaceCommands['geography'],
+    // Issue #2353 (code-review fix) — the SAME query `mapAreaListings` came
+    // from, so a Retry click on the prop path is a real refetch, not a no-op.
+    'handleAreaFirstBack' | 'refetchAreaListings'
+  >;
 }
 
 export interface AreaFirstJourneyPanelProps {
@@ -87,6 +116,13 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
   const { city } = view.routing;
   const { areasNavigationJourney, hoveredNavigationNodeKey, focusedClusterMemberAreaKeys } =
     view.navigation;
+  const {
+    areaListings,
+    isLoadingAreaListings,
+    isErrorAreaListings,
+    selectedArea,
+    isFetchingAreaListings,
+  } = view.geography;
   const { filters } = view.filters;
   const { selectedSchool, schools, schoolsQuery, schoolListings } = view.schools;
   const { listingDataLoading } = view.results;
@@ -99,7 +135,7 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
     selectJourney,
   } = commands.navigation;
   const { handleFiltersChange } = commands.filters;
-  const { handleAreaFirstBack } = commands.geography;
+  const { handleAreaFirstBack, refetchAreaListings } = commands.geography;
   // Issue #2142 SOLID follow-up (commit 2, PLAN REVIEW correction 3) — these
   // two were `useDiscoverNav()`/`useDiscoverActions()` calls (the #1953
   // ambient-facade deviation) until this commit. Same objects, same values,
@@ -169,6 +205,23 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
         // URL-only write.
         areaLeafFilters={filters}
         onAreaLeafFiltersChange={handleFiltersChange}
+        // Issue #2353 — the map's already-fetched area listings (keyed on the
+        // same effective AREA-leaf bridge), used as the primary data source by
+        // AreaLeafListingsSurface so it no longer issues its own duplicate
+        // useDiscoverCityListings query. `mapAreaListingsAreaKey` lets the
+        // surface verify the listings are actually keyed to the leaf it
+        // resolved (code-review fix) before trusting them; `mapAreaListingsRefetch`
+        // makes the surface's error-state Retry button a real refetch.
+        // `mapAreaListingsFetching` (code-review fix) — the SAME query's
+        // isFetching, so the surface can surface a `keepPreviousData`
+        // refresh-in-flight state (stale cards + new fetch pending, e.g. a
+        // filter/search rekey) instead of presenting it as fully settled.
+        mapAreaListings={areaListings}
+        mapAreaListingsLoading={isLoadingAreaListings}
+        mapAreaListingsError={isErrorAreaListings}
+        mapAreaListingsFetching={isFetchingAreaListings}
+        mapAreaListingsAreaKey={selectedArea?.areaKey ?? null}
+        mapAreaListingsRefetch={refetchAreaListings}
         // Issue #1956 PR-4 FINAL FIX PASS (regression fix) — the canonical
         // AREA-leaf surface silently dropped the "Add a school in this
         // area" CTA because this call site never supplied `onAddSchool`

@@ -35,11 +35,15 @@ import { useDiscoverActions, useDiscoverNav } from '@/features/discover/context/
 import { useDiscoverCityListings } from '@/hooks/useDiscoverCityListings';
 import { useDiscoverListings } from '@/hooks/useDiscoverListings';
 import { useDiscoverSearchState } from '@/features/discover/state/useDiscoverSearchState';
-import { CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
+import { CITY_CONFIG } from '@/lib/localityUtils';
 import { NodeListingsSurface } from './NodeListingsSurface';
 import { AreaSelectedPanel } from '@/components/discover/panels/AreaSelectedPanel';
 import { SchoolsInAreaPanel, AreaSchoolCombinedPanel } from '@/components/discover/panels/SchoolJourneyPanels';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
+import {
+  resolveEffectiveCity,
+  resolveEffectiveAreaLeafFilters,
+} from '@/features/discover/selectors/effectiveDiscoverContext';
 import { toSelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
@@ -193,6 +197,51 @@ export interface DiscoverAreasJourneyPanelProps {
   areaLeafFilters?: PropertyFilters;
   onAreaLeafFiltersChange?: (next: PropertyFilters) => void;
   /**
+   * Issue #2353 — the map's ALREADY-FETCHED area listings for the current
+   * AREA leaf (`useDiscoverMapData`'s `areaListings`, keyed on the same
+   * `effectiveSelectedArea` bridge this journey's node resolves to), plus its
+   * loading/error state. When supplied, `AreaLeafListingsSurface` uses this as
+   * its PRIMARY data source instead of issuing its own duplicate
+   * `useDiscoverCityListings` query — see that component's own doc comment.
+   * Optional so every pre-existing render path/test that never resolves an
+   * AREA leaf (and the surface's own isolated-render/standalone test path)
+   * keeps compiling and rendering unchanged: omitting it falls back to the
+   * surface's own query, exactly as before this issue.
+   */
+  mapAreaListings?: DiscoverCityListingItem[];
+  mapAreaListingsLoading?: boolean;
+  mapAreaListingsError?: boolean;
+  /**
+   * Issue #2353 (code-review fix) — the areaKey `mapAreaListings` is actually
+   * keyed to (the caller's `effectiveSelectedArea.areaKey`). `mapAreaListings`
+   * is trusted as the primary data source ONLY when this matches the resolved
+   * leaf's own `areaPoint.areaKey` — `resolveEffectiveSelectedArea` prefers a
+   * legacy `areaKey=` URL param over the canonical `node=` resolution when
+   * both are present, so the two CAN diverge on a hand-built/bookmarked URL.
+   * On a mismatch (or when omitted), the surface falls back to its own query
+   * — exactly current pre-#2353 behaviour — rather than ever rendering one
+   * area's listings under a different area's heading/breadcrumb.
+   */
+  mapAreaListingsAreaKey?: string | null;
+  /**
+   * Issue #2353 (code-review fix) — the SAME query `mapAreaListings` came
+   * from, so the surface's error-state Retry button is a real refetch instead
+   * of a no-op. Optional so the standalone-render fallback path (no map data
+   * supplied at all) keeps compiling.
+   */
+  mapAreaListingsRefetch?: () => void;
+  /**
+   * Issue #2353 (code-review fix) — the SAME query's `isFetching`.
+   * `useDiscoverCityListings` uses `placeholderData: keepPreviousData`, so on
+   * a query-key change (filter/search rekey) it deliberately keeps rendering
+   * the PREVIOUS response while a new one is in flight — `isFetching: true`
+   * while `mapAreaListingsLoading` can stay `false`. Without this, the
+   * surface would present stale cards as fully settled during a refetch,
+   * recreating the stale-cards/new-controls incoherence #2353 exists to
+   * close. Optional so the standalone-render fallback path keeps compiling.
+   */
+  mapAreaListingsFetching?: boolean;
+  /**
    * Issue #1956 PR-4 FINAL FIX PASS (regression fix) — the SAME
    * `urlActions.enterSchoolPicking` handler `DiscoverRightPanelContainer`
    * already wires to the legacy `DiscoverRightPanel`'s `onAddSchool` (see
@@ -269,6 +318,12 @@ export function DiscoverAreasJourneyPanel({
   onClusterFocusChange,
   areaLeafFilters,
   onAreaLeafFiltersChange,
+  mapAreaListings,
+  mapAreaListingsLoading,
+  mapAreaListingsError,
+  mapAreaListingsFetching,
+  mapAreaListingsAreaKey,
+  mapAreaListingsRefetch,
   onAddSchool,
   onSelectedListingPreviewChange,
   cityLabel,
@@ -510,6 +565,12 @@ export function DiscoverAreasJourneyPanel({
         historyAdjacencyLog={journey.historyAdjacencyLog}
         committedFilters={areaLeafFilters}
         onCommittedFiltersChange={onAreaLeafFiltersChange}
+        mapAreaListings={mapAreaListings}
+        mapAreaListingsLoading={mapAreaListingsLoading}
+        mapAreaListingsError={mapAreaListingsError}
+        mapAreaListingsFetching={mapAreaListingsFetching}
+        mapAreaListingsAreaKey={mapAreaListingsAreaKey}
+        mapAreaListingsRefetch={mapAreaListingsRefetch}
         onAddSchool={onAddSchool}
         // Issue #1956 PR-5 (AC5.9 breadcrumb omission-class fix) — the SAME
         // journey.selectNode reference (AC3.9's ONE selection action) every
@@ -597,6 +658,16 @@ interface AreaLeafListingsSurfaceProps {
    */
   committedFilters?: PropertyFilters;
   onCommittedFiltersChange?: (next: PropertyFilters) => void;
+  /** See `DiscoverAreasJourneyPanelProps.mapAreaListings` — the map's already-fetched primary data source. */
+  mapAreaListings?: DiscoverCityListingItem[];
+  mapAreaListingsLoading?: boolean;
+  mapAreaListingsError?: boolean;
+  /** See `DiscoverAreasJourneyPanelProps.mapAreaListingsFetching` — the keepPreviousData refresh-in-flight signal. */
+  mapAreaListingsFetching?: boolean;
+  /** See `DiscoverAreasJourneyPanelProps.mapAreaListingsAreaKey` — the identity guard. */
+  mapAreaListingsAreaKey?: string | null;
+  /** See `DiscoverAreasJourneyPanelProps.mapAreaListingsRefetch` — the working Retry handler. */
+  mapAreaListingsRefetch?: () => void;
   /** See `DiscoverAreasJourneyPanelProps.onAddSchool` — forwarded unchanged to `AreaSelectedPanel`. */
   onAddSchool?: () => void;
   /**
@@ -663,6 +734,12 @@ function AreaLeafListingsSurface({
   historyAdjacencyLog,
   committedFilters,
   onCommittedFiltersChange,
+  mapAreaListings,
+  mapAreaListingsLoading,
+  mapAreaListingsError,
+  mapAreaListingsFetching,
+  mapAreaListingsAreaKey,
+  mapAreaListingsRefetch,
   onAddSchool,
   selectNode,
   onSelectedListingPreviewChange,
@@ -712,37 +789,31 @@ function AreaLeafListingsSurface({
   // identical `effectiveFilters` value on every render, a chip toggle can
   // never show new chip state next to stale cards/count again.
   //
-  // What this does NOT guarantee: that this component's TanStack Query cache
-  // entry is the SAME entry as the map's own `useDiscoverCityListings` call
-  // in `useDiscoverMapData`. `q` here is debounced by this component's own
-  // `useDiscoverSearchState` instance (a separate timer from the map's), so
-  // the two calls' query keys can still diverge on that field independent of
-  // filters — this pass does not claim or require cache-entry sharing, only
-  // same-frame filter-identity agreement between this panel's own chips,
-  // query, and cards. True single-sourcing (this component receiving
-  // MapDiscovery's ALREADY-FETCHED `areaListings` as a prop instead of
-  // issuing its own same-shaped query) remains the named PR-5 structural
-  // option, not implemented here.
+  // Issue #2353 — true single-sourcing is now implemented: when the caller
+  // (AreaFirstJourneyPanel, via `mapAreaListings`) supplies the map's
+  // ALREADY-FETCHED `areaListings` (from `useDiscoverMapData`, keyed on the
+  // same `effectiveSelectedArea` bridge this journey's node resolves to),
+  // this component's OWN `useDiscoverCityListings` call below is disabled
+  // (empty `areaKeys`) and the prop data is used instead — closing the
+  // duplicate-fetch this comment used to describe as a "named PR-5
+  // structural option, not implemented here". `q`/chips/filters identity
+  // agreement (the rest of this comment) is unaffected either way: the prop
+  // path skips this component's own query+cards divergence risk entirely,
+  // and the fallback query path (no prop supplied — this component's own
+  // isolated-render/standalone tests) keeps the exact pre-#2353 behaviour
+  // described below.
   // A minimal PropertyFilters projection (propertyType/bedrooms/price only —
   // the fuller date/seller/board/category chip set stays on the legacy
   // ActiveContextChips-driven surface; a documented simplification, see the
   // PR-4 report), used by BOTH the query above and the chip-display `filters`
   // prop below.
+  // Issue #2353 — the projection logic itself now lives in
+  // resolveEffectiveAreaLeafFilters (single source, see that module's doc),
+  // called here inside the same useMemo so this component's memoization
+  // semantics (recompute only when committedFilters or the four nav.filters
+  // fields change) are unchanged.
   const effectiveFilters: PropertyFilters = useMemo(
-    () =>
-      committedFilters
-        ? {
-            propertyTypes: committedFilters.propertyTypes,
-            bedrooms: committedFilters.bedrooms,
-            priceMin: committedFilters.priceMin,
-            priceMax: committedFilters.priceMax,
-          }
-        : {
-            propertyTypes: nav.filters.propertyTypes as PropertyFilters['propertyTypes'],
-            bedrooms: nav.filters.bedrooms,
-            priceMin: nav.filters.priceMin,
-            priceMax: nav.filters.priceMax,
-          },
+    () => resolveEffectiveAreaLeafFilters(committedFilters, nav.filters),
     [
       committedFilters,
       nav.filters.propertyTypes,
@@ -751,9 +822,31 @@ function AreaLeafListingsSurface({
       nav.filters.priceMax,
     ],
   );
+  // Issue #2353 — true when the caller supplied the map's already-fetched
+  // area listings AND they are actually keyed to THIS resolved leaf. When
+  // true, the own query below is disabled (empty `areaKeys` trips
+  // `useDiscoverCityListings`' own `enabled: areaKeys.length > 0` gate — see
+  // that hook) so this surface never issues a second, identically-scoped
+  // fetch. `mapAreaListings` is checked for `undefined` specifically (not
+  // falsiness) so a genuinely empty resolved array (`[]`, e.g. an area with
+  // zero listings) still counts as "supplied" and is not mistaken for "no
+  // prop given".
+  //
+  // Issue #2353 (code-review fix) — the areaKey check is REQUIRED, not
+  // defensive decoration: `resolveEffectiveSelectedArea` (the map-side
+  // bridge `mapAreaListings` is fetched against) prefers a legacy `areaKey=`
+  // URL param over the canonical `node=` resolution when a URL carries both
+  // (a hand-built/bookmarked link — the in-app click path never produces
+  // this). Without this guard, that divergence would silently render one
+  // area's listings under a DIFFERENT area's heading/breadcrumb here. On any
+  // mismatch (or `mapAreaListingsAreaKey` omitted), this falls back to the
+  // surface's own query — exactly current pre-#2353 behaviour, i.e. the
+  // failure mode degrades to "one extra fetch", never "wrong data".
+  const hasMapAreaListings =
+    mapAreaListings !== undefined && mapAreaListingsAreaKey === areaPoint.areaKey;
   const areaListingsQuery = useDiscoverCityListings({
-    city: nav.city || DEFAULT_CITY,
-    areaKeys: [areaPoint.areaKey],
+    city: resolveEffectiveCity(nav.city),
+    areaKeys: hasMapAreaListings ? [] : [areaPoint.areaKey],
     limitPerArea: 50,
     propertyType:
       effectiveFilters.propertyTypes?.length === 1 ? effectiveFilters.propertyTypes[0] : undefined,
@@ -764,8 +857,49 @@ function AreaLeafListingsSurface({
     listingPurpose: intentListingPurpose,
     isAuthenticated,
   });
+  // The resolved listings/loading/error/fetching signals this surface renders
+  // from — the map-supplied prop when present (and identity-matched), else
+  // this component's own (now-disabled-when-prop-present) query above.
+  const rawAreaListings = useMemo(
+    () =>
+      hasMapAreaListings
+        ? (mapAreaListings ?? [])
+        : (areaListingsQuery.data?.areas.flatMap((a) => a.listings) ?? []),
+    [hasMapAreaListings, mapAreaListings, areaListingsQuery.data],
+  );
+  const isLoadingAreaListingsResolved = hasMapAreaListings
+    ? (mapAreaListingsLoading ?? false)
+    : areaListingsQuery.isLoading;
+  // Issue #2353 (code-review fix) — was hardcoded `false` on the prop path.
+  // `useDiscoverCityListings` uses `placeholderData: keepPreviousData`, so on
+  // a filter/search rekey it deliberately keeps rendering the PREVIOUS
+  // response while a new one is in flight (`isFetching: true`,
+  // `isLoading: false`). Hardcoding `false` here dropped that signal
+  // entirely, letting the panel present stale cards as fully settled with no
+  // fetching indicator — recreating the exact stale-cards/new-controls
+  // incoherence #2353 exists to close. `mapAreaListingsFetching` is the SAME
+  // query's real `isFetching` (see `useDiscoverMapData.isFetchingAreaListings`).
+  const isFetchingAreaListingsResolved = hasMapAreaListings
+    ? (mapAreaListingsFetching ?? false)
+    : areaListingsQuery.isFetching;
+  const isErrorAreaListingsResolved = hasMapAreaListings
+    ? (mapAreaListingsError ?? false)
+    : areaListingsQuery.isError;
+  // Issue #2353 (code-review fix) — was a no-op (`() => undefined`) on the
+  // prop path, leaving Retry visibly clickable but non-functional on a real
+  // map-fetch error. `mapAreaListingsRefetch` is the SAME query
+  // `mapAreaListings`/`mapAreaListingsError` came from
+  // (`useDiscoverMapData.refetchAreaListings`), threaded down through
+  // `AreaFirstJourneyPanel`, so Retry now re-issues the actual failed
+  // request — mirrors the `onSchoolsRetry={schoolsQuery.refetch}` pattern
+  // one call site above. Falls back to a no-op only if a caller supplies
+  // `mapAreaListings` without also supplying `mapAreaListingsRefetch`
+  // (defensive — production always supplies both together).
+  const refetchAreaListings = hasMapAreaListings
+    ? (mapAreaListingsRefetch ?? (() => undefined))
+    : () => areaListingsQuery.refetch();
   const areaListingsForPanel = useMemo(() => {
-    const listings = areaListingsQuery.data?.areas.flatMap((a) => a.listings) ?? [];
+    const listings = rawAreaListings;
     // Issue #1956 PR-4 FIX CYCLE 3 (SF4, defense-in-depth) — the anon
     // /api/discover/cities/{city}/listings response is not expected to carry
     // `pricePaise` for anon callers (backend-enforced), but this strips it
@@ -782,7 +916,7 @@ function AreaLeafListingsSurface({
     return isAuthenticated
       ? listings
       : listings.map((l) => ({ ...l, pricePaise: undefined, monthlyRentRupees: undefined }));
-  }, [areaListingsQuery.data, isAuthenticated]);
+  }, [rawAreaListings, isAuthenticated]);
 
   // Issue #1956 PR-5 (AC5.9 breadcrumb omission-class fix) — `node.ancestry`
   // is the SAME server-declared ancestry `HierarchyBackButton` already reads
@@ -851,7 +985,7 @@ function AreaLeafListingsSurface({
   // `journey.isError` above (AlertCircle icon + message + Retry button) —
   // reused verbatim here rather than inventing a second error presentation,
   // with its own testid/copy/refetch target for this query.
-  if (areaListingsQuery.isError) {
+  if (isErrorAreaListingsResolved) {
     return (
       <div className="p-4" data-testid="areas-journey-panel-listings">
         <HierarchyBackButton
@@ -869,7 +1003,7 @@ function AreaLeafListingsSurface({
           <p className="text-sm text-muted-foreground">
             We couldn't load properties in {areaPoint.areaLabel}. Please try again.
           </p>
-          <Button variant="outline" size="sm" onClick={() => areaListingsQuery.refetch()}>
+          <Button variant="outline" size="sm" onClick={refetchAreaListings}>
             Retry
           </Button>
         </div>
@@ -901,7 +1035,7 @@ function AreaLeafListingsSurface({
           selectedSchool={selectedSchool ?? null}
           listings={schoolListings ?? []}
           isLoadingListings={schoolListingsLoading ?? false}
-          isFetching={areaListingsQuery.isFetching}
+          isFetching={isFetchingAreaListingsResolved}
           radiusKm={radiusKm ?? null}
           onRadiusChange={onRadiusChange ?? (() => undefined)}
           onClearSchool={onClearSchool ?? (() => undefined)}
@@ -953,8 +1087,8 @@ function AreaLeafListingsSurface({
           schoolsFetching={schoolsFetching}
           onSelectSchool={onSelectSchool}
           areaListings={areaListingsForPanel}
-          isLoadingAreaListings={areaListingsQuery.isLoading}
-          isFetching={areaListingsQuery.isFetching}
+          isLoadingAreaListings={isLoadingAreaListingsResolved}
+          isFetching={isFetchingAreaListingsResolved}
           isAuthenticated={isAuthenticated}
           intent={nav.intent}
           selectedListingId={nav.selectedListing}
@@ -1021,7 +1155,17 @@ function AreaLeafListingsSurface({
         onCrumbRegion={onCrumbRegion}
         onCrumbGroup={onCrumbGroup}
         areaListings={areaListingsForPanel}
-        isLoadingListings={areaListingsQuery.isLoading}
+        isLoadingListings={isLoadingAreaListingsResolved}
+        // Issue #2353 (code-review fix) — was omitted at this call site, so
+        // AreaSelectedPanel's own `isFetching && !isInitialLoading` dimmed/
+        // disabled-overlay convention (its established signal for "showing
+        // stale keepPreviousData while a refetch is in flight") never fired
+        // here, even once `isFetchingAreaListingsResolved` itself was fixed
+        // to stop being hardcoded `false`. This is the plain (no-school)
+        // AREA-leaf branch — the one a filter/search rekey most commonly
+        // hits — so it is exactly the path the stale-cards-as-settled bug
+        // described.
+        isFetching={isFetchingAreaListingsResolved}
         isAuthenticated={isAuthenticated}
         filters={effectiveFilters}
         onFiltersChange={(next) => {

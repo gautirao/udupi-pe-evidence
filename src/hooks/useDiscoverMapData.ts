@@ -341,6 +341,25 @@ export interface UseDiscoverMapDataResult {
    */
   isErrorAreaListings: boolean;
   /**
+   * Issue #2353 — refetches the SAME query `areaListings`/`isErrorAreaListings`
+   * come from. Threaded down to any consumer of `areaListings` as its primary
+   * data source (e.g. AreaLeafListingsSurface via the panel-surface pipeline)
+   * so its Retry-on-error control is a real refetch, not a no-op.
+   */
+  refetchAreaListings: () => void;
+  /**
+   * Issue #2353 (code-review fix) — true while a refetch of the SAME query
+   * `areaListings` comes from is in flight, INCLUDING the
+   * `placeholderData: keepPreviousData` case where `areaListings` is still
+   * showing the previous (stale) result and `isLoadingAreaListings` is
+   * `false`. Distinct from `isLoadingAreaListings` (true only on a cold/
+   * disabled->enabled transition with no data at all yet). Threaded down so
+   * a consumer of `areaListings` as its primary data source (e.g.
+   * AreaLeafListingsSurface) can still surface "refreshing" during a
+   * filter/search rekey instead of presenting stale cards as settled.
+   */
+  isFetchingAreaListings: boolean;
+  /**
    * Issue #1261 — cross-area listings within the selected school radius, sourced from
    * the PUBLIC /school-radius-listings endpoint. Populated for anon users (their only
    * listing source in radius mode) and for authenticated users when markersEnabled is
@@ -579,6 +598,20 @@ export function useDiscoverMapData({
     // to isLoading=false, data=undefined → areaListings=[] downstream). Exposed
     // here so the caller's empty-area fallback can tell the two apart.
     isError: isErrorAreaListings,
+    // Issue #2353 — exposed so a caller consuming `areaListings` as its
+    // primary data source (AreaLeafListingsSurface, via the panel-surface
+    // pipeline) can offer a working Retry on `isErrorAreaListings` instead of
+    // a dead button — this IS the query that produced the error.
+    refetch: refetchAreaListings,
+    // Issue #2353 (code-review fix) — this query uses
+    // `placeholderData: keepPreviousData` (see useDiscoverCityListings.ts), so
+    // on a query-key change (filter/search rekey) it deliberately keeps
+    // rendering the PREVIOUS response while the new one is in flight:
+    // `isFetching: true` while `isLoading` can stay `false`. Exposed so a
+    // caller consuming `areaListings` as its primary data source can still
+    // surface that "showing stale data, refresh in flight" signal instead of
+    // presenting the previous page's cards as fully settled/current.
+    isFetching: isFetchingAreaListings,
   } = useDiscoverCityListings({
     city,
     areaKeys: selectedArea ? [selectedArea.areaKey] : [],
@@ -909,6 +942,8 @@ export function useDiscoverMapData({
     markerListings,
     areaListings,
     isErrorAreaListings,
+    refetchAreaListings,
+    isFetchingAreaListings,
     schoolRadiusListings,
     schoolRadiusListingsLoading,
     schoolRadiusHasMore,

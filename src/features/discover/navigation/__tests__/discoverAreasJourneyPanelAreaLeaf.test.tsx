@@ -433,3 +433,143 @@ describe('DiscoverAreasJourneyPanel — AREA-leaf listings surface (Issue #1956 
     });
   });
 });
+
+// ─── Issue #2353 — AREA-leaf duplicate-fetch dedup + areaKey identity guard ──
+//
+// AreaLeafListingsSurface can now be handed the map's ALREADY-FETCHED
+// `areaListings` (via `mapAreaListings`/`mapAreaListingsAreaKey`) instead of
+// issuing its own `useDiscoverCityListings` call. These tests pin BOTH
+// halves of that contract: (1) the dedup itself — supplying matching
+// map-sourced data disables this surface's own query — and (2) the identity
+// guard a code-review pass added — mismatched (or absent) map data falls
+// back to the surface's own query rather than ever rendering one area's
+// listings under a different area's heading (`resolveEffectiveSelectedArea`
+// can diverge from the node-resolved leaf when a URL carries both a legacy
+// `areaKey=` and a canonical `node=`).
+describe('DiscoverAreasJourneyPanel — AREA-leaf duplicate-fetch dedup (Issue #2353)', () => {
+  it('mapAreaListings with a MATCHING areaKey disables the surface\'s own useDiscoverCityListings query (areaKeys: [])', () => {
+    mockUseAuth.mockReturnValue({ user: null, isLoading: false });
+    mockUseDiscoverCityListings.mockClear();
+    // The surface's own (should-be-disabled) query is stubbed to return NO
+    // data — if the dedup were broken and this query's result leaked
+    // through, the assertion below on the map-supplied listing would fail.
+    mockUseDiscoverCityListings.mockReturnValue({ data: undefined, isLoading: false });
+
+    renderPanel(makeAreaLeafNode(), undefined, {
+      mapAreaListings: [makeListing()],
+      mapAreaListingsAreaKey: 'IN|KA|Bangalore|Manipal',
+      mapAreaListingsLoading: false,
+      mapAreaListingsError: false,
+    });
+
+    // Disabled: useDiscoverCityListings' own `enabled: areaKeys.length > 0`
+    // gate trips on an empty array — no second, identically-scoped fetch.
+    expect(mockUseDiscoverCityListings).toHaveBeenCalledWith(
+      expect.objectContaining({ areaKeys: [] }),
+    );
+    // Renders the map-supplied listing, proving it is the data source used.
+    expect(screen.getByTestId('property-card-listing-1')).toBeInTheDocument();
+  });
+
+  it('mapAreaListings with a MISMATCHED areaKey falls back to the surface\'s own query — never trusts data fetched for a different area', () => {
+    mockUseAuth.mockReturnValue({ user: null, isLoading: false });
+    mockUseDiscoverCityListings.mockClear();
+    mockUseDiscoverCityListings.mockReturnValue({
+      data: {
+        areas: [{ areaKey: 'IN|KA|Bangalore|Manipal', listings: [makeListing()] }],
+      },
+      isLoading: false,
+    });
+
+    renderPanel(makeAreaLeafNode(), undefined, {
+      // Simulates the #2184/#2353-code-review divergence: mapAreaListings is
+      // present, but keyed to a DIFFERENT area than the leaf this surface
+      // resolved (`makeAreaLeafNode()`'s areaKey is 'IN|KA|Bangalore|Manipal').
+      mapAreaListings: [makeListing({ id: 'listing-from-other-area' })],
+      mapAreaListingsAreaKey: 'IN|KA|Bangalore|SomeOtherArea',
+    });
+
+    // Own query re-enabled — exactly current pre-#2353 behaviour — despite
+    // mapAreaListings being supplied.
+    expect(mockUseDiscoverCityListings).toHaveBeenCalledWith(
+      expect.objectContaining({ areaKeys: ['IN|KA|Bangalore|Manipal'] }),
+    );
+    // Renders the surface's OWN query result, never the mismatched
+    // map-supplied listing — the failure mode is "one extra fetch", not
+    // "wrong data".
+    expect(screen.getByTestId('property-card-listing-1')).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('property-card-listing-from-other-area'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('omitting mapAreaListings entirely uses the surface\'s own query — the pre-#2353 / standalone-render fallback path', () => {
+    mockUseAuth.mockReturnValue({ user: null, isLoading: false });
+    mockUseDiscoverCityListings.mockClear();
+    mockUseDiscoverCityListings.mockReturnValue({
+      data: {
+        areas: [{ areaKey: 'IN|KA|Bangalore|Manipal', listings: [makeListing()] }],
+      },
+      isLoading: false,
+    });
+
+    renderPanel(makeAreaLeafNode());
+
+    expect(mockUseDiscoverCityListings).toHaveBeenCalledWith(
+      expect.objectContaining({ areaKeys: ['IN|KA|Bangalore|Manipal'] }),
+    );
+    expect(screen.getByTestId('property-card-listing-1')).toBeInTheDocument();
+  });
+
+  it('Retry on a map-sourced error calls mapAreaListingsRefetch, not a no-op (code-review fix — was a dead button)', async () => {
+    mockUseAuth.mockReturnValue({ user: null, isLoading: false });
+    mockUseDiscoverCityListings.mockClear();
+    mockUseDiscoverCityListings.mockReturnValue({ data: undefined, isLoading: false });
+    const mapAreaListingsRefetch = vi.fn();
+    const user = userEvent.setup();
+
+    renderPanel(makeAreaLeafNode(), undefined, {
+      mapAreaListings: [],
+      mapAreaListingsAreaKey: 'IN|KA|Bangalore|Manipal',
+      mapAreaListingsError: true,
+      mapAreaListingsRefetch,
+    });
+
+    const retryButton = screen.getByRole('button', { name: /retry/i });
+    await user.click(retryButton);
+
+    expect(mapAreaListingsRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('mapAreaListingsFetching surfaces AreaSelectedPanel\'s keepPreviousData refresh-in-flight indicator, not settled stale cards (code-review fix)', () => {
+    // Issue #2353 (code-review fix) — `useDiscoverCityListings` uses
+    // `placeholderData: keepPreviousData`, so on a filter/search rekey it
+    // deliberately keeps rendering the PREVIOUS response while a new fetch
+    // is in flight: `isFetching: true` while `isLoading` stays `false`. This
+    // simulates exactly that state via the map-sourced props (mirroring
+    // `useDiscoverMapData.isFetchingAreaListings`) and asserts the panel
+    // surfaces AreaSelectedPanel's own established "refresh in flight"
+    // convention (a dimmed, non-interactive overlay on the listings body —
+    // see AreaSelectedPanel.tsx's `isFetching && !isInitialLoading` class)
+    // rather than presenting the stale card as fully settled/current.
+    mockUseAuth.mockReturnValue({ user: null, isLoading: false });
+    mockUseDiscoverCityListings.mockClear();
+    mockUseDiscoverCityListings.mockReturnValue({ data: undefined, isLoading: false });
+
+    const { container } = renderPanel(makeAreaLeafNode(), undefined, {
+      mapAreaListings: [makeListing()],
+      mapAreaListingsAreaKey: 'IN|KA|Bangalore|Manipal',
+      mapAreaListingsLoading: false,
+      mapAreaListingsFetching: true,
+    });
+
+    // The stale (previous) card is still shown — keepPreviousData's whole
+    // point — never blanked to a loading skeleton.
+    expect(screen.getByTestId('property-card-listing-1')).toBeInTheDocument();
+    // ...but it is NOT presented as fully settled: the dimmed/non-interactive
+    // overlay convention fires. A regression to the hardcoded-`false` bug
+    // would leave this query empty (no `.pointer-events-none.opacity-50`
+    // element), since AreaSelectedPanel would see `isFetching: false`.
+    expect(container.querySelector('.pointer-events-none.opacity-50')).not.toBeNull();
+  });
+});

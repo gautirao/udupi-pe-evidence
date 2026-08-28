@@ -14,6 +14,7 @@ import { useDiscoverViewport } from '@/features/discover/context/useDiscoverCont
 import { deriveFocusedAreaClusterSummary } from '@/features/discover/views/DiscoverAreasJourneyPanel';
 import { formatListingCount } from '@/features/discover/navigation/useAreasNavigationJourney';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
+import { resolveEffectiveCity } from '@/features/discover/selectors/effectiveDiscoverContext';
 
 export interface SchoolsNavigationJourneyPanelProps {
   journey: UseAreasNavigationJourneyResult;
@@ -21,6 +22,18 @@ export interface SchoolsNavigationJourneyPanelProps {
   buildNodeHref: (nodeKey: string) => string | null;
   hoveredNodeKey?: string | null;
   onHoverChange?: (nodeKey: string | null) => void;
+  /**
+   * Issue #2353 (drift fix) — the canonical city slug (e.g. "udupi"), used to
+   * scope the school-search fetch. Distinct from `cityLabel` below, which is
+   * a display-only string (e.g. "Udupi") that must never drive a fetch key —
+   * every other `useSchoolSearch` caller in this codebase already passes the
+   * canonical slug; this component was the one outlier, passing
+   * `cityLabel?.toLowerCase()` instead, which silently breaks for any
+   * multi-word city label. Optional so pre-existing render paths/tests that
+   * never supplied it keep compiling (falls back to `resolveEffectiveCity`'s
+   * DEFAULT_CITY, same as every other effective-city consumer).
+   */
+  city?: string;
   cityLabel?: string;
   focusedClusterMemberAreaKeys?: readonly string[] | null;
   onClusterFocusChange?: (memberAreaKeys: readonly string[] | null) => void;
@@ -34,6 +47,7 @@ export function SchoolsNavigationJourneyPanel({
   buildNodeHref,
   hoveredNodeKey = null,
   onHoverChange,
+  city,
   cityLabel,
   focusedClusterMemberAreaKeys = null,
   onClusterFocusChange,
@@ -71,9 +85,14 @@ export function SchoolsNavigationJourneyPanel({
   );
 
   const isSearching = (schoolSearchQuery?.trim() ?? '').length >= 2;
-  // Use a fallback empty string for the city parameter if undefined.
-  // The backend uses city to constrain search results.
-  const cityParam = cityLabel?.toLowerCase() ?? '';
+  // Issue #2353 (drift fix) — was `cityLabel?.toLowerCase() ?? ''`, a display
+  // LABEL lowercased and passed as the fetch's `city` param. That happens to
+  // match for single-word city labels ("Udupi" -> "udupi", which equals the
+  // canonical slug) but silently breaks for any multi-word label (e.g. "Sri
+  // Ganganagar" -> "sri ganganagar", which never matches the backend's slug
+  // lookup). Every other `useSchoolSearch` caller passes the canonical city
+  // slug; `resolveEffectiveCity(city)` is that same single-owner selector.
+  const cityParam = resolveEffectiveCity(city);
   const schoolSearchResult = useSchoolSearch(schoolSearchQuery || '', cityParam);
   const viewport = useDiscoverViewport();
 

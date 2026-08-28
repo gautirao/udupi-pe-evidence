@@ -193,6 +193,21 @@ export function AgriGroupSelectedPanel({
   // repo's normal city-access pattern for panels (SchoolsInAreaPanel/SchoolBrowsePanel/
   // GuidedEntryPanel) — it throws outside a DiscoverProvider, which would crash existing
   // out-of-scope tests that render this panel standalone.
+  // Issue #2353 investigation — this reads `(citySlug ?? '').trim().toLowerCase()`
+  // rather than the single-owner `resolveEffectiveCity` selector. Deliberately
+  // NOT converted: `citySlug` is always supplied as the canonical slug by the
+  // production caller (DiscoverRightPanel.tsx passes its own already-effective
+  // `city`), so switching to `resolveEffectiveCity` only changes behaviour for a
+  // caller/test that renders this panel WITHOUT `citySlug` — and the
+  // empty-string fallback there is load-bearing, not a bug: `useAgriDestinations`'
+  // own `enabled: city.length > 0` gate (see that hook's doc) uses exactly this
+  // empty string to stay OFF, which is how this file's own error/empty-state
+  // tests exercise those branches without an unresolved fetch hanging the
+  // component in a perpetual loading skeleton. Verified: switching to
+  // `resolveEffectiveCity` turns the empty string into 'bangalore', flips the
+  // gate on, and the "empty state renders when there are no listings" /
+  // "error state renders a retry affordance" tests in
+  // tests/discover/panels-parity.test.tsx get stuck on the loading skeleton.
   const citySlugForDestinations = (citySlug ?? '').trim().toLowerCase();
   const listingPurposeForDestinations = intent === 'rent' ? 'rent' : 'sale';
   const {

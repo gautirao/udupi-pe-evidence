@@ -5,9 +5,10 @@ import { SchoolResult } from '@/hooks/useSchoolSearch';
 // SECOND leaflet-reaching site, found by sweeping the WHOLE eager graph rather than
 // fixing only the one that had been reported.
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
-import { CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
+import { CITY_CONFIG } from '@/lib/localityUtils';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import { DiscoverUrlState, DiscoverUrlActions } from '@/hooks/useDiscoverUrlState';
+import { resolveEffectiveCity } from '@/features/discover/selectors/effectiveDiscoverContext';
 
 export interface UseDiscoverPageStateParams {
   urlState: DiscoverUrlState;
@@ -99,8 +100,9 @@ export function useDiscoverPageState({
 
   // Initialize mapZoom from URL viewport when present so the correct zoom band
   // (area markers vs listing markers) is applied from the very first render.
+  // Issue #2353 — the fallback rule lives in resolveEffectiveCity, not inlined here.
   const [mapZoom, setMapZoom] = useState<number>(
-    urlState.viewport?.zoom ?? CITY_CONFIG[urlState.city || DEFAULT_CITY]?.zoom ?? 11,
+    urlState.viewport?.zoom ?? CITY_CONFIG[resolveEffectiveCity(urlState.city)]?.zoom ?? 11,
   );
 
   // Map readiness: set to true once Leaflet's MapContainer has initialised.
@@ -118,8 +120,9 @@ export function useDiscoverPageState({
   // survive filter-panel re-renders without polluting URL history.
   const [schoolBoardFilter, setSchoolBoardFilter] = useState<string[]>([]);
 
-  // City state — lazy initializer reads from useDiscoverUrlState (which reads URL on first render)
-  const [city, setCity] = useState(() => urlState.city || DEFAULT_CITY);
+  // City state — lazy initializer reads from useDiscoverUrlState (which reads URL on first render).
+  // Issue #2353 — the fallback rule lives in resolveEffectiveCity, not inlined here.
+  const [city, setCity] = useState(() => resolveEffectiveCity(urlState.city));
 
   // Tick counter to force map refit when "Fit to selected areas" is clicked
   const [fitTick, setFitTick] = useState(0);
@@ -159,7 +162,8 @@ export function useDiscoverPageState({
   // `setCity`/`setMapZoom`/`setFilters` are stable setters; `CITY_CONFIG` is a module const.
   const urlCity = urlState.city;
   useEffect(() => {
-    const resolvedUrlCity = urlCity || DEFAULT_CITY;
+    // Issue #2353 — the fallback rule lives in resolveEffectiveCity, not inlined here.
+    const resolvedUrlCity = resolveEffectiveCity(urlCity);
     if (resolvedUrlCity !== city) {
       setCity(resolvedUrlCity);
       setMapZoom(CITY_CONFIG[resolvedUrlCity]?.zoom ?? 11);

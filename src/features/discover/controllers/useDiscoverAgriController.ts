@@ -3,7 +3,8 @@ import { useRegionalAreaGroups, useAgriDestinations } from '@/hooks/useRegionalA
 import { useAgriMapListings } from '@/hooks/useAgriMapListings';
 import { useFilteredAgriListings } from '@/features/discover/presentation/useFilteredAgriListings';
 import { useAgriDestinationMarkers } from '@/features/discover/presentation/useAgriDestinationMarkers';
-import { CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
+import { CITY_CONFIG } from '@/lib/localityUtils';
+import { resolveEffectiveCity } from '@/features/discover/selectors/effectiveDiscoverContext';
 import type { DiscoverNavContextValue } from '@/features/discover/context/types';
 
 export interface UseDiscoverAgriControllerParams {
@@ -36,6 +37,13 @@ export function useDiscoverAgriController({
   intentListingPurpose,
   isAuthenticated,
 }: UseDiscoverAgriControllerParams) {
+  // Issue #2353 — the single effective-city derivation for this controller.
+  // Every nav.city-driven fetch below reads THIS, not an independent inline
+  // `nav.city || DEFAULT_CITY` copy, so a fallback can never be added to some
+  // sibling call sites and omitted from others (see the useAgriMapListings fix
+  // below, which was exactly that omission before this issue).
+  const effectiveCity = resolveEffectiveCity(nav.city);
+
   // Issue #1429 (B2) — precomputed corridor groups for the agri-first landing panel.
   // Issue #1745 Batch B — same DEFAULT_CITY fallback as useAreaGroups, for
   // agri-first city-landing consistency.
@@ -49,7 +57,7 @@ export function useDiscoverAgriController({
     isError: isRegionalAreaGroupsError,
     isNotGeneratedForRevision: isRegionalAreaGroupsNotGeneratedForRevision,
     refetch: refetchRegionalAreaGroups,
-  } = useRegionalAreaGroups(nav.city || DEFAULT_CITY, intentListingPurpose);
+  } = useRegionalAreaGroups(effectiveCity, intentListingPurpose);
 
   // Issue #1429 — derive areaKeys from the selected corridor + distance tier to fetch
   // agri map listings. Hook is disabled when selectedRegion + selectedMaxKm are not both set.
@@ -71,12 +79,19 @@ export function useDiscoverAgriController({
   // (state/url/agricultural.ts) makes the canonical areas.area_key, not free text.
   const selectedDestinationAreaKey = nav.selectedLocality ?? '';
 
+  // Issue #2353 (bug fix) — this call read raw `nav.city` with NO fallback,
+  // unlike every sibling fetch in this controller (all of which use
+  // `nav.city || DEFAULT_CITY`, now `effectiveCity`). With no `city=` in the
+  // URL, `nav.city` is `''`, which the backend agri-map-listings endpoint
+  // rejects/returns empty for — so the parcel/listings fetch silently
+  // disabled while its sibling agri queries (which did have the fallback)
+  // fetched fine. Aligned to `effectiveCity` like every other call site here.
   const {
     data: agriMapListingsData,
     isLoading: isLoadingAgriGroupListings,
     isError: isAgriGroupListingsError,
     refetch: refetchAgriGroupListings,
-  } = useAgriMapListings(nav.city, selectedDestinationAreaKey, intentListingPurpose, isAuthenticated);
+  } = useAgriMapListings(effectiveCity, selectedDestinationAreaKey, intentListingPurpose, isAuthenticated);
 
   // Issue #2151 PR C (C-F4/C-F7) — server-computed destination (town/locality) buckets for the
   // agri-group-selected (Level-2) panel. Replaces the client-side `item.locality ?? item.areaKey`
@@ -96,14 +111,14 @@ export function useDiscoverAgriController({
     isNotYetPromoted: isAgriDestinationsNotYetPromoted,
     isNotGeneratedForRevision: isAgriDestinationsNotGeneratedForRevision,
     refetch: refetchAgriDestinations,
-  } = useAgriDestinations(nav.city || DEFAULT_CITY, selectedRegion, selectedMaxKm, intentListingPurpose);
+  } = useAgriDestinations(effectiveCity, selectedRegion, selectedMaxKm, intentListingPurpose);
 
   // Issue #2186 — Level-2 destination-bucket markers (agri panel results with no parcel
   // markers on the map). Backend deliberately omits exact coordinates on
   // agri-destinations buckets, so positions are derived client-side from bearing/distance
   // off the SAME fixed city origin the corridor sector overlay (SectorOverlay.tsx) uses —
   // CITY_CONFIG[city].center, never a second, independently-resolved origin.
-  const cityCenterForAgri = CITY_CONFIG[nav.city || DEFAULT_CITY]?.center;
+  const cityCenterForAgri = CITY_CONFIG[effectiveCity]?.center;
   const agriDestinationMarkers = useAgriDestinationMarkers({
     agriDestinations,
     cityLat: cityCenterForAgri?.[0],

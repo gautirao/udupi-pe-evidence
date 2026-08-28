@@ -107,6 +107,10 @@ export function SchoolFirstJourneyPanel({ view, commands }: SchoolFirstJourneyPa
         buildNodeHref={urlActions.buildNodeHref}
         hoveredNodeKey={hoveredNavigationNodeKey}
         onHoverChange={onNavigationNodeHoverChange}
+        // Issue #2353 (drift fix) — the canonical city slug, distinct from
+        // `cityLabel` below (display-only). See
+        // `SchoolsNavigationJourneyPanelProps.city`'s own doc comment.
+        city={city}
         cityLabel={schoolsFirstCityLabel}
         focusedClusterMemberAreaKeys={focusedClusterMemberAreaKeys}
         onClusterFocusChange={onClusterFocusChange}
