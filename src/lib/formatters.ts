@@ -126,6 +126,24 @@ export function formatPhone(phone: string): string {
   if (cleaned.length === 12 && cleaned.startsWith('91')) {
     return `+91 ${cleaned.slice(2, 7)} ${cleaned.slice(7)}`;
   }
-  
+
   return phone;
+}
+
+/**
+ * Humanize a backend enum-style value (snake_case or UPPER_SNAKE_CASE) into
+ * Title Case for display, e.g. 'commercial_building' -> 'Commercial building',
+ * 'INCOMPLETE_INFO' -> 'Incomplete info'.
+ *
+ * Generic/algorithmic rather than a curated lookup table so it never drifts
+ * out of sync as new enum values are added on the backend (issue #2369).
+ * Returns an empty string for null/undefined input.
+ */
+export function humanizeEnumValue(raw: string | null | undefined): string {
+  if (!raw) return '';
+  const words = raw.toLowerCase().split(/[_\s]+/).filter(Boolean);
+  if (words.length === 0) return '';
+  return words
+    .map((word, index) => (index === 0 ? word.charAt(0).toUpperCase() + word.slice(1) : word))
+    .join(' ');
 }
