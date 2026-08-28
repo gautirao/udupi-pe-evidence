@@ -9,8 +9,8 @@ const RTA_STEPS = [
   { key: "launch", n: 4, tag: "Launch", title: "Launch" },
 ];
 
-function RTA_Header() {
-  const nav = [["Dashboard", false], ["Listings", false], ["City launch", true], ["Users", false]];
+function RTA_Header({ active = "City launch" }) {
+  const nav = ["Dashboard", "Listings", "City launch", "Users"].map((label) => [label, label === active]);
   return (
     <header style={{
       display: "flex", alignItems: "center", gap: "22px", height: "56px", flex: "none",
