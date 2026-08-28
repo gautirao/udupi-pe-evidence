@@ -72,14 +72,30 @@ vi.mock('leaflet', () => ({
   },
 }));
 
+// Real lat/lon -> pixel projection (same convention as AreaMarkerLayer.test.tsx's
+// `projectLatLon`) — members at the IDENTICAL coordinate still land on the
+// identical point (preserving every existing "spatially identical -> one
+// dense cluster cell" fixture's premise byte-for-byte), while a genuinely
+// distant decoy member (added below for the 'clusters' call site, Issue
+// #1943 no-redundant-singleton amendment) now correctly lands elsewhere.
+function projectLatLon(lat: number, lon: number): { x: number; y: number } {
+  return { x: (lon - 74.5) * 10000, y: (13.5 - lat) * 10000 };
+}
+
 const mapStub = {
   getSize: vi.fn(() => ({ x: 1200, y: 800 })),
   getZoom: vi.fn(() => 11),
-  // All members project to the SAME container point -> one dense cluster cell,
-  // for BOTH the 'areas' path and the 'clusters'/'directions' path.
-  latLngToContainerPoint: vi.fn(() => ({ x: 100, y: 100 })),
+  latLngToContainerPoint: vi.fn(([lat, lon]: [number, number]) => projectLatLon(lat, lon)),
   containerPointToLatLng: vi.fn(() => ({ lat: 13.0, lng: 77.6 })),
   getContainer: vi.fn(() => document.createElement('div')),
+  // Issue #1943 (no-redundant-singleton amendment) — the PARTITION-phase
+  // escalation loop's synthetic-zoom projection + termination ceiling.
+  getMaxZoom: vi.fn(() => 19),
+  project: vi.fn(([lat, lon]: [number, number], zoom: number) => {
+    const base = projectLatLon(lat, lon);
+    const scale = 2 ** (zoom - 11); // 11 == this stub's getZoom()
+    return { x: base.x * scale, y: base.y * scale };
+  }),
   on: vi.fn(),
   off: vi.fn(),
 };
@@ -174,10 +190,30 @@ function clusterChild(
 
 // 2 spatially-identical CLUSTER ("Local Destination") members -> one
 // structural visual cluster on the 'clusters'/'directions' path.
+//
+// Issue #1943 (no-redundant-singleton amendment, PLAN_REVIEW packet 010
+// APPROVED) — a cluster of ALL of a node's children can no longer render as
+// a single synthetic catch-all (see AreaMarkerLayer.test.tsx's owner-amendment
+// tests). A THIRD, geographically-distant decoy member is added so the two
+// spatially-identical members above form a genuine PARTIAL overlap (2 of 3
+// children), not a spans-all-children singleton — preserving this file's
+// actual test intent (visual-cluster-card accent rendering) without
+// triggering the new no-singleton escalation path at all.
 const CLUSTER_MEMBERS = [
   clusterChild('c:whitefield-belt', { listingCount: 40, schoolCount: 6 }),
   clusterChild('c:marathahalli-belt', { listingCount: 25, schoolCount: 3 }),
 ];
+const CLUSTER_DECOY = clusterChild('c:far-away-decoy', { listingCount: 5, schoolCount: 1 });
+CLUSTER_DECOY.raw.centreLat = 13.5;
+CLUSTER_DECOY.raw.centreLon = 78.2;
+const CLUSTER_MEMBERS_WITH_DECOY = [...CLUSTER_MEMBERS, CLUSTER_DECOY];
+
+/** Locate the ONE visual-cluster-card html among possibly-several captured calls. */
+function findClusterCardHtml(): string {
+  const html = divIconHtmlCalls.find((h) => h.includes('area-visual-cluster-marker'));
+  if (!html) throw new Error('no area-visual-cluster-marker divIcon call captured');
+  return html;
+}
 
 beforeEach(() => {
   capturedMarkers.length = 0;
@@ -272,15 +308,14 @@ describe('#2305 accent ruling — "clusters"/"directions" call site (main-agent-
   it('RESIDENTIAL journey: the structural CLUSTER visual-cluster card also renders COPPER_600 footer text, matching the "areas" site', () => {
     render(
       <AreaDestinationMarkerLayer
-        node={{ ...ROOT_NODE, children: CLUSTER_MEMBERS.map((m) => m.raw) }}
+        node={{ ...ROOT_NODE, children: CLUSTER_MEMBERS_WITH_DECOY.map((m) => m.raw) }}
         levelKind="clusters"
-        children={CLUSTER_MEMBERS.map((m) => m.typed)}
+        children={CLUSTER_MEMBERS_WITH_DECOY.map((m) => m.typed)}
         onSelect={vi.fn()}
         journey={null}
       />,
     );
-    expect(divIconHtmlCalls).toHaveLength(1);
-    const html = divIconHtmlCalls[0];
+    const html = findClusterCardHtml();
     expect(html).toContain('area-visual-cluster-marker');
     // AC4 two-tone residential accent — see the matching comment on the
     // "areas" site's equivalent test above.
@@ -292,15 +327,14 @@ describe('#2305 accent ruling — "clusters"/"directions" call site (main-agent-
   it('SCHOOL-FIRST journey: the structural CLUSTER visual-cluster card renders PLUM_600, matching the "areas" site', () => {
     render(
       <AreaDestinationMarkerLayer
-        node={{ ...ROOT_NODE, children: CLUSTER_MEMBERS.map((m) => m.raw) }}
+        node={{ ...ROOT_NODE, children: CLUSTER_MEMBERS_WITH_DECOY.map((m) => m.raw) }}
         levelKind="clusters"
-        children={CLUSTER_MEMBERS.map((m) => m.typed)}
+        children={CLUSTER_MEMBERS_WITH_DECOY.map((m) => m.typed)}
         onSelect={vi.fn()}
         journey="school-first"
       />,
     );
-    expect(divIconHtmlCalls).toHaveLength(1);
-    const html = divIconHtmlCalls[0];
+    const html = findClusterCardHtml();
     expect(rcFooterColor(html)).toBe(PLUM_600);
     expect(html).toContain(`border-top:7px solid ${PLUM_600}`);
     expect(html).not.toContain(COPPER_500);
@@ -320,14 +354,14 @@ describe('#2305 accent ruling — "clusters"/"directions" call site (main-agent-
 
     render(
       <AreaDestinationMarkerLayer
-        node={{ ...ROOT_NODE, children: CLUSTER_MEMBERS.map((m) => m.raw) }}
+        node={{ ...ROOT_NODE, children: CLUSTER_MEMBERS_WITH_DECOY.map((m) => m.raw) }}
         levelKind="clusters"
-        children={CLUSTER_MEMBERS.map((m) => m.typed)}
+        children={CLUSTER_MEMBERS_WITH_DECOY.map((m) => m.typed)}
         onSelect={vi.fn()}
         journey={null}
       />,
     );
-    const clustersColor = rcFooterColor(divIconHtmlCalls[divIconHtmlCalls.length - 1]);
+    const clustersColor = rcFooterColor(findClusterCardHtml());
 
     // AC4: both sites now render COPPER_600 footer text (not COPPER_500) —
     // the cross-call-site equality invariant itself (areasColor === clustersColor)
@@ -351,14 +385,14 @@ describe('#2305 accent ruling — "clusters"/"directions" call site (main-agent-
 
     render(
       <AreaDestinationMarkerLayer
-        node={{ ...ROOT_NODE, children: CLUSTER_MEMBERS.map((m) => m.raw) }}
+        node={{ ...ROOT_NODE, children: CLUSTER_MEMBERS_WITH_DECOY.map((m) => m.raw) }}
         levelKind="clusters"
-        children={CLUSTER_MEMBERS.map((m) => m.typed)}
+        children={CLUSTER_MEMBERS_WITH_DECOY.map((m) => m.typed)}
         onSelect={vi.fn()}
         journey="school-first"
       />,
     );
-    const clustersColor = rcFooterColor(divIconHtmlCalls[divIconHtmlCalls.length - 1]);
+    const clustersColor = rcFooterColor(findClusterCardHtml());
 
     expect(areasColor).toBe(PLUM_600);
     expect(clustersColor).toBe(PLUM_600);

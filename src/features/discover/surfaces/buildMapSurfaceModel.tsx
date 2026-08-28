@@ -111,7 +111,11 @@ type MapNavigationView = Pick<DiscoverMapCanvasProps, 'showSchoolBreadcrumb' | '
   Pick<DiscoverMapCanvasProps, 'journeyView'>;
 type MapNavigationCommands = Pick<
   DiscoverMapCanvasProps,
-  'publishClusterCameraIntent' | 'onAreaVisualClusterCameraIntent' | 'handleAreaMarkersComputed' | 'handleCityChange'
+  | 'publishClusterCameraIntent'
+  | 'onAreaVisualClusterCameraIntent'
+  | 'autoAdvanceSelectNode'
+  | 'handleAreaMarkersComputed'
+  | 'handleCityChange'
 > &
   Pick<DiscoverMapCanvasProps, 'onNavigationNodeHoverChange' | 'onClusterFocusChange'> &
   Pick<DiscoverMapCanvasProps, 'handleOverviewAreaClick' | 'handleAreaClusterClick' | 'buildNavigationNodeHref'> &
@@ -720,7 +724,7 @@ export type BuildMapSurfaceCommandsParams = Pick<
   >;
   navigationController: Pick<
     ReturnType<typeof useDiscoverNavigationController>,
-    'setHoveredNavigationNodeKey' | 'setFocusedClusterMemberAreaKeys'
+    'setHoveredNavigationNodeKey' | 'setFocusedClusterMemberAreaKeys' | 'autoAdvanceSelectNode'
   >;
   schoolController: Pick<ReturnType<typeof useDiscoverSchoolController>, 'journeyCommands'>;
   interactionController: Pick<
@@ -765,7 +769,11 @@ export function buildMapSurfaceCommands(
     geographyController: { handleAreaMarkersComputed },
     markerPopoverController: { handleStepMarkerListing },
     onAreaVisualClusterCameraIntent,
-    navigationController: { setHoveredNavigationNodeKey, setFocusedClusterMemberAreaKeys },
+    navigationController: {
+      setHoveredNavigationNodeKey,
+      setFocusedClusterMemberAreaKeys,
+      autoAdvanceSelectNode,
+    },
     schoolController: { journeyCommands },
     interactionController: { handleAreaClusterClick },
     cameraController: { handleRecenterOnSelectedNode },
@@ -790,6 +798,7 @@ export function buildMapSurfaceCommands(
       handleOverviewAreaClick,
       publishClusterCameraIntent,
       onAreaVisualClusterCameraIntent,
+      autoAdvanceSelectNode,
       handleAreaClusterClick,
       handleAreaMarkersComputed,
       onNavigationNodeHoverChange: setHoveredNavigationNodeKey,

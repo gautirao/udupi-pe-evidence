@@ -7,6 +7,8 @@ import {
   clusterVisibleAreaMembers,
   isUsableCentroid,
   boundsOfMembers,
+  footprintsIntersect,
+  footprintRectAt,
   AREA_CARD_FOOTPRINT_WIDTH_PX,
   AREA_CARD_FOOTPRINT_HEIGHT_PX,
   type ClusterableAreaMember,
@@ -542,5 +544,19 @@ describe('areaClustering — pre-rename golden characterisation (Issue #1943)', 
       hidden: plain.hidden.map((m) => stripIdentityKey(m as unknown as Record<string, unknown>)),
     };
     expect(normalised).toEqual(GOLDEN_PRE_RENAME_OUTPUT);
+  });
+});
+
+describe('footprintsIntersect / footprintRectAt (shared collision-merge primitives used by clusterAreaMembers/mergeOverlappingCells)', () => {
+  it('reports overlap for two rects that share screen space', () => {
+    const a = footprintRectAt({ x: 100, y: 100 }, 172, 140);
+    const b = footprintRectAt({ x: 150, y: 100 }, 172, 140);
+    expect(footprintsIntersect(a, b)).toBe(true);
+  });
+
+  it('reports no overlap for two rects placed far enough apart', () => {
+    const a = footprintRectAt({ x: 0, y: 100 }, 172, 140);
+    const b = footprintRectAt({ x: 1000, y: 100 }, 172, 140);
+    expect(footprintsIntersect(a, b)).toBe(false);
   });
 });

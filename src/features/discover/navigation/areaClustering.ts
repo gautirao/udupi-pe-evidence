@@ -258,9 +258,20 @@ function footprintRectAt(anchorPx: ProjectedPoint, widthPx: number, heightPx: nu
   };
 }
 
-function footprintsIntersect(a: FootprintRect, b: FootprintRect): boolean {
+/**
+ * Issue #1943 (no-redundant-singleton amendment) — exported for reuse by the
+ * PLACE phase's fit-without-overlap check in `AreaMarkerLayer.tsx`. Logic is
+ * UNCHANGED (this is the same rect-intersection test `mergeOverlappingCells`
+ * already used internally); only the export boundary is new.
+ */
+export function footprintsIntersect(a: FootprintRect, b: FootprintRect): boolean {
   return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }
+
+export type { FootprintRect };
+
+/** Re-exported so a caller can build a `FootprintRect` for its own fit checks without re-deriving the anchoring contract. */
+export { footprintRectAt };
 
 interface MergeWorkingCell<T extends ClusterableDestination> {
   members: T[];

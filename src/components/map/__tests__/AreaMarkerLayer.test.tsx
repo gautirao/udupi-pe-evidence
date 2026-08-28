@@ -96,6 +96,8 @@ vi.mock('leaflet', () => ({
         addTo: vi.fn().mockReturnThis(),
         remove: vi.fn(),
         setIcon: vi.fn(),
+        setLatLng: vi.fn(),
+        off: vi.fn(),
         getElement: vi.fn(() => element),
       };
       capturedMarkers.push({
@@ -118,14 +120,37 @@ function projectLatLon(lat: number, lon: number): { x: number; y: number } {
   return { x: (lon - 74.5) * 10000, y: (13.5 - lat) * 10000 };
 }
 
+// Issue #1943 (PR #2368, compact-row leader-line visibility fix) — backs
+// the mapStub's getPane/createPane stubs (see below), mirroring Leaflet's
+// own pane registry semantics closely enough for the pane-registration
+// effect to run without throwing.
+const paneRegistry = vi.hoisted(() => new Map<string, HTMLElement>());
+
 // Issue #1801 — a single STABLE map stub (not a fresh object per useMap()
 // call) so tests can assert "no camera call happened" across the click.
 // AreaMarkerLayer must no longer call fitBounds/flyTo/setZoom/once itself —
 // MapController (PropertyMap.tsx) is now the sole camera owner.
+// Issue #1943 (PR #2368 exact-head review, BLOCKING fix regression) — captures
+// handlers registered via `map.on(event, cb)` so a test can manually fire a
+// 'zoomend'/'moveend' settle event, simulating a real camera-settle without
+// depending on jsdom/real Leaflet event dispatch. Declared via its own
+// vi.hoisted (rather than a plain top-level const, the pattern
+// capturedMarkers/capturedDivIconCalls use) because it must be referenced
+// from INSIDE mapStub's own vi.hoisted factory below, which runs before any
+// non-hoisted module code.
+const capturedMapHandlers = vi.hoisted(() => ({} as Record<string, (...args: unknown[]) => void>));
+
 const mapStub = vi.hoisted(() => ({
   fitBounds: vi.fn(),
   flyTo: vi.fn(),
   setZoom: vi.fn(),
+  // Issue #1943 (no-redundant-singleton amendment) — the PARTITION/PLACE
+  // no-feedback invariant test needs these two additional camera-writer
+  // surfaces (setView/panTo) alongside the pre-existing fitBounds/flyTo/
+  // setZoom, plus a stable getCenter() to assert against.
+  setView: vi.fn(),
+  panTo: vi.fn(),
+  getCenter: vi.fn(() => ({ lat: 13.0, lng: 77.6 })),
   getZoom: vi.fn(() => 11),
   // Issue #1806 — the cluster click handler now calls map.getBoundsZoom to
   // compute the capped target zoom for the splittable predicate. Default (13)
@@ -136,10 +161,24 @@ const mapStub = vi.hoisted(() => ({
   // per-call with mockReturnValueOnce.
   getBoundsZoom: vi.fn(() => 13),
   once: vi.fn(),
-  on: vi.fn(),
+  on: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
+    capturedMapHandlers[event] = cb;
+  }),
   off: vi.fn(),
   getSize: vi.fn(() => ({ x: 1200, y: 800 })),
   latLngToContainerPoint: vi.fn(([lat, lon]: [number, number]) => projectLatLon(lat, lon)),
+  // Issue #1943 (no-redundant-singleton amendment) — the PARTITION-phase
+  // escalation loop's synthetic-zoom projection and its termination ceiling.
+  // `project` scales the SAME `projectLatLon` linearly by `2 ** zSynthetic`
+  // (a real Leaflet Web Mercator projection also scales by a power of 2 per
+  // zoom level) so a synthetic zoom genuinely separates two coordinates that
+  // collide at the real (lower) zoom — mirroring how the real map behaves.
+  getMaxZoom: vi.fn(() => 19),
+  project: vi.fn(([lat, lon]: [number, number], zoom: number) => {
+    const base = projectLatLon(lat, lon);
+    const scale = 2 ** (zoom - 11); // 11 == this stub's default getZoom()
+    return { x: base.x * scale, y: base.y * scale };
+  }),
   // The macro-region compass-layout recompute effect (gated on hasMacroRegions)
   // observes the map container via ResizeObserver — needed once this file's
   // new isGroup-redesign tests render an isMacroRegion area alongside a group.
@@ -148,6 +187,17 @@ const mapStub = vi.hoisted(() => ({
     lat: 13.5 - y / 10000,
     lng: x / 10000 + 74.5,
   })),
+  // Issue #1943 (PR #2368, compact-row leader-line visibility fix) — the
+  // LIST_FIRST leader-line pane registration effect calls these on every
+  // mount. A minimal stub (a real pane-tracking Map, mirroring Leaflet's own
+  // idempotent create-if-absent contract) is enough for that effect to run
+  // without throwing.
+  getPane: vi.fn((name: string) => paneRegistry.get(name)),
+  createPane: vi.fn((name: string) => {
+    const pane = document.createElement('div');
+    paneRegistry.set(name, pane);
+    return pane;
+  }),
 }));
 
 vi.mock('react-leaflet', () => ({
@@ -159,7 +209,7 @@ vi.mock('leaflet/dist/leaflet.css', () => ({}));
 // ─── Imports after mocks ──────────────────────────────────────────────────────
 
 import React from 'react';
-import { render } from '@testing-library/react';
+import { render, act } from '@testing-library/react';
 import L from 'leaflet';
 import { AreaMarkerLayer, AreaDestinationMarkerLayer } from '../AreaMarkerLayer';
 import type { AreaPoint } from '../AreaMarkerLayer';
@@ -1469,6 +1519,8 @@ describe('Issue #1943 (code review cycle 2, FIX 5) — AreaDestinationMarkerLaye
     capturedDivIconCalls.length = 0;
     capturedMarkers.length = 0;
     vi.mocked(L.marker).mockClear();
+    for (const key of Object.keys(capturedMapHandlers)) delete capturedMapHandlers[key];
+    mapStub.getZoom.mockReturnValue(11);
   });
 
   const ROOT_NODE: NavigationNodeResponse = {
@@ -1522,7 +1574,15 @@ describe('Issue #1943 (code review cycle 2, FIX 5) — AreaDestinationMarkerLaye
     };
   }
 
-  it('two directions children whose footprints overlap (identical coordinates) render exactly ONE area-visual-cluster-marker, at the members centroid', () => {
+  // Issue #1943 (singleton auto-advance, PR #2368 owner ruling 2026-08-28) —
+  // SUPERSEDES the former LIST_FIRST "real per-child reachability" outcome
+  // these two tests used to assert: two children whose declutter resolves to
+  // a singleton-spanning-all-children catch-all now AUTO-ADVANCE through the
+  // SAME camera/focus transition a manual click on that catch-all already
+  // fires — never rendering fanned-out per-child markers, never requiring a
+  // click at all.
+  it('two directions children whose footprints overlap (identical coordinates) render the plain, non-displaced catch-all card AND auto-advance via the existing camera/focus transition — never fanned-out per-child markers', () => {
+    const onAreaVisualClusterCameraIntent = vi.fn();
     const a = directionChild('d:n', 13.0, 77.6);
     const b = directionChild('d:e', 13.0, 77.6);
     render(
@@ -1531,24 +1591,27 @@ describe('Issue #1943 (code review cycle 2, FIX 5) — AreaDestinationMarkerLaye
         levelKind="directions"
         children={[a.typed, b.typed]}
         onSelect={vi.fn()}
+        onAreaVisualClusterCameraIntent={onAreaVisualClusterCameraIntent}
       />,
     );
 
-    expect(capturedMarkers).toHaveLength(1);
-    expect(capturedDivIconCalls[0].html).toContain('area-visual-cluster-marker');
-    const [latlng] = vi.mocked(L.marker).mock.calls[0];
-    expect(latlng).toEqual([13.0, 77.6]);
+    // The known-good, non-displaced catch-all card renders exactly as it
+    // did before #1943 — this is a navigation/hierarchy transition, never a
+    // new spatial arrangement.
+    expect(capturedDivIconCalls.some((c) => c.html.includes('area-visual-cluster-marker'))).toBe(true);
+    // Neither child ever renders its own INDIVIDUAL destination-card marker
+    // — no fanned-out per-child markers of the kind LIST_FIRST used to emit.
+    const destinationCardMarkers = capturedMarkers.filter(
+      (m) => m.element.innerHTML.includes('data-node-key="d:n"') || m.element.innerHTML.includes('data-node-key="d:e"'),
+    );
+    expect(destinationCardMarkers).toHaveLength(0);
+    expect(onAreaVisualClusterCameraIntent).toHaveBeenCalledTimes(1);
   });
 
-  it('clicking the multi-member cluster card fires onAreaVisualClusterCameraIntent with the members bounds, and NEVER onSelect (AC5)', () => {
+  it('a coincident-singleton auto-advance fires the existing camera/focus transition, never onSelect — this is not a real node and must never write node=', () => {
     const onSelect = vi.fn();
     const onAreaVisualClusterCameraIntent = vi.fn();
-    // Identical coordinates (same convention as test 1 and as
-    // destinations.test.tsx's own 'areas'-level AC5 equivalent at line 663)
-    // — guarantees the pair lands in the same grid cell and merges
-    // regardless of the real `estimateDestinationCardFootprint` output, so
-    // this test's outcome does not depend on that calibrated module's exact
-    // numbers.
+    // Identical coordinates — a true singleton-spans-all-children case.
     const a = directionChild('d:n', 13.0, 77.6);
     const b = directionChild('d:e', 13.0, 77.6);
     render(
@@ -1561,17 +1624,44 @@ describe('Issue #1943 (code review cycle 2, FIX 5) — AreaDestinationMarkerLaye
       />,
     );
 
-    expect(capturedMarkers).toHaveLength(1);
-    // Fire the REAL captured click handler AreaDestinationMarkerLayer
-    // registered via marker.on('click', ...) — never a stub standing in for
-    // it (mirrors destinations.test.tsx:679's pattern for the 'areas' visual
-    // cluster, now proven for 'directions' too).
-    capturedMarkers[0].handlers.click();
+    expect(onAreaVisualClusterCameraIntent).toHaveBeenCalledTimes(1);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
 
+  it('three direction children where only TWO genuinely overlap (a partial, non-spans-all-children overlap) still renders a real multi-member cluster card for that pair — the owner amendment only forbids a singleton spanning EVERY child', () => {
+    const onSelect = vi.fn();
+    const onAreaVisualClusterCameraIntent = vi.fn();
+    // a/b coincide (a real 2-member overlap); c sits far enough away (per
+    // this file's `projectLatLon` scale) to land in its own cell and never
+    // merge with a/b — so clusterAreaMembers's real-zoom result has TWO
+    // cells (one 2-member, one 1-member), never a singleton spanning all 3
+    // children. The no-redundant-singleton escalation logic must not engage
+    // at all here (it only ever fires for a true singleton-spans-all case).
+    const a = directionChild('d:n', 13.0, 77.6);
+    const b = directionChild('d:e', 13.0, 77.6);
+    const c = directionChild('d:s', 13.5, 78.2);
+    render(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: [a.raw, b.raw, c.raw] }}
+        levelKind="directions"
+        children={[a.typed, b.typed, c.typed]}
+        onSelect={onSelect}
+        onAreaVisualClusterCameraIntent={onAreaVisualClusterCameraIntent}
+      />,
+    );
+
+    const clusterCardCalls = capturedDivIconCalls.filter((c2) => c2.html.includes('area-visual-cluster-marker'));
+    expect(clusterCardCalls).toHaveLength(1);
+    const clusterMarker = capturedMarkers.find((m) => m.element.innerHTML.includes('area-visual-cluster-marker'));
+    expect(clusterMarker).toBeDefined();
+    clusterMarker!.handlers.click();
     expect(onSelect).not.toHaveBeenCalled();
     expect(onAreaVisualClusterCameraIntent).toHaveBeenCalledTimes(1);
-    const [bounds] = onAreaVisualClusterCameraIntent.mock.calls[0];
-    expect(bounds).toEqual([[13.0, 77.6], [13.0, 77.6]]);
+
+    const soloMarker = capturedMarkers.find((m) => m.element.innerHTML.includes('data-node-key="d:s"'));
+    expect(soloMarker).toBeDefined();
+    soloMarker!.handlers.click();
+    expect(onSelect).toHaveBeenCalledWith('d:s');
   });
 
   it('a non-overlapping clusters child renders the ordinary destination card and calls onSelect(nodeKey) on click, never the camera-intent callback', () => {
@@ -1634,5 +1724,202 @@ describe('Issue #1943 (code review cycle 2, FIX 5) — AreaDestinationMarkerLaye
     });
     expect(widerResult.clusters).toHaveLength(1);
     expect(widerResult.clusters[0].members.map((m) => m.identityKey)).toEqual(['left', 'right']);
+  });
+
+  // Issue #1943 — required test: singleton auto-advance's camera-only
+  // (visual-cluster) branch must make ZERO direct camera-writer calls of its
+  // own and must never perturb the map's real, unmoved camera state — it
+  // only ever publishes an `onAreaVisualClusterCameraIntent` callback (not
+  // exercised here, since this render omits that prop), never touches
+  // `map.fitBounds`/`flyTo`/`setZoom`/`setView`/`panTo` directly.
+  it('no-feedback invariant: a singleton-spans-all-children catch-all makes ZERO direct camera-writer calls and leaves the real camera state unchanged', () => {
+    mapStub.fitBounds.mockClear();
+    mapStub.flyTo.mockClear();
+    mapStub.setZoom.mockClear();
+    mapStub.setView.mockClear();
+    mapStub.panTo.mockClear();
+    const zoomBefore = mapStub.getZoom();
+    const centerBefore = mapStub.getCenter();
+
+    // Two genuinely separable (not coincident) direction children whose
+    // real-zoom footprints overlap into one visual cluster.
+    const a = directionChild('d:n', 13.0, 77.6);
+    const b = directionChild('d:e', 13.00001, 77.60001);
+    render(
+      <AreaDestinationMarkerLayer
+        node={{ ...ROOT_NODE, children: [a.raw, b.raw] }}
+        levelKind="directions"
+        children={[a.typed, b.typed]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(mapStub.fitBounds).not.toHaveBeenCalled();
+    expect(mapStub.flyTo).not.toHaveBeenCalled();
+    expect(mapStub.setZoom).not.toHaveBeenCalled();
+    expect(mapStub.setView).not.toHaveBeenCalled();
+    expect(mapStub.panTo).not.toHaveBeenCalled();
+    // The real camera's own getters must report the SAME state after the
+    // decompose as before it — the computation only ever calls the PURE
+    // `map.project(latlng, zSynthetic)` (a coordinate transform, mocked
+    // above to never mutate `mapStub`'s own state), never a camera write.
+    expect(mapStub.getZoom()).toBe(zoomBefore);
+    expect(mapStub.getCenter()).toEqual(centerBefore);
+  });
+
+  // Issue #1943 (singleton auto-advance, PR #2368 owner ruling 2026-08-28) —
+  // the two mixed-batch registry tests formerly here (added-member /
+  // moved-member "old-run vs new-run geometry" regressions) exercised the
+  // LIST_FIRST tier's per-member offset registry, which no longer exists —
+  // a coincident singleton now auto-advances via `autoAdvanceSelectNode`/
+  // `onAreaVisualClusterCameraIntent` instead of rendering displaced
+  // per-child markers at all.
+
+  describe('singleton auto-advance (PR #2368 owner ruling 2026-08-28)', () => {
+    it('a genuine single real non-leaf child auto-advances via autoAdvanceSelectNode exactly once, never onSelect', () => {
+      const onSelect = vi.fn();
+      const autoAdvanceSelectNode = vi.fn();
+      const solo = directionChild('c:whitefield-belt', 13.0, 77.6, { nodeType: 'CLUSTER', isLeafArea: false });
+      render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: [{ ...solo.raw, nodeType: 'CLUSTER' }] }}
+          levelKind="clusters"
+          children={[solo.typed]}
+          onSelect={onSelect}
+          autoAdvanceSelectNode={autoAdvanceSelectNode}
+        />,
+      );
+
+      expect(autoAdvanceSelectNode).toHaveBeenCalledTimes(1);
+      expect(autoAdvanceSelectNode).toHaveBeenCalledWith('c:whitefield-belt');
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('2+ meaningful rendered choices (well-separated children) never auto-advance', () => {
+      const onSelect = vi.fn();
+      const autoAdvanceSelectNode = vi.fn();
+      const onAreaVisualClusterCameraIntent = vi.fn();
+      const a = directionChild('d:n', 13.0, 77.6, { isLeafArea: false });
+      const b = directionChild('d:s', 13.5, 78.2, { isLeafArea: false });
+      render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: [a.raw, b.raw] }}
+          levelKind="directions"
+          children={[a.typed, b.typed]}
+          onSelect={onSelect}
+          autoAdvanceSelectNode={autoAdvanceSelectNode}
+          onAreaVisualClusterCameraIntent={onAreaVisualClusterCameraIntent}
+        />,
+      );
+
+      expect(autoAdvanceSelectNode).not.toHaveBeenCalled();
+      expect(onAreaVisualClusterCameraIntent).not.toHaveBeenCalled();
+      expect(onSelect).not.toHaveBeenCalled();
+      // Both children render as their own real, individually-clickable markers.
+      expect(capturedMarkers).toHaveLength(2);
+    });
+
+    it('a sole real child flagged isLeafArea does not auto-advance — a leaf is a genuine terminal reachability action, not an unnecessary intermediate click', () => {
+      const onSelect = vi.fn();
+      const autoAdvanceSelectNode = vi.fn();
+      // levelKind='clusters' (the branch this logic lives in) — a real
+      // server response never marks a CLUSTER/DIRECTION child isLeafArea,
+      // but this directly exercises the code's own defensive check rather
+      // than relying on that data-contract assumption holding forever.
+      const leaf = directionChild('c:leaf-cluster', 13.0, 77.6, { nodeType: 'CLUSTER', isLeafArea: true });
+      render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: [{ ...leaf.raw, nodeType: 'CLUSTER' }] }}
+          levelKind="clusters"
+          children={[leaf.typed]}
+          onSelect={onSelect}
+          autoAdvanceSelectNode={autoAdvanceSelectNode}
+        />,
+      );
+
+      expect(autoAdvanceSelectNode).not.toHaveBeenCalled();
+      expect(onSelect).not.toHaveBeenCalled();
+      // The leaf still renders as an ordinary, manually-clickable marker.
+      expect(capturedMarkers).toHaveLength(1);
+      capturedMarkers[0].handlers.click();
+      expect(onSelect).toHaveBeenCalledWith('c:leaf-cluster');
+    });
+
+    it('idempotence — a rerender for the SAME resolved node never re-fires the auto-advance transition', () => {
+      const autoAdvanceSelectNode = vi.fn();
+      const solo = directionChild('c:whitefield-belt', 13.0, 77.6, { nodeType: 'CLUSTER', isLeafArea: false });
+      const { rerender } = render(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: [{ ...solo.raw, nodeType: 'CLUSTER' }] }}
+          levelKind="clusters"
+          children={[solo.typed]}
+          onSelect={vi.fn()}
+          autoAdvanceSelectNode={autoAdvanceSelectNode}
+        />,
+      );
+      expect(autoAdvanceSelectNode).toHaveBeenCalledTimes(1);
+
+      // A bare re-render with the identical node/children (e.g. an unrelated
+      // parent state change) must not burn a second transition.
+      rerender(
+        <AreaDestinationMarkerLayer
+          node={{ ...ROOT_NODE, children: [{ ...solo.raw, nodeType: 'CLUSTER' }] }}
+          levelKind="clusters"
+          children={[solo.typed]}
+          onSelect={vi.fn()}
+          autoAdvanceSelectNode={autoAdvanceSelectNode}
+        />,
+      );
+      expect(autoAdvanceSelectNode).toHaveBeenCalledTimes(1);
+    });
+
+    // Issue #1943 (PR #2368 exact-head review, BLOCKING fix regression) —
+    // the camera-only (visual-cluster) branch's idempotence guard must be
+    // scoped to the TRANSITION INSTANCE (node + membership + actual settled
+    // zoom), never `node.nodeKey` alone: that branch deliberately never
+    // changes `node`, so a plain nodeKey guard would permanently block a
+    // SECOND, legitimate auto-advance at the same node once a closer
+    // settled camera still resolves to exactly one synthetic catch-all
+    // (recursive declutter is explicitly in-design). This also proves the
+    // no-op ceiling guard: a repeat settle at the SAME zoom never re-fires.
+    it('two consecutive camera-only singleton advances at different settled zooms both fire on the SAME nodeKey; a repeat settle at the SAME zoom does not (no-op ceiling guard, never loops)', () => {
+      vi.useFakeTimers();
+      try {
+        const onAreaVisualClusterCameraIntent = vi.fn();
+        const a = directionChild('d:n', 13.0, 77.6);
+        const b = directionChild('d:e', 13.00001, 77.60001); // near-coincident -> singleton visual cluster
+        mapStub.getZoom.mockReturnValue(11);
+        render(
+          <AreaDestinationMarkerLayer
+            node={{ ...ROOT_NODE, children: [a.raw, b.raw] }}
+            levelKind="directions"
+            children={[a.typed, b.typed]}
+            onSelect={vi.fn()}
+            onAreaVisualClusterCameraIntent={onAreaVisualClusterCameraIntent}
+          />,
+        );
+        expect(onAreaVisualClusterCameraIntent).toHaveBeenCalledTimes(1);
+
+        // A genuinely closer settled camera (still a singleton at the new
+        // zoom) — simulated via a real 'zoomend' event at a higher zoom,
+        // then letting the settle debounce elapse.
+        mapStub.getZoom.mockReturnValue(12);
+        act(() => {
+          capturedMapHandlers['zoomend']?.();
+          vi.advanceTimersByTime(700);
+        });
+        expect(onAreaVisualClusterCameraIntent).toHaveBeenCalledTimes(2);
+
+        // A repeat settle at the SAME zoom (12, unchanged) must NOT re-fire
+        // — the no-op ceiling guard that keeps this from ever looping.
+        act(() => {
+          capturedMapHandlers['zoomend']?.();
+          vi.advanceTimersByTime(700);
+        });
+        expect(onAreaVisualClusterCameraIntent).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });

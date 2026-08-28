@@ -335,3 +335,101 @@ describe('Issue #1943 — cluster-card drill-in must always zoom in, never out',
     expect(mapStub.panTo).not.toHaveBeenCalled();
   });
 });
+
+describe("Issue #1943 (owner repro, 2026-08-28) — a multi-group 'Zoom in' AREA marker's drill-in click must also always zoom in, never pan-only", () => {
+  // Real-browser repro: a genuine multi-group AREA-level visual-cluster card
+  // ("Budigere Cross, Katamnallur +1") at zoom 14 produced NO visible change
+  // on a single click — only Leaflet's native double-click-zoom (a completely
+  // separate code path) revealed the members. Root cause: `isDestinationClusterLevel`
+  // (PropertyMap.tsx) only recognised `levelKind === 'clusters' | 'directions'`,
+  // so at `levelKind === 'areas'` `overviewMaxZoom` stayed clamped to the legacy
+  // AREA_LAYER_MAX_ZOOM (12) instead of widening to LEAF_FIT_MAX_ZOOM (16) —
+  // and because AREA-level browsing routinely sits at or above zoom 12 already,
+  // the "already at the ceiling" branch fired on the very first click, so the
+  // camera could only ever pan, never zoom in. These tests mirror the
+  // 'clusters'-level tests above exactly, with `levelKind: 'areas'` — they FAIL
+  // against the pre-fix code (setView is never called; only panTo fires).
+  it("a drill-in click on an 'areas'-level multi-group card zooms in strictly past the click-time zoom, mirroring the 'clusters'-level behaviour above", () => {
+    const areasBaseProps = {
+      ...baseProps,
+      areasNavigationJourney: makeAreasNavigationJourney({ levelKind: 'areas' }),
+    };
+    const { rerender } = render(
+      <PropertyMap {...areasBaseProps} cameraIntent={null} focusBounds={null} onAreaVisualClusterCameraIntent={vi.fn()} />,
+    );
+    expect(capturedOnAreaVisualClusterCameraIntent).toBeDefined();
+
+    capturedOnAreaVisualClusterCameraIntent!(CLUSTER_MEMBERS_BOUNDS, CLUSTER_CENTER);
+    const intent: CameraIntent = {
+      seq: 1,
+      bounds: CLUSTER_MEMBERS_BOUNDS,
+      center: CLUSTER_CENTER,
+      framing: 'overview',
+    };
+    rerender(
+      <PropertyMap {...areasBaseProps} cameraIntent={intent} focusBounds={null} onAreaVisualClusterCameraIntent={vi.fn()} />,
+    );
+
+    // Pre-fix: overviewMaxZoom stayed AREA_LAYER_MAX_ZOOM (12), currentZoom
+    // (13) >= 12 hit the "already at the ceiling" branch, and ONLY panTo
+    // fired — no zoom change at all, reproducing the exact bug report.
+    expect(mapStub.setView).toHaveBeenCalledTimes(1);
+    const [, targetZoom] = mapStub.setView.mock.calls[0];
+    expect(targetZoom).toBeGreaterThan(13);
+    expect(mapStub.panTo).not.toHaveBeenCalled();
+  });
+
+  it("reproduces the exact owner repro geometry: currentZoom 14 (already past legacy AREA_LAYER_MAX_ZOOM=12) still advances on a single 'areas'-level drill-in click, never a pan-only no-op", () => {
+    mapStub.getZoom.mockReturnValue(14);
+    mapStub.getBoundsZoom.mockReturnValue(16);
+    const areasBaseProps = {
+      ...baseProps,
+      areasNavigationJourney: makeAreasNavigationJourney({ levelKind: 'areas' }),
+    };
+    const { rerender } = render(
+      <PropertyMap {...areasBaseProps} cameraIntent={null} focusBounds={null} onAreaVisualClusterCameraIntent={vi.fn()} />,
+    );
+    capturedOnAreaVisualClusterCameraIntent!(CLUSTER_MEMBERS_BOUNDS, CLUSTER_CENTER);
+    const intent: CameraIntent = {
+      seq: 1,
+      bounds: CLUSTER_MEMBERS_BOUNDS,
+      center: CLUSTER_CENTER,
+      framing: 'overview',
+    };
+    rerender(
+      <PropertyMap {...areasBaseProps} cameraIntent={intent} focusBounds={null} onAreaVisualClusterCameraIntent={vi.fn()} />,
+    );
+
+    expect(mapStub.panTo).not.toHaveBeenCalled();
+    expect(mapStub.setView).toHaveBeenCalledTimes(1);
+    const [, targetZoom] = mapStub.setView.mock.calls[0];
+    expect(targetZoom).toBeGreaterThan(14);
+    expect(targetZoom).toBeLessThanOrEqual(16);
+  });
+
+  it("REGRESSION GUARD: the 'listings'/'empty' levels (never a destination-cluster-card producer) remain unaffected — unmodified AREA_LAYER_MAX_ZOOM ceiling", () => {
+    mapStub.getZoom.mockReturnValue(13);
+    const listingsBaseProps = {
+      ...baseProps,
+      areasNavigationJourney: makeAreasNavigationJourney({ levelKind: 'listings' }),
+    };
+    const { rerender } = render(
+      <PropertyMap {...listingsBaseProps} cameraIntent={null} focusBounds={null} onAreaVisualClusterCameraIntent={vi.fn()} />,
+    );
+    // No real 'listings'-level producer ever arms this ref in production,
+    // but proving the ceiling itself stayed narrow for this level (unlike
+    // 'areas' above) is the point of this guard.
+    const intent: CameraIntent = {
+      seq: 1,
+      bounds: CLUSTER_MEMBERS_BOUNDS,
+      center: CLUSTER_CENTER,
+      framing: 'overview',
+    };
+    rerender(
+      <PropertyMap {...listingsBaseProps} cameraIntent={intent} focusBounds={null} onAreaVisualClusterCameraIntent={vi.fn()} />,
+    );
+
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+    expect(mapStub.fitBounds).toHaveBeenCalledWith(CLUSTER_MEMBERS_BOUNDS, { padding: [40, 40], maxZoom: 12 });
+  });
+});

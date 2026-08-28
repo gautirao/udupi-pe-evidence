@@ -23,11 +23,16 @@
  * driven (`map.setView(centre, zoom)`): the geometry this module reasons
  * about is the geometry that will actually be painted.
  *
- * `zBase` is the MINIMUM of two independently-computed, largest-satisfying
- * integer zooms (each searched from `min(maxZoom, LEAF_FIT_MAX_ZOOM)` down to
- * `minZoom`) — these answer two DIFFERENT questions and are deliberately
- * NEVER merged into one rect list (external review, post-first-fix-round —
- * they used to be, and that was itself a defect; see below):
+ * `zBase` starts from CHILD PLACEMENT alone and is pulled down to the
+ * ENVELOPE SCALE FLOOR only when the anchors THEMSELVES are structurally
+ * degenerate — fewer than 2 usable anchors, or every usable anchor
+ * geographically coincident (see Issue #1943 remaining-scope fix, below).
+ * These two independently-computed, largest-satisfying integer zooms (each
+ * searched from
+ * `min(maxZoom, LEAF_FIT_MAX_ZOOM)` down to `minZoom`) answer two DIFFERENT
+ * questions and are deliberately NEVER merged into one rect list (external
+ * review, post-first-fix-round — they used to be, and that was itself a
+ * defect; see below):
  *
  *   1. CHILD PLACEMENT (the real question): the largest zoom at which every
  *      child's CARD RECT (its anchor projected at that zoom, then expanded
@@ -75,6 +80,47 @@
  *     calls this retaining node bounds "ONLY as containment/fallback", i.e.
  *     a floor to start searching from, not a hard ceiling to enforce
  *     forever after.
+ *
+ *   - FALLBACK ONLY, NOT A CO-EQUAL FLOOR (Issue #1943 remaining-scope fix —
+ *     "useful-first root/structural presentation") — an earlier version of
+ *     this module applied `containmentBounds` UNCONDITIONALLY via
+ *     `zBase = Math.min(childZBase, envelopeZBase)`. That let a node's own
+ *     (frequently much larger — e.g. the union of every child's full
+ *     descendant-area extent, not just the child ANCHORS actually rendered
+ *     as cards) envelope silently override an already-correct `childZBase`
+ *     whenever the envelope was merely SMALLER, not only when the anchors
+ *     themselves degenerated. A city ROOT with several well-separated
+ *     Direction children is the production case this broke: `childZBase`
+ *     alone already finds a legible zoom for the 5 rendered cards, but the
+ *     ROOT's own envelope — sized off each Direction's full descendant-area
+ *     bbox, tens of km wider than the 5 anchors' own spread — dragged the
+ *     window down anyway, so the declutter fallback merged every child into
+ *     one catch-all card on first arrival.
+ *
+ *     `isAnchorSpreadDegenerate` gates the envelope on a STRUCTURAL property
+ *     of the anchors — fewer than 2 usable anchors, or every anchor sharing
+ *     the exact same lat AND lon — matching PURPOSE above ("a node with one
+ *     child, or several tightly-coincident children") and mirroring
+ *     `PropertyMap.tsx`'s identical check for `derivedMinZoom`. A first
+ *     attempt at this gate used `childZBase === effectiveMaxZoom` instead
+ *     (inferring degeneracy from where the search happened to land) — code
+ *     review caught that this is NOT equivalent and is actively wrong: two
+ *     genuinely DISTINCT, non-overlapping anchors (e.g. 0.3deg apart, 100px
+ *     cards) on a large-enough usable rect are trivially contained even at
+ *     the ceiling zoom simply because the viewport has room to spare, not
+ *     because the anchors are degenerate — that fixture reproducibly
+ *     misfired the old gate, applying the envelope to a perfectly legible
+ *     pair and dragging them down into an overlap. The STRUCTURAL check
+ *     never confuses "the viewport happens to be roomy" with "the anchors
+ *     are degenerate": it only fires for the actual documented failure mode.
+ *
+ *     Gating the envelope floor on this exact condition still fully covers
+ *     the documented degenerate case, while no longer overriding a
+ *     genuinely-computed `childZBase` for every other shape. This can only
+ *     ever RAISE `zBase` relative to the old unconditional `Math.min`
+ *     (removing a MIN operand cannot lower the result), so it is monotone-
+ *     safe: no node shape can end up with a LESS legible starting point than
+ *     before this fix.
  *
  *   - WHY THE ENVELOPE'S *POSITION* MUST NOT GATE `zBase` (the bug this
  *     section now corrects): an earlier version of this fix folded the
@@ -524,9 +570,11 @@ export function resolveHierarchyCameraFit(
 
   const usableRect = usableSubRect(input.viewport);
 
-  // ── zBase = min(childZBase, envelopeZBase) — see the module doc's
-  // "MINIMUM of two independently-computed" section for why these must
-  // stay two separate searches, never merged into one rect list. ──
+  // ── zBase: childZBase, pulled down to envelopeZBase ONLY when childZBase
+  // hit the degenerate sparse/coincident-anchor signature — see the module
+  // doc's "FALLBACK ONLY, NOT A CO-EQUAL FLOOR" section (Issue #1943
+  // remaining-scope fix). These stay two separate searches, never merged
+  // into one rect list. ──
 
   // 1. childZBase: largest zoom at which every CHILD card rect is actually
   // contained under the real centre-pinned placement (never a union-only
@@ -549,9 +597,35 @@ export function resolveHierarchyCameraFit(
   // 2. envelopeZBase: largest zoom at which `containmentBounds`'s projected
   // envelope fits usable's DIMENSIONS alone — position-insensitive by
   // construction (`fitsByDimension` never translates). Absent bounds, this
-  // contributes no constraint (defaults to the ceiling).
+  // contributes no constraint (defaults to the ceiling). Only ever computed
+  // when it can matter (see the `isAnchorSpreadDegenerate` gate below) —
+  // still a pure function of `containmentBounds`/`usableRect`, unrelated to
+  // that gate.
+  //
+  // `isAnchorSpreadDegenerate` — a STRUCTURAL property of the anchors
+  // themselves (fewer than 2 usable anchors, or every usable anchor sharing
+  // the exact same lat AND lon), never inferred from where childZBase's
+  // search happened to land. `childZBase === effectiveMaxZoom` was tried
+  // first and is WRONG: it also fires for two genuinely DISTINCT,
+  // non-overlapping anchors whenever the viewport is large enough (relative
+  // to their real spread) that they are trivially contained even at the
+  // ceiling — e.g. two anchors 0.3deg apart, 100px cards, on a 2000px-wide
+  // usable rect are 480px apart (well-separated, non-overlapping) and still
+  // pass containment at zoom 16, so the old condition misclassified them as
+  // "degenerate" and applied the envelope anyway, dragging a perfectly
+  // legible pair down to a zoom where they overlap — precisely the
+  // catch-all defect this fix exists to remove. The anchors' own SIZE (this
+  // property, mirroring PropertyMap.tsx's identical `isAnchorSpreadDegenerate`
+  // check for `derivedMinZoom`) is the one thing this module's own PURPOSE
+  // paragraph actually describes: "a node with one child (or several
+  // tightly-coincident children)". Any other shape — including one where
+  // childZBase happens to reach the ceiling because the viewport is roomy —
+  // is genuinely non-degenerate and must not have the envelope applied.
+  const isAnchorSpreadDegenerate =
+    usable.length < 2 ||
+    (usable.every((a) => a.lat === usable[0].lat) && usable.every((a) => a.lon === usable[0].lon));
   let envelopeZBase = effectiveMaxZoom;
-  if (input.containmentBounds != null) {
+  if (isAnchorSpreadDegenerate && input.containmentBounds != null) {
     const bounds = input.containmentBounds;
     let foundEnvelopeFit = false;
     for (let z = Math.floor(effectiveMaxZoom); z >= Math.ceil(input.minZoom); z -= 1) {
@@ -566,7 +640,7 @@ export function resolveHierarchyCameraFit(
     if (!foundEnvelopeFit) envelopeZBase = input.minZoom;
   }
 
-  const zBase = Math.min(childZBase, envelopeZBase);
+  const zBase = isAnchorSpreadDegenerate ? Math.min(childZBase, envelopeZBase) : childZBase;
 
   // ── Candidates: [zBase, zBase+1, zBase+2, zBase+3], clamped, deduped. ──
   const rawCandidates = [zBase, zBase + 1, zBase + 2, zBase + 3];

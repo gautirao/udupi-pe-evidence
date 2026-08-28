@@ -511,6 +511,24 @@ export interface DiscoverUrlActions {
    */
   goToNode: (nodeKey: string) => void;
   /**
+   * Issue #1943 (singleton auto-advance, PR #2368 owner ruling 2026-08-28) —
+   * IDENTICAL param delta to `goToNode` (same `applyNodeDelta`, so a
+   * differential test can assert byte-identical output), but a single
+   * REPLACE instead of a PUSH.
+   *
+   * Reserved for the automatic hierarchy transition fired when the current
+   * rendered state resolves to exactly one interactive real child marker
+   * that itself has further children — never for a user-initiated click,
+   * which always stays PUSH via `goToNode`. REPLACE is load-bearing here:
+   * the singleton state this collapses through was never a real navigation
+   * destination the user chose, so it must not occupy its own history slot
+   * — a PUSH would let Back land back on the singleton and immediately
+   * auto-re-advance forward again, an unrecoverable trap. Same no-op guard
+   * as `goToNode` (a repeat call for the node already active writes
+   * nothing).
+   */
+  goToNodeReplacingCurrent: (nodeKey: string) => void;
+  /**
    * Issue #1956 PR 2 — jump to an ancestry crumb, including `'root'` (the
    * synthetic city top level, a real server key). Identical URL delta to
    * `goToNode`; a distinct name so breadcrumb intent has its own call site.

@@ -31,6 +31,7 @@ import {
   boundsOfMembers,
   isUsableCentroid,
   AREA_CARD_FOOTPRINT_WIDTH_PX,
+  type AreaClusterCell,
   type ClusterableAreaMember,
   type ClusterableDestination,
   type ProjectFn as AreaClusterProjectFn,
@@ -63,6 +64,7 @@ import {
   homeGlyphSvg,
   VISUAL_CLUSTER_CARD_WIDTH_PX,
   VISUAL_CLUSTER_CARD_HEIGHT_PX,
+  MARKER_SHELL_STYLE,
 } from './markerPrimitives';
 
 /**
@@ -481,25 +483,34 @@ function makeClusterIcon(
 
 /**
  * Leader line + 7px anchor dot back to a chip's true centroid (design-spec
- * §1), rendered only when the chip's offset is >=16px. This divIcon is
- * anchored at the TRUE centroid lat/lon (never offset); the SVG line is drawn
- * locally from the anchor point to (dx, dy) so it visually terminates exactly
- * under the offset chip without needing a second lat/lon. Non-interactive
+ * §1), emitted only for a non-zero offset by its caller (the legacy
+ * AreaMarkerLayer cluster-chip layout below). This divIcon is anchored at
+ * the TRUE centroid lat/lon (never offset); the SVG line is drawn locally
+ * from the anchor point to (dx, dy) so it visually terminates exactly under
+ * the offset chip without needing a second lat/lon. Non-interactive
  * (pointer-events:none) so it never steals a click meant for a neighbour.
  */
 function makeLeaderIcon(offset: { dx: number; dy: number }, color: string): L.DivIcon {
   const { dx, dy } = offset;
   const minX = Math.min(0, dx);
   const minY = Math.min(0, dy);
-  const w = Math.max(0, dx) - minX;
-  const h = Math.max(0, dy) - minY;
   const x1 = 0 - minX;
   const y1 = 0 - minY;
   const x2 = dx - minX;
   const y2 = dy - minY;
+  // A purely-vertical (dx=0) or purely-horizontal (dy=0) offset makes the
+  // RAW bounding width/height exactly 0.
+  // An SVG element with an explicit `width="0"` or `height="0"` attribute
+  // gets no rendering box at all — its content never paints, even with
+  // `overflow:visible` — so the leader line silently disappeared for every
+  // STACK-mode row. `Math.max(..., 1)` keeps the LINE's own coordinates
+  // (x1/y1/x2/y2, computed from the real offset) exact; only the SVG
+  // element's own declared width/height gets a 1px floor.
+  const w = Math.max(0, dx) - minX || 1;
+  const h = Math.max(0, dy) - minY || 1;
   const html = `<div data-testid="area-cluster-leader" style="position:relative;transform:translate(${minX}px, ${minY}px);pointer-events:none;">
     <svg width="${w}" height="${h}" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none;" aria-hidden="true">
-      <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="1.5" stroke-opacity="0.38" />
+      <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="2" stroke-opacity="0.7" />
     </svg>
     <span style="position:absolute;left:${x1 - 3.5}px;top:${y1 - 3.5}px;width:7px;height:7px;border-radius:50%;background:${color};border:1.5px solid #fff;box-shadow:0 1px 3px rgba(17,24,39,0.25);"></span>
   </div>`;
@@ -595,6 +606,14 @@ export interface AreaDestinationMarkerLayerProps {
    * `onSelect` — it is not a real node, so it must never change `node=`.
    */
   onAreaVisualClusterCameraIntent?: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
+  /**
+   * Issue #1943 (singleton auto-advance, PR #2368 owner ruling 2026-08-28) —
+   * REPLACE-mode counterpart to `onSelect`, reserved for the automatic
+   * hierarchy transition fired when the current rendered state resolves to
+   * exactly one real child marker that itself has further children. Never
+   * called by a user click — a click always goes through `onSelect` (PUSH).
+   */
+  autoAdvanceSelectNode?: (nodeKey: string) => void;
   /**
    * Controlled cluster-focus membership (the `areaKey`s of the currently
    * focused visual cluster's members), for a parent that lifts this state to
@@ -1082,6 +1101,7 @@ export function AreaDestinationMarkerLayer({
   journey = null,
   selectedSchool,
   onAreaVisualClusterCameraIntent,
+  autoAdvanceSelectNode,
   focusedClusterMemberAreaKeys,
   onClusterFocusChange,
 }: AreaDestinationMarkerLayerProps) {
@@ -1104,8 +1124,6 @@ export function AreaDestinationMarkerLayer({
     };
   }, [map]);
 
-
-
   // ── AREA / Local-Destination real geography (Issue #1956 PR 3, Slice 4) ──
   // Recompute grouping on zoom only (grid clustering is a pure function of
   // projected pixel position at a given zoom) — the same pan-invariant
@@ -1115,14 +1133,55 @@ export function AreaDestinationMarkerLayer({
   // through footprint-aware clustering (see the main effect below), so they
   // need the same zoom-driven recompute 'areas' already had.
   const [areasZoomTick, setAreasZoomTick] = useState(() => map.getZoom());
+  // Issue #1943 (no-redundant-singleton amendment) — a SETTLED-zoom signal,
+  // separate from `areasZoomTick` above. Leaflet's `zoomend` fires at EVERY
+  // intermediate stop of an animated multi-level flyTo/fitBounds, not only
+  // once the camera has actually finished moving — a live-verification pass
+  // (real dev stack, not the unit-test mocks) found that the singleton
+  // auto-advance below reacting to every one of those intermediate frames
+  // could expose a still-settling child as its own clickable marker several
+  // frames BEFORE the camera actually stopped, racing a fast (automated or
+  // real) click against a presentation that was about to change again a
+  // moment later. The owner's binding invariant is explicitly about
+  // the STEADY-STATE presentation ("...the steady-state map must not show
+  // one synthetic marker...", PLAN_REVIEW packet 010's owner ruling) — this
+  // debounce is what makes "steady-state" a real, checkable condition rather
+  // than "whatever the most recent intermediate animation frame happened to
+  // compute". `areasZoomTick` itself stays UNDEBOUNCED (unchanged behaviour
+  // for the plain, non-escalated clustering path, which this amendment must
+  // not alter) — only the escalation gate below reads `hasSettledZoom`.
+  const SETTLE_DEBOUNCE_MS = 650;
+  const [settledZoomGeneration, setSettledZoomGeneration] = useState(0);
+  const lastZoomEndAtRef = useRef(0);
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (levelKind !== 'areas' && levelKind !== 'clusters' && levelKind !== 'directions') return;
-    const onZoomEnd = () => setAreasZoomTick(map.getZoom());
-    map.on('zoomend', onZoomEnd);
+    // Issue #1943 — a real node's projected screen position was found to
+    // differ by tens of pixels between two consecutive re-renders even
+    // though its lat/lon was unchanged: the camera was still GENUINELY
+    // MOVING (a pan, not just a zoom) between them. The original debounce
+    // below only ever subscribed to `zoomend`, so a pure pan (no zoom-level
+    // change) never reset it. `moveend` is Leaflet's own "camera is now at
+    // rest, whether from a pan OR a zoom" event — both are now watched, so
+    // `hasSettledZoom` (see below) genuinely means settled, not merely "no
+    // zoom change recently".
+    const onCameraSettling = () => {
+      setAreasZoomTick(map.getZoom());
+      lastZoomEndAtRef.current = Date.now();
+      if (settleTimerRef.current != null) clearTimeout(settleTimerRef.current);
+      settleTimerRef.current = setTimeout(() => {
+        setSettledZoomGeneration((g) => g + 1);
+      }, SETTLE_DEBOUNCE_MS);
+    };
+    map.on('zoomend', onCameraSettling);
+    map.on('moveend', onCameraSettling);
     return () => {
-      map.off('zoomend', onZoomEnd);
+      map.off('zoomend', onCameraSettling);
+      map.off('moveend', onCameraSettling);
+      if (settleTimerRef.current != null) clearTimeout(settleTimerRef.current);
     };
   }, [map, levelKind]);
+  const hasSettledZoom = Date.now() - lastZoomEndAtRef.current >= SETTLE_DEBOUNCE_MS;
 
   // Issue #1956 PR 3 (bounded state-lift, AC4.12/AC4.18) — cluster focus is
   // now ALWAYS controlled by the caller (MapDiscovery owns the ONE
@@ -1154,6 +1213,25 @@ export function AreaDestinationMarkerLayer({
     Map<string, { marker: L.Marker; html: string; latlng: [number, number] }>
   >(new Map());
 
+  // Issue #1943 (singleton auto-advance, PR #2368 owner ruling 2026-08-28) —
+  // idempotence guard for a REAL-CHILD auto-advance (goToNodeReplacingCurrent).
+  // Firing it changes `node` itself on the next render (a genuinely new
+  // nodeKey), so a plain nodeKey-keyed guard is correct and sufficient here —
+  // a semantic-state guard, never a wall-clock debounce.
+  const autoAdvancedNodeKeyRef = useRef<string | null>(null);
+  // Issue #1943 (PR #2368 exact-head review, BLOCKING fix) — a SEPARATE guard
+  // for the client-only visual-cluster (camera-only) auto-advance. That
+  // branch deliberately leaves `node=` unchanged (see the branch below), so
+  // keying idempotence off `node.nodeKey` alone (the previous, buggy
+  // behaviour) permanently blocked a SECOND legitimate auto-advance at the
+  // same node — even when a closer settled camera still resolves to exactly
+  // one synthetic catch-all (recursive declutter, which this file's own
+  // contract explicitly allows), leaving the user with a redundant click.
+  // Keyed on (node, membership, actual settled zoom) instead — see the
+  // camera branch below for why this is both a correct idempotence guard
+  // AND a no-op ceiling guard against ever looping on an unchanged camera.
+  const autoAdvancedCameraSignatureRef = useRef<string | null>(null);
+
   useEffect(() => {
     const registry = areaMarkerRegistryRef.current;
     if (!node || (levelKind !== 'areas' && levelKind !== 'clusters' && levelKind !== 'directions')) {
@@ -1182,7 +1260,13 @@ export function AreaDestinationMarkerLayer({
     // which is not a real node and has no hover-highlight state of its own.
     const desired = new Map<
       string,
-      { latlng: [number, number]; icon: L.DivIcon; html: string; onClick: () => void; hoverKey: string | null }
+      {
+        latlng: [number, number];
+        icon: L.DivIcon;
+        html: string;
+        onClick: () => void;
+        hoverKey: string | null;
+      }
     >();
     // Shared by 'areas' AND (Issue #1943 Slice B+C merge) 'clusters'/
     // 'directions' — the map's own lat/lon -> container-pixel projection,
@@ -1273,95 +1357,180 @@ export function AreaDestinationMarkerLayer({
         footprintHeightPx,
       });
 
-      // clusterAreaMembers's OWN output order is identityKey-sorted (a
-      // deterministic TOTAL order — see areaClustering.ts's module doc), not
-      // the server's `children` sibling order. Emission below iterates
-      // `children` in their ORIGINAL order instead — several existing
-      // marker-creation-order-dependent tests (and, more importantly,
-      // consistent map behaviour across re-renders) rely on that stable
-      // ordering, and nothing about the clustering DECISION itself depends
-      // on emission order. A multi-member cell is emitted exactly ONCE, at
-      // `cell.anchor` — the members' centroid, a position no raw member
-      // occupies. Only which member's `children`-order position is
-      // encountered FIRST (`emittedClusterKeys` below) is what that
-      // iteration order controls — the emitted card's own position is
-      // always the centroid, never any one member's.
-      const cellByNodeKey = new Map<string, (typeof clusterResult.clusters)[number]>();
-      for (const cell of clusterResult.clusters) {
-        for (const member of cell.members) {
-          cellByNodeKey.set(member.nodeKey, cell);
-        }
-      }
-      const emittedClusterKeys = new Set<string>();
+      type DestinationCell = (typeof clusterResult.clusters)[number];
 
-      for (const child of children) {
-        const cell = cellByNodeKey.get(child.nodeKey);
-        if (!cell) continue; // omitted (unusable centroid) — never rendered, never fabricated.
+      // Issue #1943 (singleton auto-advance, PR #2368 owner ruling
+      // 2026-08-05) — when the current rendered state resolves to exactly
+      // ONE interactive cell — a genuine single real child
+      // (`destinationMembers.length === 1`) or every real child collapsing
+      // onto one screen point (a client-only visual-cluster catch-all) —
+      // this fires the SAME transition a manual click on that lone marker
+      // already performs, automatically, rather than fabricating a new
+      // spatial arrangement: `effectiveClusters` is always the plain,
+      // non-escalated `clusterResult.clusters` — a navigation/camera
+      // transition, never a new layout. `hasSettledZoom` gates this on the
+      // STEADY-STATE camera only (see the debounce's own doc comment above)
+      // — a still-animating intermediate frame renders the plain singleton
+      // for that one frame, exactly as it always has.
+      const effectiveClusters: readonly DestinationCell[] = clusterResult.clusters;
+      const singletonCell =
+        hasSettledZoom && clusterResult.clusters.length === 1 ? clusterResult.clusters[0] : null;
 
-        if (cell.members.length === 1) {
-          // REACHABILITY INVARIANT (AC5) — a single-member cell renders the
-          // existing makeDestinationCard and calls onSelect(nodeKey) exactly
-          // as today.
-          const member = cell.members[0];
-          const isSelected = selectedNodeKey === child.nodeKey;
-          const isHovered = hoveredNodeKey === child.nodeKey;
-          const icon = makeDestinationCard(child, isSelected, isHovered, eligibilityJourney);
-          desired.set(child.nodeKey, {
-            latlng: [member.lat, member.lon],
-            icon,
-            html: String(icon.options.html),
-            onClick: () => onSelect(child.nodeKey),
-            hoverKey: child.nodeKey,
-          });
-          continue;
-        }
-
-        // REACHABILITY INVARIANT (AC5) — a multi-member cluster card must
-        // NOT call onSelect and must NOT touch `node=`; it publishes the
-        // camera intent + focused members, mirroring the existing 'areas'
-        // visual-cluster precedent in this file verbatim. Recursive
-        // declutter is IN-DESIGN: drilling into this camera intent may
-        // itself land on a still-decluttered state at the closer zoom — it
-        // terminates because each drill-in strictly reduces the rendered
-        // child set (this cell's own membership).
-        const membershipKey = cell.members.map((m) => m.identityKey).join('|');
-        if (emittedClusterKeys.has(membershipKey)) continue;
-        emittedClusterKeys.add(membershipKey);
-
-        const { representativeNames, countResult } = presentDestinationClusterRepresentatives(
-          cell.members,
-          eligibilityJourney,
-        );
-        const totalListingCount = cell.members.reduce((sum, m) => sum + m.listingCount, 0);
-        const icon = makeAreaVisualClusterCard(
-          representativeNames,
-          countResult.label,
-          totalListingCount,
-          destinationAccent,
-          membershipKey,
-          // No focus concept exists for a 'clusters'/'directions' visual
-          // cluster (unlike the 'areas' site below) — never focused.
-          false,
-          destinationJourneyAttr,
-        );
-        desired.set(`cluster:${membershipKey}`, {
-          latlng: [cell.anchor.lat, cell.anchor.lon],
-          icon,
-          html: String(icon.options.html),
-          onClick: () => {
-            const bounds = boundsOfMembers(cell.members);
+      if (singletonCell && node) {
+        if (singletonCell.members.length === 1) {
+          // A genuine single real child. Auto-advance ONLY when it has
+          // further children of its own to reveal — never an AREA leaf
+          // (`isLeafArea`), whose selection is a genuine terminal
+          // reachability action (a listings destination), not an
+          // unnecessary intermediate click through more markers.
+          const onlyChild = singletonCell.members[0];
+          // `isLeafArea` lives on the TYPED `AreasNavigationChild` (`children`
+          // prop), never on the raw `NavigationChildSummary` (`node.children`
+          // / `rawByNodeKey`) — that raw wire shape carries no such field.
+          const typedChild = children.find((c) => c.nodeKey === onlyChild.nodeKey);
+          if (typedChild && !typedChild.isLeafArea && autoAdvancedNodeKeyRef.current !== node.nodeKey) {
+            autoAdvancedNodeKeyRef.current = node.nodeKey;
+            autoAdvanceSelectNode?.(onlyChild.nodeKey);
+          }
+        } else {
+          // A client-only visual cluster spanning every reachable child —
+          // reuse the EXISTING camera/focus transition a manual click on
+          // this same cluster already fires below (the `cell.members.length
+          // > 1` branch in the emission loop), never `onSelect`/
+          // `autoAdvanceSelectNode` — this is not a real node and must never
+          // write `node=`.
+          //
+          // Idempotence here CANNOT be keyed on `node.nodeKey` alone (unlike
+          // the real-child branch above): this branch deliberately never
+          // changes `node`, so a plain nodeKey guard would permanently block
+          // every subsequent auto-advance at this node — including a second,
+          // LEGITIMATE one, if a closer settled camera still resolves to
+          // exactly one synthetic catch-all (recursive declutter is
+          // explicitly in-design; see the emission loop's own comment on the
+          // multi-member cluster-card click below). The signature below keys
+          // on the actual settled zoom (`areasZoomTick`, updated only once
+          // per real camera settle) plus this cell's own membership — so the
+          // SAME presentation at the SAME camera fires at most once (the
+          // no-op ceiling guard: if the camera genuinely cannot advance
+          // further, `areasZoomTick` cannot change either, so the signature
+          // repeats and this never loops), while a genuinely closer settled
+          // camera that is STILL a singleton produces a new signature and is
+          // free to advance again.
+          const membershipKey = singletonCell.members
+            .map((m) => m.identityKey)
+            .sort()
+            .join('|');
+          const cameraSignature = `${node.nodeKey}:${membershipKey}:${areasZoomTick}`;
+          if (autoAdvancedCameraSignatureRef.current !== cameraSignature) {
+            const bounds = boundsOfMembers(singletonCell.members);
             if (bounds) {
+              autoAdvancedCameraSignatureRef.current = cameraSignature;
               onAreaVisualClusterCameraIntent?.(
                 [[bounds.minLat, bounds.minLon], [bounds.maxLat, bounds.maxLon]],
-                [cell.anchor.lat, cell.anchor.lon],
+                [singletonCell.anchor.lat, singletonCell.anchor.lon],
               );
             }
-            // A visual cluster is client-side only — never calls onSelect,
-            // never changes node=, never touches history.
-          },
-          // Not a real node — no hover-highlight state to report.
-          hoverKey: null,
-        });
+          }
+        }
+      }
+
+      {
+        // clusterAreaMembers's OWN output order is identityKey-sorted (a
+        // deterministic TOTAL order — see areaClustering.ts's module doc), not
+        // the server's `children` sibling order. Emission below iterates
+        // `children` in their ORIGINAL order instead — several existing
+        // marker-creation-order-dependent tests (and, more importantly,
+        // consistent map behaviour across re-renders) rely on that stable
+        // ordering, and nothing about the clustering DECISION itself depends
+        // on emission order. A multi-member cell is emitted exactly ONCE, at
+        // `cell.anchor` — the members' centroid, a position no raw member
+        // occupies. Only which member's `children`-order position is
+        // encountered FIRST (`emittedClusterKeys` below) is what that
+        // iteration order controls — the emitted card's own position is
+        // always the centroid, never any one member's.
+        const cellByNodeKey = new Map<string, DestinationCell>();
+        for (const cell of effectiveClusters) {
+          for (const member of cell.members) {
+            cellByNodeKey.set(member.nodeKey, cell);
+          }
+        }
+        const emittedClusterKeys = new Set<string>();
+
+        for (const child of children) {
+          const cell = cellByNodeKey.get(child.nodeKey);
+          if (!cell) continue; // omitted (unusable centroid) — never rendered, never fabricated.
+
+          if (cell.members.length === 1) {
+            // REACHABILITY INVARIANT (AC5) — a single-member cell renders the
+            // existing makeDestinationCard and calls onSelect(nodeKey) exactly
+            // as today.
+            const member = cell.members[0];
+            const isSelected = selectedNodeKey === child.nodeKey;
+            const isHovered = hoveredNodeKey === child.nodeKey;
+            const icon = makeDestinationCard(child, isSelected, isHovered, eligibilityJourney);
+            desired.set(child.nodeKey, {
+              latlng: [member.lat, member.lon],
+              icon,
+              html: String(icon.options.html),
+              onClick: () => onSelect(child.nodeKey),
+              hoverKey: child.nodeKey,
+            });
+            continue;
+          }
+
+          // REACHABILITY INVARIANT (AC5) — a multi-member cluster card must
+          // NOT call onSelect and must NOT touch `node=`; it publishes the
+          // camera intent + focused members, mirroring the existing 'areas'
+          // visual-cluster precedent in this file verbatim. Recursive
+          // declutter is IN-DESIGN: drilling into this camera intent may
+          // itself land on a still-decluttered state at the closer zoom — it
+          // terminates because each drill-in strictly reduces the rendered
+          // child set (this cell's own membership).
+          // Membership-only registry key (never anything else derived from
+          // presentation state) — so a re-render with the same membership
+          // set is always an ordinary icon/position update to the diff below
+          // (existing.html/existing.latlng), never a teardown/rebuild that
+          // could race a real click against the marker mid-recreation.
+          const membershipKey = cell.members.map((m) => m.identityKey).join('|');
+          const registryKey = `cluster:${membershipKey}`;
+          if (emittedClusterKeys.has(registryKey)) continue;
+          emittedClusterKeys.add(registryKey);
+
+          const { representativeNames, countResult } = presentDestinationClusterRepresentatives(
+            cell.members,
+            eligibilityJourney,
+          );
+          const totalListingCount = cell.members.reduce((sum, m) => sum + m.listingCount, 0);
+          const baseIcon = makeAreaVisualClusterCard(
+            representativeNames,
+            countResult.label,
+            totalListingCount,
+            destinationAccent,
+            membershipKey,
+            // No focus concept exists for a 'clusters'/'directions' visual
+            // cluster (unlike the 'areas' site below) — never focused.
+            false,
+            destinationJourneyAttr,
+          );
+          desired.set(registryKey, {
+            latlng: [cell.anchor.lat, cell.anchor.lon],
+            icon: baseIcon,
+            html: String(baseIcon.options.html),
+            onClick: () => {
+              const bounds = boundsOfMembers(cell.members);
+              if (bounds) {
+                onAreaVisualClusterCameraIntent?.(
+                  [[bounds.minLat, bounds.minLon], [bounds.maxLat, bounds.maxLon]],
+                  [cell.anchor.lat, cell.anchor.lon],
+                );
+              }
+              // A visual cluster is client-side only — never calls onSelect,
+              // never changes node=, never touches history.
+            },
+            // Not a real node — no hover-highlight state to report.
+            hoverKey: null,
+          });
+        }
       }
     } else {
       // 'areas' — dense AREA children. Visibility runs BEFORE clustering
@@ -1815,6 +1984,12 @@ export function AreaDestinationMarkerLayer({
     layoutTick,
     focusedMembers,
     onAreaVisualClusterCameraIntent,
+    // Issue #1943 (no-redundant-singleton amendment) — re-run once the
+    // settle-debounce above fires, so escalation gets a real chance to run
+    // against the FINAL camera state even when `areasZoomTick` itself
+    // stopped changing a moment earlier (the debounce's timer, not a new
+    // zoomend, is what flips `hasSettledZoom` back to true).
+    settledZoomGeneration,
   ]);
 
   // True unmount cleanup — removes every marker this layer instance ever

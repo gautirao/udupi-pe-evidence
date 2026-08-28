@@ -520,6 +520,14 @@ interface PropertyMapProps {
    */
   onAreaVisualClusterCameraIntent?: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
   /**
+   * Issue #1943 (singleton auto-advance, PR #2368 owner ruling 2026-08-28) —
+   * REPLACE-mode counterpart to `areasNavigationJourney.selectNode`, passed
+   * through unchanged to `AreaDestinationMarkerLayer`. Fired ONLY by the
+   * layer's own automatic-transition detection, never by a user click — a
+   * click always goes through `areasNavigationJourney.selectNode` (PUSH).
+   */
+  autoAdvanceSelectNode?: (nodeKey: string) => void;
+  /**
    * Issue #1956 PR 2 (Slice 3, map half) — the SAME dual-preview-gate +
    * `journey === 'area-first'` condition `DiscoverRightPanelContainer`
    * already evaluates to decide whether `DiscoverAreasJourneyPanel` (rather
@@ -1558,14 +1566,42 @@ function AreaPanner({
         // routine (never hand-rolled), mirroring the `map.project` rule just
         // below. Falls back to LEAF_FIT_MIN_ZOOM only when no usable
         // envelope exists at all (no bbox AND no anchors with a lat/lon).
-        const envelopeLatLngs: [number, number][] = nodeBbox
-          ? [nodeBbox[0], nodeBbox[1]]
-          : panToArea.hierarchyChildAnchors
-              .filter(
-                (anchor): anchor is HierarchyChildAnchor & { lat: number; lon: number } =>
-                  anchor.lat != null && anchor.lon != null,
-              )
-              .map((anchor) => [anchor.lat, anchor.lon] as [number, number]);
+        //
+        // Issue #1943 (remaining scope, "useful-first root/structural
+        // presentation") — the ANCHOR extent is now preferred over
+        // `nodeBbox`, falling back to `nodeBbox` only when the anchors'
+        // own spread is degenerate (0-1 usable anchor, or every anchor
+        // coincident). This mirrors hierarchyCameraFit.ts's own
+        // "fallback only, not a co-equal floor" fix to the SAME anti-
+        // pattern one call downstream: `nodeBbox` is the union of every
+        // DESCENDANT area's full extent — several levels below what is
+        // actually rendered at this level — and has no on-screen
+        // representation at all, while the anchors are the EXACT
+        // positions the destination cards are painted at
+        // (AreaMarkerLayer.tsx reads the same `centreLat`/`centreLon`).
+        // Framing the camera to the invisible bbox instead of the visible
+        // cards systematically over-zooms-out, which is precisely the
+        // "unnecessary declutter" defect this slice fixes. `nodeBbox`
+        // remains the fallback for the one case anchors alone cannot
+        // describe a real extent for — a single child, or several
+        // tightly-coincident ones — which is the same degenerate
+        // signature this file's own over-zoom guard (just above) already
+        // exists to protect against.
+        const anchorLatLngs: [number, number][] = panToArea.hierarchyChildAnchors
+          .filter(
+            (anchor): anchor is HierarchyChildAnchor & { lat: number; lon: number } =>
+              anchor.lat != null && anchor.lon != null,
+          )
+          .map((anchor) => [anchor.lat, anchor.lon] as [number, number]);
+        const isAnchorSpreadDegenerate =
+          anchorLatLngs.length < 2 ||
+          (anchorLatLngs.every(([lat]) => lat === anchorLatLngs[0][0]) &&
+            anchorLatLngs.every(([, lon]) => lon === anchorLatLngs[0][1]));
+        const envelopeLatLngs: [number, number][] = isAnchorSpreadDegenerate
+          ? nodeBbox
+            ? [nodeBbox[0], nodeBbox[1]]
+            : anchorLatLngs
+          : anchorLatLngs;
         let derivedMinZoom = LEAF_FIT_MIN_ZOOM;
         // Issue #2314 — `getBoundsZoom` below only ever sees LAT/LON POINTS
         // (`envelopeLatLngs`), so left unmodified this floor is a
@@ -3541,6 +3577,7 @@ export function PropertyMap({
   focusedClusterMemberAreaKeys = null,
   onClusterFocusChange,
   onAreaVisualClusterCameraIntent,
+  autoAdvanceSelectNode,
   showAreasNavigationDestinations = false,
   onZoomChange,
   onViewportChange,
@@ -3742,7 +3779,25 @@ export function PropertyMap({
           cameraIntent={cameraIntent}
           isDestinationClusterLevel={
             areasNavigationJourney?.levelKind === 'clusters' ||
-            areasNavigationJourney?.levelKind === 'directions'
+            areasNavigationJourney?.levelKind === 'directions' ||
+            // Issue #1943 (owner repro, 2026-08-28) — the 'areas' level's own
+            // multi-group visual-cluster card (AreaMarkerLayer.tsx's second
+            // `makeAreaVisualClusterCard` call site) fires the exact same
+            // `onAreaVisualClusterCameraIntent` -> `handleAreaVisualClusterCameraIntent`
+            // drill-in intent as the 'clusters'/'directions' level's card. Excluding
+            // 'areas' here left `overviewMaxZoom` clamped to AREA_LAYER_MAX_ZOOM (12)
+            // for it — and because the AREA-level hierarchy routinely sits at or above
+            // zoom 12 already (unlike the shallower 'clusters'/'directions' levels this
+            // flag was written for), the "already at the ceiling" branch below fired on
+            // the very first click, so the intent could only ever pan, never zoom in.
+            // A single click did nothing visible; only Leaflet's native dblclick-zoom
+            // (a completely separate code path) actually revealed the members. The
+            // `deriveDiscoverScopeKind` safety argument on this prop's doc comment
+            // applies identically here: 'areas' is the same node-key-based hierarchy
+            // level (still driven by `node=`, never the legacy areaKey/groupId/scope
+            // params), so widening the ceiling for it is exactly as safe as it already
+            // is for 'clusters'/'directions'.
+            areasNavigationJourney?.levelKind === 'areas'
           }
           isClusterDrillIntentRef={isClusterDrillIntentRef}
         />
@@ -3831,6 +3886,7 @@ export function PropertyMap({
             focusedClusterMemberAreaKeys={focusedClusterMemberAreaKeys}
             onClusterFocusChange={onClusterFocusChange}
             onAreaVisualClusterCameraIntent={handleAreaVisualClusterCameraIntent}
+            autoAdvanceSelectNode={autoAdvanceSelectNode}
           />
         ) : (
           // Issue #1882 (Track A PR3, Slice S3) — AreaMarkerLayer renders when it's

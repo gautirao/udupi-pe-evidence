@@ -55,6 +55,7 @@ type NavigationState = Pick<DiscoverUrlState, 'node' | 'rawNodeParam' | 'nodeLis
 type NavigationActions = Pick<
   DiscoverUrlActions,
   | 'goToNode'
+  | 'goToNodeReplacingCurrent'
   | 'goToAncestorNode'
   | 'clearNode'
   | 'enterAreasJourney'
@@ -349,21 +350,31 @@ export function useNavigationUrlDomain(
    * race defence.
    */
   const writeNode = useCallback(
-    (nextNodeKey: string | null) => {
+    (nextNodeKey: string | null, historyMode: 'push' | 'replace') => {
       cancelPendingViewportCommit(timers);
       if (nextNodeKey === node) {
         return;
       }
       setUrlParams(
         (prev) => applyNodeDelta(prev, nextNodeKey),
-        { replace: false }, // PUSH — every node navigation is a deliberate destination
+        { replace: historyMode === 'replace' },
       );
     },
     [setUrlParams, timers, node],
   );
 
   /** Drill into a direct child node (guided navigation). PUSH. */
-  const goToNode = useCallback((nodeKey: string) => writeNode(nodeKey), [writeNode]);
+  const goToNode = useCallback((nodeKey: string) => writeNode(nodeKey, 'push'), [writeNode]);
+
+  /**
+   * Issue #1943 (singleton auto-advance) — see this action's own doc on
+   * `DiscoverUrlActions.goToNodeReplacingCurrent`. Same delta as `goToNode`,
+   * REPLACE instead of PUSH.
+   */
+  const goToNodeReplacingCurrent = useCallback(
+    (nodeKey: string) => writeNode(nodeKey, 'replace'),
+    [writeNode],
+  );
 
   /**
    * Jump to an ancestry crumb — including `'root'`, the synthetic city top level,
@@ -372,10 +383,10 @@ export function useNavigationUrlDomain(
    * `goToNode`, kept as a distinct named action so a breadcrumb click has a
    * semantically distinct call site even though today's URL delta is identical.
    */
-  const goToAncestorNode = useCallback((nodeKey: string) => writeNode(nodeKey), [writeNode]);
+  const goToAncestorNode = useCallback((nodeKey: string) => writeNode(nodeKey, 'push'), [writeNode]);
 
   /** Leave the hierarchy cursor entirely — deletes `node=`. PUSH. */
-  const clearNode = useCallback(() => writeNode(null), [writeNode]);
+  const clearNode = useCallback(() => writeNode(null, 'push'), [writeNode]);
 
   /**
    * Issue #2203 (Option A') — School-first "pick a new Area from the shared
@@ -578,6 +589,7 @@ export function useNavigationUrlDomain(
     state: { node, rawNodeParam, nodeListings },
     actions: {
       goToNode,
+      goToNodeReplacingCurrent,
       goToAncestorNode,
       clearNode,
       enterAreasJourney,

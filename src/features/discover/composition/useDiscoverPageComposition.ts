@@ -119,6 +119,7 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   const navigationController = useDiscoverNavigationController({
     nav,
     goToNode: actions.goToNode,
+    goToNodeReplacingCurrent: actions.goToNodeReplacingCurrent,
     intentListingPurpose,
   });
   const {

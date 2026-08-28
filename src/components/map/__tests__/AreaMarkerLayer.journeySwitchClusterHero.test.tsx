@@ -71,16 +71,37 @@ vi.mock('leaflet', () => ({
   },
 }));
 
+// Real lat/lon -> pixel projection (same convention as AreaMarkerLayer.test.tsx's
+// `projectLatLon`) — members at the IDENTICAL coordinate still land on the
+// identical point, preserving every existing "spatially identical -> one
+// dense cluster cell" fixture's premise byte-for-byte.
+function projectLatLon(lat: number, lon: number): { x: number; y: number } {
+  return { x: (lon - 74.5) * 10000, y: (13.5 - lat) * 10000 };
+}
+
+const panes = new Map<string, HTMLElement>();
 const mapStub = {
   getSize: vi.fn(() => ({ x: 1200, y: 800 })),
   getZoom: vi.fn(() => 11),
-  // All members project to the SAME container point -> one dense cluster
-  // cell, for both the 'areas' and 'clusters'/'directions' paths.
-  latLngToContainerPoint: vi.fn(() => ({ x: 100, y: 100 })),
+  latLngToContainerPoint: vi.fn(([lat, lon]: [number, number]) => projectLatLon(lat, lon)),
   containerPointToLatLng: vi.fn(() => ({ lat: 13.0, lng: 77.6 })),
   getContainer: vi.fn(() => document.createElement('div')),
+  // Issue #1943 (no-redundant-singleton amendment) — the PARTITION-phase
+  // escalation loop's synthetic-zoom projection + termination ceiling.
+  getMaxZoom: vi.fn(() => 19),
+  project: vi.fn(([lat, lon]: [number, number], zoom: number) => {
+    const base = projectLatLon(lat, lon);
+    const scale = 2 ** (zoom - 11); // 11 == this stub's getZoom()
+    return { x: base.x * scale, y: base.y * scale };
+  }),
   on: vi.fn(),
   off: vi.fn(),
+  getPane: vi.fn((name: string) => panes.get(name)),
+  createPane: vi.fn((name: string) => {
+    const pane = document.createElement('div');
+    panes.set(name, pane);
+    return pane;
+  }),
 };
 
 vi.mock('react-leaflet', () => ({
@@ -89,6 +110,7 @@ vi.mock('react-leaflet', () => ({
 
 vi.mock('leaflet/dist/leaflet.css', () => ({}));
 
+import L from 'leaflet';
 import { AreaDestinationMarkerLayer } from '../AreaMarkerLayer';
 import type { AreasNavigationChild } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { NavigationNodeResponse } from '@/features/discover/navigation/types';
@@ -182,6 +204,49 @@ const ZERO_CLUSTER_MEMBERS = [
   clusterChild('c:zero-belt-two', { listingCount: 0, schoolCount: 2 }),
 ];
 
+// Issue #1943 (no-redundant-singleton amendment, PLAN_REVIEW packet 010
+// APPROVED) — a cluster of ALL of a node's children can no longer render as
+// a single synthetic catch-all. A THIRD, geographically-distant decoy member
+// is added to both 'clusters'-level fixtures above so the two spatially-
+// identical members form a genuine PARTIAL overlap (2 of 3 children), not a
+// spans-all-children singleton — preserving this file's actual test intent
+// (hero-metric journey-switch rendering) without triggering the new
+// no-singleton escalation path at all.
+function farDecoy(nodeKey: string): { raw: NavigationNodeResponse['children'][number]; typed: AreasNavigationChild } {
+  const decoy = clusterChild(nodeKey, { listingCount: 1, schoolCount: 1 });
+  decoy.raw.centreLat = 13.5;
+  decoy.raw.centreLon = 78.2;
+  return decoy;
+}
+const CLUSTER_MEMBERS_WITH_DECOY = [...CLUSTER_MEMBERS, farDecoy('c:far-away-decoy')];
+const ZERO_CLUSTER_MEMBERS_WITH_DECOY = [...ZERO_CLUSTER_MEMBERS, farDecoy('c:far-away-decoy-zero')];
+
+/**
+ * Locate the MOST RECENT visual-cluster-card html among possibly-several
+ * captured calls (searched from the end — `divIconHtmlCalls` accumulates
+ * across a `rerender()`, and these tests need the LATEST html, not the
+ * first/stale one).
+ */
+function findClusterCardHtml(): string {
+  for (let i = divIconHtmlCalls.length - 1; i >= 0; i--) {
+    if (divIconHtmlCalls[i].includes('area-visual-cluster-marker')) return divIconHtmlCalls[i];
+  }
+  throw new Error('no area-visual-cluster-marker divIcon call captured');
+}
+
+/**
+ * Locate the marker created with the visual-cluster-card icon, by matching
+ * `L.marker`'s own call arguments (icon.options.html) — robust regardless of
+ * whether `setIcon` has fired yet for a brand-new marker (unlike reading
+ * `getElement().innerHTML`, which only reflects a LATER `setIcon` call).
+ */
+function findClusterCardMarker(): CapturedMarker {
+  const calls = vi.mocked(L.marker).mock.calls as unknown as [unknown, { icon?: { options?: { html?: string } } }][];
+  const index = calls.findIndex((call) => call[1]?.icon?.options?.html?.includes('area-visual-cluster-marker'));
+  if (index < 0) throw new Error('no area-visual-cluster-marker marker captured');
+  return capturedMarkers[index];
+}
+
 beforeEach(() => {
   capturedMarkers.length = 0;
   divIconHtmlCalls.length = 0;
@@ -247,29 +312,28 @@ describe('#2345 — visual-cluster hero metric must not leak stale residential c
     // such filtering, so it is used here to exercise the zero-phrase branch.
     const { rerender } = render(
       <AreaDestinationMarkerLayer
-        node={{ ...ROOT_NODE, children: ZERO_CLUSTER_MEMBERS.map((m) => m.raw) }}
+        node={{ ...ROOT_NODE, children: ZERO_CLUSTER_MEMBERS_WITH_DECOY.map((m) => m.raw) }}
         levelKind="clusters"
-        children={ZERO_CLUSTER_MEMBERS.map((m) => m.typed)}
+        children={ZERO_CLUSTER_MEMBERS_WITH_DECOY.map((m) => m.typed)}
         onSelect={vi.fn()}
         journey={null}
       />,
     );
-    expect(divIconHtmlCalls).toHaveLength(1);
-    expect(hasZeroListingsPhrase(divIconHtmlCalls[0])).toBe(true);
+    expect(hasZeroListingsPhrase(findClusterCardHtml())).toBe(true);
 
     act(() => {
       rerender(
         <AreaDestinationMarkerLayer
-          node={{ ...ROOT_NODE, children: ZERO_CLUSTER_MEMBERS.map((m) => m.raw) }}
+          node={{ ...ROOT_NODE, children: ZERO_CLUSTER_MEMBERS_WITH_DECOY.map((m) => m.raw) }}
           levelKind="clusters"
-          children={ZERO_CLUSTER_MEMBERS.map((m) => m.typed)}
+          children={ZERO_CLUSTER_MEMBERS_WITH_DECOY.map((m) => m.typed)}
           onSelect={vi.fn()}
           journey="school-first"
         />,
       );
     });
 
-    const latestHtml = divIconHtmlCalls[divIconHtmlCalls.length - 1];
+    const latestHtml = findClusterCardHtml();
     expect(latestHtml).toContain('data-journey="schools"');
     expect(hasZeroListingsPhrase(latestHtml)).toBe(false);
   });
@@ -277,24 +341,22 @@ describe('#2345 — visual-cluster hero metric must not leak stale residential c
   it('"clusters" call site, non-zero listings: schools-journey HTML carries NO residential listings hero after switching from residential', () => {
     const { rerender } = render(
       <AreaDestinationMarkerLayer
-        node={{ ...ROOT_NODE, children: CLUSTER_MEMBERS.map((m) => m.raw) }}
+        node={{ ...ROOT_NODE, children: CLUSTER_MEMBERS_WITH_DECOY.map((m) => m.raw) }}
         levelKind="clusters"
-        children={CLUSTER_MEMBERS.map((m) => m.typed)}
+        children={CLUSTER_MEMBERS_WITH_DECOY.map((m) => m.typed)}
         onSelect={vi.fn()}
         journey={null}
       />,
     );
-    expect(divIconHtmlCalls).toHaveLength(1);
-    expect(heroListingsNumber(divIconHtmlCalls[0])).toBe('65');
-    expect(capturedMarkers).toHaveLength(1);
-    const marker = capturedMarkers[0];
+    expect(heroListingsNumber(findClusterCardHtml())).toBe('65');
+    const marker = findClusterCardMarker();
 
     act(() => {
       rerender(
         <AreaDestinationMarkerLayer
-          node={{ ...ROOT_NODE, children: CLUSTER_MEMBERS.map((m) => m.raw) }}
+          node={{ ...ROOT_NODE, children: CLUSTER_MEMBERS_WITH_DECOY.map((m) => m.raw) }}
           levelKind="clusters"
-          children={CLUSTER_MEMBERS.map((m) => m.typed)}
+          children={CLUSTER_MEMBERS_WITH_DECOY.map((m) => m.typed)}
           onSelect={vi.fn()}
           journey="school-first"
         />,
@@ -302,7 +364,7 @@ describe('#2345 — visual-cluster hero metric must not leak stale residential c
     });
 
     expect(marker.setIcon).toHaveBeenCalled();
-    const latestHtml = divIconHtmlCalls[divIconHtmlCalls.length - 1];
+    const latestHtml = findClusterCardHtml();
     expect(latestHtml).toContain('data-journey="schools"');
     expect(heroListingsNumber(latestHtml)).toBeNull();
     expect(latestHtml).not.toContain('>65<');

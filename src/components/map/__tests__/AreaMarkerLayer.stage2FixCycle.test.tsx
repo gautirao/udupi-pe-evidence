@@ -72,14 +72,32 @@ vi.mock('leaflet', () => ({
 // Overridden per-test via `.mockImplementation` (Fix 1's describe block) —
 // defaults to the dense "every member collapses to one point" convention
 // every other spec in this suite already uses for Fix 2/Fix 6b.
+const panes = new Map<string, HTMLElement>();
 const mapStub = {
   getSize: vi.fn(() => ({ x: 1200, y: 800 })),
   getZoom: vi.fn(() => 11),
   latLngToContainerPoint: vi.fn((): { x: number; y: number } => ({ x: 100, y: 100 })),
   containerPointToLatLng: vi.fn(() => ({ lat: 13.0, lng: 77.6 })),
   getContainer: vi.fn(() => document.createElement('div')),
+  // Issue #1943 (no-redundant-singleton amendment) — the PARTITION-phase
+  // escalation loop's synthetic-zoom projection + termination ceiling. Every
+  // fixture in THIS file that would otherwise be a singleton-spans-all case
+  // now carries a far-away decoy child (see `farDecoy` below) so this path
+  // is never actually exercised here — mocked defensively regardless.
+  getMaxZoom: vi.fn(() => 19),
+  project: vi.fn(([lat, lon]: [number, number], zoom: number) => {
+    const base = { x: (lon - 74.5) * 10000, y: (13.5 - lat) * 10000 };
+    const scale = 2 ** (zoom - 11);
+    return { x: base.x * scale, y: base.y * scale };
+  }),
   on: vi.fn(),
   off: vi.fn(),
+  getPane: vi.fn((name: string) => panes.get(name)),
+  createPane: vi.fn((name: string) => {
+    const pane = document.createElement('div');
+    panes.set(name, pane);
+    return pane;
+  }),
 };
 
 vi.mock('react-leaflet', () => ({
@@ -162,25 +180,59 @@ function clusterChild(
   };
 }
 
+// Issue #1943 (no-redundant-singleton amendment, PLAN_REVIEW packet 010
+// APPROVED) — a cluster of ALL of a node's children can no longer render as
+// a single synthetic catch-all. A far-away decoy child (projected well
+// outside any test's merge-relevant coordinates) is added to every
+// 'clusters'-level 2-child fixture in this file below, so the pair under
+// test forms a genuine PARTIAL overlap (2 of 3 children), not a
+// spans-all-children singleton — preserving every test's actual intent
+// (footprint-floor merge threshold / hero-metric wiring) without triggering
+// the new no-singleton escalation path at all.
+const FAR_DECOY_LAT = 40.0; // never close to any real fixture's lat in this file
+function farDecoy(nodeKey: string): { raw: NavigationNodeResponse['children'][number]; typed: AreasNavigationChild } {
+  const decoy = clusterChild(nodeKey, { listingCount: 1, schoolCount: 1 });
+  decoy.raw.centreLat = FAR_DECOY_LAT;
+  decoy.raw.centreLon = 90.0;
+  return decoy;
+}
+/** Locate the ONE visual-cluster-card html among possibly-several captured calls. */
+function findClusterCardHtml(): string {
+  const html = divIconHtmlCalls.find((h) => h.includes('area-visual-cluster-marker'));
+  if (!html) throw new Error('no area-visual-cluster-marker divIcon call captured');
+  return html;
+}
+
 beforeEach(() => {
   capturedMarkers.length = 0;
   divIconHtmlCalls.length = 0;
   vi.clearAllMocks();
   mapStub.getZoom.mockReturnValue(11);
-  mapStub.latLngToContainerPoint.mockReturnValue({ x: 100, y: 100 });
+  mapStub.getMaxZoom.mockReturnValue(19);
+  // Default: every real fixture coordinate projects to (100,100); the decoy
+  // (FAR_DECOY_LAT) always projects far away, so it never merges with
+  // anything — every test below layers ITS OWN merge-relevant
+  // mockImplementation for the non-decoy members on top of this default.
+  mapStub.latLngToContainerPoint.mockImplementation(([lat]: [number, number]) =>
+    lat === FAR_DECOY_LAT ? { x: 5000, y: 5000 } : { x: 100, y: 100 },
+  );
 });
 
 describe('FIX 1 (B1) — clusters/directions footprint floor', () => {
   it('MERGES two "clusters" children ~125px apart vertically (schoolCount null, residential journey) — proves the batch footprint used >=140px, not the old 120px estimate', () => {
     const a = clusterChild('c:alpha-belt');
     const b = clusterChild('c:bravo-belt');
+    const decoy = farDecoy('c:far-away-decoy');
     // A projects to y=100, B to y=225 — a 125px vertical separation: MORE
     // than the pre-fix 120px (BASE_HEIGHT_PX) bound, LESS than the Option-B
     // 140px floor this fix adds. Only the floored footprint's rects
-    // actually intersect (see the module-doc math in the ruling toml).
-    mapStub.latLngToContainerPoint.mockImplementation(([lat]: [number, number]) =>
-      lat >= 13.001 ? { x: 100, y: 100 } : { x: 100, y: 225 },
-    );
+    // actually intersect (see the module-doc math in the ruling toml). The
+    // decoy (Issue #1943 amendment) keeps this a genuine PARTIAL overlap (2
+    // of 3 children), never a spans-all singleton.
+    mapStub.latLngToContainerPoint.mockImplementation(([lat]: [number, number]) => {
+      if (lat === FAR_DECOY_LAT) return { x: 5000, y: 5000 };
+      return lat >= 13.001 ? { x: 100, y: 100 } : { x: 100, y: 225 };
+    });
 
     render(
       <AreaDestinationMarkerLayer
@@ -189,17 +241,17 @@ describe('FIX 1 (B1) — clusters/directions footprint floor', () => {
           children: [
             { ...a.raw, centreLat: 13.002 },
             { ...b.raw, centreLat: 13.0 },
+            decoy.raw,
           ],
         }}
         levelKind="clusters"
-        children={[a.typed, b.typed]}
+        children={[a.typed, b.typed, decoy.typed]}
         onSelect={vi.fn()}
         journey={null}
       />,
     );
 
-    expect(divIconHtmlCalls).toHaveLength(1);
-    expect(divIconHtmlCalls[0]).toContain('area-visual-cluster-marker');
+    expect(findClusterCardHtml()).toContain('area-visual-cluster-marker');
   });
 
   it('SANITY (fails without the floor) — the SAME 125px separation does NOT merge when the footprint is held at the old 120px bound', () => {
@@ -238,17 +290,17 @@ describe('FIX 2 (N1) — AC3 layer-level proof: hero number/unit split', () => {
   it('72 total listings -> the mono hero span reads 72 and the unit is PLURAL "listings"', () => {
     const m1 = clusterChild('c:alpha-belt', { listingCount: 40 });
     const m2 = clusterChild('c:bravo-belt', { listingCount: 32 });
+    const decoy = farDecoy('c:far-away-decoy-1');
     render(
       <AreaDestinationMarkerLayer
-        node={{ ...ROOT_NODE, children: [m1.raw, m2.raw] }}
+        node={{ ...ROOT_NODE, children: [m1.raw, m2.raw, decoy.raw] }}
         levelKind="clusters"
-        children={[m1.typed, m2.typed]}
+        children={[m1.typed, m2.typed, decoy.typed]}
         onSelect={vi.fn()}
         journey={null}
       />,
     );
-    expect(divIconHtmlCalls).toHaveLength(1);
-    const html = divIconHtmlCalls[0];
+    const html = findClusterCardHtml();
     expect(html).toMatch(/>72<\/span>/);
     expect(html).toMatch(/>listings<\/span>/);
     // Boundary proof (never a bare toContain('listing'), which 'listings'
@@ -259,17 +311,17 @@ describe('FIX 2 (N1) — AC3 layer-level proof: hero number/unit split', () => {
   it('exactly 1 total listing -> the hero reads 1 and the unit is SINGULAR "listing" (never plural)', () => {
     const m1 = clusterChild('c:alpha-belt', { listingCount: 1 });
     const m2 = clusterChild('c:bravo-belt', { listingCount: 0 });
+    const decoy = farDecoy('c:far-away-decoy-2');
     render(
       <AreaDestinationMarkerLayer
-        node={{ ...ROOT_NODE, children: [m1.raw, m2.raw] }}
+        node={{ ...ROOT_NODE, children: [m1.raw, m2.raw, decoy.raw] }}
         levelKind="clusters"
-        children={[m1.typed, m2.typed]}
+        children={[m1.typed, m2.typed, decoy.typed]}
         onSelect={vi.fn()}
         journey={null}
       />,
     );
-    expect(divIconHtmlCalls).toHaveLength(1);
-    const html = divIconHtmlCalls[0];
+    const html = findClusterCardHtml();
     expect(html).toMatch(/>1<\/span>/);
     expect(html).toMatch(/>listing<\/span>/);
     // The discriminating boundary assertion: a regression that always
@@ -281,17 +333,17 @@ describe('FIX 2 (N1) — AC3 layer-level proof: hero number/unit split', () => {
   it('all members listingCount 0 -> renders the "No listings yet" zero phrase and NEVER a bare mono hero "0"', () => {
     const m1 = clusterChild('c:alpha-belt', { listingCount: 0 });
     const m2 = clusterChild('c:bravo-belt', { listingCount: 0 });
+    const decoy = farDecoy('c:far-away-decoy-3');
     render(
       <AreaDestinationMarkerLayer
-        node={{ ...ROOT_NODE, children: [m1.raw, m2.raw] }}
+        node={{ ...ROOT_NODE, children: [m1.raw, m2.raw, decoy.raw] }}
         levelKind="clusters"
-        children={[m1.typed, m2.typed]}
+        children={[m1.typed, m2.typed, decoy.typed]}
         onSelect={vi.fn()}
         journey={null}
       />,
     );
-    expect(divIconHtmlCalls).toHaveLength(1);
-    const html = divIconHtmlCalls[0];
+    const html = findClusterCardHtml();
     expect(html).toContain('No listings yet');
     expect(html).not.toMatch(/>0<\/span>/);
   });

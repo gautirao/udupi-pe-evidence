@@ -54,6 +54,26 @@ function squareViewport(px: number) {
   return { widthPx: px, heightPx: px, insetTopPx: 0, insetRightPx: 0, insetBottomPx: 0, insetLeftPx: 0 };
 }
 
+/**
+ * Issue #1943 remaining-scope fix (code review) — envelope-forced zBase now
+ * requires a structurally DEGENERATE anchor spread (isAnchorSpreadDegenerate),
+ * so a genuinely non-degenerate 2-anchor pair can no longer be pulled below
+ * its own natural (childZBase-only) ceiling via containmentBounds. Several
+ * fixtures below still need a real multi-candidate window at a fixed floor to
+ * exercise argmin/clamping/dedup mechanics for a non-degenerate pair. This
+ * helper places a THIRD anchor EXACTLY at the mean of the real pair (so it
+ * does not shift `centre` at all — mean(A,B,mean(A,B)) = mean(A,B)) with a
+ * footprint larger than any test viewport used here, guaranteeing it clips
+ * identically at every candidate zoom (its own projected position always
+ * equals the centre-pinned placement point) without ever being legible —
+ * this forces `minZoom`/`maxZoom` to directly control the window (no
+ * envelope needed) and prevents the legible-winner short-circuit from firing
+ * early, so the FULL window gets evaluated.
+ */
+function clipAnchorAtMean(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
+  return anchor((a.lat + b.lat) / 2, (a.lon + b.lon) / 2, 3000, 3000);
+}
+
 function baseInput(overrides: Partial<HierarchyCameraFitInput>): HierarchyCameraFitInput {
   return {
     anchors: [],
@@ -199,29 +219,27 @@ describe('resolveHierarchyCameraFit — zBase uses REAL centre-pinned containmen
 });
 
 describe('resolveHierarchyCameraFit — anchor mean OFF-CENTRE within containmentBounds is safe (code review F2 residual)', () => {
-  it('children hugging the NORTH EDGE of the bbox still reach the clean higher zoom — envelope admissibility never depends on centre position', () => {
-    // This is the exact reachable case from the external review that proved
-    // folding containmentBounds into the SAME rect list as the children was
-    // itself a defect: two children at lat=0.9 (legitimately near the north
-    // edge of a [-1,1] bbox, not its centre), 0.08deg apart in longitude.
+  it('a degenerate single anchor hugging the NORTH EDGE of the bbox resolves the SAME envelope floor as one at the centre — envelope admissibility never depends on position', () => {
+    // Issue #1943 remaining-scope fix (code review) — this originally used a
+    // genuinely non-degenerate 2-anchor pair to demonstrate BOTH (a)
+    // envelope position-insensitivity AND (b) a pairs transition. (b) is no
+    // longer constructible for a non-degenerate pair (see the describe doc
+    // two blocks up): envelope now only applies to a structurally
+    // DEGENERATE spread. This redesign keeps (a) — the property actually
+    // under test here — using a SINGLE anchor (still the canonical
+    // degenerate case) positioned at lat=0.9 (near the north edge of the
+    // [-1,1] bbox, not its centre): `envelopeZBase`'s SIZE-only,
+    // position-insensitive computation must resolve to the IDENTICAL floor
+    // regardless of where inside the bbox the anchor sits.
     //
-    // envelopeZBase (SIZE-only, position-insensitive): identical to the
-    // lat=1 fixtures above — the envelope's own width/height doesn't depend
-    // on where the children sit inside it. Fits at zoom=12
-    // (2*100*12=2400<=2500) but not 13 (2600>2500) -> envelopeZBase=12.
-    // childZBase: with 2 close, small anchors the child-only union is tiny,
-    // so it trivially places at every zoom in range -> childZBase=16.
-    // zBase = min(16, 12) = 12 — UNCHANGED by moving the children from
-    // lat=1 to lat=0.9, because the envelope's admissibility never consulted
-    // their position in the first place.
-    //
-    // At z=12: gap=0.08*100*12=96<100 -> overlapWidth=4, area=400, pairs=1
-    // (not legible). At z=13: gap=104>=100 -> pairs=0, clipped=0 -> LEGIBLE,
-    // accepted immediately. A camera that folds the envelope's POSITION
-    // into this check would have found z=13 clips the (off-centre-relative)
-    // envelope and wrongly stayed at needsDeclutter:true — this fixture
-    // fails against that version and passes against the current one.
-    const anchors = [anchor(0.9, 0, 100, 100), anchor(0.9, 0.08, 100, 100)];
+    // envelopeZBase: bbox [-1,1]x[-1,1] fits at zoom=12 (2*100*12=2400<=2500)
+    // but not 13 (2600>2500) -> envelopeZBase=12, independent of the
+    // anchor's own lat=0.9 position. childZBase trivially reaches the
+    // ceiling for this single, tiny-footprint anchor, so zBase = min(ceiling,
+    // 12) = 12 — the SAME value a centre-positioned (lat=1) anchor would
+    // produce, proving the envelope's admissibility never consulted the
+    // anchor's position.
+    const anchors = [anchor(0.9, 0, 100, 100)];
     const input = baseInput({
       anchors,
       containmentBounds: { south: -1, north: 1, west: -1, east: 1 },
@@ -231,23 +249,49 @@ describe('resolveHierarchyCameraFit — anchor mean OFF-CENTRE within containmen
     });
     const result = resolveHierarchyCameraFit(input);
     expect(result).not.toBeNull();
-    expect(result?.evaluated).toEqual([
-      { zoom: 12, clipped: 0, clipOverflowPx: 0, pairs: 1, overlapAreaPx2: 400, score: 10400 },
-      { zoom: 13, clipped: 0, clipOverflowPx: 0, pairs: 0, overlapAreaPx2: 0, score: 1000 },
-    ]);
-    expect(result?.zoom).toBe(13);
+    expect(result?.evaluated[0]).toEqual({
+      zoom: 12,
+      clipped: 0,
+      clipOverflowPx: 0,
+      pairs: 0,
+      overlapAreaPx2: 0,
+      score: 0,
+    });
+    expect(result?.zoom).toBe(12);
     expect(result?.needsDeclutter).toBe(false);
   });
 });
 
 describe('resolveHierarchyCameraFit — candidate ordering, clamping, dedup, never zBase-1', () => {
   it('clamps zBase+1/+2/+3 down to the caller maxZoom and drops the resulting duplicates', () => {
+    // Issue #1943 remaining-scope fix (code review) — envelope-forced zBase
+    // now requires a structurally DEGENERATE anchor spread (see
+    // isAnchorSpreadDegenerate). This fixture uses a SINGLE anchor (the
+    // canonical degenerate case) so the envelope still legitimately applies,
+    // exercising the SAME clamping/dedup arithmetic as before: this is a
+    // window-mechanics test, not a pairs-resolution test, so a single anchor
+    // (whose OWN card rect never clips or changes across candidates) still
+    // fully exercises what's being asserted here — the exact CANDIDATE ZOOM
+    // VALUES produced by [zBase, zBase+1, zBase+2, zBase+3], clamped and
+    // deduped.
+    //
     // containmentBounds [-1,1]x[-1,1] projects to a (2*K*zoom)-wide/tall
     // square. usable width/height = 2900px (no insets). Fits at zoom=14
     // (2*100*14=2800<=2900) but NOT at zoom=15 (2*100*15=3000>2900) ->
-    // zBase=14. Raw candidates [14,15,16,17] clamp to [14,15] (maxZoom=15)
-    // -> dedupe to exactly [14,15]. zBase-1 (=13) must never appear.
-    const anchors = [anchor(1, 0, 100, 100), anchor(1, 0.06, 100, 100)];
+    // envelopeZBase=14 = zBase (childZBase trivially reaches the ceiling for
+    // this single, tiny-footprint anchor, so Math.min picks envelopeZBase).
+    // Raw candidates [14,15,16,17] clamp to [14,15] (maxZoom=15) -> dedupe
+    // to exactly [14,15]. zBase-1 (=13) must never appear.
+    //
+    // A LONE anchor is trivially legible at every zoom (translation always
+    // places it dead-centre; nothing else to overlap with), so the
+    // legible-winner short-circuit would accept z=14 immediately and this
+    // test would never see z=15 evaluated. A second anchor at the EXACT
+    // SAME lat/lon (still degenerate — isAnchorSpreadDegenerate requires
+    // ALL anchors coincide, which this preserves) with an oversized
+    // footprint forces a constant clip, preventing the short-circuit so the
+    // full clamped/deduped window is actually observable.
+    const anchors = [anchor(1, 0, 100, 100), anchor(1, 0, 3000, 3000)];
     const input = baseInput({
       anchors,
       containmentBounds: { south: -1, north: 1, west: -1, east: 1 },
@@ -346,141 +390,143 @@ describe('resolveHierarchyCameraFit — containmentBounds is a SOFT over-zoom gu
   });
 });
 
-describe('resolveHierarchyCameraFit — first-legible immediate acceptance (false-green trap: selected candidate is NOT the first)', () => {
-  it('accepts a LATER candidate the moment it is legible, without evaluating the rest', () => {
-    // Same containment-bounds trick pins zBase=12 (bounds fit at 12
-    // [200*12=2400<=2500] but not at 13 [2600>2500]) while two CHILD
-    // anchors 0.08 deg apart (gap(z)=0.08*100*z) still overlap at z=12
-    // (gap=96 < 100 footprint width -> overlapWidth=4, area=400) but no
-    // longer overlap at z=13 (gap=104 >= 100 -> pairs=0). The children sit
-    // near the bounds' centre, nowhere near the 2500px usable edge, so they
-    // are never individually clipped by the bounds-driven zBase — this is
-    // exactly what makes candidate z=13 reachable and legible even though
-    // zBase(=12) itself is not.
-    const anchors = [anchor(1, 0, 100, 100), anchor(1, 0.08, 100, 100)];
-    const input = baseInput({
-      anchors,
-      containmentBounds: { south: -1, north: 1, west: -1, east: 1 },
-      viewport: squareViewport(2500),
-      minZoom: 5,
-      maxZoom: 20,
-    });
-    const result = resolveHierarchyCameraFit(input);
-    expect(result).not.toBeNull();
-    expect(result?.evaluated.map((e) => e.zoom)).toEqual([12, 13]); // stopped after 2, never reached 14/15
-    expect(result?.zoom).toBe(13); // NOT the first candidate (12)
-    expect(result?.needsDeclutter).toBe(false);
-    expect(result?.chosen.clipped).toBe(0);
-    expect(result?.chosen.pairs).toBe(0);
-  });
-});
+// Issue #1943 remaining-scope fix (code review) — this file used to have a
+// "resolveHierarchyCameraFit — first-legible immediate acceptance" describe
+// block here, whose one test forced zBase=12 via containmentBounds for a
+// genuinely NON-degenerate 2-anchor pair whose overlap resolved one
+// candidate later (illegible at zBase, legible at zBase+1), specifically to
+// prove the search accepts that LATER legible candidate without exploring
+// zBase+2/+3. That exact shape is no longer constructible: envelope-forced
+// zBase now requires a structurally degenerate spread
+// (isAnchorSpreadDegenerate), and — provable from the algorithm itself, not
+// incidentally — a genuinely non-degenerate childZBase can NEVER have a
+// clean (legible-eligible) candidate above it: childZBase is BY DEFINITION
+// the first/highest zoom (scanning down from the ceiling) with clean
+// containment, so anything strictly above it must have already failed
+// containment when the search checked it, and evaluateCandidate's clip
+// check is the IDENTICAL computation — so a "candidate above zBase is
+// legible" fixture cannot exist for a real, non-degenerate multi-anchor
+// spread. The "accept a later candidate over the first" behaviour itself is
+// not orphaned by this removal: "zoomDelta CAN be worth paying..." below
+// already proves a later-evaluated candidate can win (there, via argmin
+// score rather than legible short-circuit, since nothing in that fixture is
+// ever legible) — real, passing coverage of the adjacent claim, without a
+// fixture shape that no longer exists. Deleted rather than left as a
+// disabled/skipped stub, per this repo's test-hygiene convention.
 
 describe('resolveHierarchyCameraFit — argmin selection and needsDeclutter boundary (exact score arithmetic)', () => {
-  it('argmin over score when nothing is legible; needsDeclutter is true; scores match the formula exactly', () => {
-    // Same bounds-forced zBase=12 setup, but the child gap grows too slowly
-    // (0.05 deg) to ever separate past the 100px footprint width within
-    // zBase..zBase+3 (12..15): gap(z) = 0.05*100*z = 5*z.
-    //   z=12: gap=60, overlapWidth=40, area=4000, delta=0 -> score=10000+4000+0    =14000
-    //   z=13: gap=65, overlapWidth=35, area=3500, delta=1 -> score=10000+3500+1000 =14500
-    //   z=14: gap=70, overlapWidth=30, area=3000, delta=2 -> score=10000+3000+2000 =15000
-    //   z=15: gap=75, overlapWidth=25, area=2500, delta=3 -> score=10000+2500+3000 =15500
-    // Here the overlap shrinks by only 500px^2/step (< the 1000/step
-    // zoomDelta cost) -> zBase (z=12) has the LOWEST score and wins: paying
-    // to zoom in further is NOT worth it.
-    const anchors = [anchor(1, 0, 100, 100), anchor(1, 0.05, 100, 100)];
-    const input = baseInput({
-      anchors,
-      containmentBounds: { south: -1, north: 1, west: -1, east: 1 },
-      viewport: squareViewport(2500),
-      minZoom: 5,
-      maxZoom: 20,
-    });
+  // Issue #1943 remaining-scope fix (code review) — these fixtures used to
+  // force zBase=12 via containmentBounds for a genuinely NON-degenerate
+  // 2-anchor pair. That is no longer possible: envelope now only applies to
+  // a structurally degenerate anchor spread (see isAnchorSpreadDegenerate),
+  // and a real, non-degenerate childZBase-derived window can NEVER contain
+  // a candidate above zBase with clean containment (childZBase is BY
+  // DEFINITION the first/highest zoom with clean containment scanning down
+  // from the ceiling, so anything above it must have failed containment —
+  // provable from the algorithm, not incidental). To still exercise a real
+  // multi-candidate window at zBase=12..15 with SOME baseline clipping (so
+  // the window doesn't collapse to a single candidate at the ceiling), the
+  // file-level `clipAnchorAtMean` helper (see its own doc) supplies a
+  // constant clip baseline via a third anchor at the real pair's mean.
+  // `minZoom`/`maxZoom` directly pin the window to [12,15] since
+  // containmentBounds no longer participates. The constant clip term keeps
+  // `needsDeclutter` permanently true across this whole describe block
+  // (verified against the real resolver, not hand-derived) — these three
+  // fixtures never asserted `needsDeclutter: false`, so this is unaffected;
+  // the ONE test that needed `false` (the "just resolves" case, immediately
+  // below) is redesigned separately with a clean single-candidate fixture.
+
+  it('argmin over score when nothing is legible; needsDeclutter is true; scores match the resolver exactly', () => {
+    // Real pair: gap(z) = 0.05*100*z, too slow to ever separate past the
+    // 100px footprint within the [12,15] window -> overlap persists at
+    // every candidate, shrinking too little per step (500px^2) to justify
+    // the 1000-point zoomDelta cost, so zBase (12, the LOWEST-zoom, lowest-
+    // score candidate) wins. Values below are the resolver's OWN verified
+    // output (a constant clipped=1/clipOverflowPx=2250 baseline from
+    // `clipAnchorAtMean`, plus 2 constant pairs from that anchor overlapping
+    // both real anchors — see the describe-level comment).
+    const a = { lat: 1, lon: 0 };
+    const b = { lat: 1, lon: 0.05 };
+    const anchors = [anchor(a.lat, a.lon, 100, 100), anchor(b.lat, b.lon, 100, 100), clipAnchorAtMean(a, b)];
+    const input = baseInput({ anchors, viewport: squareViewport(2500), minZoom: 12, maxZoom: 15 });
     const result = resolveHierarchyCameraFit(input);
     expect(result).not.toBeNull();
     expect(result?.evaluated).toEqual([
-      { zoom: 12, clipped: 0, clipOverflowPx: 0, pairs: 1, overlapAreaPx2: 4000, score: 14000 },
-      { zoom: 13, clipped: 0, clipOverflowPx: 0, pairs: 1, overlapAreaPx2: 3500, score: 14500 },
-      { zoom: 14, clipped: 0, clipOverflowPx: 0, pairs: 1, overlapAreaPx2: 3000, score: 15000 },
-      { zoom: 15, clipped: 0, clipOverflowPx: 0, pairs: 1, overlapAreaPx2: 2500, score: 15500 },
+      { zoom: 12, clipped: 1, clipOverflowPx: 2250, pairs: 3, overlapAreaPx2: 24000, score: 1279000 },
+      { zoom: 13, clipped: 1, clipOverflowPx: 2250, pairs: 3, overlapAreaPx2: 23500, score: 1279500 },
+      { zoom: 14, clipped: 1, clipOverflowPx: 2250, pairs: 3, overlapAreaPx2: 23000, score: 1280000 },
+      { zoom: 15, clipped: 1, clipOverflowPx: 2250, pairs: 3, overlapAreaPx2: 22500, score: 1280500 },
     ]);
     expect(result?.zoom).toBe(12);
     expect(result?.needsDeclutter).toBe(true);
     expect(result?.chosen).toEqual(result?.evaluated[0]);
   });
 
-  it('needsDeclutter boundary: a fixture that is just-NOT-legible until the final candidate', () => {
-    // gap(z) = 0.067*100*z. z=14: gap=93.8 (<100, still overlapping).
-    // z=15: gap=100.5 (>=100, JUST resolves).
-    const anchors = [anchor(1, 0, 100, 100), anchor(1, 0.067, 100, 100)];
-    const input = baseInput({
-      anchors,
-      containmentBounds: { south: -1, north: 1, west: -1, east: 1 },
-      viewport: squareViewport(2500),
-      minZoom: 5,
-      maxZoom: 20,
-    });
+  it('needsDeclutter boundary: a fixture that is just-NOT-legible until the final candidate (clean, single-candidate design — see describe comment for why a multi-candidate window can no longer show this transition)', () => {
+    // A clean (no clipAnchor), single-candidate design: two anchors 0.1deg
+    // apart, 100px footprints. gap(z) = 0.1*100*z = 10*z. At z=10, gap=100
+    // -- exactly equal to the combined half-footprints (50+50), the boundary
+    // where `rectsIntersect` (strict) stops counting them as overlapping --
+    // JUST resolves. minZoom=maxZoom=10 -> exactly one candidate, so this
+    // needs no envelope/degenerate-gate participation at all.
+    const anchors = [anchor(1, 0, 100, 100), anchor(1, 0.1, 100, 100)];
+    const input = baseInput({ anchors, viewport: squareViewport(2500), minZoom: 10, maxZoom: 10 });
     const result = resolveHierarchyCameraFit(input);
     expect(result).not.toBeNull();
-    expect(result?.evaluated.map((e) => e.zoom)).toEqual([12, 13, 14, 15]); // never legible before the last
-    expect(result?.zoom).toBe(15);
+    expect(result?.evaluated).toEqual([
+      { zoom: 10, clipped: 0, clipOverflowPx: 0, pairs: 0, overlapAreaPx2: 0, score: 0 },
+    ]);
+    expect(result?.zoom).toBe(10);
     expect(result?.needsDeclutter).toBe(false);
   });
 
-  it('needsDeclutter boundary (companion): a fixture that is just-NOT-legible at any candidate', () => {
-    // Same shape as the argmin test above (gap grows too slowly to ever
-    // separate within zBase..zBase+3) — the boundary companion to the
-    // "just resolves" case directly above.
-    const anchors = [anchor(1, 0, 100, 100), anchor(1, 0.05, 100, 100)];
-    const input = baseInput({
-      anchors,
-      containmentBounds: { south: -1, north: 1, west: -1, east: 1 },
-      viewport: squareViewport(2500),
-      minZoom: 5,
-      maxZoom: 20,
-    });
+  it('needsDeclutter boundary (companion): the SAME pair one zoom below the resolve boundary is still overlapping', () => {
+    // Companion to the fixture directly above: one zoom lower (9), gap=90 <
+    // 100 -> still overlapping, needsDeclutter stays true.
+    const anchors = [anchor(1, 0, 100, 100), anchor(1, 0.1, 100, 100)];
+    const input = baseInput({ anchors, viewport: squareViewport(2500), minZoom: 9, maxZoom: 9 });
     const result = resolveHierarchyCameraFit(input);
     expect(result?.needsDeclutter).toBe(true);
     expect(result?.chosen.pairs).toBeGreaterThan(0);
   });
 
   it('zoomDelta CAN outweigh a smaller residual overlap reduction (paying zoomDelta is not always worth it)', () => {
-    // Duplicate of the argmin fixture's core point, stated as its own
-    // assertion: shrinking overlap by only 500px^2/step never beats the
-    // 1000/step zoomDelta cost, so the SMALLEST (zBase) candidate wins.
-    const anchors = [anchor(1, 0, 100, 100), anchor(1, 0.05, 100, 100)];
-    const input = baseInput({
-      anchors,
-      containmentBounds: { south: -1, north: 1, west: -1, east: 1 },
-      viewport: squareViewport(2500),
-      minZoom: 5,
-      maxZoom: 20,
-    });
+    // Duplicate of the argmin fixture's core point (same anchors/clipAnchor,
+    // same [12,15] window), stated as its own assertion: shrinking overlap
+    // by only 500px^2/step never beats the 1000/step zoomDelta cost, so the
+    // SMALLEST (zBase) candidate wins.
+    const a = { lat: 1, lon: 0 };
+    const b = { lat: 1, lon: 0.05 };
+    const anchors = [anchor(a.lat, a.lon, 100, 100), anchor(b.lat, b.lon, 100, 100), clipAnchorAtMean(a, b)];
+    const input = baseInput({ anchors, viewport: squareViewport(2500), minZoom: 12, maxZoom: 15 });
     const result = resolveHierarchyCameraFit(input);
     expect(result?.zoom).toBe(12);
   });
 
   it('zoomDelta CAN be worth paying when it buys a larger (>1000px^2/step) overlap reduction', () => {
-    // A piecewise project function gives children and containment-bounds
-    // corners fully independent, exact per-zoom pixel positions (see file
-    // doc). Bounds fit at zoom=10 (width 200<=240) but not zoom=11 (width
-    // 250>240) -> zBase=10. Candidates [10,11,12,13] clamp to [10,11]
-    // (maxZoom=11) -> dedupe to [10,11].
-    //   z=10 (delta 0): child gap = 0.5*150 = 75  -> overlapWidth=25 -> area=2500 -> score=10000+2500+0    =12500
-    //   z=11 (delta 1): child gap = 0.5*180 = 90  -> overlapWidth=10 -> area=1000 -> score=10000+1000+1000 =12000
-    // The 1500px^2 reduction is worth more than the 1000-point zoomDelta
-    // cost, so z=11 wins by argmin even though NEITHER candidate is
-    // legible (pairs=1 at both).
+    // A piecewise project function gives the real children and the
+    // clipAnchor (see describe-level comment) fully independent, exact
+    // per-zoom pixel positions. `minZoom:10, maxZoom:11` pins a genuine
+    // 2-candidate window directly (containmentBounds no longer participates
+    // for this non-degenerate pair); `clipAnchorAtMean` supplies the same
+    // constant clipped=1/pairs+2 baseline as the earlier fixtures, verified
+    // against the real resolver output.
+    //   z=10 (delta 0): real-pair gap = 0.5*150 = 75  -> overlapWidth=25 -> area=2500
+    //   z=11 (delta 1): real-pair gap = 0.5*180 = 90  -> overlapWidth=10 -> area=1000
+    // The 1500px^2 reduction (from the real pair alone) is worth more than
+    // the 1000-point zoomDelta cost, so z=11 wins by argmin.
     const boundsScale = (zoom: number) => (zoom <= 10 ? 100 : 125);
     const childScale = (zoom: number) => (zoom <= 10 ? 150 : 180);
     const piecewiseProject: HierarchyProjectFn = (lat, lon, zoom) => {
       if (lon === 1 || lon === -1) return { x: lon * boundsScale(zoom), y: -lat * boundsScale(zoom) };
       return { x: lon * childScale(zoom), y: 0 };
     };
-    const anchors = [anchor(1, 0, 100, 100), anchor(1, 0.5, 100, 100)];
+    const a = { lat: 1, lon: 0 };
+    const b = { lat: 1, lon: 0.5 };
+    const anchors = [anchor(a.lat, a.lon, 100, 100), anchor(b.lat, b.lon, 100, 100), clipAnchorAtMean(a, b)];
     const input = baseInput({
       anchors,
       project: piecewiseProject,
-      containmentBounds: { south: -1, north: 1, west: -1, east: 1 },
       viewport: squareViewport(240),
       minZoom: 10,
       maxZoom: 11,
@@ -488,38 +534,41 @@ describe('resolveHierarchyCameraFit — argmin selection and needsDeclutter boun
     const result = resolveHierarchyCameraFit(input);
     expect(result).not.toBeNull();
     expect(result?.evaluated).toEqual([
-      { zoom: 10, clipped: 0, clipOverflowPx: 0, pairs: 1, overlapAreaPx2: 2500, score: 12500 },
-      { zoom: 11, clipped: 0, clipOverflowPx: 0, pairs: 1, overlapAreaPx2: 1000, score: 12000 },
+      { zoom: 10, clipped: 1, clipOverflowPx: 5640, pairs: 3, overlapAreaPx2: 22500, score: 1616500 },
+      { zoom: 11, clipped: 1, clipOverflowPx: 5640, pairs: 3, overlapAreaPx2: 21000, score: 1616000 },
     ]);
     expect(result?.zoom).toBe(11);
     expect(result?.needsDeclutter).toBe(true);
   });
 
   it('smaller-zoom tie-break: equal scores pick the SMALLER zoom', () => {
-    // Same piecewise-project technique, tuned for an EXACT score tie:
-    //   z=10 (delta 0): child gap = 0.4*100 = 40 -> overlapWidth=60 -> area=6000 -> score=10000+6000+0    =16000
-    //   z=11 (delta 1): child gap = 0.4*125 = 50 -> overlapWidth=50 -> area=5000 -> score=10000+5000+1000 =16000
-    // Both scores are exactly 16000 — the documented rule (smaller zoom
-    // wins a tie) is the only thing that can break it.
+    // Same technique, tuned for an EXACT score tie between the real pair's
+    // own contribution at each candidate zoom:
+    //   z=10 (delta 0): real-pair gap = 0.4*100 = 40 -> overlapWidth=60 -> area=6000
+    //   z=11 (delta 1): real-pair gap = 0.4*125 = 50 -> overlapWidth=50 -> area=5000
+    // Verified against the real resolver: both candidates score identically
+    // (1620000 — clipAnchorAtMean's constant baseline plus the real pair's
+    // own tied contribution) — the documented rule (smaller zoom wins a
+    // tie) is the only thing that can break it.
     const boundsScale = (zoom: number) => (zoom <= 10 ? 100 : 125);
-    const childScale = boundsScale; // same schedule, reused for clarity
     const tieProject: HierarchyProjectFn = (lat, lon, zoom) => {
       if (lon === 1 || lon === -1) return { x: lon * boundsScale(zoom), y: -lat * boundsScale(zoom) };
-      return { x: lon * childScale(zoom), y: 0 };
+      return { x: lon * boundsScale(zoom), y: 0 };
     };
-    const anchors = [anchor(1, 0, 100, 100), anchor(1, 0.4, 100, 100)];
+    const a = { lat: 1, lon: 0 };
+    const b = { lat: 1, lon: 0.4 };
+    const anchors = [anchor(a.lat, a.lon, 100, 100), anchor(b.lat, b.lon, 100, 100), clipAnchorAtMean(a, b)];
     const input = baseInput({
       anchors,
       project: tieProject,
-      containmentBounds: { south: -1, north: 1, west: -1, east: 1 },
       viewport: squareViewport(240),
       minZoom: 10,
       maxZoom: 11,
     });
     const result = resolveHierarchyCameraFit(input);
     expect(result).not.toBeNull();
-    expect(result?.evaluated[0].score).toBe(16000);
-    expect(result?.evaluated[1].score).toBe(16000);
+    expect(result?.evaluated[0].score).toBe(1620000);
+    expect(result?.evaluated[1].score).toBe(1620000);
     expect(result?.zoom).toBe(10); // the smaller of the two tied zooms
   });
 });
@@ -779,5 +828,157 @@ describe('resolveHierarchyCameraFit — using REAL measured footprints (false-gr
     expect(result?.chosen.clipped).toBe(0);
     expect(result?.chosen.pairs).toBe(1);
     expect(result?.chosen.overlapAreaPx2).toBeCloseTo(16147.875, 3);
+  });
+});
+
+describe('resolveHierarchyCameraFit — envelope is FALLBACK ONLY, not a co-equal floor (Issue #1943 remaining scope)', () => {
+  // These fixtures mirror the real production shape that reproduced live:
+  // a structural node (city ROOT / a Direction) with several GEOGRAPHICALLY
+  // SEPARATED children whose own historical descendant-area envelope
+  // (containmentBounds) is disproportionately larger than the children's
+  // own centroid spread — the same ratio observed on Bangalore's real
+  // ROOT.bounds (~140km) vs its 5 Direction centroids' own spread (~29km,
+  // ~4.8x). Before this fix, `zBase = Math.min(childZBase, envelopeZBase)`
+  // let the oversized envelope silently override an already-legible
+  // childZBase-only fit, collapsing every child into one catch-all card.
+
+  it('a genuinely non-degenerate multi-child fit (childZBase well below the ceiling) is no longer dragged down by a disproportionately large envelope', () => {
+    // 5 children (mirrors Bangalore's 5 Directions), lon spread [-1,1],
+    // lat=1, 100x100 footprints. Union half-width at zoom z is
+    // 50 + 1*100*z; usable half-width = 1000 (squareViewport(2000)).
+    // Contained at z=9 (50+900=950<=1000) but NOT at z=10 (50+1000=1050>1000)
+    // -> childZBase=9, well below effectiveMaxZoom=16 -> genuinely
+    // non-degenerate (this is NOT the "sparse/coincident" failure mode
+    // containmentBounds exists to guard against).
+    //
+    // containmentBounds [-5,5] (10 lon-units wide -> 5x the children's own
+    // 2.0-unit spread, mirroring the real ~4.8x Bangalore ratio) projects to
+    // a 10*100*z-wide square. Fits at z=2 (2000<=2000) but not z=3
+    // (3000>2000) -> envelopeZBase(OLD)=2.
+    //   OLD (Math.min): zBase = min(9, 2) = 2 -- the same catastrophic
+    //     collapse observed live (childZBase's real, legible fit thrown
+    //     away in favour of the node's much larger historical extent).
+    //   NEW (fallback-only): childZBase(9) !== effectiveMaxZoom(16) ->
+    //     envelopeZBase is not even computed -> zBase = 9.
+    const anchors = [
+      anchor(1, -1, 100, 100),
+      anchor(1, -0.5, 100, 100),
+      anchor(1, 0, 100, 100),
+      anchor(1, 0.5, 100, 100),
+      anchor(1, 1, 100, 100),
+    ];
+    const input = baseInput({
+      anchors,
+      containmentBounds: { south: -1, north: 1, west: -5, east: 5 },
+      viewport: squareViewport(2000),
+      minZoom: 5,
+      maxZoom: 20,
+    });
+    const result = resolveHierarchyCameraFit(input);
+    expect(result).not.toBeNull();
+    // zBase=9 is the first candidate evaluated -- proves the envelope did
+    // NOT drag the window down to 2, as the pre-fix Math.min would have.
+    expect(result?.evaluated[0]?.zoom).toBe(9);
+    // Adjacent children are 0.5*100*9=450px apart, well clear of the
+    // 100px footprint -> immediately legible at the first candidate.
+    expect(result?.zoom).toBe(9);
+    expect(result?.needsDeclutter).toBe(false);
+    expect(result?.chosen.clipped).toBe(0);
+    expect(result?.chosen.pairs).toBe(0);
+  });
+
+  it('two DISTINCT, non-coincident (but geometrically close) children are NOT dragged down by a much wider envelope, even though childZBase happens to reach the ceiling (code review: childZBase===effectiveMaxZoom is NOT equivalent to degenerate)', () => {
+    // Two children only 0.3deg apart -- NOT coincident (isAnchorSpreadDegenerate
+    // is a STRUCTURAL check on the anchors themselves, not on where childZBase's
+    // search lands). Their union IS trivially contained at every candidate zoom
+    // up to the ceiling given this generously wide 2000px viewport, so
+    // childZBase saturates at effectiveMaxZoom(16) -- but that saturation is a
+    // property of the VIEWPORT being roomy relative to their real spread, not
+    // evidence the anchors are degenerate. At zoom 16 the two cards project
+    // 0.3*100*16=480px apart -- well clear of their 100px footprints, genuinely
+    // legible and non-overlapping.
+    //
+    // This is the exact counterexample from code review that falsified the
+    // OLD `childZBase === effectiveMaxZoom` gate: that gate misclassified this
+    // shape as degenerate, applied a much-wider envelope, and dragged these
+    // two perfectly legible cards down to a zoom where they OVERLAP (480px
+    // -> 90px apart at the envelope-forced zoom). The STRUCTURAL gate
+    // (isAnchorSpreadDegenerate — <2 anchors or all-coincident) never fires
+    // for two genuinely distinct anchors, so the envelope is correctly
+    // skipped and zBase = childZBase = 16 stays legible.
+    const anchors = [anchor(1, -0.15, 100, 100), anchor(1, 0.15, 100, 100)];
+    const input = baseInput({
+      anchors,
+      containmentBounds: { south: -1, north: 1, west: -3, east: 3 },
+      viewport: squareViewport(2000),
+      minZoom: 1,
+      maxZoom: 20,
+    });
+    const result = resolveHierarchyCameraFit(input);
+    expect(result).not.toBeNull();
+    // The search window starts at 16 (child-only), NOT at 3 (the envelope-
+    // driven zoom the old, incorrect gate would have forced).
+    expect(result?.evaluated[0]?.zoom).toBe(16);
+    expect(result?.zoom).toBe(16);
+    expect(result?.needsDeclutter).toBe(false);
+    expect(result?.chosen.clipped).toBe(0);
+    expect(result?.chosen.pairs).toBe(0);
+  });
+
+  it('several TRULY coincident children (exact same lat/lon) still get pulled down by the envelope (the real over-zoom guard, preserved)', () => {
+    // Three anchors at the EXACT same point -- isAnchorSpreadDegenerate is
+    // true (every anchor shares the same lat AND lon), so this is the
+    // genuine "several tightly-coincident children" case the module doc's
+    // PURPOSE section describes: a near-zero child-rect footprint that would
+    // otherwise climb straight to the ceiling with no real signal.
+    //
+    // containmentBounds [-3,3] (6 units) fits at z=3 (1800<=2000) but not
+    // z=4 (2400>2000) -> envelopeZBase=3. childZBase would trivially reach
+    // effectiveMaxZoom(16) unconstrained (a single point is contained at
+    // every zoom) -- the envelope correctly pulls zBase down to 3.
+    const anchors = [anchor(1, 0.1, 100, 100), anchor(1, 0.1, 100, 100), anchor(1, 0.1, 100, 100)];
+    const input = baseInput({
+      anchors,
+      containmentBounds: { south: -1, north: 1, west: -3, east: 3 },
+      viewport: squareViewport(2000),
+      minZoom: 1,
+      maxZoom: 20,
+    });
+    const result = resolveHierarchyCameraFit(input);
+    expect(result).not.toBeNull();
+    // The search window starts at 3 (envelope-driven), NOT at 16
+    // (child-only) -- confirms the guard still fires for this genuinely
+    // degenerate shape.
+    expect(result?.evaluated[0]?.zoom).toBe(3);
+  });
+
+  it('boundary: childZBase exactly one below the ceiling (effectiveMaxZoom-1) with a large envelope is NOT overridden (precise gating, not "near the ceiling")', () => {
+    // 3 children, lon spread [-0.5,0.5], lat=1, 100x100 footprints. Union
+    // half-width = 50+0.5*100*z; usable half-width=800
+    // (squareViewport(1600)). Contained at z=15 (50+750=800<=800) but NOT
+    // at z=16 (50+800=850>800) -> childZBase=15, exactly one below
+    // effectiveMaxZoom(16) -- deliberately NOT the ceiling itself, to prove
+    // the gate is an EXACT equality check, not a "nearly at the ceiling"
+    // tolerance.
+    //
+    // containmentBounds [-2.5,2.5] (5 units, 5x the children's 1.0-unit
+    // spread) fits at z=3 (1500<=1600) but not z=4 (2000>1600) ->
+    // envelopeZBase(OLD)=3. OLD zBase=min(15,3)=3; NEW: 15!==16 ->
+    // envelope skipped -> zBase=15.
+    const anchors = [anchor(1, -0.5, 100, 100), anchor(1, 0, 100, 100), anchor(1, 0.5, 100, 100)];
+    const input = baseInput({
+      anchors,
+      containmentBounds: { south: -1, north: 1, west: -2.5, east: 2.5 },
+      viewport: squareViewport(1600),
+      minZoom: 5,
+      maxZoom: 20,
+    });
+    const result = resolveHierarchyCameraFit(input);
+    expect(result).not.toBeNull();
+    expect(result?.evaluated[0]?.zoom).toBe(15);
+    // Adjacent children are 0.5*100*15=750px apart, well clear of the
+    // 100px footprint -> immediately legible.
+    expect(result?.zoom).toBe(15);
+    expect(result?.needsDeclutter).toBe(false);
   });
 });

@@ -168,6 +168,12 @@ export interface DiscoverMapCanvasProps {
    */
   onAreaVisualClusterCameraIntent?: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
   /**
+   * Issue #1943 (singleton auto-advance, PR #2368 owner ruling 2026-08-28) —
+   * REPLACE-mode counterpart to `areasNavigationJourney.selectNode`.
+   * Threaded straight to `PropertyMap`'s prop of the same name.
+   */
+  autoAdvanceSelectNode?: (nodeKey: string) => void;
+  /**
    * Issue #1956 PR 2 (Slice 5) — pure href builder for the canonical Areas
    * map breadcrumb's ancestor crumbs (`urlActions.buildNodeHref`, unchanged).
    * Forwarded to `DiscoverMapContextOverlay`'s `AreasBreadcrumbTrail` branch;
@@ -352,6 +358,7 @@ export function DiscoverMapCanvas({
   focusedClusterMemberAreaKeys,
   onClusterFocusChange,
   onAreaVisualClusterCameraIntent,
+  autoAdvanceSelectNode,
   buildNavigationNodeHref,
   schoolZoneLabels,
   setMapZoom,
@@ -683,6 +690,7 @@ export function DiscoverMapCanvas({
           focusedClusterMemberAreaKeys={focusedClusterMemberAreaKeys}
           onClusterFocusChange={onClusterFocusChange}
           onAreaVisualClusterCameraIntent={onAreaVisualClusterCameraIntent}
+          autoAdvanceSelectNode={autoAdvanceSelectNode}
           showAreasNavigationDestinations={showAreasNavigationDestinations}
           schoolZoneLabels={isSchoolsNavNodeLevel ? [] : schoolZoneLabels}
           onSelectZone={(groupId) => urlActions.selectGroup(groupId)}

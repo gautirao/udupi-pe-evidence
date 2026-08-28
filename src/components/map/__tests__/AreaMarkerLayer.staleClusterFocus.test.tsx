@@ -75,6 +75,7 @@ vi.mock('leaflet', () => ({
   },
 }));
 
+const panes = new Map<string, HTMLElement>();
 const mapStub = {
   getSize: vi.fn(() => ({ x: 1200, y: 800 })),
   getZoom: vi.fn(() => 11),
@@ -83,6 +84,12 @@ const mapStub = {
   getContainer: vi.fn(() => document.createElement('div')),
   on: vi.fn(),
   off: vi.fn(),
+  getPane: vi.fn((name: string) => panes.get(name)),
+  createPane: vi.fn((name: string) => {
+    const pane = document.createElement('div');
+    panes.set(name, pane);
+    return pane;
+  }),
 };
 
 vi.mock('react-leaflet', () => ({

@@ -1267,27 +1267,147 @@ describe('Issue #1943 Slice B — AreaPanner hierarchy camera-fit branch (canoni
     expect(mapStub.getBoundsZoom).toHaveBeenCalledTimes(1);
   });
 
-  // T-B10 (code review cycle 2, FIX 3) — a degenerate (zero-span) NODE BBOX
-  // (e.g. bad upstream data collapsing it to a single point) must not force
-  // `derivedMinZoom` up to LEAF_FIT_MAX_ZOOM: `wideSeparatedChildAnchors`
-  // are spread far enough apart that they clip at EVERY zoom in [13, 16]
-  // (see the fixture's own comment). The FIX 3 guard is observable through
-  // the resolver's SEARCH RANGE itself: `map.project` is called once per
-  // candidate zoom in `[minZoom, maxZoom]`, so zoom 13 appearing among those
-  // calls proves `derivedMinZoom` stayed at LEAF_FIT_MIN_ZOOM=13 rather than
-  // being clamped to 16. Without the FIX 3 guard, `map.getBoundsZoom` would
-  // report the degenerate bounds' containment zoom as the map's own maximum
-  // (simulated here as 20) and clamp `derivedMinZoom` straight to
-  // LEAF_FIT_MAX_ZOOM=16, so zoom 13 would never be probed at all.
-  //
-  // Issue #2312 — since every candidate in range clips for this fixture, the
-  // resolver's `chosen` is now the magnitude-ranked best of that
-  // always-clipping window (see hierarchyCameraFit.ts's `clipOverflowPx`
-  // doc), and PropertyMap commits it via setView rather than falling back to
-  // fitBounds (reroute cycle 2, Option 2's discard-on-any-clip behaviour was
-  // itself the pre-#2312 defect; see PropertyMap.hierarchyOverzoomFloor.test.tsx).
-  it('T-B10: a degenerate (zero-span) node bbox does not force the derived floor up to LEAF_FIT_MAX_ZOOM', () => {
-    mapStub.getBoundsZoom.mockReturnValueOnce(20);
+  // T-B12 (Issue #1943 remaining scope — "useful-first root/structural
+  // presentation") — real Bangalore ROOT-shaped payload: 4 of the city's
+  // actual live Direction centroids (captured via
+  // GET /api/discover/cities/bangalore/navigation/resolve?node=root) as
+  // `hierarchyChildAnchors`, plus the ROOT node's own actual (much larger —
+  // union of every Direction's full descendant-area extent) bbox, ALSO
+  // captured live. Before this fix, `zBase = Math.min(childZBase,
+  // envelopeZBase)` let that disproportionately large bbox drag the camera
+  // down to a low zoom where every Direction merged into one catch-all card
+  // — reproduced live in the browser. Proves the fix: the component's
+  // actual written zoom (bbox PRESENT) now equals the childZBase-only
+  // answer (bbox absent) for this real shape — the oversized envelope no
+  // longer changes the outcome.
+  it('T-B12: real Bangalore-ROOT-shaped payload (live Direction anchors + the live ROOT bbox) is no longer dragged down by the disproportionately larger envelope', () => {
+    const realBangaloreDirectionAnchors = [
+      { lat: 12.973375, lon: 77.59658, footprintWidthPx: 150, footprintHeightPx: 130 }, // d:central
+      { lat: 13.121752, lon: 77.581242, footprintWidthPx: 150, footprintHeightPx: 130 }, // d:n
+      { lat: 13.023391, lon: 77.714112, footprintWidthPx: 150, footprintHeightPx: 130 }, // d:e
+      { lat: 12.856264, lon: 77.681505, footprintWidthPx: 150, footprintHeightPx: 130 }, // d:s
+    ];
+    const realRootBbox: [[number, number], [number, number]] = [
+      [12.579089, 77.230649],
+      [13.826627, 77.940854],
+    ];
+
+    renderWithPan(
+      makeCanonicalPayload({
+        hierarchyChildAnchors: realBangaloreDirectionAnchors,
+        bbox: realRootBbox,
+      }) as SeqAreaPoint,
+    );
+
+    expect(mapStub.setView).toHaveBeenCalledTimes(1);
+    const [, zoomWithEnvelope] = mapStub.setView.mock.calls[0];
+
+    // Issue #1943 (remaining scope) — derivedMinZoom's own envelope query
+    // is built from the 4 ANCHOR extents, not the ROOT bbox corners: direct
+    // proof of the anchor-preferred precedence, not just an outcome match.
+    expect(L.latLngBounds).toHaveBeenCalledWith(
+      realBangaloreDirectionAnchors.map((a) => [a.lat, a.lon]),
+    );
+
+    // Independently resolve the SAME anchors with NO containmentBounds —
+    // isolating the childZBase-only answer for this real shape.
+    const projectMercator = (lat: number, lon: number, z: number) => {
+      const scale = 2 ** z;
+      return { x: (lon + 180) * scale, y: (90 - lat) * scale };
+    };
+    const viewport = {
+      widthPx: 1440,
+      heightPx: 900,
+      insetTopPx: 40,
+      insetRightPx: 120,
+      insetBottomPx: 40,
+      insetLeftPx: 120,
+    };
+    const childOnly = resolveHierarchyCameraFit({
+      anchors: realBangaloreDirectionAnchors,
+      containmentBounds: null,
+      viewport,
+      project: projectMercator,
+      minZoom: LEAF_FIT_MIN_ZOOM,
+      maxZoom: LEAF_FIT_MAX_ZOOM,
+    });
+    expect(childOnly).not.toBeNull();
+
+    // The fix's core guarantee for this real, non-degenerate multi-child
+    // shape: the disproportionately large ROOT envelope must not change the
+    // resolved zoom relative to the child-anchors-only answer.
+    expect(zoomWithEnvelope).toBe(childOnly?.zoom);
+
+    // Cross-check the SAME two calls directly against the resolver (bbox
+    // present vs. absent) — this would DIVERGE under the pre-fix
+    // unconditional Math.min for a genuinely well-separated multi-anchor
+    // shape like this one, since the ROOT bbox's much larger size pulls
+    // envelopeZBase well below childZBase.
+    const withEnvelope = resolveHierarchyCameraFit({
+      anchors: realBangaloreDirectionAnchors,
+      containmentBounds: {
+        south: realRootBbox[0][0],
+        west: realRootBbox[0][1],
+        north: realRootBbox[1][0],
+        east: realRootBbox[1][1],
+      },
+      viewport,
+      project: projectMercator,
+      minZoom: LEAF_FIT_MIN_ZOOM,
+      maxZoom: LEAF_FIT_MAX_ZOOM,
+    });
+    expect(withEnvelope?.zoom).toBe(childOnly?.zoom);
+  });
+
+  // T-B13 (Issue #1943 remaining scope) — the conflicting-constraint case:
+  // two anchors close together (0.02deg apart — a real, technically
+  // NON-degenerate 2-point spread, NOT coincident) inside a node bbox that
+  // is MUCH wider (2deg span — mirrors a real Direction whose two rendered
+  // children happen to sit near each other while its full descendant-AREA
+  // footprint sprawls much further). This is the intended, accepted
+  // trade-off: the camera frames the two cards actually on screen tightly
+  // and legibly, using the TIGHT anchor extent, rather than zooming out to
+  // the wide bbox extent with nothing else rendered in the empty space.
+  it('T-B13: two non-degenerate but tightly-clustered anchors take precedence over a much wider node bbox (intended: frame what is rendered, not the empty space)', () => {
+    const closeAnchors = [
+      { lat: 12.97, lon: 77.59, footprintWidthPx: 150, footprintHeightPx: 130 },
+      { lat: 12.97, lon: 77.61, footprintWidthPx: 150, footprintHeightPx: 130 }, // 0.02deg apart
+    ];
+    const wideBbox: [[number, number], [number, number]] = [
+      [11.97, 76.59],
+      [13.97, 78.59],
+    ]; // 2deg span, ~100x wider than the anchors' own 0.02deg spread
+
+    renderWithPan(
+      makeCanonicalPayload({
+        hierarchyChildAnchors: closeAnchors,
+        bbox: wideBbox,
+      }) as SeqAreaPoint,
+    );
+
+    // The tight anchor extent is queried, never the wide bbox corners.
+    expect(L.latLngBounds).toHaveBeenCalledWith([
+      [closeAnchors[0].lat, closeAnchors[0].lon],
+      [closeAnchors[1].lat, closeAnchors[1].lon],
+    ]);
+    expect(mapStub.setView).toHaveBeenCalledTimes(1);
+  });
+
+  // T-B10 (code review cycle 2, FIX 3; UPDATED Issue #1943 remaining scope) —
+  // originally: a degenerate (zero-span) NODE BBOX must not force
+  // `derivedMinZoom` up to LEAF_FIT_MAX_ZOOM. Since the anchor-extent-
+  // preferred fix, a degenerate BBOX no longer matters at all whenever the
+  // anchors themselves form a real (non-degenerate) spread — `nodeBbox` is
+  // never even consulted in that case, so the old "detect degenerate bbox,
+  // skip getBoundsZoom" path is no longer reached for THIS fixture
+  // (healthy `wideSeparatedChildAnchors` + a degenerate bbox). This is a
+  // STRONGER guarantee than before (the degenerate bbox literally cannot
+  // poison the floor when anchors are healthy, not just "detected and
+  // skipped"), so the test now asserts `L.latLngBounds` is called with the
+  // ANCHOR extent, not the (irrelevant, degenerate) bbox corners, and that
+  // the resulting search range still spans down to the real derived floor —
+  // never silently clamped to a single candidate.
+  it('T-B10: a degenerate (zero-span) node bbox no longer matters at all once healthy, non-degenerate anchors take precedence', () => {
     renderWithPan(
       makeCanonicalPayload({
         hierarchyChildAnchors: wideSeparatedChildAnchors,
@@ -1295,16 +1415,44 @@ describe('Issue #1943 Slice B — AreaPanner hierarchy camera-fit branch (canoni
       }) as SeqAreaPoint,
     );
 
-    // The degenerate bbox is detected before ever calling
-    // map.getBoundsZoom — never fed the mocked max-zoom return into the
-    // derivation at all.
-    expect(mapStub.getBoundsZoom).not.toHaveBeenCalled();
-    // The magnitude-ranked resolver camera is committed; fitBounds never fires.
-    expect(mapStub.fitBounds).not.toHaveBeenCalled();
+    // The envelope query is built from the ANCHORS, not the degenerate bbox
+    // corners — proving the bbox is never even consulted here.
+    expect(L.latLngBounds).toHaveBeenCalledWith([
+      [wideSeparatedChildAnchors[0].lat, wideSeparatedChildAnchors[0].lon],
+      [wideSeparatedChildAnchors[1].lat, wideSeparatedChildAnchors[1].lon],
+    ]);
+    expect(mapStub.getBoundsZoom).toHaveBeenCalledTimes(1);
     expect(mapStub.setView).toHaveBeenCalledTimes(1);
+    // The search range still spans a real window, never collapsed to one
+    // candidate by a stray degenerate-bbox artefact.
     const zoomsProbed = new Set(mapStub.project.mock.calls.map(([, z]) => z));
-    expect(zoomsProbed.has(LEAF_FIT_MIN_ZOOM)).toBe(true);
-    expect(zoomsProbed.has(LEAF_FIT_MAX_ZOOM)).toBe(true);
+    expect(zoomsProbed.size).toBeGreaterThan(1);
+  });
+
+  // T-B10b (regression guard for the ORIGINAL FIX 3 protection) — the
+  // isDegenerateEnvelope skip-path (PropertyMap.tsx, just below the anchor/
+  // bbox precedence swap) must still fire for the case it was built for:
+  // BOTH the anchors AND the bbox are degenerate (a single anchor, whose
+  // own "spread" is zero-span by definition, with a zero-span bbox too).
+  // Without this guard, `getBoundsZoom` would report the degenerate bounds'
+  // containment zoom as the map's own maximum (simulated here as 20) and
+  // clamp `derivedMinZoom` straight to LEAF_FIT_MAX_ZOOM=16, collapsing the
+  // resolver's candidate window to a single zoom.
+  it('T-B10b: a genuinely degenerate envelope (single anchor + degenerate bbox) still skips getBoundsZoom (both fallback sources are degenerate; no signal to derive a floor from)', () => {
+    mapStub.getBoundsZoom.mockReturnValueOnce(20);
+    renderWithPan(
+      makeCanonicalPayload({
+        hierarchyChildAnchors: oneChildAnchor,
+        bbox: [[12.97, 77.59], [12.97, 77.59]],
+      }) as SeqAreaPoint,
+    );
+
+    // The degenerate envelope (whichever source it came from) is detected
+    // before ever calling map.getBoundsZoom — the mocked max-zoom return
+    // (20) never feeds into the derivation, so `derivedMinZoom` keeps the
+    // flat LEAF_FIT_MIN_ZOOM fallback rather than being clamped to 16.
+    expect(mapStub.getBoundsZoom).not.toHaveBeenCalled();
+    expect(mapStub.setView).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -1889,8 +2037,15 @@ describe('MapController — overview framing zoom ceiling (Task 2 — Option B)'
     expect(options).toMatchObject({ maxZoom: LEAF_FIT_MAX_ZOOM });
   });
 
-  it('keeps the ORIGINAL AREA_LAYER_MAX_ZOOM ceiling for every other levelKind (e.g. "areas") — unaffected by Task 2', () => {
+  it('Issue #1943 (owner repro, 2026-08-28) — widens the ceiling to LEAF_FIT_MAX_ZOOM while levelKind is "areas" too: a multi-group "Zoom in" AREA marker fires the exact same destination-cluster-card drill-in intent as the "clusters"/"directions" levels above, and needs the same widened ceiling to actually separate on a single click (previously clamped to AREA_LAYER_MAX_ZOOM here, which — because AREA-level browsing routinely already sits at or above that ceiling — made a single click a pan-only no-op; only native dblclick-zoom, a separate code path, revealed the members)', () => {
     renderThenPublishOverviewIntent('areas');
+    expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
+    const [, options] = mapStub.fitBounds.mock.calls[0];
+    expect(options).toMatchObject({ maxZoom: LEAF_FIT_MAX_ZOOM });
+  });
+
+  it('keeps the ORIGINAL AREA_LAYER_MAX_ZOOM ceiling for a levelKind that never produces a destination-cluster-card drill-in intent (e.g. "listings") — unaffected by Task 2 or the #1943 "areas" widening above', () => {
+    renderThenPublishOverviewIntent('listings');
     expect(mapStub.fitBounds).toHaveBeenCalledTimes(1);
     const [, options] = mapStub.fitBounds.mock.calls[0];
     expect(options).toMatchObject({ maxZoom: AREA_LAYER_MAX_ZOOM });

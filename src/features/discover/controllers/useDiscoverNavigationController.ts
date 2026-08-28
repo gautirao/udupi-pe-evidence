@@ -13,6 +13,12 @@ export interface UseDiscoverNavigationControllerParams {
   nav: DiscoverNavContextValue;
   /** actions.goToNode from useDiscoverActions(). */
   goToNode: (nodeKey: string) => void;
+  /**
+   * Issue #1943 (singleton auto-advance, PR #2368 owner ruling 2026-08-28) —
+   * actions.goToNodeReplacingCurrent from useDiscoverActions(). Reserved for
+   * the automatic hierarchy transition; never for a user-initiated click.
+   */
+  goToNodeReplacingCurrent: (nodeKey: string) => void;
   /** Issue #2083 RC_C — nav.intent mapped to backend listingPurpose; computed by the caller (page-global, not navigation-specific). */
   intentListingPurpose: string;
 }
@@ -31,6 +37,13 @@ export interface UseDiscoverNavigationControllerResult {
   /** Issue #2142 SOLID follow-up (commit 2) — likewise recomputed by the panel surface until now. */
   isSchoolsNavNodeLevel: boolean;
   areasNavigationJourney: UseAreasNavigationJourneyResult;
+  /**
+   * Issue #1943 (singleton auto-advance) — REPLACE-mode counterpart to
+   * `areasNavigationJourney.selectNode`, passed through unchanged for the
+   * same reason `selectNode` is (AC3.9-style identity guarantee). Never
+   * wired to a click affordance — only to the automatic transition.
+   */
+  autoAdvanceSelectNode: (nodeKey: string) => void;
   hoveredNavigationNodeKey: string | null;
   setHoveredNavigationNodeKey: Dispatch<SetStateAction<string | null>>;
   focusedClusterMemberAreaKeys: readonly string[] | null;
@@ -66,6 +79,7 @@ export interface UseDiscoverNavigationControllerResult {
 export function useDiscoverNavigationController({
   nav,
   goToNode,
+  goToNodeReplacingCurrent,
   intentListingPurpose,
 }: UseDiscoverNavigationControllerParams): UseDiscoverNavigationControllerResult {
   // Issue #1956 PR 2 (Slice 3) — this is one of THREE identical gate sites
@@ -177,6 +191,7 @@ export function useDiscoverNavigationController({
     isAreaFirstJourneyActive,
     isSchoolsNavNodeLevel,
     areasNavigationJourney,
+    autoAdvanceSelectNode: goToNodeReplacingCurrent,
     hoveredNavigationNodeKey,
     setHoveredNavigationNodeKey,
     focusedClusterMemberAreaKeys,

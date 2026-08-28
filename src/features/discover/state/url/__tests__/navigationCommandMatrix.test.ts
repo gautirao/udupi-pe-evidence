@@ -200,6 +200,31 @@ const ROWS: MatrixRow[] = [
       'would have broken every first click of this journey.',
   },
   {
+    id: 'goToNodeReplacingCurrent(direction) — Issue #1943 singleton auto-advance: SAME delta as goToNode, but REPLACE',
+    start: 'city=bangalore&node=root&lat=12.97&lon=77.59&zoom=11&listing=abc-123',
+    invoke: (h) => renderNavigation(h).current.actions.goToNodeReplacingCurrent(DIRECTION_KEY),
+    expectedCalls: 1,
+    expectedReplace: true,
+    expectedAdded: [`node=${DIRECTION_KEY}`],
+    expectedRemoved: ['lat=12.97', 'listing=abc-123', 'lon=77.59', 'node=root', 'zoom=11'],
+    cancelsViewportTimer: true,
+    note:
+      'PR #2368 owner ruling (2026-08-28) — the automatic transition fired when ' +
+      'the current rendered state resolves to a singleton must REPLACE, never ' +
+      'PUSH: that state was never a destination the user chose, so it must not ' +
+      'occupy its own history slot (a PUSH would let Back land back on it and ' +
+      'immediately auto-re-advance forward again). Byte-identical delta to ' +
+      "goToChild(direction) above — same applyNodeDelta, only the history mode " +
+      'differs.',
+  },
+  {
+    id: 'goToNodeReplacingCurrent(sameNodeAsCurrent) — ZERO writes, same no-op guard as goToNode',
+    start: START,
+    invoke: (h) => renderNavigation(h).current.actions.goToNodeReplacingCurrent(DIRECTION_KEY),
+    expectedCalls: 0,
+    cancelsViewportTimer: true,
+  },
+  {
     id: 'goToChild(area) — DIRECTION → AREA, the live level 1',
     start: START,
     invoke: (h) => renderNavigation(h).current.actions.goToNode(AREA_KEY),
