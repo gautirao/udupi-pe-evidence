@@ -369,9 +369,63 @@ const createSelectedMarkerIcon = (
   return icon;
 };
 
+/**
+ * Issue #2296 (PR #2381 third review) — Level-2 agri destination-bucket
+ * marker icon: a compact evergreen parcel-count badge with the destination
+ * name in a chip underneath (the approved look — see
+ * docs/design/retrends-design-system/ui_kits/agri-discovery/AgriMap.jsx's
+ * `clusterHTML`, which uses the evergreen family #1C5B43/#1F7A5C/#2E9B74).
+ * Renders the bucket's `displayName` + authoritative `parcelCount` (from
+ * `AgriDestinationBucket.parcelCount`, threaded through unchanged — never a
+ * synthetic cluster-child count).
+ *
+ * All colour/shape styling lives in the `.agri-destination-marker-*` CSS
+ * classes in src/index.css, which reuse the app's EXISTING ReTrends
+ * --evergreen / --evergreen-foreground / --evergreen-tint / --card /
+ * --foreground tokens (already defined in :root and already consumed
+ * elsewhere as hsl(var(--evergreen)) — see JourneySwitcher.tsx,
+ * PropertyCard.tsx) rather than a second hardcoded agri palette — this
+ * function only interpolates the escaped text content, no hex/rgba/hsl
+ * embedded here.
+ *
+ * Used ONLY by AgriDestinationMarkerLayer (a dedicated, non-clustering
+ * layer — see below), never by AgriMarkerClusterLayer; real Level-3 parcel
+ * listings keep using createMarkerIcon / createSelectedMarkerIcon exactly as
+ * before, untouched by this function.
+ */
+const createAgriDestinationBadgeIcon = (
+  displayName: string,
+  parcelCount: number,
+  isHighlighted: boolean,
+): L.DivIcon => {
+  const cacheKey = `agri-destination|${displayName}|${parcelCount}|${isHighlighted ? 'selected' : 'default'}`;
+  const cached = iconCache.get(cacheKey);
+  if (cached) return cached;
+
+  const safeName = escapeHtml(displayName);
+  const parcelLabel = `${parcelCount} ${parcelCount === 1 ? 'parcel' : 'parcels'}`;
+  const badgeModifier = isHighlighted ? ' agri-destination-marker-badge--selected' : '';
+
+  const html = `
+    <div class="agri-destination-marker" data-testid="agri-destination-marker" aria-label="${escapeHtml(`${displayName}, ${parcelLabel}`)}">
+      <div class="agri-destination-marker-badge${badgeModifier}">${parcelCount}</div>
+      <div class="agri-destination-marker-name">${safeName}</div>
+    </div>`;
+
+  const icon = L.divIcon({
+    className: '',
+    html,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+
+  iconCache.set(cacheKey, icon);
+  return icon;
+};
+
 // Issue #1942 — exported for unit testing (icon HTML/escaping/aria-label assertions);
 // not part of the public component API. Additive: no existing export changed.
-export { createMarkerIcon, createSelectedMarkerIcon };
+export { createMarkerIcon, createSelectedMarkerIcon, createAgriDestinationBadgeIcon };
 
 export interface SchoolCircle {
   lat: number;
@@ -729,6 +783,28 @@ interface PropertyMapProps {
    * When null/undefined, falls back to the existing `listings` prop (no regression).
    */
   agriGroupListings?: AgriMapListingItem[] | null;
+  /**
+   * Issue #2296 (PR #2381 second review) — Level-2 agri destination-bucket
+   * markers, rendered by the dedicated AgriDestinationMarkerLayer (NOT
+   * AgriMarkerClusterLayer). Deliberately a SEPARATE prop from
+   * `agriGroupListings`/`listings` — those still drive AgriMarkerClusterLayer
+   * for real Level-3 parcel listings, unchanged, so a Level-2 destination
+   * marker can never fall into that layer's clustering policy and render a
+   * generic "N properties" bubble instead of its own name + authoritative
+   * parcel count. Each item MUST carry a defined `parcelCount` (items without
+   * one are skipped) since that is the whole point of this layer.
+   */
+  agriDestinationMarkers?: AgriMapListingItem[] | null;
+  /**
+   * Issue #2296 (PR #2381 third review) — fired when a Level-2 agri
+   * destination-bucket marker (AgriDestinationMarkerLayer) is clicked, with
+   * that bucket's stable `areaKey`. The caller is expected to drill down
+   * into that destination (`urlActions.setLocality(areaKey)` — PUSH
+   * semantics, the same action `AgriGroupSelectedPanel`'s locality-row click
+   * already uses), NOT the generic marker-selection/popover flow
+   * `onSelectListing` drives for real listings.
+   */
+  onSelectAgriDestination?: (areaKey: string) => void;
   /**
    * Issue #1547 — ID of the currently selected listing (from the `listing` URL param).
    * When set, the corresponding residential marker renders with the copper selected-state
@@ -3400,6 +3476,11 @@ function AgriMarkerClusterLayer({
       // Issue #1942 — pass priceBand for signature consistency with MarkerClusterLayer.
       // Agri listings never carry a priceBand (null), so this branch stays byte-identical
       // '—' — the same shared helper is just called with an always-absent 3rd arg here.
+      // Issue #2296 (PR #2381 second review) — Level-2 destination-bucket markers no
+      // longer flow through this layer at all (see AgriDestinationMarkerLayer below,
+      // wired via the dedicated `agriDestinationMarkers` prop). This layer is used
+      // ONLY for real Level-3 parcel listings, so its icon selection is back to
+      // exactly its pre-#2296 form — no parcelCount branching here.
       const icon = isHighlighted
         ? createSelectedMarkerIcon(listing.property_type, listing.price, listing.priceBand)
         : createMarkerIcon(listing.property_type, listing.price, listing.priceBand);
@@ -3440,6 +3521,98 @@ function AgriMarkerClusterLayer({
       map.removeLayer(clusterGroup);
     };
   }, [listings, map, onSelectListing, selectedListingId, hoveredListingId]);
+
+  return null;
+}
+
+/**
+ * Issue #2296 (PR #2381 second review) — dedicated Level-2 agri destination-
+ * bucket marker layer.
+ *
+ * Deliberately does NOT use `L.markerClusterGroup` (unlike AgriMarkerClusterLayer
+ * above, which is for real Level-3 parcel listings and is UNCHANGED by this
+ * component). Level-2 destination buckets each carry their own authoritative
+ * name + parcelCount; if two nearby buckets were clustered by the generic
+ * marker-cluster policy, Leaflet's `iconCreateFunction` would collapse them
+ * into a "N properties" bubble showing the number of clustered MARKERS
+ * (towns), not parcels — silently recreating the exact identity/count
+ * ambiguity #2296 exists to remove. Rendering every destination as a plain
+ * `L.marker` in an `L.layerGroup` guarantees each one always shows its own
+ * name + count, at every zoom level, with no clustering branch to regress.
+ *
+ * Items without a defined `parcelCount` are skipped — this layer only ever
+ * renders authoritative Level-2 destination buckets (see
+ * useAgriDestinationMarkers, which populates parcelCount and already drops
+ * zero-count buckets before this layer ever sees them).
+ */
+function AgriDestinationMarkerLayer({
+  destinations,
+  onSelectAgriDestination,
+  selectedListingId,
+  hoveredListingId,
+}: {
+  destinations: AgriMapListingItem[];
+  /**
+   * Issue #2296 (PR #2381 third review) — fired with the clicked bucket's
+   * stable `areaKey`. NOT the generic `onSelectListing` marker-popover flow:
+   * a destination-bucket marker represents a town/locality, not a single
+   * listing, so clicking it must drill down (`urlActions.setLocality`), the
+   * same action AgriGroupSelectedPanel's locality-row click already uses —
+   * not open a listing popover/preview.
+   */
+  onSelectAgriDestination?: (areaKey: string) => void;
+  /** ID of the currently selected agri destination (URL-derived `listing`/areaKey). */
+  selectedListingId?: string | null;
+  /** Ephemeral hover/focus id for panel-row -> marker highlight. */
+  hoveredListingId?: string | null;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    const validDestinations = destinations.filter(
+      (d): d is AgriMapListingItem & { latitude: number; longitude: number; parcelCount: number } =>
+        d.latitude != null && d.longitude != null && d.parcelCount != null,
+    );
+
+    // No-op when there is nothing to render (the common case — most map
+    // states are not Level-2 agri destinations). Skipping L.layerGroup()
+    // entirely here also means this layer imposes zero cost/dependency on
+    // every OTHER PropertyMap consumer (residential, school-first, Level-3
+    // agri, etc.) that never populates `agriDestinationMarkers`.
+    if (validDestinations.length === 0) return;
+
+    const layerGroup = L.layerGroup();
+
+    validDestinations.forEach((destination) => {
+        const isHighlighted =
+          destination.id === selectedListingId || destination.id === hoveredListingId;
+        const icon = createAgriDestinationBadgeIcon(
+          destination.title ?? destination.locality ?? 'Agricultural land',
+          destination.parcelCount,
+          isHighlighted,
+        );
+        const marker = L.marker([destination.latitude, destination.longitude], { icon });
+
+        marker.on('add', () => {
+          const el = marker.getElement();
+          if (el) el.setAttribute('data-listing-id', destination.id);
+        });
+
+        marker.on('click', () => {
+          // Stable identity: destination.areaKey is unchanged from the
+          // authoritative AgriDestinationBucket (see useAgriDestinationMarkers).
+          onSelectAgriDestination?.(destination.areaKey);
+        });
+
+        layerGroup.addLayer(marker);
+      });
+
+    map.addLayer(layerGroup);
+
+    return () => {
+      map.removeLayer(layerGroup);
+    };
+  }, [destinations, map, onSelectAgriDestination, selectedListingId, hoveredListingId]);
 
   return null;
 }
@@ -3612,6 +3785,8 @@ export function PropertyMap({
   mapZoom,
   selectedPolygonListing,
   agriGroupListings,
+  agriDestinationMarkers = null,
+  onSelectAgriDestination,
   sectorOverlay = null,
   selectedListingId,
   hoveredListingId,
@@ -3839,6 +4014,18 @@ export function PropertyMap({
             <AgriMarkerClusterLayer
               listings={agriLayerListings}
               onSelectListing={onSelectListing}
+              selectedListingId={selectedListingId}
+              hoveredListingId={hoveredListingId}
+            />
+            {/* Issue #2296 (PR #2381 second review) — Level-2 agri destination-bucket
+                markers, rendered by a DEDICATED non-clustering layer via the separate
+                `agriDestinationMarkers` prop (never routed through agriLayerListings/
+                AgriMarkerClusterLayer's clustering policy, so two nearby destinations
+                can never collapse into a generic "N properties" bubble). Renders
+                nothing when the prop is null/empty. */}
+            <AgriDestinationMarkerLayer
+              destinations={agriDestinationMarkers ?? []}
+              onSelectAgriDestination={onSelectAgriDestination}
               selectedListingId={selectedListingId}
               hoveredListingId={hoveredListingId}
             />

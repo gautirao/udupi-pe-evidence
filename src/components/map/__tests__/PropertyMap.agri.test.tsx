@@ -15,6 +15,9 @@ const capturedDivIconCalls: Array<{ html: string }> = [];
 const mockAddLayer = vi.fn();
 const mockRemoveLayer = vi.fn();
 const mockClusterGroupAddLayer = vi.fn();
+// Issue #2296 (PR #2381 second review) — AgriDestinationMarkerLayer's plain
+// L.layerGroup, distinct from mockClusterGroupAddLayer above.
+const mockLayerGroupAddLayer = vi.fn();
 
 vi.mock('leaflet', () => {
   return {
@@ -41,6 +44,12 @@ vi.mock('leaflet', () => {
         // unregisters a clusterclick/clusterkeypress listener on the group.
         on: vi.fn().mockReturnThis(),
         off: vi.fn().mockReturnThis(),
+      })),
+      // Issue #2296 (PR #2381 second review) — AgriDestinationMarkerLayer uses a
+      // plain (non-clustering) L.layerGroup, deliberately distinct from
+      // markerClusterGroup above.
+      layerGroup: vi.fn(() => ({
+        addLayer: mockLayerGroupAddLayer,
       })),
       point: vi.fn((x: number, y: number) => ({ x, y })),
     },
@@ -360,5 +369,217 @@ describe('PropertyMap — SectorOverlay conditional render (Issue #1429 AC4)', (
 
     // SectorOverlay is mounted → it renders the mocked Polygon
     expect(screen.getByTestId('mock-sector-polygon')).toBeInTheDocument();
+  });
+});
+
+// ─── Issue #2296 (PR #2381 second review): Level-2 agri destination markers ─
+// ─── use a DEDICATED non-clustering layer, never AgriMarkerClusterLayer ─────
+
+describe('PropertyMap — AgriDestinationMarkerLayer, Level-2 destinations (Issue #2296 PR #2381 second review)', () => {
+  // A Level-2 destination-bucket marker (AgriMapListingItem shape, as produced
+  // by useAgriDestinationMarkers) — NOT a PropertyListingWithImages. Carries
+  // the authoritative parcelCount; no price, since it represents a
+  // town/locality bucket, not a real parcel.
+  const brahmavar = {
+    id: 'IN|KA|Udupi|Brahmavar',
+    areaKey: 'IN|KA|Udupi|Brahmavar',
+    title: 'Brahmavar',
+    locality: 'Brahmavar',
+    propertyType: 'agricultural_land',
+    latitude: 13.4,
+    longitude: 74.8,
+    parcelCount: 4,
+  };
+
+  // A second, nearby destination — used to prove clustering-immunity: two
+  // destinations close enough that a shared marker-cluster-group would
+  // collapse them into one "2 properties" bubble must NOT do so here.
+  const hebri = {
+    id: 'IN|KA|Udupi|Hebri',
+    areaKey: 'IN|KA|Udupi|Hebri',
+    title: 'Hebri',
+    locality: 'Hebri',
+    propertyType: 'agricultural_land',
+    latitude: 13.401,
+    longitude: 74.801,
+    parcelCount: 2,
+  };
+
+  beforeEach(() => {
+    capturedDivIconCalls.length = 0;
+    mockAddLayer.mockClear();
+    mockRemoveLayer.mockClear();
+    mockClusterGroupAddLayer.mockClear();
+    mockLayerGroupAddLayer.mockClear();
+    vi.mocked(L.divIcon).mockClear();
+    vi.mocked(L.marker).mockClear();
+    vi.mocked(L.layerGroup).mockClear();
+    vi.mocked(L.markerClusterGroup).mockClear();
+  });
+
+  it('renders the destination-bucket parcel count and display name via a plain (non-clustering) layerGroup, not markerClusterGroup', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+
+    render(
+      <PropertyMap listings={[]} isAgriMode={true} agriDestinationMarkers={[brahmavar]} />,
+    );
+
+    // AgriDestinationMarkerLayer uses L.layerGroup, never markerClusterGroup,
+    // for Level-2 destinations — that IS the fix: no clustering branch exists
+    // to collapse two destinations into a generic count.
+    expect(L.layerGroup).toHaveBeenCalled();
+    expect(mockLayerGroupAddLayer).toHaveBeenCalledTimes(1);
+
+    const markerIconCall = capturedDivIconCalls.find((c) =>
+      c.html.includes('agri-destination-marker'),
+    );
+    expect(markerIconCall).toBeDefined();
+    expect(markerIconCall!.html).toContain('Brahmavar');
+    expect(markerIconCall!.html).toContain('>4<'); // count badge content
+    // Approved compact green marker: class-based (design-token CSS), no
+    // embedded hex/rgba inline styling.
+    expect(markerIconCall!.html).toContain('agri-destination-marker-badge');
+    expect(markerIconCall!.html).toContain('agri-destination-marker-name');
+    expect(markerIconCall!.html).not.toMatch(/#[0-9A-Fa-f]{3,6}/);
+    expect(markerIconCall!.html).not.toMatch(/rgba?\(/);
+    // Not the generic price-pill marker.
+    expect(markerIconCall!.html).not.toContain('property-marker"');
+  });
+
+  it('singular "1 parcel" wording is not asserted on the badge (count-only); the aria-label still uses correct singular/plural grammar', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+
+    render(
+      <PropertyMap
+        listings={[]}
+        isAgriMode={true}
+        agriDestinationMarkers={[{ ...brahmavar, parcelCount: 1 }]}
+      />,
+    );
+
+    const markerIconCall = capturedDivIconCalls.find((c) =>
+      c.html.includes('agri-destination-marker'),
+    );
+    expect(markerIconCall!.html).toContain('Brahmavar, 1 parcel"');
+    expect(markerIconCall!.html).not.toContain('1 parcels"');
+  });
+
+  // THE core regression this review pass fixes: two nearby Level-2
+  // destinations must each keep their own name + parcel count — never
+  // collapse into AgriMarkerClusterLayer-style generic "N properties" copy.
+  it('two nearby destination buckets each render their own name + parcel count — never a generic "properties" cluster bubble', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+    // Unique names/counts so createAgriDestinationBadgeIcon's module-level
+    // iconCache (keyed on displayName|parcelCount|state) can't return an icon
+    // already cached by an earlier test in this file for the shared
+    // `brahmavar`/`hebri` fixtures — that would mask a real regression here.
+    const townA = { ...brahmavar, id: 'cluster-immunity-a', title: 'ClusterImmunityTownA', locality: 'ClusterImmunityTownA', parcelCount: 7 };
+    const townB = { ...hebri, id: 'cluster-immunity-b', title: 'ClusterImmunityTownB', locality: 'ClusterImmunityTownB', parcelCount: 3 };
+
+    render(
+      <PropertyMap
+        listings={[]}
+        isAgriMode={true}
+        agriDestinationMarkers={[townA, townB]}
+      />,
+    );
+
+    // Both destinations got their own marker — no clustering collapsed them.
+    expect(mockLayerGroupAddLayer).toHaveBeenCalledTimes(2);
+
+    const destinationIconCalls = capturedDivIconCalls.filter((c) =>
+      c.html.includes('agri-destination-marker'),
+    );
+    expect(destinationIconCalls).toHaveLength(2);
+
+    const townAIcon = destinationIconCalls.find((c) => c.html.includes('ClusterImmunityTownA'));
+    const townBIcon = destinationIconCalls.find((c) => c.html.includes('ClusterImmunityTownB'));
+    expect(townAIcon).toBeDefined();
+    expect(townBIcon).toBeDefined();
+    expect(townAIcon!.html).toContain('>7<');
+    expect(townBIcon!.html).toContain('>3<');
+
+    // Neither marker's HTML — nor the cluster-bubble iconCreateFunction path —
+    // ever emits the generic child-count "properties" copy AgriMarkerClusterLayer
+    // uses for real Level-3 parcel clusters.
+    for (const call of capturedDivIconCalls) {
+      expect(call.html).not.toContain('properties');
+    }
+    // AgriMarkerClusterLayer (the clustering layer) always mounts in agri mode
+    // (even with an empty `listings`/`agriGroupListings`), but it must never
+    // receive either Level-2 destination as a member — neither one was fed
+    // into its clustering policy.
+    expect(mockClusterGroupAddLayer).not.toHaveBeenCalled();
+  });
+
+  it('a destination bucket with parcelCount undefined is skipped (defensive — useAgriDestinationMarkers never emits one, but the layer must not render a countless marker)', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+    const noCount = { ...brahmavar, id: 'no-count', parcelCount: undefined };
+
+    render(
+      <PropertyMap listings={[]} isAgriMode={true} agriDestinationMarkers={[noCount]} />,
+    );
+
+    expect(mockLayerGroupAddLayer).not.toHaveBeenCalled();
+  });
+
+  // Real Level-3 parcel listings go through `listings`/`agriGroupListings`
+  // (AgriMarkerClusterLayer), completely separate from `agriDestinationMarkers`
+  // — this proves that path is unaffected by this change. Uses a price unique
+  // to this test so createMarkerIcon's module-level iconCache (keyed on
+  // propertyType|colour|label) can't return an icon already cached by an
+  // earlier test in this file, which would otherwise mask a real regression.
+  it('a real Level-3 parcel listing (via `listings`, not agriDestinationMarkers) still renders the price-pill marker via AgriMarkerClusterLayer, unaffected', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+    const uniquePriceListing = { ...agriListing, id: 'agri-price-cache-buster-2', price: 888_888 };
+
+    render(<PropertyMap listings={[uniquePriceListing]} isAgriMode={true} />);
+
+    expect(L.markerClusterGroup).toHaveBeenCalled();
+    expect(mockLayerGroupAddLayer).not.toHaveBeenCalled();
+
+    const destinationIconCall = capturedDivIconCalls.find((c) =>
+      c.html.includes('agri-destination-marker'),
+    );
+    expect(destinationIconCall).toBeUndefined();
+
+    const priceMarkerCall = capturedDivIconCalls.find((c) => c.html.includes('property-marker"'));
+    expect(priceMarkerCall).toBeDefined();
+  });
+
+  // Stable click-routing identity (reviewer requirement, third pass): a
+  // destination-marker click must drill down via onSelectAgriDestination
+  // (urlActions.setLocality equivalent), keyed on the bucket's stable
+  // areaKey — NOT the generic onSelectListing marker-popover flow (a
+  // destination bucket represents a town, not a single listing).
+  it('click routing drills down via onSelectAgriDestination, keyed on the destination stable areaKey', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+    const onSelectAgriDestination = vi.fn();
+    const onSelectListing = vi.fn();
+
+    let clickHandler: (() => void) | undefined;
+    vi.mocked(L.marker).mockImplementationOnce(() => ({
+      on: vi.fn((event: string, handler: () => void) => {
+        if (event === 'click') clickHandler = handler;
+        return { on: vi.fn().mockReturnThis(), bindTooltip: vi.fn().mockReturnThis() };
+      }),
+      bindTooltip: vi.fn().mockReturnThis(),
+    }) as unknown as ReturnType<typeof L.marker>);
+
+    render(
+      <PropertyMap
+        listings={[]}
+        isAgriMode={true}
+        agriDestinationMarkers={[brahmavar]}
+        onSelectAgriDestination={onSelectAgriDestination}
+        onSelectListing={onSelectListing}
+      />,
+    );
+
+    expect(clickHandler).toBeDefined();
+    clickHandler!();
+    expect(onSelectAgriDestination).toHaveBeenCalledWith('IN|KA|Udupi|Brahmavar');
+    // The generic listing-popover flow must NOT fire for a destination-bucket click.
+    expect(onSelectListing).not.toHaveBeenCalled();
   });
 });

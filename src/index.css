@@ -331,6 +331,72 @@
     cursor: pointer;
   }
 
+  /* Issue #2296 (PR #2381 third review) — Level-2 agri destination-bucket
+     marker (AgriDestinationMarkerLayer / createAgriDestinationBadgeIcon): a
+     compact circular parcel-count badge with the destination name in a chip
+     underneath, per the approved look in
+     docs/design/retrends-design-system/ui_kits/agri-discovery/AgriMap.jsx
+     (which uses the evergreen family #1C5B43/#1F7A5C/#2E9B74 — NOT the
+     generic success-green this used before the third review pass).
+     Reuses the app's existing ReTrends --evergreen/--evergreen-foreground/
+     --evergreen-tint/--card/--foreground tokens (already defined in :root
+     above and already consumed elsewhere as hsl(var(--evergreen)) — see
+     JourneySwitcher.tsx, PropertyCard.tsx, TrustStrip.tsx) instead of a
+     second hardcoded palette. Elevation shadows use the SAME neutral
+     rgba(17,24,39,alpha) convention every other marker in this file uses
+     (.agri-cluster, .custom-marker-cluster-cap, etc.) — this codebase has
+     no separate shadow token, so that rgba IS the established "shadow
+     token" here, not a bespoke value.
+     This is a dedicated, NON-clustering layer — unlike .agri-cluster, this
+     marker never collapses two destinations into one generic bubble, so it
+     always shows one destination's own name + count. */
+  .agri-destination-marker {
+    transform: translate(-50%, -100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    pointer-events: auto;
+  }
+
+  .agri-destination-marker-badge {
+    width: 34px;
+    height: 34px;
+    border-radius: 9999px;
+    background-color: hsl(var(--evergreen));
+    color: hsl(var(--evergreen-foreground));
+    border: 2px solid hsl(var(--card));
+    box-shadow: 0 4px 10px rgba(17, 24, 39, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 13.5px;
+    line-height: 1;
+    transition: width 0.12s ease, height 0.12s ease, box-shadow 0.12s ease;
+  }
+
+  .agri-destination-marker-badge--selected {
+    width: 40px;
+    height: 40px;
+    font-size: 15px;
+    box-shadow: 0 0 0 4px hsl(var(--evergreen) / 0.28), 0 6px 14px rgba(17, 24, 39, 0.3);
+  }
+
+  .agri-destination-marker-name {
+    background-color: hsl(var(--card));
+    color: hsl(var(--foreground));
+    border: 1px solid hsl(var(--evergreen-tint));
+    border-radius: 9999px;
+    padding: 3px 10px;
+    font-size: 11.5px;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(17, 24, 39, 0.12);
+  }
+
   /* a1 — selected property marker sits above its neighbours (copper ring).
      Leaflet renders all markers in the overlayPane; z-index on the icon wrapper
      lifts the selected pin above adjacent unselected pins. !important overrides

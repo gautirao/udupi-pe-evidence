@@ -53,6 +53,15 @@ export interface AgriMapListingItem {
   ownershipType?: string | null;
   /** Issue #1551 — ISO-8601 timestamp of last update. Omitted when null. */
   updatedAt?: string | null;
+  /**
+   * Issue #2296 (PR #2381 review) — authoritative parcel count for a Level-2
+   * agri destination-bucket marker, carried straight from
+   * `AgriDestinationBucket.parcelCount` by useAgriDestinationMarkers. Never
+   * populated for real Level-3 parcel listings returned by this hook's own
+   * endpoint — those don't come from destination buckets, so this field is
+   * always `undefined` for them.
+   */
+  parcelCount?: number | null;
 }
 
 export interface AgriMapListingsResponse {

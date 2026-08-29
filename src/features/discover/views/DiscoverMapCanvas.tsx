@@ -456,15 +456,23 @@ export function DiscoverMapCanvas({
   // journey is active, so each site recomputes the SAME condition rather
   // than trusting a threaded boolean.
   const isSchoolsNavNodeLevel = nav.journey === 'school-first' && !nav.areaKey && !nav.schoolId;
-  // Issue #2203 follow-up (review Finding 1) — symmetric agri-first
-  // counterpart to `isSchoolsNavNodeLevel` above, completing this file's
-  // copy of the triplicated gate to match the widened
-  // `showAreasNavigationJourney` in useDiscoverNavigationController.ts.
-  // Same condition as that controller's `isAgriNavNodeLevel`: agri-first's
-  // geography-dependent leaf is `selectedLocality`, not `areaKey`/`schoolId`.
-  const isAgriNavNodeLevel = nav.journey === 'agri-first' && !nav.selectedLocality;
+  // Issue #2296 fix — deliberately NOT extending this map-rendering gate to
+  // agri-first. Issue #2203 briefly widened it that way (see the removed
+  // `isAgriNavNodeLevel` local, still present as `showAreasNavigationJourney`'s
+  // agri term in useDiscoverNavigationController.ts), but issue #2186 later
+  // shipped the purpose-built agri Level-2 pathway
+  // (AgriMarkerClusterLayer, fed by the `agriDestinationMarkers` prop below)
+  // — the #2203 wiring here was never removed, so agri-first Level 2
+  // mounted BOTH `AreaDestinationMarkerLayer` (residential/school "card"
+  // styling — see AreaMarkerLayer.tsx's `eligibilityJourney: 'areas'`
+  // fallback) and the correct agri layer at once. This file's copy of the
+  // gate now excludes agri on purpose: `showAreasNavigationJourney` in the
+  // controller intentionally KEEPS agri-first (it still drives the canonical
+  // hierarchy fetch and the Recenter camera affordance — see
+  // useDiscoverCameraController.test.ts) — only the MAP's destination-marker
+  // mount point is narrowed here.
   const showAreasNavigationDestinations =
-    (nav.journey === 'area-first' || isSchoolsNavNodeLevel || isAgriNavNodeLevel) && !nav.nodeListings;
+    (nav.journey === 'area-first' || isSchoolsNavNodeLevel) && !nav.nodeListings;
 
   // Issue #2089 — Leaflet's own click-after-drag suppression only covers
   // Leaflet's INTERNAL 'click' event system; it does not stop the browser's
@@ -594,17 +602,28 @@ export function DiscoverMapCanvas({
         <PropertyMap
           listings={currentMapMarkerListings}
           focusBounds={agriGroupFocusBounds ?? activeFocusBounds}
-          // Issue #2186 — Level-3 (locality drilled into) uses the real fetched parcel
-          // listings, unchanged. Level-2 (region + maxKm chosen, no locality yet) now
-          // renders the synthetic per-destination-bucket markers instead of nothing,
-          // fixing the "agri panel has results but the map shows zero markers" gap.
-          agriGroupListings={
-            nav.selectedLocality
-              ? filteredAgriListings
-              : (selectedRegion && selectedMaxKm != null)
-                ? agriDestinationMarkers
-                : null
+          // Issue #2186 / #2296 (PR #2381 second review) — Level-3 (locality drilled
+          // into) uses the real fetched parcel listings via AgriMarkerClusterLayer,
+          // unchanged. Level-2 (region + maxKm chosen, no locality yet) no longer
+          // flows through this prop at all — it now goes through the dedicated
+          // `agriDestinationMarkers` prop below (AgriDestinationMarkerLayer, which
+          // never clusters), so a Level-2 destination can never collapse into
+          // AgriMarkerClusterLayer's generic "N properties" cluster bubble.
+          agriGroupListings={nav.selectedLocality ? filteredAgriListings : null}
+          // Issue #2296 (PR #2381 second review) — Level-2 destination-bucket markers,
+          // ONLY when no locality is drilled into yet (mutually exclusive with the
+          // Level-3 branch above — never show both at once).
+          agriDestinationMarkers={
+            !nav.selectedLocality && selectedRegion && selectedMaxKm != null
+              ? agriDestinationMarkers
+              : null
           }
+          // Issue #2296 (PR #2381 third review) — a Level-2 destination marker
+          // click must drill down into that destination (same action
+          // AgriGroupSelectedPanel's locality-row click already uses —
+          // urlActions.setLocality, PUSH semantics), not the generic
+          // marker-popover flow.
+          onSelectAgriDestination={(areaKey) => urlActions.setLocality(areaKey)}
           polygon={filters.polygon}
           // Issue #1588 — hide the polygon draw tool on the public landing
           // (guided-entry). PropertyMap only mounts DrawControl when BOTH handlers

@@ -92,4 +92,54 @@ describe('useAgriDestinationMarkers', () => {
     const withoutAcreage = renderHook(() => useAgriDestinationMarkers(makeParams()));
     expect(withoutAcreage.result.current[0].computedAreaAcres).toBeNull();
   });
+
+  // Issue #2296 (PR #2381 review) — Level-2 marker must carry the authoritative
+  // per-destination parcelCount straight from AgriDestinationBucket, not a
+  // synthetic marker/cluster-child count.
+  it('carries parcelCount through from the bucket unchanged', () => {
+    const { result } = renderHook(() =>
+      useAgriDestinationMarkers(
+        makeParams({ agriDestinations: [makeBucket({ parcelCount: 8 })] }),
+      ),
+    );
+    expect(result.current[0].parcelCount).toBe(8);
+  });
+
+  // Issue #2296 (PR #2381 review) — zero-count rule: a destination bucket with
+  // no parcels for the current filters must not produce a marker at all.
+  it('omits buckets with parcelCount === 0', () => {
+    const buckets = [
+      makeBucket({ areaKey: 'has-parcels', displayName: 'Brahmavar', parcelCount: 4 }),
+      makeBucket({ areaKey: 'zero-parcels', displayName: 'Udupi', parcelCount: 0 }),
+    ];
+    const { result } = renderHook(() =>
+      useAgriDestinationMarkers(makeParams({ agriDestinations: buckets })),
+    );
+
+    expect(result.current).toHaveLength(1);
+    expect(result.current[0].areaKey).toBe('has-parcels');
+    expect(result.current.some((m) => m.areaKey === 'zero-parcels')).toBe(false);
+  });
+
+  it('returns [] when every bucket has parcelCount === 0', () => {
+    const { result } = renderHook(() =>
+      useAgriDestinationMarkers(
+        makeParams({ agriDestinations: [makeBucket({ parcelCount: 0 })] }),
+      ),
+    );
+    expect(result.current).toEqual([]);
+  });
+
+  // Stable-identity contract (reviewer requirement): id/areaKey must remain the
+  // bucket's areaKey after the parcelCount/zero-count changes, so click-to-drill
+  // routing (useMarkerSelection reads areaKey) is unaffected.
+  it('keeps id/areaKey identity keyed on the bucket areaKey (stable click routing)', () => {
+    const { result } = renderHook(() =>
+      useAgriDestinationMarkers(
+        makeParams({ agriDestinations: [makeBucket({ areaKey: 'IN|KA|Udupi|Brahmavar', parcelCount: 4 })] }),
+      ),
+    );
+    expect(result.current[0].id).toBe('IN|KA|Udupi|Brahmavar');
+    expect(result.current[0].areaKey).toBe('IN|KA|Udupi|Brahmavar');
+  });
 });

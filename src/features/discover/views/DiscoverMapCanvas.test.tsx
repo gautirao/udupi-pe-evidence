@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRef } from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { UseInfiniteQueryResult, InfiniteData } from '@tanstack/react-query';
 import type { DiscoverUrlState, DiscoverUrlActions } from '@/hooks/useDiscoverUrlState';
@@ -33,10 +33,18 @@ vi.mock('@/components/map/PropertyMap', () => ({
   PropertyMap: (props: {
     hoveredNavigationNodeKey?: string | null;
     onAreaVisualClusterCameraIntent?: (bounds: unknown, center: unknown) => void;
-    // Issue #2186 — captured so a test can prove which source (filteredAgriListings vs
-    // agriDestinationMarkers vs null) DiscoverMapCanvas actually resolved into the
-    // agriGroupListings prop, without needing PropertyMap's real Leaflet internals.
+    // Issue #2186 / #2296 (PR #2381 second review) — captured so a test can prove
+    // which source (filteredAgriListings vs agriDestinationMarkers vs null)
+    // DiscoverMapCanvas actually resolved into each prop, without needing
+    // PropertyMap's real Leaflet internals. As of the second review, Level-3
+    // (filteredAgriListings) and Level-2 (agriDestinationMarkers) are separate
+    // PropertyMap props — agriGroupListings now carries ONLY Level-3.
     agriGroupListings?: Array<{ id: string }> | null;
+    agriDestinationMarkers?: Array<{ id: string }> | null;
+    // Issue #2296 (PR #2381 third review) — captured so a test can simulate a
+    // destination-marker click and prove DiscoverMapCanvas wires it to
+    // urlActions.setLocality (drill-down), not a generic listing callback.
+    onSelectAgriDestination?: (areaKey: string) => void;
   }) => (
     <div
       data-testid="property-map-mock"
@@ -49,6 +57,12 @@ vi.mock('@/components/map/PropertyMap', () => ({
           ? 'null'
           : props.agriGroupListings.map((l) => l.id).join(',')
       }
+      data-agri-destination-markers-ids={
+        props.agriDestinationMarkers == null
+          ? 'null'
+          : props.agriDestinationMarkers.map((l) => l.id).join(',')
+      }
+      onClick={() => props.onSelectAgriDestination?.('IN|KA|Udupi|Brahmavar')}
     />
   ),
 }));
@@ -317,14 +331,14 @@ describe('DiscoverMapCanvas', () => {
     );
   });
 
-  describe('Issue #2186 — agriGroupListings prop resolution', () => {
+  describe('Issue #2186 / #2296 (PR #2381 second review) — agriGroupListings / agriDestinationMarkers prop resolution', () => {
     afterEach(() => {
       // Restore BASE_NAV.selectedLocality after any test that mutates it below —
       // BASE_NAV is a shared hoisted fixture read by every test in this file.
       BASE_NAV.selectedLocality = undefined;
     });
 
-    it('AC4: Level-2 (region + maxKm set, no selectedLocality) resolves to agriDestinationMarkers, fixing the "results but no markers" gap', () => {
+    it('AC4: Level-2 (region + maxKm set, no selectedLocality) resolves to the dedicated agriDestinationMarkers prop, not agriGroupListings', () => {
       const agriDestinationMarkers = [
         { id: 'IN|KA|Udupi|Brahmavar', areaKey: 'IN|KA|Udupi|Brahmavar', latitude: 13.4, longitude: 74.8, propertyType: 'agricultural_land' },
       ];
@@ -338,13 +352,15 @@ describe('DiscoverMapCanvas', () => {
           })}
         />,
       );
-      expect(screen.getByTestId('property-map-mock')).toHaveAttribute(
-        'data-agri-group-listings-ids',
-        'IN|KA|Udupi|Brahmavar',
-      );
+      const mock = screen.getByTestId('property-map-mock');
+      // Issue #2296 second review — Level-2 goes through the DEDICATED
+      // agriDestinationMarkers prop (AgriDestinationMarkerLayer, never clusters),
+      // never through agriGroupListings (AgriMarkerClusterLayer, which clusters).
+      expect(mock).toHaveAttribute('data-agri-destination-markers-ids', 'IN|KA|Udupi|Brahmavar');
+      expect(mock).toHaveAttribute('data-agri-group-listings-ids', 'null');
     });
 
-    it('Level-3 (selectedLocality also set) resolves to filteredAgriListings, unchanged pre-#2186 behaviour', () => {
+    it('Level-3 (selectedLocality also set) resolves to filteredAgriListings via agriGroupListings; agriDestinationMarkers is null (mutually exclusive)', () => {
       BASE_NAV.selectedLocality = 'IN|KA|Udupi|Brahmavar';
       const filteredAgriListings = [
         { id: 'parcel-1', areaKey: 'IN|KA|Udupi|Brahmavar', latitude: 13.41, longitude: 74.81, propertyType: 'agricultural_land' },
@@ -362,13 +378,13 @@ describe('DiscoverMapCanvas', () => {
           })}
         />,
       );
-      expect(screen.getByTestId('property-map-mock')).toHaveAttribute(
-        'data-agri-group-listings-ids',
-        'parcel-1',
-      );
+      const mock = screen.getByTestId('property-map-mock');
+      expect(mock).toHaveAttribute('data-agri-group-listings-ids', 'parcel-1');
+      // Level-2 destination markers must not also render underneath Level-3 real parcels.
+      expect(mock).toHaveAttribute('data-agri-destination-markers-ids', 'null');
     });
 
-    it('no region/maxKm selected (Level-1 landing) resolves to null — no markers, no regression', () => {
+    it('no region/maxKm selected (Level-1 landing) resolves both props to null — no markers, no regression', () => {
       render(
         <DiscoverMapCanvas
           {...baseProps({
@@ -379,10 +395,34 @@ describe('DiscoverMapCanvas', () => {
           })}
         />,
       );
-      expect(screen.getByTestId('property-map-mock')).toHaveAttribute(
-        'data-agri-group-listings-ids',
-        'null',
+      const mock = screen.getByTestId('property-map-mock');
+      expect(mock).toHaveAttribute('data-agri-group-listings-ids', 'null');
+      expect(mock).toHaveAttribute('data-agri-destination-markers-ids', 'null');
+    });
+
+    // Issue #2296 (PR #2381 third review) — a Level-2 destination-marker
+    // click must drill down (urlActions.setLocality), not fire a generic
+    // listing-selection callback.
+    it('wires onSelectAgriDestination to urlActions.setLocality, keyed on the clicked destination areaKey', () => {
+      URL_ACTIONS.setLocality.mockClear();
+
+      const agriDestinationMarkers = [
+        { id: 'IN|KA|Udupi|Brahmavar', areaKey: 'IN|KA|Udupi|Brahmavar', latitude: 13.4, longitude: 74.8, propertyType: 'agricultural_land' },
+      ];
+      render(
+        <DiscoverMapCanvas
+          {...baseProps({
+            selectedRegion: 'N',
+            selectedMaxKm: 25,
+            filteredAgriListings: null,
+            agriDestinationMarkers,
+          })}
+        />,
       );
+
+      fireEvent.click(screen.getByTestId('property-map-mock'));
+
+      expect(URL_ACTIONS.setLocality).toHaveBeenCalledWith('IN|KA|Udupi|Brahmavar');
     });
   });
 
