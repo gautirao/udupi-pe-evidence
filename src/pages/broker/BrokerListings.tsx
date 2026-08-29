@@ -1,24 +1,11 @@
-import { useMemo, useState } from 'react';
-import { Navigate, Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Navigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import {
-  useBrokerMyListingsInfinite,
-  useDeleteListing,
-  useBulkDeleteListings,
-  useDuplicateListing,
-  useSubmitListing,
-  useArchiveListing,
-  useWithdrawListing,
-  useReopenListing,
-  useReopenAsDraftListing,
-  useResubmitArchivedListing,
-  useRestoreListing,
-  type ListingResponse,
-} from '@/hooks/useBrokerListings';
+import { useBulkDeleteListings } from '@/hooks/useBrokerListings';
+import { useBrokerListingsInventory } from '@/hooks/useBrokerListingsInventory';
+import { useBrokerListingSelection } from '@/hooks/useBrokerListingSelection';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,19 +25,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, Building2, CalendarDays, Copy, Eye, ImageIcon, Loader2, Trash2 } from 'lucide-react';
+import { AlertCircle, Building2, Loader2, Trash2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TrustProgressPanel } from '@/components/trust/TrustProgressPanel';
-
-const EDITABLE_STATUSES = ['DRAFT', 'REJECTED'];
-
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: 'Draft',
-  PENDING_REVIEW: 'Under Review',
-  LIVE: 'Live',
-  REJECTED: 'Rejected',
-  ARCHIVED: 'Archived',
-};
+import { STATUS_LABELS } from '@/components/broker/listings/brokerListingStatus';
+import { BrokerListingsList } from '@/components/broker/listings/BrokerListingsList';
 
 const FILTER_CHIPS: Array<{ value: string; label: string }> = [
   { value: '', label: 'All' },
@@ -67,409 +45,40 @@ const SORT_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'updatedAt,desc', label: 'Recently updated' },
 ];
 
-function statusClassName(status: string): string {
-  switch (status) {
-    case 'LIVE':
-      return 'bg-green-100 text-green-800 border-0';
-    case 'PENDING_REVIEW':
-      return 'bg-amber-100 text-amber-800 border-0';
-    case 'REJECTED':
-      return 'bg-red-100 text-red-800 border-0';
-    case 'DRAFT':
-      return 'bg-gray-100 text-gray-600 border-0';
-    case 'ARCHIVED':
-      return 'bg-slate-100 text-slate-700 border-0';
-    default:
-      return 'bg-gray-100 text-gray-600 border-0';
-  }
-}
-
-/**
- * Submit button for DRAFT listings only.
- *
- * Rendered as a separate component so that `useSubmitListing` (a hook) can be
- * called at the top level rather than inside the parent's `.map()`.
- */
-function DraftSubmitButton({ listing }: { listing: ListingResponse }) {
-  const navigate = useNavigate();
-  const { toast } = useToast();
-  const submitMutation = useSubmitListing(listing.id);
-
-  const isReady = listing.addressConfirmed && listing.imageCount >= 3;
-
-  if (isReady) {
-    return (
-      <Button
-        size="sm"
-        disabled={submitMutation.isPending}
-        onClick={() => {
-          submitMutation.mutate(undefined, {
-            onSuccess: () => {
-              toast({ title: 'Submitted for review' });
-            },
-          });
-        }}
-      >
-        {submitMutation.isPending ? (
-          <>
-            <Loader2 className="h-3 w-3 animate-spin mr-1" />
-            Submitting…
-          </>
-        ) : (
-          'Submit for Review'
-        )}
-      </Button>
-    );
-  }
-
-  const bothMissing = !listing.addressConfirmed && listing.imageCount < 3;
-  const hint = bothMissing
-    ? 'Add images & confirm address to submit'
-    : listing.imageCount < 3
-      ? `Need ${3 - listing.imageCount} more image(s)`
-      : 'Confirm address to submit';
-
-  // Deep-link to the blocking wizard step: images (step 2) takes priority
-  const targetStep = listing.imageCount < 3 ? 2 : 3;
-
-  return (
-    <div>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => navigate(`/broker/listings/${listing.id}/edit?step=${targetStep}`)}
-      >
-        Complete &amp; Submit
-      </Button>
-      <p className="text-xs text-muted-foreground mt-1">{hint}</p>
-    </div>
-  );
-}
-
-/**
- * Duplicate button — creates a new DRAFT by copying core fields from an existing listing.
- * Separate component so hooks are called at top level (not inside .map()).
- */
-function DuplicateButton({ listing }: { listing: ListingResponse }) {
-  const navigate = useNavigate();
-  const duplicateMutation = useDuplicateListing();
-
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      disabled={duplicateMutation.isPending}
-      onClick={() => {
-        duplicateMutation.mutate(listing.id, {
-          onSuccess: (newListing) => {
-            navigate(`/broker/listings/${newListing.id}/edit`);
-          },
-        });
-      }}
-    >
-      {duplicateMutation.isPending ? (
-        <Loader2 className="h-3 w-3 animate-spin mr-1" />
-      ) : (
-        <Copy className="h-3.5 w-3.5 mr-1" />
-      )}
-      Duplicate
-    </Button>
-  );
-}
-
-/**
- * Archive button — LIVE and REJECTED listings.
- * Requires confirmation before POSTing /archive.
- */
-function ArchiveButton({ listing }: { listing: ListingResponse }) {
-  const archiveMutation = useArchiveListing(listing.id);
-  const { toast } = useToast();
-
-  return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button variant="outline" size="sm" disabled={archiveMutation.isPending}>
-          {archiveMutation.isPending ? (
-            <>
-              <Loader2 className="h-3 w-3 animate-spin mr-1" />
-              Archiving…
-            </>
-          ) : (
-            'Archive'
-          )}
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Archive Listing</AlertDialogTitle>
-          <AlertDialogDescription>
-            Are you sure you want to archive this listing?
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={() => {
-              archiveMutation.mutate(undefined, {
-                onSuccess: () => {
-                  toast({ title: 'Listing archived' });
-                },
-              });
-            }}
-          >
-            Archive
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
-
-/**
- * Withdraw button — PENDING_REVIEW listings.
- * Requires confirmation before PUTting /withdraw (returns 204 No Content).
- */
-function WithdrawButton({ listing }: { listing: ListingResponse }) {
-  const withdrawMutation = useWithdrawListing(listing.id);
-  const { toast } = useToast();
-
-  return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button variant="outline" size="sm" disabled={withdrawMutation.isPending}>
-          {withdrawMutation.isPending ? (
-            <>
-              <Loader2 className="h-3 w-3 animate-spin mr-1" />
-              Withdrawing…
-            </>
-          ) : (
-            'Withdraw'
-          )}
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Withdraw Listing</AlertDialogTitle>
-          <AlertDialogDescription>
-            This will move the listing back to Draft.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={() => {
-              withdrawMutation.mutate(undefined, {
-                onSuccess: () => {
-                  toast({ title: 'Listing withdrawn to draft' });
-                },
-              });
-            }}
-          >
-            Withdraw
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
-
-/**
- * Reopen button — REJECTED listings only, no confirm required.
- * POSTs /reopen to move listing back to DRAFT.
- */
-function ReopenButton({ listing }: { listing: ListingResponse }) {
-  const reopenMutation = useReopenListing(listing.id);
-  const { toast } = useToast();
-
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={reopenMutation.isPending}
-      onClick={() => {
-        reopenMutation.mutate(undefined, {
-          onSuccess: () => {
-            toast({ title: 'Listing reopened for editing' });
-          },
-        });
-      }}
-    >
-      {reopenMutation.isPending ? (
-        <>
-          <Loader2 className="h-3 w-3 animate-spin mr-1" />
-          Reopening…
-        </>
-      ) : (
-        'Reopen for Editing'
-      )}
-    </Button>
-  );
-}
-
-/**
- * Reopen as Draft button — ARCHIVED listings only, no confirm required.
- * POSTs /reopen-as-draft to move listing to DRAFT.
- */
-function ReopenAsDraftButton({ listing }: { listing: ListingResponse }) {
-  const reopenAsDraftMutation = useReopenAsDraftListing(listing.id);
-  const { toast } = useToast();
-
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={reopenAsDraftMutation.isPending}
-      onClick={() => {
-        reopenAsDraftMutation.mutate(undefined, {
-          onSuccess: () => {
-            toast({ title: 'Listing reopened as draft' });
-          },
-        });
-      }}
-    >
-      {reopenAsDraftMutation.isPending ? (
-        <>
-          <Loader2 className="h-3 w-3 animate-spin mr-1" />
-          Reopening…
-        </>
-      ) : (
-        'Reopen as Draft'
-      )}
-    </Button>
-  );
-}
-
-/**
- * Resubmit button — ARCHIVED listings only, no confirm required.
- * POSTs /submit to move listing to PENDING_REVIEW.
- */
-function ResubmitArchivedButton({ listing }: { listing: ListingResponse }) {
-  const resubmitMutation = useResubmitArchivedListing(listing.id);
-  const { toast } = useToast();
-
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={resubmitMutation.isPending}
-      onClick={() => {
-        resubmitMutation.mutate(undefined, {
-          onSuccess: () => {
-            toast({ title: 'Listing resubmitted for review' });
-          },
-        });
-      }}
-    >
-      {resubmitMutation.isPending ? (
-        <>
-          <Loader2 className="h-3 w-3 animate-spin mr-1" />
-          Resubmitting…
-        </>
-      ) : (
-        'Resubmit'
-      )}
-    </Button>
-  );
-}
-
-/**
- * Restore to Live button — ARCHIVED listings only, no confirm required.
- * Always shown; backend returns 422 if ineligible.
- * PUTs /restore to move listing back to LIVE.
- */
-function RestoreButton({ listing }: { listing: ListingResponse }) {
-  const restoreMutation = useRestoreListing(listing.id);
-  const { toast } = useToast();
-
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={restoreMutation.isPending}
-      onClick={() => {
-        restoreMutation.mutate(undefined, {
-          onSuccess: () => {
-            toast({ title: 'Listing restored to live' });
-          },
-        });
-      }}
-    >
-      {restoreMutation.isPending ? (
-        <>
-          <Loader2 className="h-3 w-3 animate-spin mr-1" />
-          Restoring…
-        </>
-      ) : (
-        'Restore to Live'
-      )}
-    </Button>
-  );
-}
-
 /**
  * "My Listings" page for brokers.
  *
  * Guards:
  *  - Unauthenticated: ProtectedRoute redirects to /auth before this component renders.
  *  - Not dealer/admin: redirect to / (access not permitted).
+ *
+ * Composition root only: filter/sort UI, loading/error/empty states and the
+ * bulk-delete bar are wired here from useBrokerListingsInventory and
+ * useBrokerListingSelection; per-listing rendering and lifecycle actions live
+ * in BrokerListingsList/BrokerListingCard/BrokerListingActions.
  */
 export default function BrokerListings() {
   const { isBroker, isAdmin, isLoading, userRole } = useAuth();
-  const [searchParams] = useSearchParams();
-  const [activeFilter, setActiveFilter] = useState(searchParams.get('status') ?? '');
-  const [activeSort, setActiveSort] = useState('createdAt,desc');
   const {
-    data,
+    activeFilter,
+    setActiveFilter,
+    activeSort,
+    setActiveSort,
+    listings: allListings,
+    totalElements,
     isLoading: listingsLoading,
     isError,
     refetch,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useBrokerMyListingsInfinite({ status: activeFilter, sort: activeSort });
+  } = useBrokerListingsInventory();
 
-  const allListings = useMemo(() => data?.pages.flatMap((p) => p.listings) ?? [], [data?.pages]);
-  const totalElements = data?.pages[0]?.totalElements ?? 0;
-  const deleteListingMutation = useDeleteListing();
+  const { selectedIds, deletableListings, toggleSelect, selectAll, deselectAll } =
+    useBrokerListingSelection(allListings);
+
   const bulkDeleteMutation = useBulkDeleteListings();
   const { toast } = useToast();
-
-  // Bulk selection state
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-
-  // Trust panel expand state — panels are mounted only when expanded to avoid N+1 API fan-out
-  const [expandedTrustIds, setExpandedTrustIds] = useState<Set<string>>(new Set());
-  const toggleTrust = (id: string) => {
-    setExpandedTrustIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  // Only DRAFT and REJECTED listings can be bulk-deleted
-  const deletableListings = useMemo(
-    () => allListings.filter((l) => l.status === 'DRAFT' || l.status === 'REJECTED'),
-    [allListings],
-  );
-
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const selectAll = () => {
-    setSelectedIds(new Set(deletableListings.map((l) => l.id)));
-  };
-
-  const deselectAll = () => {
-    setSelectedIds(new Set());
-  };
 
   const handleBulkDelete = () => {
     const ids = Array.from(selectedIds);
@@ -481,7 +90,7 @@ export default function BrokerListings() {
             ? `${result.skipped} could not be deleted (wrong status or not found).`
             : undefined,
         });
-        setSelectedIds(new Set());
+        deselectAll();
       },
       onError: (error: Error) => {
         toast({
@@ -577,11 +186,7 @@ export default function BrokerListings() {
                 <p className="text-sm font-medium text-muted-foreground">
                   No {STATUS_LABELS[activeFilter]?.toLowerCase() ?? activeFilter.toLowerCase()} listings
                 </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setActiveFilter('')}
-                >
+                <Button variant="outline" size="sm" onClick={() => setActiveFilter('')}>
                   View all listings
                 </Button>
               </>
@@ -622,16 +227,10 @@ export default function BrokerListings() {
 
             {selectedIds.size > 0 && (
               <div className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-2">
-                <span className="text-sm font-medium">
-                  {selectedIds.size} selected
-                </span>
+                <span className="text-sm font-medium">{selectedIds.size} selected</span>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      disabled={bulkDeleteMutation.isPending}
-                    >
+                    <Button variant="destructive" size="sm" disabled={bulkDeleteMutation.isPending}>
                       {bulkDeleteMutation.isPending ? (
                         <Loader2 className="h-3 w-3 animate-spin mr-1" />
                       ) : (
@@ -665,232 +264,15 @@ export default function BrokerListings() {
                 </Button>
               </div>
             )}
-            {allListings.map((listing) => {
-              const isDeletable = listing.status === 'DRAFT' || listing.status === 'REJECTED';
-              const isSelected = selectedIds.has(listing.id);
 
-              return (
-              <Card
-                key={listing.id}
-                className={`overflow-hidden relative transition-colors ${isSelected ? 'ring-2 ring-destructive/40' : ''}`}
-              >
-                {/* Selection checkbox for deletable listings */}
-                {isDeletable && (
-                  <div className="absolute top-2 left-2 z-10">
-                    <label className="flex items-center justify-center h-6 w-6 rounded border bg-background/90 cursor-pointer hover:bg-accent">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleSelect(listing.id)}
-                        className="h-4 w-4 accent-destructive cursor-pointer"
-                      />
-                    </label>
-                  </div>
-                )}
-                {listing.firstImageUrl ? (
-                  <div className="relative">
-                    <img
-                      src={listing.firstImageUrl}
-                      alt={listing.title ?? 'Property listing image'}
-                      className="w-full h-32 object-cover rounded-t-lg"
-                    />
-                    {listing.imageCount > 0 && (
-                      <span
-                        className={`absolute bottom-2 right-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                          listing.status === 'DRAFT' && listing.imageCount < 3
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-black/60 text-white'
-                        }`}
-                      >
-                        <ImageIcon className="h-3 w-3" />
-                        {listing.status === 'DRAFT' && listing.imageCount < 3
-                          ? `${listing.imageCount} / 3`
-                          : listing.imageCount}
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <div className="w-full h-32 bg-secondary flex flex-col items-center justify-center rounded-t-lg gap-1">
-                    <Building2 className="h-8 w-8 text-muted-foreground/40" />
-                    {listing.imageCount === 0 && (
-                      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
-                        <ImageIcon className="h-3 w-3" />
-                        No photos yet
-                      </span>
-                    )}
-                  </div>
-                )}
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <CardTitle className="text-lg">
-                        {listing.title ?? 'Untitled Listing'}
-                      </CardTitle>
-                      {listing.displayId && (
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {listing.displayId}
-                        </p>
-                      )}
-                    </div>
-                    <Badge className={statusClassName(listing.status)}>
-                      {STATUS_LABELS[listing.status] ?? listing.status}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2 text-sm text-muted-foreground mb-4">
-                    <Badge variant="secondary" className="capitalize text-xs">{listing.propertyType?.replace(/_/g, ' ')}</Badge>
-                    {listing.listingPurpose === 'rent' && (
-                      <Badge variant="outline" className="text-xs">Rent</Badge>
-                    )}
-                    {listing.locality && <span>· {listing.locality}</span>}
-                    {listing.listingPurpose === 'rent' ? (
-                      listing.monthlyRent != null && (
-                        <span>· &#8377;{listing.monthlyRent.toLocaleString('en-IN')}/mo</span>
-                      )
-                    ) : (
-                      listing.price != null && (
-                        <span>· &#8377;{listing.price.toLocaleString('en-IN')}</span>
-                      )
-                    )}
-                  </div>
-                  {listing.rejectionReason && (
-                    <p className="text-sm text-destructive mb-3">
-                      Rejection reason: {listing.rejectionReason}
-                    </p>
-                  )}
-                  <div className="flex gap-2 flex-wrap items-start">
-                    <Button variant="outline" size="sm" asChild>
-                      <Link
-                        to={
-                          listing.status === 'LIVE'
-                            ? `/listing/${listing.id}`
-                            : `/listing/${listing.id}?preview=true`
-                        }
-                      >
-                        <Eye className="h-3.5 w-3.5 mr-1" />
-                        {listing.status === 'LIVE' ? 'View' : 'Preview'}
-                      </Link>
-                    </Button>
-                    <DuplicateButton listing={listing} />
-                    {listing.status === 'LIVE' && (
-                      <>
-                        <Button variant="outline" size="sm" asChild>
-                          <Link to={`/broker/bookings?listingId=${listing.id}`}>
-                            <CalendarDays className="h-3.5 w-3.5 mr-1" />
-                            Booking enquiries
-                          </Link>
-                        </Button>
-                        <ArchiveButton listing={listing} />
-                      </>
-                    )}
-                    {listing.status === 'PENDING_REVIEW' && (
-                      <WithdrawButton listing={listing} />
-                    )}
-                    {EDITABLE_STATUSES.includes(listing.status) && (
-                      <>
-                        <Button variant="outline" size="sm" asChild>
-                          <Link to={`/broker/listings/${listing.id}/edit`}>Edit</Link>
-                        </Button>
-                        {listing.status === 'DRAFT' ? (
-                          <DraftSubmitButton listing={listing} />
-                        ) : (
-                          <>
-                            <Button size="sm" asChild>
-                              <Link to={`/broker/listings/${listing.id}/edit`}>
-                                Edit &amp; Resubmit
-                              </Link>
-                            </Button>
-                            <ReopenButton listing={listing} />
-                            <ArchiveButton listing={listing} />
-                          </>
-                        )}
-                      </>
-                    )}
-                    {listing.status === 'ARCHIVED' && (
-                      <>
-                        <ReopenAsDraftButton listing={listing} />
-                        <ResubmitArchivedButton listing={listing} />
-                        <RestoreButton listing={listing} />
-                      </>
-                    )}
-                    {(listing.status === 'DRAFT' || listing.status === 'REJECTED') && (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
-                          >
-                            Delete
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete listing?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This will permanently delete your listing. This cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              onClick={() => {
-                                deleteListingMutation.mutate(listing.id, {
-                                  onSuccess: () => {
-                                    toast({ title: 'Listing deleted' });
-                                  },
-                                });
-                              }}
-                            >
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    )}
-                  </div>
-                  {(listing.status === 'LIVE' || listing.status === 'PENDING_REVIEW') && (
-                    <div className="mt-4 pt-4 border-t">
-                      <button
-                        className="text-xs text-muted-foreground hover:text-foreground mb-2 underline-offset-2 hover:underline"
-                        onClick={() => toggleTrust(listing.id)}
-                        aria-expanded={expandedTrustIds.has(listing.id)}
-                        aria-controls={`trust-panel-${listing.id}`}
-                      >
-                        {expandedTrustIds.has(listing.id) ? 'Hide trust progress' : 'Show trust progress'}
-                      </button>
-                      {expandedTrustIds.has(listing.id) && (
-                        <div id={`trust-panel-${listing.id}`}>
-                          <TrustProgressPanel listingId={listing.id} variant="compact" />
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-              );
-            })}
-            {hasNextPage && (
-              <div className="flex justify-center pt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={isFetchingNextPage}
-                  onClick={() => fetchNextPage()}
-                >
-                  {isFetchingNextPage ? (
-                    <>
-                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                      Loading…
-                    </>
-                  ) : (
-                    'Load more'
-                  )}
-                </Button>
-              </div>
-            )}
+            <BrokerListingsList
+              listings={allListings}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelect}
+              hasNextPage={hasNextPage}
+              isFetchingNextPage={isFetchingNextPage}
+              onLoadMore={() => fetchNextPage()}
+            />
           </div>
         )}
       </div>
