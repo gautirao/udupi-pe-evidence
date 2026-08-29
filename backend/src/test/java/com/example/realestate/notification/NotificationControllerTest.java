@@ -187,6 +187,29 @@ class NotificationControllerTest {
                 .andExpect(jsonPath("$.error").value("Notification not found"));
     }
 
+    // ==================== Test 9: PUT read-all -> 204 ====================
+
+    @Test
+    void markAllAsRead_returns204() throws Exception {
+        when(notificationRepository.markAllAsReadByUserId(USER_A)).thenReturn(5);
+
+        mockMvc.perform(put("/api/notifications/read-all")
+                        .with(jwt().jwt(j -> j.subject(USER_A.toString()))))
+                .andExpect(status().isNoContent());
+
+        verify(notificationRepository).markAllAsReadByUserId(USER_A);
+    }
+
+    // ==================== Test 10: PUT read-all without JWT -> 403 ====================
+
+    @Test
+    void markAllAsRead_withoutJwt_returns403() throws Exception {
+        mockMvc.perform(put("/api/notifications/read-all"))
+                .andExpect(status().isForbidden());
+
+        verify(notificationRepository, never()).markAllAsReadByUserId(any());
+    }
+
     // ==================== Helper ====================
 
     private Notification buildNotification(UUID id, UUID userId, String type,

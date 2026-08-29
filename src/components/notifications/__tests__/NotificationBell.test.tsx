@@ -18,6 +18,7 @@ globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserv
 
 const mockRefetch = vi.fn().mockResolvedValue({ data: [] });
 const mockMutate = vi.fn();
+const mockMarkAllMutate = vi.fn();
 const mockNavigate = vi.fn();
 
 let mockNotifications: {
@@ -46,6 +47,7 @@ vi.mock('@/hooks/useNotifications', () => ({
   useNotifications: () => mockNotifications,
   useUnreadCount: () => mockUnreadCount,
   useMarkAsRead: () => ({ mutate: mockMutate }),
+  useMarkAllAsRead: () => ({ mutate: mockMarkAllMutate, isPending: false }),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -343,6 +345,44 @@ describe('NotificationBell', () => {
     await user.click(screen.getByRole('button'));
     await user.click(screen.getByText('No nav'));
 
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  // ── Mark all as read ──────────────────────────────────
+
+  it('shows "Mark all as read" when there are unread notifications', async () => {
+    mockUnreadCount = { data: { count: 3 } };
+    const user = userEvent.setup();
+    renderBell();
+
+    await user.click(screen.getByRole('button'));
+    expect(screen.getByText('Mark all as read')).toBeInTheDocument();
+  });
+
+  it('hides "Mark all as read" when unread count is 0', async () => {
+    mockUnreadCount = { data: { count: 0 } };
+    const user = userEvent.setup();
+    renderBell();
+
+    await user.click(screen.getByRole('button'));
+    expect(screen.queryByText('Mark all as read')).not.toBeInTheDocument();
+  });
+
+  it('calls markAllAsRead.mutate when "Mark all as read" is clicked', async () => {
+    mockUnreadCount = { data: { count: 3 } };
+    mockNotifications = {
+      data: [makeNotification('n-1', { title: 'Unread item' })],
+      isLoading: false,
+      isError: false,
+      refetch: mockRefetch,
+    };
+    const user = userEvent.setup();
+    renderBell();
+
+    await user.click(screen.getByRole('button'));
+    await user.click(screen.getByText('Mark all as read'));
+
+    expect(mockMarkAllMutate).toHaveBeenCalledTimes(1);
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 

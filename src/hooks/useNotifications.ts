@@ -100,3 +100,41 @@ export function useMarkAsRead() {
     },
   });
 }
+
+export function useMarkAllAsRead() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => api.put('/api/notifications/read-all'),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['notifications'] });
+      await queryClient.cancelQueries({ queryKey: ['notifications-unread-count'] });
+
+      const prevNotifications = queryClient.getQueryData<NotificationResponse[]>(['notifications']);
+      const prevCount = queryClient.getQueryData<UnreadCountResponse>(['notifications-unread-count']);
+
+      if (prevNotifications) {
+        queryClient.setQueryData<NotificationResponse[]>(
+          ['notifications'],
+          prevNotifications.map((n) => ({ ...n, isRead: true })),
+        );
+      }
+
+      queryClient.setQueryData<UnreadCountResponse>(['notifications-unread-count'], { count: 0 });
+
+      return { prevNotifications, prevCount };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.prevNotifications) {
+        queryClient.setQueryData(['notifications'], context.prevNotifications);
+      }
+      if (context?.prevCount) {
+        queryClient.setQueryData(['notifications-unread-count'], context.prevCount);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
+    },
+  });
+}

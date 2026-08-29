@@ -10,6 +10,7 @@ import {
   useNotifications,
   useUnreadCount,
   useMarkAsRead,
+  useMarkAllAsRead,
   type NotificationResponse,
 } from '@/hooks/useNotifications';
 import { cn } from '@/lib/utils';
@@ -30,9 +31,14 @@ export function NotificationBell() {
   const { data: notifications = [], isLoading, isError, refetch } = useNotifications();
   const { data: unreadData } = useUnreadCount();
   const markAsRead = useMarkAsRead();
+  const markAllAsRead = useMarkAllAsRead();
 
   const unreadCount = unreadData?.count ?? 0;
   const displayNotifications = notifications.slice(0, 20);
+
+  function handleMarkAllAsRead() {
+    markAllAsRead.mutate();
+  }
 
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
@@ -65,8 +71,19 @@ export function NotificationBell() {
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 p-0">
-        <div className="px-4 py-3">
+        <div className="flex items-center justify-between px-4 py-3">
           <h4 className="text-sm font-semibold">Notifications</h4>
+          {unreadCount > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-auto px-2 py-1 text-xs font-medium"
+              disabled={markAllAsRead.isPending}
+              onClick={handleMarkAllAsRead}
+            >
+              Mark all as read
+            </Button>
+          )}
         </div>
         <Separator />
         {isLoading ? (

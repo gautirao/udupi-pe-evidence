@@ -464,5 +464,51 @@
                 </plugins>
             </build>
         </profile>
+        <!--
+            Activate with `mvn -f backend/pom.xml -Pnotification-mark-all-read-it verify`.
+            Runs NotificationMarkAllAsReadIT tagged @Tag("integration") via failsafe as a
+            regression guard for issue #2072 PR #2392 review finding (missing @Transactional
+            on the bulk mark-all-read endpoint). Requires Docker (Testcontainers with
+            postgis/postgis:15-3.4-alpine).
+        -->
+        <profile>
+            <id>notification-mark-all-read-it</id>
+            <build>
+                <plugins>
+                    <!-- Skip surefire entirely under this profile; only failsafe runs. -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <argLine>
+                                -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar
+                                -XX:+EnableDynamicAgentLoading
+                                -Dnet.bytebuddy.experimental=true
+                            </argLine>
+                            <!-- Narrowed include: ONLY the issue #2072 mark-all-read regression guard. -->
+                            <includes>
+                                <include>**/NotificationMarkAllAsReadIT.java</include>
+                            </includes>
+                            <groups>integration</groups>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 </project>

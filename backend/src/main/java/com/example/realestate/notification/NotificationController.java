@@ -9,6 +9,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -62,6 +63,16 @@ public class NotificationController {
         }
 
         log.info("PUT /api/notifications/{}/read -> 204 userId={}", id, userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Transactional
+    @PutMapping("/read-all")
+    public ResponseEntity<?> markAllAsRead(JwtAuthenticationToken auth) {
+        UUID userId = extractUserId(auth);
+        int updated = notificationRepository.markAllAsReadByUserId(userId);
+
+        log.info("PUT /api/notifications/read-all -> 204 updated={} userId={}", updated, userId);
         return ResponseEntity.noContent().build();
     }
 
