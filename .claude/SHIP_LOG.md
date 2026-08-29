@@ -12,6 +12,15 @@ Date: YYYY-MM-DD | Sprint: <name or standalone/quick> | Route: <agent chain>
 ---
 -->
 
+## PR #2384 — refactor(#2380): split PendingListings.tsx into query/filters/selection/mutations hooks
+Date: 2026-08-29 | Sprint: standalone/quick | Route: qa-fast (pre-implementation risk scan) → frontend-engineer (self) — open PR, awaiting code-reviewer pass and owner review
+- What: extracted `usePendingListingsQuery`, `usePendingListingsFilters`, `usePendingListingsSelection`, `usePendingListingsMutations` out of `src/pages/admin/PendingListings.tsx`; page now only composes the hooks + drawer advancement/focus-restoration + top-level JSX
+- Why: non-blocking follow-up from PR #2378's review, ahead of further Pending Approvals work
+- Deviations: NONE — matches issue's proposed split exactly; no redesign, no regression of #2369 drawer-advancement behaviour
+- Risks: NONE — qa-fast's one abstract "BLOCKING" concern (stale-closure of `filteredListings` in callbacks passed into the mutations hook) was already avoided by design (`advanceOrClose`/`closeReview` kept unmemoized in the page, passed by reference)
+- Test evidence: unit/component 30/30 PASS (23 existing + 7 sibling) + tsc clean + eslint clean, all re-run post-rebase onto `e6ae4dfa`; pre-push local E2E gate 30 passed/1 skipped against an isolated per-worktree stack (fe:5240/be:8100 via `scripts/dev-worktree-stack.sh`), no `--no-verify`; manual browser check of `/admin/listings/pending` labeled MANUAL_INCONCLUSIVE (env-wide auth-bootstrap loading state with no logged-in session, reproduced on `/` too — not specific to this change)
+---
+
 ## PR #2383 — feat(#2207): admin hierarchy tree node selection + contextual override prefill
 Date: 2026-08-29 | Sprint: standalone/quick | Route: qa-fast → frontend-engineer → code-reviewer (APPROVE, 1 a11y fix cycle) → qa (E2E authoring, 6/6) — draft PR open, awaiting review
 - What: single-node/Area selection in the admin City Launch hierarchy tree, independent of expand/collapse; new contextual details panel (label/type/key/child+descendant/listing counts); per-node-type override-prefill actions that jump to the existing Overrides tab with `subjectAreaKey`/`subjectNodeKey` + kind pre-filled, gated on PREPARED lifecycle

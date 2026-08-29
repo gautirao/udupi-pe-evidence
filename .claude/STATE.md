@@ -3,13 +3,13 @@
 <!-- Claude-managed. Tracks where the session is and how to resume.
      NOT a source of project/product truth — decisions live in docs/ and .claude/ARCHITECTURE.md -->
 
-Last updated: 2026-08-15
+Last updated: 2026-08-29
 
 ## Current Position
-- Active thread: City Launch (#2151) preview/promotion bug sweep — investigated + fixed via standalone /quick, not part of the parked milestone #12 below
+- Active thread: PendingListings.tsx hook extraction (#2380) — non-blocking follow-up from PR #2378's review — via standalone /quick, not part of the parked milestone #12 below
 - Mode: standalone ROUTE_AND_RUN / /quick execution per issue
-- Phase: PR #2178 (#2177 checksum-drift false positive) open, READY_AWAITING_OWNER_MANUAL_TEST — not merged, awaiting owner manual test on the live Udupi promotion flow
-- Prior milestone #12 (discover-filter-simplification) below remains parked/stale from 2026-06-08 — not touched this session
+- Phase: PR #2384 (#2380 split PendingListings.tsx into query/filters/selection/mutations hooks) open, READY_AWAITING_OWNER — not merged, awaiting owner review
+- Prior entries (PR #2178, milestone #12) remain parked/stale — not touched this session
 
 ## Milestone #12 — Execution Order
 
