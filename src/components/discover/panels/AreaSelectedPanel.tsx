@@ -31,6 +31,17 @@ import { StartOverButton } from '../StartOverButton';
 const QUICK_PROPERTY_TYPES = ['apartment', 'villa', 'land'] as const;
 const QUICK_BEDROOMS = [2, 3] as const;
 
+// Issue #2023 — fixed budget bands (rupees), matching the frozen mock
+// (docs/design/retrends-design-system/ui_kits/new_discover/src/ExpPanel.jsx
+// ~L55-72: "Any price" / "≤50L" / "≤80L" / "≤1.2Cr"). A max-only band; the
+// "Any price" chip clears priceMin/priceMax entirely (there is no min-price
+// control on this card).
+const QUICK_BUDGETS = [
+  { label: '≤ ₹50L', max: 5_000_000 },
+  { label: '≤ ₹80L', max: 8_000_000 },
+  { label: '≤ ₹1.2Cr', max: 12_000_000 },
+] as const;
+
 const PROPERTY_TYPE_LABELS: Record<string, string> = {
   apartment: 'Apartments',
   villa: 'Villas',
@@ -111,6 +122,18 @@ interface AreaSelectedPanelProps {
   onCrumbRegion?: () => void;
   /** Breadcrumb: navigate back to the selected group's drill-down (group crumb). */
   onCrumbGroup?: () => void;
+  /**
+   * Issue #2023 code-review follow-up — whether the "Ready to move" quick
+   * filter chip has any effect on the listings actually shown by the calling
+   * surface. Defaults to `true` so existing callers (e.g. NodeListingsSurface,
+   * which forwards `readyToMove` to useDiscoverListings via
+   * buildDiscoverSearchParams) keep their current behavior unchanged. Callers
+   * whose listings hook has no readyToMove/possessionStatus param (e.g. the
+   * default area-leaf surface backed by useDiscoverCityListings) must pass
+   * `false` — the chip then renders visually disabled and inert instead of
+   * silently toggling active with no effect on the results.
+   */
+  isReadyToMoveSupported?: boolean;
 }
 
 export function AreaSelectedPanel({
@@ -147,6 +170,7 @@ export function AreaSelectedPanel({
   onCrumbCity,
   onCrumbRegion,
   onCrumbGroup,
+  isReadyToMoveSupported = true,
 }: AreaSelectedPanelProps) {
   const navigate = useNavigate();
   const areaLabel = selectedArea.areaLabel;
@@ -173,9 +197,22 @@ export function AreaSelectedPanel({
     [filters.bedrooms],
   );
   const allTypesActive = activePropertyTypes.size === 0;
+  // Budget chips are single-select (max-only bands); "Any price" is active
+  // when no priceMax is set.
+  const activePriceMax = filters.priceMax;
+  const activeReadyToMove = Boolean(filters.readyToMove);
 
   const hasPropertyFilters = Boolean(
-    filters.propertyTypes?.length || filters.bedrooms?.length || filters.priceMin || filters.priceMax
+    filters.propertyTypes?.length ||
+      filters.bedrooms?.length ||
+      filters.priceMin ||
+      filters.priceMax ||
+      // Issue #2023 code-review follow-up — a stale/URL-carried readyToMove
+      // has no effect on this surface's listings when unsupported (see
+      // `isReadyToMoveSupported` JSDoc), so it must not drive "filters are
+      // active" copy/empty-state messaging here either — that would tell the
+      // user filters are narrowing results when none actually are.
+      (isReadyToMoveSupported && filters.readyToMove)
   );
 
   // Toggle property type: add if not present, remove if already active
@@ -210,6 +247,25 @@ export function AreaSelectedPanel({
     },
     [filters, activeBedrooms, onFiltersChange],
   );
+
+  // Budget chips are single-select: picking a band replaces priceMax (and
+  // clears priceMin — this card has no min control). `undefined` = "Any price".
+  const handleSelectBudget = useCallback(
+    (max: number | undefined) => {
+      if (!onFiltersChange) return;
+      onFiltersChange({ ...filters, priceMin: undefined, priceMax: max });
+    },
+    [filters, onFiltersChange],
+  );
+
+  // "Ready to move" is a boolean toggle chip. Issue #2023 code-review follow-up —
+  // when the calling surface's listings hook can't actually filter on this
+  // (isReadyToMoveSupported === false), the chip must not be toggleable at all,
+  // so this bails out even if a click somehow reaches it (e.g. programmatic).
+  const handleToggleReadyToMove = useCallback(() => {
+    if (!onFiltersChange || !isReadyToMoveSupported) return;
+    onFiltersChange({ ...filters, readyToMove: activeReadyToMove ? undefined : true });
+  }, [filters, activeReadyToMove, onFiltersChange, isReadyToMoveSupported]);
 
   // Clear property-type filters only; preserve school, polygon, city, date, and other active filters
   const handleClearPropertyFilters = useCallback(() => {
@@ -479,6 +535,46 @@ export function AreaSelectedPanel({
                     {PROPERTY_TYPE_LABELS[type]}
                   </Button>
                 ))}
+                {/* Issue #2023 — "Ready to move" sits on the trailing edge of the Type
+                    row per the frozen mock (ExpPanel.jsx ~L55-72). Evergreen-tint
+                    active state, matching this file's existing trust/verified colour
+                    convention (ShieldCheck / evergreen-tint result-summary strip
+                    below), distinct from the navy property-type and copper bedroom
+                    chips.
+
+                    Code-review follow-up — not every calling surface can actually
+                    filter on this (see `isReadyToMoveSupported` JSDoc above). When
+                    unsupported the chip renders muted/disabled with an explanatory
+                    title instead of toggling into an active state that has no
+                    effect on the listings shown — an active-looking chip that does
+                    nothing is a UX-honesty bug, not a cosmetic one. If a stale
+                    `filters.readyToMove=true` arrives from a prior session/URL on
+                    an unsupported surface, this deliberately still renders inert
+                    (not visually active) rather than silently clearing the user's
+                    URL state as a side effect. */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!isReadyToMoveSupported}
+                  className={cn(
+                    'h-8 px-3 text-xs ml-auto',
+                    !isReadyToMoveSupported
+                      ? 'cursor-not-allowed opacity-50'
+                      : activeReadyToMove
+                        ? 'border-evergreen bg-evergreen-tint text-evergreen shadow-sm hover:bg-evergreen-tint/80'
+                        : '',
+                  )}
+                  onClick={isReadyToMoveSupported ? handleToggleReadyToMove : undefined}
+                  data-testid="quick-chip-ready-to-move"
+                  aria-pressed={isReadyToMoveSupported && activeReadyToMove}
+                  title={
+                    isReadyToMoveSupported
+                      ? undefined
+                      : "Ready-to-move filtering isn't available in this view yet — try Browse all listings"
+                  }
+                >
+                  Ready to move
+                </Button>
               </div>
             </div>
 
@@ -504,6 +600,49 @@ export function AreaSelectedPanel({
                     aria-pressed={activeBedrooms.has(bed)}
                   >
                     {bed} BHK
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                Budget
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {/* Fixed budget bands (mock parity) — navy active state, matching
+                    the property-type chips (both are single-facet selections). */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    'h-8 px-3 text-xs',
+                    activePriceMax == null
+                      ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+                      : '',
+                  )}
+                  onClick={() => handleSelectBudget(undefined)}
+                  data-testid="quick-chip-budget-any"
+                  aria-pressed={activePriceMax == null}
+                >
+                  Any price
+                </Button>
+                {QUICK_BUDGETS.map((budget) => (
+                  <Button
+                    key={budget.max}
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      'h-8 px-3 text-xs',
+                      activePriceMax === budget.max
+                        ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+                        : '',
+                    )}
+                    onClick={() => handleSelectBudget(budget.max)}
+                    data-testid={`quick-chip-budget-${budget.max}`}
+                    aria-pressed={activePriceMax === budget.max}
+                  >
+                    {budget.label}
                   </Button>
                 ))}
               </div>

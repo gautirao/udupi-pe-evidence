@@ -117,7 +117,7 @@ class CityAreaListingsServiceTest {
         stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, 13.34091, 74.74215);
 
         CityAreaListingsResponse resp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, false);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, false);
 
         AreaListingCard card = resp.areas().get(0).listings().get(0);
         assertThat(card.latitude()).isEqualTo(13.34);
@@ -133,7 +133,7 @@ class CityAreaListingsServiceTest {
         stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, 13.34091, 74.74215);
 
         CityAreaListingsResponse resp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, true);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, true);
 
         AreaListingCard card = resp.areas().get(0).listings().get(0);
         assertThat(card.latitude()).isEqualTo(13.34);
@@ -150,11 +150,57 @@ class CityAreaListingsServiceTest {
         stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, null, null);
 
         CityAreaListingsResponse resp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, false);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, false);
 
         AreaListingCard card = resp.areas().get(0).listings().get(0);
         assertThat(card.latitude()).isNull();
         assertThat(card.longitude()).isNull();
+    }
+
+    // ── #2023 (BLOCKING review fix): readyToMove now filters this endpoint too,
+    // consistent with markers/navigation-counts/authenticated Browse-all via
+    // DiscoverListingPredicateBuilder (possession_status = 'READY'). ──────────
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#2023: readyToMove=true adds the possession_status = 'READY' predicate to the SQL")
+    void getAreaListings_readyToMoveTrue_addsPossessionStatusPredicate() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, null, null);
+
+        service.getAreaListings(
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, true, false);
+
+        org.mockito.ArgumentCaptor<String> sqlCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(jdbc).query(sqlCaptor.capture(), any(RowCallbackHandler.class), any(Object[].class));
+        assertThat(sqlCaptor.getValue()).contains("pl.possession_status = 'READY'");
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#2023: readyToMove absent (null) does NOT add the possession_status predicate")
+    void getAreaListings_readyToMoveAbsent_noPossessionStatusPredicate() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, null, null);
+
+        service.getAreaListings(
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, false);
+
+        org.mockito.ArgumentCaptor<String> sqlCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(jdbc).query(sqlCaptor.capture(), any(RowCallbackHandler.class), any(Object[].class));
+        assertThat(sqlCaptor.getValue()).doesNotContain("possession_status");
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#2023: readyToMove=false does NOT add the possession_status predicate")
+    void getAreaListings_readyToMoveFalse_noPossessionStatusPredicate() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, null, null);
+
+        service.getAreaListings(
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, false, false);
+
+        org.mockito.ArgumentCaptor<String> sqlCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(jdbc).query(sqlCaptor.capture(), any(RowCallbackHandler.class), any(Object[].class));
+        assertThat(sqlCaptor.getValue()).doesNotContain("possession_status");
     }
 
     @Test
@@ -165,9 +211,9 @@ class CityAreaListingsServiceTest {
         stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, 13.34091, 74.74215);
 
         CityAreaListingsResponse anonResp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, false);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, false);
         CityAreaListingsResponse authedResp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, true);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, true);
 
         AreaListingCard anonCard = anonResp.areas().get(0).listings().get(0);
         AreaListingCard authedCard = authedResp.areas().get(0).listings().get(0);
@@ -211,7 +257,7 @@ class CityAreaListingsServiceTest {
                 purpose, pricePaise, monthlyRent);
 
         CityAreaListingsResponse resp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, isAuthenticated);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, isAuthenticated);
 
         AreaListingCard card = resp.areas().get(0).listings().get(0);
         assertThat(card.listingPurpose()).isEqualTo(purpose);
@@ -234,9 +280,9 @@ class CityAreaListingsServiceTest {
                 "rent", SALE_PRICE_PAISE, RENT_MONTHLY_RENT);
 
         CityAreaListingsResponse anonResp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, false);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, false);
         CityAreaListingsResponse authedResp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, true);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, true);
 
         AreaListingCard anonCard = anonResp.areas().get(0).listings().get(0);
         AreaListingCard authedCard = authedResp.areas().get(0).listings().get(0);
@@ -264,9 +310,9 @@ class CityAreaListingsServiceTest {
                 "rent", null, null);
 
         CityAreaListingsResponse anonResp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, false);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, false);
         CityAreaListingsResponse authedResp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, true);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, true);
 
         assertThat(anonResp.areas().get(0).listings().get(0).monthlyRentBand()).isNull();
         assertThat(anonResp.areas().get(0).listings().get(0).monthlyRentRupees()).isNull();
@@ -283,9 +329,9 @@ class CityAreaListingsServiceTest {
                 "rent", null, 0L);
 
         CityAreaListingsResponse anonResp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, false);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, false);
         CityAreaListingsResponse authedResp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, true);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, true);
 
         AreaListingCard anonCard = anonResp.areas().get(0).listings().get(0);
         assertThat(anonCard.monthlyRentBand()).isNull();
@@ -304,9 +350,9 @@ class CityAreaListingsServiceTest {
                 "rent", null, -1000L);
 
         CityAreaListingsResponse anonResp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, false);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, false);
         CityAreaListingsResponse authedResp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, true);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, true);
 
         AreaListingCard anonCard = anonResp.areas().get(0).listings().get(0);
         assertThat(anonCard.monthlyRentBand()).isNull();

@@ -45,11 +45,16 @@ export function resolveEffectiveAreaLeafFilters(
         bedrooms: committedFilters.bedrooms,
         priceMin: committedFilters.priceMin,
         priceMax: committedFilters.priceMax,
+        // Issue #2023 — was missing from this projection, so a readyToMove
+        // toggle never reached AreaSelectedPanel's chip-display `filters` prop
+        // for the AREA-leaf surface (AreaLeafListingsSurface).
+        readyToMove: committedFilters.readyToMove,
       }
     : {
         propertyTypes: navFilters.propertyTypes as PropertyFilters['propertyTypes'],
         bedrooms: navFilters.bedrooms,
         priceMin: navFilters.priceMin,
         priceMax: navFilters.priceMax,
+        readyToMove: navFilters.readyToMove,
       };
 }

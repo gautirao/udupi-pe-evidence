@@ -820,6 +820,7 @@ function AreaLeafListingsSurface({
       nav.filters.bedrooms,
       nav.filters.priceMin,
       nav.filters.priceMax,
+      nav.filters.readyToMove,
     ],
   );
   // Issue #2353 — true when the caller supplied the map's already-fetched
@@ -855,6 +856,9 @@ function AreaLeafListingsSurface({
     maxPrice: effectiveFilters.priceMax != null ? effectiveFilters.priceMax * 100 : undefined,
     q: debouncedSearch?.trim() || undefined,
     listingPurpose: intentListingPurpose,
+    // Issue #2023 — CityAreaListingsService now filters on possession_status = 'READY'
+    // for this endpoint too, matching markers/navigation-counts/authenticated Browse-all.
+    readyToMove: effectiveFilters.readyToMove,
     isAuthenticated,
   });
   // The resolved listings/loading/error/fetching signals this surface renders
@@ -1184,6 +1188,9 @@ function AreaLeafListingsSurface({
               bedrooms: next.bedrooms,
               priceMin: next.priceMin,
               priceMax: next.priceMax,
+              // Issue #2023 — was missing, so a readyToMove toggle from
+              // AreaSelectedPanel's quick-filter chip was silently dropped on commit.
+              readyToMove: next.readyToMove,
             });
             return;
           }
@@ -1193,6 +1200,7 @@ function AreaLeafListingsSurface({
             bedrooms: next.bedrooms,
             priceMin: next.priceMin,
             priceMax: next.priceMax,
+            readyToMove: next.readyToMove,
           });
         }}
         searchQuery={searchQuery}
@@ -1201,6 +1209,15 @@ function AreaLeafListingsSurface({
         onSelectListing={(id) => actions.setSelectedListing(id)}
         intent={nav.intent}
         onAddSchool={onAddSchool}
+        // Issue #2023 (BLOCKING review fix) — this AREA-leaf surface's listings
+        // come from `useDiscoverCityListings` (see `areaListingsForPanel` /
+        // `areaListingsQuery` above), which now forwards `readyToMove` to
+        // `CityAreaListingsService` and filters on `possession_status = 'READY'`,
+        // for both anon and authenticated callers — the same predicate
+        // markers/navigation-counts/authenticated "Browse all" already apply.
+        // The chip is genuinely functional here now, so it stays enabled —
+        // prop omitted, relying on AreaSelectedPanel's own `= true` default,
+        // same as `NodeListingsSurface`'s "Browse all" surface.
       />
     </div>
   );

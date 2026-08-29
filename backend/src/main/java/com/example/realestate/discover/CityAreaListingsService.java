@@ -61,6 +61,7 @@ public class CityAreaListingsService {
      *                     may cause a {@code DataAccessException} which propagates to the global
      *                     exception handler.
      * @param listingPurpose  optional listing purpose filter ('sale' or 'rent'); null/blank = no filter
+     * @param readyToMove     optional; true = restrict to possession_status = 'READY'; null/false = no filter
      * @param isAuthenticated true when the caller presented a valid JWT; false for anonymous callers.
      *                        When false, pricePaise is omitted and priceBand (coarse label) is returned
      *                        instead. Server-side price filtering (minPrice/maxPrice) always uses the
@@ -77,6 +78,7 @@ public class CityAreaListingsService {
                                                     String propertyType,
                                                     String q,
                                                     String listingPurpose,
+                                                    Boolean readyToMove,
                                                     boolean isAuthenticated) {
 
         int limit = clampLimit(rawLimit);
@@ -134,6 +136,13 @@ public class CityAreaListingsService {
         }
         if (normPurpose != null) {
             joinFilterClauses.append("\n                        AND pl.listing_purpose = ?");
+        }
+        // readyToMove — #2023: same predicate DiscoverListingPredicateBuilder already applies
+        // for markers/navigation-counts/authenticated Browse-all (possession_status = 'READY').
+        // No bind param needed; 'READY' is a fixed literal, same pattern as the
+        // agricultural_land exclusion above.
+        if (Boolean.TRUE.equals(readyToMove)) {
+            joinFilterClauses.append("\n                        AND pl.possession_status = 'READY'");
         }
 
         // Single query: join areas → cities to enforce city ownership, lateral join to listing_images

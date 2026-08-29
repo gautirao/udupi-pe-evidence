@@ -153,6 +153,49 @@ describe('useDiscoverCityListings', () => {
     expect(params.get('maxPrice')).toBe('10000000');
   });
 
+  // Issue #2023 (BLOCKING review fix) — readyToMove now forwarded to the backend,
+  // consistent with minPrice/maxPrice above (CityAreaListingsService filters on
+  // possession_status = 'READY').
+  it('appends readyToMove when true', async () => {
+    mockGet.mockResolvedValue(BASE_RESPONSE);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverCityListings({
+          city: 'udupi',
+          areaKeys: ['udupi|manipal'],
+          readyToMove: true,
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.get('readyToMove')).toBe('true');
+  });
+
+  it('omits readyToMove when false or absent', async () => {
+    mockGet.mockResolvedValue(BASE_RESPONSE);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverCityListings({
+          city: 'udupi',
+          areaKeys: ['udupi|manipal'],
+          readyToMove: false,
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.has('readyToMove')).toBe(false);
+  });
+
   it('appends bedrooms when provided', async () => {
     mockGet.mockResolvedValue(BASE_RESPONSE);
 

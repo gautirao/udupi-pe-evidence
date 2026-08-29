@@ -83,6 +83,124 @@ describe('AreaSelectedPanel', () => {
     });
   });
 
+  // Issue #2023 — Budget (fixed bands) and Ready-to-move chips, from the frozen mock
+  // (docs/design/retrends-design-system/ui_kits/new_discover/src/ExpPanel.jsx).
+  describe('Budget and Ready to move chips', () => {
+    it('renders budget chips', () => {
+      renderPanel();
+      expect(screen.getByTestId('quick-chip-budget-any')).toBeInTheDocument();
+      expect(screen.getByTestId('quick-chip-budget-5000000')).toBeInTheDocument();
+      expect(screen.getByTestId('quick-chip-budget-8000000')).toBeInTheDocument();
+      expect(screen.getByTestId('quick-chip-budget-12000000')).toBeInTheDocument();
+    });
+
+    it('renders the ready-to-move chip', () => {
+      renderPanel();
+      expect(screen.getByTestId('quick-chip-ready-to-move')).toBeInTheDocument();
+    });
+
+    it('sets priceMax (and clears priceMin) when a budget chip is clicked', () => {
+      const onFiltersChange = vi.fn();
+      renderPanel({ onFiltersChange });
+      fireEvent.click(screen.getByTestId('quick-chip-budget-5000000'));
+      expect(onFiltersChange).toHaveBeenCalledWith({ priceMin: undefined, priceMax: 5_000_000 });
+    });
+
+    it('clears priceMin/priceMax when "Any price" is clicked', () => {
+      const onFiltersChange = vi.fn();
+      renderPanel({ filters: { priceMax: 8_000_000 }, onFiltersChange });
+      fireEvent.click(screen.getByTestId('quick-chip-budget-any'));
+      expect(onFiltersChange).toHaveBeenCalledWith({ priceMin: undefined, priceMax: undefined });
+    });
+
+    it('sets readyToMove on click', () => {
+      const onFiltersChange = vi.fn();
+      renderPanel({ onFiltersChange });
+      fireEvent.click(screen.getByTestId('quick-chip-ready-to-move'));
+      expect(onFiltersChange).toHaveBeenCalledWith({ readyToMove: true });
+    });
+
+    it('clears readyToMove when toggled again', () => {
+      const onFiltersChange = vi.fn();
+      renderPanel({ filters: { readyToMove: true }, onFiltersChange });
+      fireEvent.click(screen.getByTestId('quick-chip-ready-to-move'));
+      expect(onFiltersChange).toHaveBeenCalledWith({ readyToMove: undefined });
+    });
+
+    it('highlights the active budget chip', () => {
+      renderPanel({ filters: { priceMax: 8_000_000 } });
+      expect(screen.getByTestId('quick-chip-budget-8000000')).toHaveClass('bg-primary');
+      expect(screen.getByTestId('quick-chip-budget-any')).not.toHaveClass('bg-primary');
+      expect(screen.getByTestId('quick-chip-budget-5000000')).not.toHaveClass('bg-primary');
+    });
+
+    it('highlights "Any price" as active when no priceMax is set', () => {
+      renderPanel();
+      expect(screen.getByTestId('quick-chip-budget-any')).toHaveClass('bg-primary');
+    });
+
+    it('highlights the ready-to-move chip when active', () => {
+      renderPanel({ filters: { readyToMove: true } });
+      expect(screen.getByTestId('quick-chip-ready-to-move')).toHaveClass('bg-evergreen-tint');
+      expect(screen.getByTestId('quick-chip-ready-to-move')).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('is not highlighted when readyToMove is not set', () => {
+      renderPanel();
+      expect(screen.getByTestId('quick-chip-ready-to-move')).not.toHaveClass('bg-evergreen-tint');
+      expect(screen.getByTestId('quick-chip-ready-to-move')).toHaveAttribute('aria-pressed', 'false');
+    });
+  });
+
+  // Issue #2023 code-review follow-up — a surface whose listings hook can't
+  // actually filter on readyToMove (e.g. the area-leaf surface backed by
+  // useDiscoverCityListings) must render the chip disabled/inert instead of
+  // letting the user toggle it into an active-looking state with no effect.
+  describe('isReadyToMoveSupported', () => {
+    it('renders the chip disabled and clicking it has no effect when unsupported', () => {
+      const onFiltersChange = vi.fn();
+      renderPanel({ onFiltersChange, isReadyToMoveSupported: false });
+      const chip = screen.getByTestId('quick-chip-ready-to-move');
+      expect(chip).toBeDisabled();
+      fireEvent.click(chip);
+      expect(onFiltersChange).not.toHaveBeenCalled();
+    });
+
+    it('gives the disabled chip an explanatory title', () => {
+      renderPanel({ isReadyToMoveSupported: false });
+      expect(screen.getByTestId('quick-chip-ready-to-move')).toHaveAttribute(
+        'title',
+        expect.stringContaining('Browse all'),
+      );
+    });
+
+    it('never renders aria-pressed=true when unsupported, even if readyToMove is already truthy', () => {
+      renderPanel({ filters: { readyToMove: true }, isReadyToMoveSupported: false });
+      const chip = screen.getByTestId('quick-chip-ready-to-move');
+      expect(chip).toHaveAttribute('aria-pressed', 'false');
+      expect(chip).not.toHaveClass('bg-evergreen-tint');
+      expect(chip).toBeDisabled();
+    });
+
+    it('keeps the chip enabled and functional when isReadyToMoveSupported is omitted (default true)', () => {
+      const onFiltersChange = vi.fn();
+      renderPanel({ onFiltersChange });
+      const chip = screen.getByTestId('quick-chip-ready-to-move');
+      expect(chip).not.toBeDisabled();
+      fireEvent.click(chip);
+      expect(onFiltersChange).toHaveBeenCalledWith({ readyToMove: true });
+    });
+
+    it('keeps the chip enabled when isReadyToMoveSupported is explicitly true', () => {
+      const onFiltersChange = vi.fn();
+      renderPanel({ onFiltersChange, isReadyToMoveSupported: true });
+      const chip = screen.getByTestId('quick-chip-ready-to-move');
+      expect(chip).not.toBeDisabled();
+      fireEvent.click(chip);
+      expect(onFiltersChange).toHaveBeenCalledWith({ readyToMove: true });
+    });
+  });
+
   describe('School CTA', () => {
     it('renders add school CTA', () => {
       renderPanel();

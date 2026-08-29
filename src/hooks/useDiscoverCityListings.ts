@@ -103,6 +103,12 @@ export interface DiscoverCityListingsParams {
   /** Issue #1494 — buy/rent intent mapped to listingPurpose for the backend. */
   listingPurpose?: string;
   /**
+   * Issue #2023 — when true, restricts results to possession_status = 'READY',
+   * consistent with the same filter already applied by markers/navigation-counts/
+   * authenticated Browse-all via DiscoverListingPredicateBuilder.
+   */
+  readyToMove?: boolean;
+  /**
    * Issue #1616 — auth-branched price contract. When true, the api helper attaches
    * the JWT so the backend returns exact pricePaise (no priceBand). When false/absent,
    * no JWT is sent and the backend returns a coarse priceBand string.
@@ -131,6 +137,7 @@ export function useDiscoverCityListings({
   propertyType,
   q,
   listingPurpose,
+  readyToMove,
   isAuthenticated = false,
 }: DiscoverCityListingsParams) {
   // Issue #1911 PR3 — see useDiscoverRegionSummary.ts for the default-context
@@ -151,6 +158,7 @@ export function useDiscoverCityListings({
       propertyType ?? null,
       q?.trim() || null,
       listingPurpose ?? null,
+      readyToMove ?? null,
       // Issue #1616: include auth state so login/logout produces a separate cache bucket.
       // Anon callers receive priceBand; authed callers receive pricePaise — they must not
       // share a cache entry or a stale band response would be served post-login.
@@ -188,6 +196,7 @@ export function useDiscoverCityListings({
       if (propertyType) params.append('propertyType', propertyType);
       if (q?.trim()) params.append('q', q.trim());
       if (listingPurpose) params.append('listingPurpose', listingPurpose);
+      if (readyToMove) params.append('readyToMove', 'true');
       // Issue #1616: do NOT force skipAuth. When the user has a valid session the api
       // helper attaches the JWT (Bearer token) automatically, causing the backend to
       // return exact pricePaise. Anonymous callers have no session so no token is

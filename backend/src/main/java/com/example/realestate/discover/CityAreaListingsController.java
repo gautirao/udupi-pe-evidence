@@ -62,6 +62,10 @@ public class CityAreaListingsController {
      * @param bedrooms     optional bedroom count filter
      * @param propertyType optional property type filter
      * @param q            optional keyword search query (blank treated as absent; max 500 chars)
+     * @param readyToMove  optional; when {@code true}, restricts to listings whose
+     *                     {@code possession_status = 'READY'} (#2023 parity with the
+     *                     authenticated Browse-all / markers / navigation-count paths,
+     *                     which already filter on this via {@code DiscoverListingPredicateBuilder})
      */
     @GetMapping("/cities/{city}/listings")
     public ResponseEntity<CityAreaListingsResponse> getCityAreaListings(
@@ -73,7 +77,8 @@ public class CityAreaListingsController {
             @RequestParam(required = false) Integer bedrooms,
             @RequestParam(required = false) String propertyType,
             @RequestParam(required = false) String q,
-            @RequestParam(required = false) String listingPurpose) {
+            @RequestParam(required = false) String listingPurpose,
+            @RequestParam(required = false) Boolean readyToMove) {
 
         if (areaKeys == null || areaKeys.isEmpty() || areaKeys.stream().allMatch(String::isBlank)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "areaKeys_required");
@@ -97,7 +102,7 @@ public class CityAreaListingsController {
 
         CityAreaListingsResponse response = service.getAreaListings(
                 city, areaKeys, limitPerArea, minPrice, maxPrice, bedrooms, propertyType, q, listingPurpose,
-                isAuthenticated);
+                readyToMove, isAuthenticated);
 
         // Cache-control split by auth state:
         //   anon  → coarsened response; safe to share via public cache (maxAge 60s)

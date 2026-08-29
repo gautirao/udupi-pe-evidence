@@ -59,12 +59,17 @@ export function NodeListingsSurface({
             bedrooms: committedFilters.bedrooms,
             priceMin: committedFilters.priceMin,
             priceMax: committedFilters.priceMax,
+            // Issue #2023 — was missing from this projection, so a readyToMove
+            // toggle in AreaSelectedPanel never reached the chip-display
+            // `filters` prop (nor this surface's own listings queries below).
+            readyToMove: committedFilters.readyToMove,
           }
         : {
             propertyTypes: nav.filters.propertyTypes as PropertyFilters['propertyTypes'],
             bedrooms: nav.filters.bedrooms,
             priceMin: nav.filters.priceMin,
             priceMax: nav.filters.priceMax,
+            readyToMove: nav.filters.readyToMove,
           },
     [
       committedFilters,
@@ -72,6 +77,7 @@ export function NodeListingsSurface({
       nav.filters.bedrooms,
       nav.filters.priceMin,
       nav.filters.priceMax,
+      nav.filters.readyToMove,
     ],
   );
 
@@ -83,6 +89,7 @@ export function NodeListingsSurface({
     effectiveFilters.bedrooms?.join(',') ?? '',
     effectiveFilters.priceMin ?? '',
     effectiveFilters.priceMax ?? '',
+    effectiveFilters.readyToMove ?? '',
     debouncedSearch ?? '',
   ].join('|');
   useEffect(() => {
@@ -134,6 +141,9 @@ export function NodeListingsSurface({
     maxPrice: effectiveFilters.priceMax != null ? effectiveFilters.priceMax * 100 : undefined,
     q: debouncedSearch?.trim() || undefined,
     listingPurpose: intentListingPurpose,
+    // Issue #2023 — CityAreaListingsService now filters on possession_status = 'READY',
+    // same predicate markers/navigation-counts/authenticated Browse-all already apply.
+    readyToMove: effectiveFilters.readyToMove,
   });
 
   // Normalise anon city-listing items to the DiscoverListingItem shape so a single
@@ -154,8 +164,17 @@ export function NodeListingsSurface({
     // server call above only forwards the FIRST selected value of each (single-value params),
     // while the user may have selected multiple — so client-side filtering still needs to
     // enforce the full multi-select set.
+    //
+    // Issue #2023 — readyToMove is ALSO excluded here (not just price), for the same
+    // reason: it is already sent to and authoritatively filtered by the public
+    // /api/discover/cities/{city}/listings endpoint above (readyToMove param,
+    // CityAreaListingsService). The anon response contract (`DiscoverCityListingItem`)
+    // has no `possessionStatus` field to re-check client-side, and re-applying
+    // `applyAnonPropertyFilters`'s `l.possessionStatus === 'ready_to_move'` check here
+    // would always be false and silently wipe every server-correct row.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { priceMin: _priceMin, priceMax: _priceMax, ...nonPriceFilters } = effectiveFilters;
+    const { priceMin: _priceMin, priceMax: _priceMax, readyToMove: _readyToMove, ...nonPriceFilters } =
+      effectiveFilters;
     const filtered = applyAnonPropertyFilters(
       raw as Parameters<typeof applyAnonPropertyFilters>[0],
       nonPriceFilters,
@@ -304,6 +323,9 @@ export function NodeListingsSurface({
               bedrooms: next.bedrooms,
               priceMin: next.priceMin,
               priceMax: next.priceMax,
+              // Issue #2023 — was missing, so a readyToMove toggle from
+              // AreaSelectedPanel's quick-filter chip was silently dropped on commit.
+              readyToMove: next.readyToMove,
             });
             return;
           }
@@ -313,6 +335,7 @@ export function NodeListingsSurface({
             bedrooms: next.bedrooms,
             priceMin: next.priceMin,
             priceMax: next.priceMax,
+            readyToMove: next.readyToMove,
           });
         }}
         searchQuery={searchQuery}
@@ -321,6 +344,13 @@ export function NodeListingsSurface({
         onSelectListing={(id) => actions.setSelectedListing(id)}
         intent={nav.intent}
         onAddSchool={onAddSchool}
+        // Issue #2023 (BLOCKING review fix) — this "Browse all" surface now
+        // genuinely applies readyToMove for BOTH authenticated users (via
+        // `useDiscoverListings`'s `filters` arg above) and anonymous users
+        // (via `useDiscoverCityListings`'s `readyToMove` param above, now
+        // filtered server-side by `CityAreaListingsService`). No longer
+        // gated on `isAuthenticated` — prop omitted, relying on
+        // AreaSelectedPanel's own `= true` default.
       />
       {totalPages > 1 ? (
         <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border bg-card shrink-0">
