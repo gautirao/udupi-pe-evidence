@@ -166,3 +166,13 @@ Date: 2026-03-28 | Sprint: standalone/quick | Route: frontend-engineer → code-
 - Deviations: NONE
 - Risks: NONE
 ---
+
+## PR #2378 — fix(#2264): correct pending-queue truncation banner's loaded-row cap
+Date: 2026-08-28 | Sprint: standalone/quick | Route: /quick (ROUTE_AND_RUN, bugfix/single-service/low-risk)
+- What: `src/pages/admin/PendingListings.tsx` truncation banner now displays `listings.length` (the real aggregated row count) instead of a hardcoded `PENDING_PAGE_FETCH_SIZE * MAX_PAGES` (200*25=5000) assumption
+- Why: Original #2264 text is stale — #2369 already redesigned this page and already aggregates + shows a truncation banner. The remaining live bug: the backend clamps page size to 100 (`spring.data.web.pageable.max-page-size`), so the true loaded cap is 2500, not 5000 — the banner could report a false, overstated row count
+- Deviations: NONE — minimal in-place fix, no new mechanism; #2369's filter/sort/drawer/mutation/pagination logic untouched (diff: 2 files, +32/-2)
+- Risks: NONE — no schema/migration/auth touch; blast radius is one banner string
+- Evidence: Bug Fix Protocol fully run (git-stash-isolated fail→fix→pass). `npx vitest run src/pages/admin/__tests__/PendingListings.test.tsx` 23/23 PASS (exit 0); `tsc --noEmit` and `eslint` both exit 0. Pre-push E2E (isolated worktree stack, ports 5231/8231): 30 passed/1 skipped/0 failed (AUTOMATED_PASS)
+- PR: https://github.com/gautirao/udupi-property-explorer/pull/2378 (draft) — head 288b4254
+---

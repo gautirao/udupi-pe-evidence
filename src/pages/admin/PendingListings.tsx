@@ -62,7 +62,16 @@ interface BulkApproveOutcome {
 // full queue across pages client-side and do all filtering/sorting/stats
 // over the complete array — 100-row single-page fetches silently dropped
 // everything past row 100. MAX_PAGES is a safety cap against a pathological
-// unbounded loop, not an expected limit (25 * 200 = 5000 rows).
+// unbounded loop, not an expected limit. Note: the requested page size below
+// is a request only — spring.data.web.pageable.max-page-size (application.yml)
+// silently clamps it server-side (currently 100), so the true per-page count
+// actually loaded can be smaller than PENDING_PAGE_FETCH_SIZE. Never assume
+// PENDING_PAGE_FETCH_SIZE * MAX_PAGES as the loaded-row cap for display —
+// use the real aggregated array length (see the truncated-queue banner below).
+// Also: because filtering/sorting happens entirely over this already-truncated
+// `listings` array (the endpoint has no server-side filter), the truncated-
+// queue banner must never imply that narrowing the visible filters can reveal
+// rows beyond what was already loaded — it cannot (#2378 review finding).
 const PENDING_PAGE_FETCH_SIZE = 200;
 const MAX_PAGES = 25;
 const TABLE_PAGE_SIZE = 20;
@@ -408,8 +417,10 @@ export default function PendingListings() {
             <p className="text-muted-foreground">Review broker-submitted listings</p>
             {truncated && (
               <p className="text-xs text-amber-700" data-testid="pending-queue-truncated-note">
-                Showing first {PENDING_PAGE_FETCH_SIZE * MAX_PAGES} of {totalElements} — narrow with
-                filters to see more.
+                Only the first {listings.length} of {totalElements} pending listings are
+                loaded — the remaining {totalElements - listings.length} are not shown here
+                and cannot be revealed by filtering, since filters only narrow what's
+                already loaded.
               </p>
             )}
           </div>

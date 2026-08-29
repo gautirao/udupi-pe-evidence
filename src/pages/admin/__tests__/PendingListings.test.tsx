@@ -639,5 +639,37 @@ describe('PendingListings', () => {
       await user.click(within(nav).getByRole('button', { name: /^previous$/i }));
       await waitFor(() => expect(screen.getByTestId('pending-row-listing-0')).toBeInTheDocument());
     });
+
+    it('shows the true loaded-row cap (not a hardcoded fetch-size assumption) when the queue is truncated by MAX_PAGES (#2264)', async () => {
+      // Mirrors the real backend contract: spring.data.web.pageable.max-page-size
+      // (application.yml) silently clamps any requested `size` down to 100,
+      // regardless of what the client asked for. So even though the UI requests
+      // size=200 per page, the server actually returns 100 rows/page here.
+      const realPageSize = 100;
+      const totalPages = 30; // exceeds the component's MAX_PAGES (25) safety cap
+      const totalElements = 3000;
+      vi.mocked(api.get).mockImplementation(async (url: string) => {
+        const pageIndex = Number(url.match(/page=(\d+)/)?.[1] ?? '0');
+        const content = Array.from({ length: realPageSize }, (_, i) =>
+          makeListing({ id: `p${pageIndex}-${i}` }),
+        );
+        return makePage(content, { size: realPageSize, number: pageIndex, totalElements, totalPages });
+      });
+      renderPage();
+
+      const note = await screen.findByTestId('pending-queue-truncated-note');
+      // 25 pages * 100 real rows/page = 2500 actually loaded. The old code
+      // displayed PENDING_PAGE_FETCH_SIZE * MAX_PAGES (200 * 25 = 5000),
+      // which ignores the backend's real max-page-size clamp and overstates
+      // how many rows are actually shown.
+      expect(note).toHaveTextContent('Only the first 2500 of 3000 pending listings are loaded');
+      // #2378 review finding: this page filters/sorts entirely client-side over
+      // the already-truncated `listings` array — the backend does not support
+      // server-side search/filter, so narrowing the visible filters can never
+      // surface the 500 rows that were never loaded. The banner must not imply
+      // otherwise.
+      expect(note).toHaveTextContent('cannot be revealed by filtering');
+      expect(note.textContent).not.toMatch(/narrow.*filters?.*(see|reveal|more)/i);
+    });
   });
 });
