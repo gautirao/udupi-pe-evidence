@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -14,6 +14,8 @@ import {
 import type { NavigationTreeNode } from '@/lib/schemas/navigationHierarchy';
 import { NavigationHierarchyTreeNode } from './NavigationHierarchyTreeNode';
 import { NavigationHierarchyTable } from './NavigationHierarchyTable';
+import { NavigationHierarchySelectionPanel } from './NavigationHierarchySelectionPanel';
+import type { OverridePrefillInput } from './navigationHierarchyOverrideRules';
 
 type ViewMode = 'tree' | 'table';
 
@@ -48,8 +50,27 @@ function collectExpandableKeys(nodes: readonly NavigationTreeNode[], maxDepth?: 
  * SAME already-preview-aware `useDiscoverAreas` hook the reused Discover
  * components use — never from the structural tree/diff response, so it can
  * never leak into a checksum/structural comparison.
+ *
+ * Issue #2207 — single-node selection, independent of expand/collapse.
+ * `selectedNodeKey` is looked up against `rows` (the full flatten) on every
+ * render rather than a cached node object, so:
+ *  - a selection hidden by search/collapse state stays selected (its details
+ *    panel keeps showing) — it's just not the DOM row that's hidden;
+ *  - a selection that structurally no longer exists after a refetch (e.g. an
+ *    override just excluded/moved it) resolves to `undefined` and gets
+ *    cleared by the effect below, rather than pointing at stale data.
  */
-export function NavigationHierarchyTree() {
+export interface NavigationHierarchyTreeProps {
+  /** True only when the revision's lifecycle_status === 'PREPARED'. Gates the selection panel's override actions. Defaults to false (read-only) so existing callers that don't pass it stay safe. */
+  overridesEditable?: boolean;
+  /** Issue #2207 — called when an override action is started from the selection panel; the caller (CityLaunchPreview) prefills NavigationOverridesPanel and switches to the Overrides tab. */
+  onRequestOverride?: (prefill: OverridePrefillInput) => void;
+}
+
+export function NavigationHierarchyTree({
+  overridesEditable = false,
+  onRequestOverride,
+}: NavigationHierarchyTreeProps = {}) {
   const tree = useNavigationTree();
   // The `city` argument only feeds the LIVE-mode path string, which
   // discoverPath ignores entirely in preview mode (see DiscoverDataSourceContext) —
@@ -60,9 +81,24 @@ export function NavigationHierarchyTree() {
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedKeys, setExpandedKeys] = useState<Set<string> | null>(null);
+  const [selectedNodeKey, setSelectedNodeKey] = useState<string | null>(null);
 
   const forest = useMemo(() => (tree.data ? buildNavigationForest(tree.data.nodes) : []), [tree.data]);
   const rows = useMemo(() => flattenNavigationForest(forest), [forest]);
+  const selectedNode = useMemo(
+    () => (selectedNodeKey ? rows.find((row) => row.nodeKey === selectedNodeKey) ?? null : null),
+    [rows, selectedNodeKey],
+  );
+
+  // Issue #2207 — clear selection only when the selected node has actually
+  // disappeared from the tree's structural data (e.g. an override just
+  // excluded/moved it and the tree refetched). Never cleared just because
+  // search or collapse state currently hides its row.
+  useEffect(() => {
+    if (selectedNodeKey && !rows.some((row) => row.nodeKey === selectedNodeKey)) {
+      setSelectedNodeKey(null);
+    }
+  }, [rows, selectedNodeKey]);
   const defaultExpandedKeys = useMemo(
     () => collectExpandableKeys(forest, DEFAULT_EXPANDED_MAX_DEPTH),
     [forest],
@@ -226,22 +262,38 @@ export function NavigationHierarchyTree() {
       </div>
 
       {viewMode === 'tree' ? (
-        <div
-          role="tree"
-          aria-label="Revision navigation hierarchy"
-          className="overflow-x-auto p-2"
-          data-testid="navigation-hierarchy-tree-view"
-        >
-          {forest.map((root) => (
-            <NavigationHierarchyTreeNode
-              key={root.nodeKey}
-              node={root}
-              expandedKeys={effectiveExpandedKeys}
-              onToggle={toggleNode}
-              listingCountByAreaKey={listingCountByAreaKey}
-              matchTerm={matchTerm}
+        <div className="flex items-start">
+          <div
+            role="tree"
+            aria-label="Revision navigation hierarchy"
+            className="min-w-0 flex-1 overflow-x-auto p-2"
+            data-testid="navigation-hierarchy-tree-view"
+          >
+            {forest.map((root) => (
+              <NavigationHierarchyTreeNode
+                key={root.nodeKey}
+                node={root}
+                expandedKeys={effectiveExpandedKeys}
+                onToggle={toggleNode}
+                listingCountByAreaKey={listingCountByAreaKey}
+                matchTerm={matchTerm}
+                selectedNodeKey={selectedNodeKey}
+                onSelect={(node) => setSelectedNodeKey(node.nodeKey)}
+              />
+            ))}
+          </div>
+          {selectedNode && (
+            <NavigationHierarchySelectionPanel
+              node={selectedNode}
+              listingCount={
+                selectedNode.nodeType === 'AREA' && selectedNode.areaKey != null
+                  ? listingCountByAreaKey.get(selectedNode.areaKey)
+                  : undefined
+              }
+              overridesEditable={overridesEditable}
+              onRequestOverride={onRequestOverride}
             />
-          ))}
+          )}
         </div>
       ) : (
         <NavigationHierarchyTable rows={rows} listingCountByAreaKey={listingCountByAreaKey} />

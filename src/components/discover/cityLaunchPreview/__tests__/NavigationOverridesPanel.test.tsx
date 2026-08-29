@@ -118,6 +118,37 @@ describe('NavigationOverridesPanel — apply', () => {
   });
 });
 
+// Issue #2207 — hierarchy-selection prefill (NavigationHierarchyTree ->
+// NavigationOverridesPanel via CityLaunchPreview's onRequestOverride wiring).
+describe('NavigationOverridesPanel — initialOverride prefill', () => {
+  it('seeds an Area-subject kind + subjectAreaKey from the prefill', () => {
+    render(
+      <NavigationOverridesPanel
+        editable
+        initialOverride={{ kind: 'MOVE_AREA', subjectAreaKey: 'IN|KA|Udupi|Manipal' }}
+      />,
+    );
+    expect(screen.getByLabelText('Area key')).toHaveValue('IN|KA|Udupi|Manipal');
+    expect(screen.getByLabelText('Target parent node key')).toBeInTheDocument();
+  });
+
+  it('seeds a Node-subject kind + subjectNodeKey from the prefill, never leaking subjectAreaKey', () => {
+    render(
+      <NavigationOverridesPanel
+        editable
+        initialOverride={{ kind: 'RELABEL', subjectNodeKey: 'c:north:manipal' }}
+      />,
+    );
+    expect(screen.getByLabelText('Node key')).toHaveValue('c:north:manipal');
+    expect(screen.queryByLabelText('Area key')).not.toBeInTheDocument();
+  });
+
+  it('falls back to the default EXCLUDE_AREA form when no prefill is given', () => {
+    render(<NavigationOverridesPanel editable initialOverride={null} />);
+    expect(screen.getByLabelText('Area key')).toHaveValue('');
+  });
+});
+
 describe('NavigationOverridesPanel — PREPARED-only gating', () => {
   it('editable=false disables the kind select, all inputs, and Apply', () => {
     render(<NavigationOverridesPanel editable={false} />);

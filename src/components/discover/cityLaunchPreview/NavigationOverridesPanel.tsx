@@ -28,6 +28,7 @@ import type {
   NavigationOverrideKind,
   NavigationOverrideRecord,
 } from '@/lib/schemas/navigationHierarchy';
+import type { OverridePrefillInput } from './navigationHierarchyOverrideRules';
 
 const OVERRIDE_KIND_LABELS: Record<NavigationOverrideKind, string> = {
   EXCLUDE_AREA: 'Exclude area',
@@ -153,6 +154,14 @@ function isFormValid(form: FormState): boolean {
 export interface NavigationOverridesPanelProps {
   /** True only when the revision's lifecycle_status === 'PREPARED' — mutations are backend-enforced but also disabled here for UX. */
   editable: boolean;
+  /**
+   * Issue #2207 — seeds the form's kind + subject key from a hierarchy
+   * selection. Only read once, at mount (see `useState` initializer below):
+   * CityLaunchPreview's Tabs unmount this panel whenever its tab isn't
+   * active, so each "start an override from here" click remounts a fresh
+   * panel with the latest prefill — last-action-wins without a sync effect.
+   */
+  initialOverride?: OverridePrefillInput | null;
 }
 
 /**
@@ -162,11 +171,20 @@ export interface NavigationOverridesPanelProps {
  * (revision lifecycle_status === PREPARED, passed down from
  * CityLaunchPreview's existing useValidationState — not re-derived here).
  */
-export function NavigationOverridesPanel({ editable }: NavigationOverridesPanelProps) {
+export function NavigationOverridesPanel({ editable, initialOverride }: NavigationOverridesPanelProps) {
   const overrides = useNavigationOverrides();
   const createOverride = useCreateNavigationOverride();
   const deleteOverride = useDeleteNavigationOverride();
-  const [form, setForm] = useState<FormState>(INITIAL_FORM);
+  const [form, setForm] = useState<FormState>(() =>
+    initialOverride
+      ? {
+          ...INITIAL_FORM,
+          kind: initialOverride.kind,
+          subjectAreaKey: initialOverride.subjectAreaKey ?? '',
+          subjectNodeKey: initialOverride.subjectNodeKey ?? '',
+        }
+      : INITIAL_FORM,
+  );
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();

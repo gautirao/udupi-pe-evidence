@@ -42,6 +42,7 @@ Guardrails for the milestone:
 - NONE — paused per user request before Issue 1 implementation.
 
 ## Recent Completions (last 6)
+- #2207 (admin hierarchy tree: node selection, contextual override actions — first deliverable, bulk deferred) → PR #2383 OPEN, draft, awaiting review (2026-08-29) [/quick]
 - #2264 (pending-listings admin queue truncation banner showed a false loaded-row count — stale issue text vs #2369's redesign, but the banner's `PENDING_PAGE_FETCH_SIZE * MAX_PAGES` math ignored the backend's real `max-page-size: 100` clamp) → PR #2378 OPEN (draft), READY_AWAITING_OWNER (2026-08-28) [/quick]
 - #2345 (visual-cluster marker cards leak stale residential hero content into schools journey) → PR #2358 OPEN, awaiting review (2026-08-27) [/quick]
 - #2177 (City Launch checksum-drift false positive blocking promotion) → PR #2178 OPEN, READY_AWAITING_OWNER_MANUAL_TEST (2026-08-15) [/quick]

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { AlertCircle, Copy, Loader2, ShieldAlert } from 'lucide-react';
 import MapDiscovery from '@/pages/MapDiscovery';
@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NavigationHierarchyTree } from '@/components/discover/cityLaunchPreview/NavigationHierarchyTree';
 import { NavigationDiffView } from '@/components/discover/cityLaunchPreview/NavigationDiffView';
 import { NavigationOverridesPanel } from '@/components/discover/cityLaunchPreview/NavigationOverridesPanel';
+import type { OverridePrefillInput } from '@/components/discover/cityLaunchPreview/navigationHierarchyOverrideRules';
 import {
   useValidationState,
   useToggleCheck,
@@ -82,6 +83,12 @@ export default function CityLaunchPreview() {
   // showing. Separate from `view` (buyer-preview vs launch-readiness),
   // which is unaffected by this PR.
   const [subView, setSubView] = useState<'map' | 'hierarchy' | 'diff' | 'overrides'>('map');
+  // Issue #2207 — set by a hierarchy-selection "start an override" action,
+  // consumed once by NavigationOverridesPanel's initial-state seed below.
+  // Cleared right after being applied (see the effect below) so returning to
+  // the Overrides tab later — unrelated to any prefill click — never
+  // re-seeds a stale selection into a freshly-mounted panel.
+  const [overridePrefill, setOverridePrefill] = useState<OverridePrefillInput | null>(null);
 
   const validationState = useValidationState(cityId, revisionId);
   const toggleCheck = useToggleCheck(cityId, revisionId);
@@ -92,6 +99,15 @@ export default function CityLaunchPreview() {
   // constructed, so preview mode never threads a stale/default city identity.
   const identity = usePreviewCityIdentity(cityId, revisionId);
   const editRevision = useEditRevision(cityId);
+
+  // Issue #2207 — consume the prefill once it's been passed down to a
+  // (freshly-mounted) NavigationOverridesPanel, so a later unrelated visit
+  // to the Overrides tab doesn't re-seed it.
+  useEffect(() => {
+    if (subView === 'overrides' && overridePrefill != null) {
+      setOverridePrefill(null);
+    }
+  }, [subView, overridePrefill]);
 
   if (!isValid) {
     return <InvalidPreviewState message="Invalid preview link — city or revision id is missing." />;
@@ -198,13 +214,19 @@ export default function CityLaunchPreview() {
         </TabsList>
 
         <TabsContent value="hierarchy" className="min-h-0 flex-1 overflow-y-auto">
-          <NavigationHierarchyTree />
+          <NavigationHierarchyTree
+            overridesEditable={overridesEditable}
+            onRequestOverride={(prefill) => {
+              setOverridePrefill(prefill);
+              setSubView('overrides');
+            }}
+          />
         </TabsContent>
         <TabsContent value="diff" className="min-h-0 flex-1 overflow-y-auto">
           <NavigationDiffView />
         </TabsContent>
         <TabsContent value="overrides" className="min-h-0 flex-1 overflow-y-auto">
-          <NavigationOverridesPanel editable={overridesEditable} />
+          <NavigationOverridesPanel editable={overridesEditable} initialOverride={overridePrefill} />
         </TabsContent>
 
         <TabsContent value="map" className="flex min-h-0 flex-1" forceMount hidden={subView !== 'map'}>

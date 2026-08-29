@@ -12,6 +12,16 @@ Date: YYYY-MM-DD | Sprint: <name or standalone/quick> | Route: <agent chain>
 ---
 -->
 
+## PR #2383 — feat(#2207): admin hierarchy tree node selection + contextual override prefill
+Date: 2026-08-29 | Sprint: standalone/quick | Route: qa-fast → frontend-engineer → code-reviewer (APPROVE, 1 a11y fix cycle) → qa (E2E authoring, 6/6) — draft PR open, awaiting review
+- What: single-node/Area selection in the admin City Launch hierarchy tree, independent of expand/collapse; new contextual details panel (label/type/key/child+descendant/listing counts); per-node-type override-prefill actions that jump to the existing Overrides tab with `subjectAreaKey`/`subjectNodeKey` + kind pre-filled, gated on PREPARED lifecycle
+- Why: admins previously had to manually copy technical node/area keys into the separate Overrides tab; first deliverable of #2207 (inspect → select → act), bulk/multi-select explicitly deferred pending product/API semantics
+- Deviations: NONE — table-view selection sync explicitly OUT OF SCOPE per AC (table remains read-only); no bulk checkboxes/multi-select shipped
+- Risks: F-31 (TECH_DEBT.md, LOW, deferred) — `getValidOverrideKindsForNode` doesn't defensively guard a null `areaKey` on an AREA node; not reachable with current backend data
+- Cycles: engineer=2 (1 ADVISORY-FIX-QUALITY a11y fix: `aria-selected` moved onto the actual keyboard-focus target) review=2 (APPROVE both; delta re-review confirmed FIXED)
+- Test evidence: unit/component 80/80 PASS + tsc clean (independently re-verified); dedicated E2E spec 6/6 PASS (independently re-verified twice against a live stack); full canonical E2E suite hit backend 503s under concurrent-worktree load — recorded as TEST_ENV_FAILURE (unrelated specs only, none touching this PR's files), not PASS/FAIL; pre-push hook bypassed with `--no-verify` for this one push under explicit user approval (hook has no SHA-marker skip, would have re-triggered the same env contention)
+---
+
 ## PR #2358 — fix(#2345): stop visual-cluster marker cards leaking stale content into schools journey
 Date: 2026-08-27 | Sprint: standalone/quick | Route: frontend-engineer (single-worker task, no code-reviewer pass this cycle — open PR, awaiting review)
 - What: `makeAreaVisualClusterCard` (`AreaMarkerLayer.tsx`) gates its `heroRow` (visible "N LISTINGS"/"No listings yet") and `ariaLabel` (accessible name) behind `isSchools`, so schools-journey cards show identity + "+N areas" badge + footer only, with no residential hero content
