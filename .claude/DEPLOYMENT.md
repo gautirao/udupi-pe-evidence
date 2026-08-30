@@ -118,8 +118,8 @@ Both Cloudflare Pages and Render are configured via their own dashboards, not
 via a file checked into this repo, so a structure migration that moves these
 directories requires a manual, one-time update on each provider:
 
-- **Cloudflare Pages**: superseded by the npm-workspace-aware config below
-  ("Cloudflare Pages: npm workspace + Rollup optional-dependency failure") —
+- **Cloudflare Pages**: superseded by the config in the section below
+  ("Cloudflare Pages: npm workspace + native optional-dependency records") —
   do **not** set the project root to `apps/web`; that section is now the one
   authoritative Cloudflare Pages configuration.
 - **Render** (service `srv-d648gt0gjchc739iegb0`): set the service's root
@@ -131,44 +131,58 @@ problem with the code in this repository.
 
 ---
 
-## Cloudflare Pages: npm workspace + Rollup optional-dependency failure
+## Cloudflare Pages: npm workspace + native optional-dependency records
 
 Symptom: Cloudflare Pages build fails with
-`Error: Cannot find module @rollup/rollup-linux-x64-gnu` even though the
-committed root `package-lock.json` correctly lists every `@rollup/rollup-*`
-platform package (including `linux-x64-gnu`) as an `os`/`cpu`-scoped optional
-dependency.
+`Error: Cannot find module @rollup/rollup-linux-x64-gnu`.
 
-**Root cause:** this is npm's own optional-dependency install bug
-([npm/cli#4828](https://github.com/npm/cli/issues/4828)), not a lockfile
-defect. It reproduces on some npm versions and not others against the exact
-same lockfile — confirmed locally: macOS with npm 11.7.0 installs the
-Linux Rollup binary correctly (as an inactive optional entry) and builds
-clean, while Cloudflare Pages' build image runs npm 10.9.2, which hits the
-bug and drops the platform-specific optional dependency during its
-automatic pre-build `npm install` step. **Do not "fix" this by regenerating
-the lockfile or by adding `@rollup/rollup-linux-x64-gnu` as a hard
-dependency** — the lockfile is already correct, and pinning a
+**Root cause (corrected):** the previous version of this section attributed
+this purely to npm's own optional-dependency install bug
+([npm/cli#4828](https://github.com/npm/cli/issues/4828)) and claimed the
+committed `package-lock.json` already had full records for every
+`@rollup/rollup-*`, `@swc/core-*`, and `@esbuild/*` platform package. That
+claim was disproven: the lockfile in circulation only carried full resolved
+package records (`resolved`/`integrity`) for the platform that last ran
+`npm install` — `darwin-arm64` — with `linux-x64-gnu` and the other
+platform variants present only inside the parent package's
+`optionalDependencies` map, not as their own top-level `node_modules/...`
+entries. Any installer, buggy npm version or not, has nothing to resolve
+those packages from.
+
+**Fix — regenerate the lockfile in a clean Linux container** so npm
+resolves and records every platform's optional dependency, not just the
+one the last local `npm install` happened to run on:
+
+```bash
+docker run --rm --platform linux/amd64 \
+  -v "$PWD:/repo" -w /repo node:22.16.0-bookworm bash -lc '
+    npm install -g npm@11.7.0 &&
+    rm -rf node_modules &&
+    rm package-lock.json &&
+    npm install --package-lock-only --include=optional --ignore-scripts
+  '
+```
+
+`--platform linux/amd64` matters even on an Apple Silicon host: without it,
+Docker Desktop pulls the arm64 image and npm records `linux-arm64` optional
+entries instead of the `linux-x64-*` ones Cloudflare's build image actually
+needs. Verify with a second clean-container run (`npm ci && npm run build`)
+before committing.
+
+**Do not** "fix" this by adding `@rollup/rollup-linux-x64-gnu` (or the
+`@swc`/`@esbuild` Linux equivalents) as a hard dependency — pinning a
 platform-specific native binary as a direct dependency breaks local
-(macOS/Windows) installs.
+(macOS/Windows) installs. The lockfile, once regenerated this way, already
+carries every platform's optional entry; no npm-version workaround or
+`SKIP_DEPENDENCY_INSTALL` dashboard setting is required.
 
-**Fix — Cloudflare Pages dashboard only** (cannot be set from this repo):
-
-1. Project → Settings → Environment variables → add `SKIP_DEPENDENCY_INSTALL=1`
-   (any truthy value). This disables Cloudflare's automatic pre-build
-   `npm install` step, which is where the buggy npm 10.9.2 runs.
-2. Update the Build command to install dependencies itself with a
-   known-good npm before building:
-   `npm install -g npm@latest && npm ci && npm run build`
-
-With `SKIP_DEPENDENCY_INSTALL` set, the full Cloudflare Pages config is:
+Full Cloudflare Pages config:
 
 ```
 Root directory: (leave blank)
-Build command: npm install -g npm@latest && npm ci && npm run build
+Build command: npm run build
 Build output directory: apps/web/dist
 Production branch: main
-Environment variables: SKIP_DEPENDENCY_INSTALL=1
 ```
 
 ---

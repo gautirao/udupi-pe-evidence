@@ -12,6 +12,15 @@ Date: YYYY-MM-DD | Sprint: <name or standalone/quick> | Route: <agent chain>
 ---
 -->
 
+## PR #2403 — fix(#2402): regenerate lockfile with full Linux optional-dependency records
+Date: 2026-08-30 | Sprint: standalone/quick | Route: self (docs/lockfile-only) — open PR, awaiting review
+- What: regenerated root `package-lock.json` from scratch in a clean `linux/amd64 node:22.16.0-bookworm` container so `@rollup/rollup-linux-x64-gnu`, `@swc/core-linux-x64-gnu`, and `@esbuild/linux-x64` get their own resolved package records (previously only referenced inside parent `optionalDependencies`, with only `darwin-arm64` fully resolved); corrected `.claude/DEPLOYMENT.md`'s disproven "lockfile is already correct" claim and removed the now-unneeded `SKIP_DEPENDENCY_INSTALL`/npm-self-upgrade workaround from PR #2402
+- Why: PR #2402's root-cause diagnosis (pure npm/cli#4828 install-version bug) was wrong — the lockfile itself was missing the Linux platform records, so the dashboard workaround only masked the gap rather than fixing it
+- Deviations: NONE — no `package.json`/source changes, no platform-specific package added as a direct dependency, no `npm audit fix`
+- Risks: NONE carried forward — local `node_modules` was incidentally emptied by the container run and had to be `npm install`ed locally to restore macOS `darwin-arm64` binaries before push; verified restored
+- Test evidence: 2nd clean `linux/amd64` container run — `npm ci` PASS, `npm run build` PASS (`apps/web/dist` produced), `npm run typecheck` FAIL only on pre-existing test-fixture type errors already documented in #2402 (unrelated, reproduces on clean main); local pre-push hook ran full smoke E2E — 30/30 PASS, 1 pre-existing skip (Q7)
+---
+
 ## PR #2384 — refactor(#2380): split PendingListings.tsx into query/filters/selection/mutations hooks
 Date: 2026-08-29 | Sprint: standalone/quick | Route: qa-fast (pre-implementation risk scan) → frontend-engineer (self) — open PR, awaiting code-reviewer pass and owner review
 - What: extracted `usePendingListingsQuery`, `usePendingListingsFilters`, `usePendingListingsSelection`, `usePendingListingsMutations` out of `src/pages/admin/PendingListings.tsx`; page now only composes the hooks + drawer advancement/focus-restoration + top-level JSX

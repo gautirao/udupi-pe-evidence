@@ -3,12 +3,13 @@
 <!-- Claude-managed. Tracks where the session is and how to resume.
      NOT a source of project/product truth — decisions live in docs/ and .claude/ARCHITECTURE.md -->
 
-Last updated: 2026-08-29
+Last updated: 2026-08-30
 
 ## Current Position
-- Active thread: PendingListings.tsx hook extraction (#2380) — non-blocking follow-up from PR #2378's review — via standalone /quick, not part of the parked milestone #12 below
+- Active thread: #2402 Cloudflare Pages build-failure follow-up — lockfile regeneration (root cause was an incomplete lockfile, not the npm-version bug PR #2402 assumed) — via standalone /quick
 - Mode: standalone ROUTE_AND_RUN / /quick execution per issue
-- Phase: PR #2384 (#2380 split PendingListings.tsx into query/filters/selection/mutations hooks) open, READY_AWAITING_OWNER — not merged, awaiting owner review
+- Phase: PR #2403 (regenerate lockfile with full Linux optional-dependency records; corrects #2402's DEPLOYMENT.md workaround) open, awaiting review — not merged
+- Prior: PR #2384 (#2380 split PendingListings.tsx) remains READY_AWAITING_OWNER — not merged, awaiting owner review
 - Prior entries (PR #2178, milestone #12) remain parked/stale — not touched this session
 
 ## Milestone #12 — Execution Order
@@ -42,6 +43,7 @@ Guardrails for the milestone:
 - NONE — paused per user request before Issue 1 implementation.
 
 ## Recent Completions (last 6)
+- #2402 follow-up (Cloudflare Pages build failure — actual root cause was an incomplete lockfile, not the npm-version bug PR #2402 diagnosed) → PR #2403 OPEN, awaiting review (2026-08-30) [/quick]
 - #2207 (admin hierarchy tree: node selection, contextual override actions — first deliverable, bulk deferred) → PR #2383 OPEN, draft, awaiting review (2026-08-29) [/quick]
 - #2264 (pending-listings admin queue truncation banner showed a false loaded-row count — stale issue text vs #2369's redesign, but the banner's `PENDING_PAGE_FETCH_SIZE * MAX_PAGES` math ignored the backend's real `max-page-size: 100` clamp) → PR #2378 OPEN (draft), READY_AWAITING_OWNER (2026-08-28) [/quick]
 - #2345 (visual-cluster marker cards leak stale residential hero content into schools journey) → PR #2358 OPEN, awaiting review (2026-08-27) [/quick]
