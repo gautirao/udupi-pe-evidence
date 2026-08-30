@@ -26,7 +26,7 @@ dist-ssr
 *.sln
 *.sw?
 
-backend/target/*
+apps/api/target/*
 
 # Lockfiles (npm only — prevent Cloudflare from auto-selecting bun)
 bun.lockb
@@ -37,15 +37,16 @@ bun.lockb
 .env.*
 *.env
 *.env.*
-backend/.env
-backend/.env_*
-backend/.env.*
-backend/*.env
+apps/api/.env
+apps/api/.env_*
+apps/api/.env.*
+apps/api/*.env
 # Allow example/template files that show required env var structure (no real secrets)
 !.env.e2e.example
 !.env.e2e.auth.example
 !.env.seed.example
-!backend/.env.example
+!apps/api/.env.example
+!apps/web/.env.example
 .claude/settings.local.json
 
 # Playwright test output
@@ -103,7 +104,7 @@ screenshots/
 # City geography preparation pipeline (issue #1900) — never commit the large
 # Geofabrik OSM extract or any raw/full city output; only tiny fixtures,
 # checksums, and the one small compat-IT sample batch under
-# backend/src/test/resources/area-onboarding/ are committed.
+# apps/api/src/test/resources/area-onboarding/ are committed.
 *.osm.pbf
 southern-zone*
 scripts/geography/output/

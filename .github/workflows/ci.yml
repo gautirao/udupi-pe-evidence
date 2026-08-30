@@ -61,7 +61,7 @@ jobs:
           cache: 'maven'
 
       - name: Run backend tests
-        working-directory: backend
+        working-directory: apps/api
         run: mvn test -B --no-transfer-progress
         env:
           # Placeholder values — unit tests mock all real connections.
@@ -91,7 +91,7 @@ jobs:
           cache: 'maven'
 
       - name: Run integration tests
-        working-directory: backend
+        working-directory: apps/api
         run: mvn test -Dgroups=integration -B --no-transfer-progress
         env:
           SUPABASE_DB_HOST: localhost
@@ -200,7 +200,7 @@ jobs:
           VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY}
           EOF
 
-          cat > backend/.env <<EOF
+          cat > apps/api/.env <<EOF
           SUPABASE_DB_HOST=unused-local-fixture-overrides-this
           SUPABASE_DB_USER=postgres
           SUPABASE_DB_PASSWORD=unused-local-fixture-overrides-this

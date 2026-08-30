@@ -2,7 +2,7 @@
 """Python port of AreaKeyFormat (#1887 PR1, issue #1900 AC4/D3).
 
 Ports, VERBATIM, the district CASE-normalisation rules from
-backend/src/main/java/com/example/realestate/discover/AreaKeyFormat.java
+apps/api/src/main/java/com/example/realestate/discover/AreaKeyFormat.java
 (lines 31-47 isValidFourSegment, 56-70 normalise/normaliseDistrictToken,
 89-94 titleCase). This module is a validator/normaliser AND a key MINTER
 (mint() has no Java counterpart — AreaKeyFormat never invents a key; #1900

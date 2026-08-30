@@ -7,7 +7,7 @@
 -- WHY THIS EXISTS: NavigationGraphCache / NavigationCachePreloadRunner only ever loads a city's
 -- navigation tree if PublicActiveCityRevisionReader finds a row in public.city_launch_revision
 -- with lifecycle_status='PROMOTED' AND superseded_by IS NULL for that city (see
--- backend/src/main/java/com/example/realestate/discover/navigation/PublicActiveCityRevisionReader.java).
+-- apps/api/src/main/java/com/example/realestate/discover/navigation/PublicActiveCityRevisionReader.java).
 -- The existing navigation-hierarchy-fixture-seed.sql (#1956) populates public.navigation_nodes
 -- rows for Bangalore, but never inserts the city_launch_revision "PROMOTED" pointer row that
 -- makes those nodes reachable — so GET /api/discover/cities/bangalore/navigation/resolve returns

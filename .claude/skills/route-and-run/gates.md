@@ -63,7 +63,7 @@ Forbidden examples (always route to specialist):
 
 If a "two-line mechanical fix" is tempting but fails any of the 5 conditions above: **stop and route to the appropriate specialist** instead. Bloated Main Agent context and cross-file dependency bugs are the historical reason this boundary exists.
 
-**Pre-approval scope of the micro-fix exception:** The micro-fix exception does NOT apply to application code before ChatGPT PLAN_REVIEW returns `verdict = "APPROVED"`. The only edits the Main Agent may make before approval are **process / handoff files**: `.claude/state/*.toml`, `.claude/handoffs/**`, `.claude/SPRINT_CHECKPOINT.md`, `.claude/STATE.md`, and the agent's own scratch notes. Any application file (`src/**`, `backend/**`, `tests/**`, `e2e/**`, migrations, config, SQL) is forbidden territory until PLAN_REVIEW approval lands, regardless of how trivial the change appears.
+**Pre-approval scope of the micro-fix exception:** The micro-fix exception does NOT apply to application code before ChatGPT PLAN_REVIEW returns `verdict = "APPROVED"`. The only edits the Main Agent may make before approval are **process / handoff files**: `.claude/state/*.toml`, `.claude/handoffs/**`, `.claude/SPRINT_CHECKPOINT.md`, `.claude/STATE.md`, and the agent's own scratch notes. Any application file (`apps/web/src/**`, `apps/api/**`, `tests/**`, `e2e/**`, migrations, config, SQL) is forbidden territory until PLAN_REVIEW approval lands, regardless of how trivial the change appears.
 
 ---
 
@@ -120,11 +120,11 @@ items = [
 summary = "Brief current behaviour summary."
 
 [[evidence]]
-ref = "src/path/File.tsx:L10-L40"
+ref = "apps/web/src/path/File.tsx:L10-L40"
 proves = "What this confirms."
 
 [[evidence]]
-ref = "backend/path/File.java:L80-L110"
+ref = "apps/api/path/File.java:L80-L110"
 proves = "What this confirms."
 
 [plan]
@@ -136,8 +136,8 @@ steps = [
 
 [files]
 likely_change = [
-  "src/path/File.tsx",
-  "backend/path/File.java",
+  "apps/web/src/path/File.tsx",
+  "apps/api/path/File.java",
   "tests/path/spec.ts"
 ]
 
@@ -169,8 +169,8 @@ items = [
 [scope_lock]
 approved_plan_ref = ""        # filled at materialisation time
 allowed_files = [
-  "src/path/File.tsx",
-  "backend/path/File.java"
+  "apps/web/src/path/File.tsx",
+  "apps/api/path/File.java"
 ]
 change_requires_review = [
   "new API contract",
@@ -293,8 +293,8 @@ agents = ["frontend-engineer", "code-reviewer", "qa"]
 
 [scope]
 acceptance = ["AC1 short text", "AC2 short text"]
-allowed_files = ["src/path/File.tsx", "backend/path/File.java"]
-expected_files = ["src/path/File.tsx", "backend/path/File.java", "tests/path/spec.ts"]
+allowed_files = ["apps/web/src/path/File.tsx", "apps/api/path/File.java"]
+expected_files = ["apps/web/src/path/File.tsx", "apps/api/path/File.java", "tests/path/spec.ts"]
 non_goals = ["Thing explicitly not done"]
 
 [tests_required]
@@ -338,7 +338,7 @@ change_requires_review = [
 **AC1 — Universal Scope-Lock Policy (No Automatic Bypass)**
 
 No file family automatically bypasses scope-lock. This includes (but is not limited to):
-- Production source code (`.ts`, `.tsx`, `.java`, `.kt`, backend/)
+- Production source code (`.ts`, `.tsx`, `.java`, `.kt`, apps/api/)
 - Test files (`*.spec.ts`, `*.test.ts`, test/, tests/)
 - Documentation files (`*.md`, docs/, .claude/*)
 - GitHub workflows (`.github/workflows/`)
@@ -471,15 +471,15 @@ summary = "Short summary of actual work."
 
 [files_changed]
 items = [
-  "src/path/File.tsx",
-  "backend/path/File.java",
+  "apps/web/src/path/File.tsx",
+  "apps/api/path/File.java",
   "tests/path/spec.ts"
 ]
 
 [[ac_mapping]]
 ac = "AC1 short text"
 status = "done"
-evidence = "src/path/File.tsx:L10-L45"
+evidence = "apps/web/src/path/File.tsx:L10-L45"
 
 [[ac_mapping]]
 ac = "AC2 short text"

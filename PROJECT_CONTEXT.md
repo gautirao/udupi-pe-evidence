@@ -7,8 +7,8 @@ Keep this file concise and up to date.
 ## TL;DR (read this first)
 
 - Repo is a **mono-repo**
-- **Frontend**: React + Vite at repo root
-- **Backend**: Spring Boot (Maven) in `./backend`
+- **Frontend**: React + Vite in `apps/web`
+- **Backend**: Spring Boot (Maven) in `apps/api`
 - **Auth**: Supabase Auth (frontend-only)
     - Implemented: email/password sign-in + sign-out
     - Planned: Google + Facebook OAuth
@@ -26,14 +26,18 @@ Keep this file concise and up to date.
 ## Repo layout
 
 /
-├─ backend/                # Spring Boot Maven project
-│  ├─ pom.xml
-│  └─ src/main/java/...
-├─ src/                    # React app source
-├─ public/
-│  └─ _redirects           # SPA routing for Cloudflare Pages
-├─ package.json
-├─ vite.config.*
+├─ apps/
+│  ├─ web/                 # React + Vite app
+│  │  ├─ src/
+│  │  ├─ public/
+│  │  │  └─ _redirects     # SPA routing for Cloudflare Pages
+│  │  ├─ package.json
+│  │  └─ vite.config.*
+│  └─ api/                 # Spring Boot Maven project
+│     ├─ pom.xml
+│     └─ src/main/java/...
+├─ tests/e2e/              # Playwright suite (root-orchestrated, cross-stack)
+├─ package.json            # thin npm-workspaces orchestrator
 ├─ PROJECT_CONTEXT.md
 
 ---
@@ -41,7 +45,7 @@ Keep this file concise and up to date.
 ## Local development
 
 ### Backend (Spring Boot)
-cd backend
+cd apps/api
 mvn -DskipTests spring-boot:run
 
 - Default port: typically `8080`

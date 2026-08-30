@@ -101,7 +101,7 @@ allowed_file_globs = [                # scope lock — executor must not exceed
   "src/components/dealer/**",
   "e2e/**"
 ]
-forbidden_globs = ["backend/**", ".claude/**", "supabase/**"]
+forbidden_globs = ["apps/api/**", ".claude/**", "supabase/**"]
 max_specialist_invocations = 8
 max_minutes = 30
 

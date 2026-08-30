@@ -145,9 +145,9 @@ new_fixture_sandbox() {
   local sb
   sb="$(mktemp -d)"
   CLEANUP_DIRS+=("$sb")
-  mkdir -p "$sb/backend" "$sb/scripts/db" "$sb/scripts/dev/lib"
+  mkdir -p "$sb/apps/api" "$sb/scripts/db" "$sb/scripts/dev/lib"
 
-  cat > "$sb/backend/.env" <<'EOF'
+  cat > "$sb/apps/api/.env" <<'EOF'
 SUPABASE_PROJECT_REF=prodref
 AI_API_KEY=test-ai-key-secret
 EOF
@@ -175,7 +175,7 @@ exit 0
 EOF
   chmod +x "$sb/scripts/db/restore-test-fixture.sh"
 
-  cat > "$sb/backend/run-local.sh" <<'EOF'
+  cat > "$sb/apps/api/run-local.sh" <<'EOF'
 #!/usr/bin/env bash
 echo "MOCK_RUN_LOCAL_INVOKED"
 {
@@ -189,7 +189,7 @@ echo "MOCK_RUN_LOCAL_INVOKED"
 } > "${RUN_LOCAL_CAPTURE:?RUN_LOCAL_CAPTURE not set}"
 exit 0
 EOF
-  chmod +x "$sb/backend/run-local.sh"
+  chmod +x "$sb/apps/api/run-local.sh"
 
   if [[ "$mode" == "with_e2e_auth" ]]; then
     cat > "$sb/.env.e2e.auth" <<'EOF'
@@ -322,9 +322,9 @@ rm -f /tmp/c3_e2e_login.log /tmp/c3_prod_login.log
 # ===========================================================================
 
 SBC4="$(new_fixture_sandbox with_e2e_auth)"
-# Overwrite backend/.env's SUPABASE_PROJECT_REF to collide with the sandbox's
+# Overwrite apps/api/.env's SUPABASE_PROJECT_REF to collide with the sandbox's
 # E2E_SUPABASE_PROJECT_REF (e2eref).
-cat > "$SBC4/backend/.env" <<'EOF'
+cat > "$SBC4/apps/api/.env" <<'EOF'
 SUPABASE_PROJECT_REF=e2eref
 AI_API_KEY=test-ai-key-secret
 EOF

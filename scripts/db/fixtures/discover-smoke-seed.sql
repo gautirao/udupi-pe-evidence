@@ -428,7 +428,7 @@ ON CONFLICT (id) DO UPDATE SET
 --     authed contact-phone-section (ListingDetailSidebar.tsx:104-127, gated
 --     on `user && listing.contact_phone`) can NEVER render for ANY caller,
 --     seeded or not, because backend ListingResponse.java
---     (backend/src/main/java/com/example/realestate/listing/api/ListingResponse.java)
+--     (apps/api/src/main/java/com/example/realestate/listing/api/ListingResponse.java)
 --     has no `contactPhone`/`contact_phone` field at all — live-curl-
 --     confirmed against an authenticated GET /api/public/listings/{id} call
 --     on this exact listing (with contact_phone populated in the DB below):

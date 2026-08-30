@@ -6,7 +6,7 @@
 # scripts/dev/local-fixture-backend.sh). Additive-only, idempotent — safe to re-run any number of
 # times against a container other sessions may also be using.
 #
-# This script does NOT touch backend/run-local.sh or any already-running Spring Boot process. The
+# This script does NOT touch apps/api/run-local.sh or any already-running Spring Boot process. The
 # navigation cache only reloads a city's tree on its own eager startup preload or a promotion event
 # (see NavigationGraphCache/NavigationCachePreloadRunner) — never on a raw navigation_nodes write —
 # so seeded rows are invisible to an already-running backend until a FRESH backend process starts
@@ -91,5 +91,5 @@ echo "      SUPABASE_DB_NAME=postgres SUPABASE_DB_USER=postgres SUPABASE_DB_PASS
 echo "      SPRING_DATASOURCE_HIKARI_DATA_SOURCE_PROPERTIES_SSL=false \\"
 echo "      SPRING_DATASOURCE_HIKARI_DATA_SOURCE_PROPERTIES_SSLMODE=disable SPRING_FLYWAY_ENABLED=false \\"
 echo "      SERVER_PORT=<unused-port> \\"
-echo "      backend/run-local.sh"
+echo "      apps/api/run-local.sh"
 echo "    Restarting or mutating the SHARED backend process requires separate explicit authorisation."

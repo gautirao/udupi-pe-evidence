@@ -51,7 +51,7 @@ Violation → **stop, flag explicitly, wait for direction.**
 EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'admin')
 ```
 
-**Locations:** RPCs: `backend/src/main/resources/db/supabase-rpcs/` (reference copies, run in SQL editor). Edge functions: `supabase/functions/<name>/index.ts`. Storage: `listing-images` bucket, path `{user_id}/{listing_id}/{filename}`.
+**Locations:** RPCs: `apps/api/src/main/resources/db/supabase-rpcs/` (reference copies, run in SQL editor). Edge functions: `supabase/functions/<name>/index.ts`. Storage: `listing-images` bucket, path `{user_id}/{listing_id}/{filename}`.
 
 ---
 

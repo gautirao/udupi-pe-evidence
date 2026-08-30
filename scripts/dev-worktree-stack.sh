@@ -9,7 +9,7 @@
 # Three knobs must move together and nothing in the repo couples them:
 #
 #   1. CORS_ALLOWED_ORIGINS   — backend allowlist (default 5173,5174,3000 only)
-#   2. VITE_API_BASE_URL      — what the APP calls (src/lib/api.ts, default :8085)
+#   2. VITE_API_BASE_URL      — what the APP calls (apps/web/src/lib/api.ts, default :8085)
 #   3. BACKEND_BASE_URL       — what PLAYWRIGHT calls (e2e/** only, never src/**)
 #
 # Move one and leave the others and the app silently keeps calling the old
@@ -146,7 +146,8 @@ link_env() {
 }
 link_env ".env"
 link_env ".env.e2e"
-link_env "backend/.env"
+link_env "apps/web/.env"
+link_env "apps/api/.env"
 
 # ── 4. the three knobs, set together ─────────────────────────────────────────
 step "Port configuration"
@@ -179,8 +180,8 @@ ok ".env.e2e.local written — this worktree's ports now survive into a fresh sh
 # ── 5. backend ───────────────────────────────────────────────────────────────
 if ! $SKIP_BACKEND; then
   step "Backend"
-  [[ -x "$MAIN_REPO/backend/run-local.sh" ]] || die "backend/run-local.sh not found or not executable"
-  ( cd "$WORKTREE" && bash "$WORKTREE/backend/run-local.sh" >"$BE_LOG" 2>&1 ) &
+  [[ -x "$MAIN_REPO/apps/api/run-local.sh" ]] || die "apps/api/run-local.sh not found or not executable"
+  ( cd "$WORKTREE" && bash "$WORKTREE/apps/api/run-local.sh" >"$BE_LOG" 2>&1 ) &
   BE_PID=$!
   printf '  ..  starting (log: %s)\n' "$BE_LOG"
   for i in $(seq 1 120); do
@@ -204,7 +205,7 @@ fi
 # the WRONG TREE — new utility classes silently vanish from the served CSS —
 # and makes Vite serve the wrong source entirely.
 step "Frontend"
-( cd "$WORKTREE" && npx vite --port "$FE_PORT" --strictPort >"$FE_LOG" 2>&1 ) &
+( cd "$WORKTREE/apps/web" && npx vite --port "$FE_PORT" --strictPort >"$FE_LOG" 2>&1 ) &
 FE_PID=$!
 for i in $(seq 1 60); do
   kill -0 "$FE_PID" 2>/dev/null || die "vite exited early. Last lines:
@@ -222,8 +223,9 @@ ok "vite listening on $FE_PORT (pid $FE_PID)"
 # module and require a JS content-type. Prefer a file that exists ONLY on this
 # branch, so the check also fails when the right server serves the wrong ref.
 step "Provenance"
-PROBE="$(git -C "$WORKTREE" diff --name-only "$(git -C "$WORKTREE" merge-base HEAD main 2>/dev/null || echo HEAD)"...HEAD -- 'src/**/*.ts' 'src/**/*.tsx' 2>/dev/null | head -1)"
-[[ -n "$PROBE" ]] || PROBE="src/main.tsx"
+PROBE="$(git -C "$WORKTREE" diff --name-only "$(git -C "$WORKTREE" merge-base HEAD main 2>/dev/null || echo HEAD)"...HEAD -- 'apps/web/src/**/*.ts' 'apps/web/src/**/*.tsx' 2>/dev/null | head -1)"
+[[ -n "$PROBE" ]] || PROBE="apps/web/src/main.tsx"
+PROBE="${PROBE#apps/web/}"  # Vite's root is apps/web, so served URLs are relative to that, not the repo root.
 CT="$(curl -sS -o /dev/null -w '%{content_type}' "$FE_ORIGIN/$PROBE" 2>/dev/null || true)"
 case "$CT" in
   *javascript*|*ecmascript*)

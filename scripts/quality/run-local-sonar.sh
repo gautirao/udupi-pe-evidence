@@ -17,19 +17,19 @@ fi
 SONAR_HOST_URL="${SONAR_HOST_URL:-http://host.docker.internal:9000}"
 
 echo "==> Backend: mvn test (JaCoCo report)"
-mvn -f "$ROOT_DIR/backend/pom.xml" -q clean test
+mvn -f "$ROOT_DIR/apps/api/pom.xml" -q clean test
 
-if [[ ! -f "$ROOT_DIR/backend/target/site/jacoco/jacoco.xml" ]]; then
-  echo "ERROR: backend/target/site/jacoco/jacoco.xml was not generated." >&2
-  echo "Check that org.jacoco:jacoco-maven-plugin is bound in backend/pom.xml." >&2
+if [[ ! -f "$ROOT_DIR/apps/api/target/site/jacoco/jacoco.xml" ]]; then
+  echo "ERROR: apps/api/target/site/jacoco/jacoco.xml was not generated." >&2
+  echo "Check that org.jacoco:jacoco-maven-plugin is bound in apps/api/pom.xml." >&2
   exit 1
 fi
 
-echo "==> Frontend: npm test -- --coverage"
-(cd "$ROOT_DIR" && npm test -- --coverage)
+echo "==> Frontend: npm run test:coverage --workspace=apps/web"
+(cd "$ROOT_DIR" && npm run test:coverage --workspace=apps/web)
 
-if [[ ! -f "$ROOT_DIR/coverage/lcov.info" ]]; then
-  echo "ERROR: coverage/lcov.info was not generated." >&2
+if [[ ! -f "$ROOT_DIR/apps/web/coverage/lcov.info" ]]; then
+  echo "ERROR: apps/web/coverage/lcov.info was not generated." >&2
   echo "Check that @vitest/coverage-v8 is installed and vitest.config.ts has a coverage block." >&2
   exit 1
 fi

@@ -4,8 +4,8 @@
 # Minimal, dependency-free bash assertion harness (same style as
 # scripts/dev/tests/local-fixture-backend.test.sh) covering:
 #   - scripts/dev/lib/port-ownership.sh (pure ownership predicate)
-#   - backend/run-local.sh (caller-exported SERVER_PORT and CORS_ALLOWED_ORIGINS
-#     both survive backend/.env — #2078 and #2285)
+#   - apps/api/run-local.sh (caller-exported SERVER_PORT and CORS_ALLOWED_ORIGINS
+#     both survive apps/api/.env — #2078 and #2285)
 #   - scripts/run-e2e-local.sh (.env.e2e.local override precedence, SERVER_PORT
 #     propagation into the backend it starts, and refusing vs. restarting a
 #     port depending on whether the holder belongs to this worktree)
@@ -166,18 +166,18 @@ else
 fi
 
 # ===========================================================================
-# T1/T2 — backend/run-local.sh: caller-exported SERVER_PORT survives
-# backend/.env also defining SERVER_PORT (the #2078 clobbering regression)
+# T1/T2 — apps/api/run-local.sh: caller-exported SERVER_PORT survives
+# apps/api/.env also defining SERVER_PORT (the #2078 clobbering regression)
 # ===========================================================================
 
 new_runlocal_sandbox() {
   local sb
   sb="$(mktemp -d)"
   CLEANUP_DIRS+=("$sb")
-  mkdir -p "$sb/backend"
-  cp "$REPO_ROOT/backend/run-local.sh" "$sb/backend/run-local.sh"
-  chmod +x "$sb/backend/run-local.sh"
-  cat > "$sb/backend/.env" <<'ENVEOF'
+  mkdir -p "$sb/apps/api"
+  cp "$REPO_ROOT/apps/api/run-local.sh" "$sb/apps/api/run-local.sh"
+  chmod +x "$sb/apps/api/run-local.sh"
+  cat > "$sb/apps/api/.env" <<'ENVEOF'
 SUPABASE_DB_HOST=fromenv-host
 SUPABASE_DB_USER=fromenv-user
 SUPABASE_DB_PASSWORD=fromenv-pass-secret
@@ -192,7 +192,7 @@ ENVEOF
 run_runlocal() {
   local sandbox="$1"
   shift
-  env -i PATH="$MOCKBIN:$ORIG_PATH" HOME="${HOME:-/tmp}" "$@" bash "$sandbox/backend/run-local.sh"
+  env -i PATH="$MOCKBIN:$ORIG_PATH" HOME="${HOME:-/tmp}" "$@" bash "$sandbox/apps/api/run-local.sh"
 }
 
 SB1="$(new_runlocal_sandbox)"
@@ -203,8 +203,8 @@ RC1=$?
 CAP1="$(cat "$MVN_CAP1" 2>/dev/null || true)"
 
 assert_true "T1: run-local.sh (no caller override) exits 0" "$RC1"
-assert_contains "T1: with no caller override, backend/.env's SERVER_PORT is used (baseline)" "$CAP1" "SERVER_PORT=8085"
-assert_contains "T1: with no caller override, backend/.env's CORS_ALLOWED_ORIGINS is used (baseline)" "$CAP1" "CORS_ALLOWED_ORIGINS=http://fromenv-origin-should-not-be-used"
+assert_contains "T1: with no caller override, apps/api/.env's SERVER_PORT is used (baseline)" "$CAP1" "SERVER_PORT=8085"
+assert_contains "T1: with no caller override, apps/api/.env's CORS_ALLOWED_ORIGINS is used (baseline)" "$CAP1" "CORS_ALLOWED_ORIGINS=http://fromenv-origin-should-not-be-used"
 
 SB2="$(new_runlocal_sandbox)"
 MVN_CAP2="$(mktemp)"
@@ -215,11 +215,11 @@ CAP2="$(cat "$MVN_CAP2" 2>/dev/null || true)"
 LOG2_CONTENT="$(cat "$LOG2" 2>/dev/null || true)"
 
 assert_true "T2: run-local.sh (caller SERVER_PORT=9401, CORS_ALLOWED_ORIGINS override) exits 0" "$RC2"
-assert_contains "T2: caller-exported SERVER_PORT survives sourcing backend/.env (#2078 fix)" "$CAP2" "SERVER_PORT=9401"
-assert_not_contains "T2: backend/.env's conflicting SERVER_PORT is NOT what actually starts" "$CAP2" "SERVER_PORT=8085"
+assert_contains "T2: caller-exported SERVER_PORT survives sourcing apps/api/.env (#2078 fix)" "$CAP2" "SERVER_PORT=9401"
+assert_not_contains "T2: apps/api/.env's conflicting SERVER_PORT is NOT what actually starts" "$CAP2" "SERVER_PORT=8085"
 assert_contains "T2: override is logged for operator visibility" "$LOG2_CONTENT" "SERVER_PORT overridden by caller: 9401"
-assert_contains "T2: caller-exported CORS_ALLOWED_ORIGINS survives sourcing backend/.env (#2285 fix)" "$CAP2" "CORS_ALLOWED_ORIGINS=http://worktree-override-origin"
-assert_not_contains "T2: backend/.env's conflicting CORS_ALLOWED_ORIGINS is NOT what actually starts" "$CAP2" "CORS_ALLOWED_ORIGINS=http://fromenv-origin-should-not-be-used"
+assert_contains "T2: caller-exported CORS_ALLOWED_ORIGINS survives sourcing apps/api/.env (#2285 fix)" "$CAP2" "CORS_ALLOWED_ORIGINS=http://worktree-override-origin"
+assert_not_contains "T2: apps/api/.env's conflicting CORS_ALLOWED_ORIGINS is NOT what actually starts" "$CAP2" "CORS_ALLOWED_ORIGINS=http://fromenv-origin-should-not-be-used"
 assert_contains "T2: CORS override is logged for operator visibility" "$LOG2_CONTENT" "CORS_ALLOWED_ORIGINS overridden by caller: http://worktree-override-origin"
 
 # ===========================================================================
@@ -231,7 +231,7 @@ new_e2e_sandbox() {
   local sb
   sb="$(mktemp -d)"
   CLEANUP_DIRS+=("$sb")
-  mkdir -p "$sb/scripts/dev/lib" "$sb/backend"
+  mkdir -p "$sb/scripts/dev/lib" "$sb/apps/api"
   cp "$REPO_ROOT/scripts/run-e2e-local.sh" "$sb/scripts/run-e2e-local.sh"
   chmod +x "$sb/scripts/run-e2e-local.sh"
   cp "$REPO_ROOT/scripts/dev/lib/port-ownership.sh" "$sb/scripts/dev/lib/port-ownership.sh"
@@ -240,7 +240,7 @@ PLAYWRIGHT_BASE_URL=http://localhost:$1
 BACKEND_BASE_URL=http://localhost:$2
 ADMIN_EMAIL=admin@test.local
 EOF
-  cat > "$sb/backend/run-local.sh" <<'EOF'
+  cat > "$sb/apps/api/run-local.sh" <<'EOF'
 #!/usr/bin/env bash
 {
   echo "SERVER_PORT=${SERVER_PORT:-}"
@@ -248,7 +248,7 @@ EOF
 } > "${BACKEND_CAPTURE:?BACKEND_CAPTURE not set}"
 sleep 5
 EOF
-  chmod +x "$sb/backend/run-local.sh"
+  chmod +x "$sb/apps/api/run-local.sh"
   echo "$sb"
 }
 

@@ -79,7 +79,7 @@ _e2e_auth_collision_guard() {
 # _e2e_auth_detect_production_ref [repo_root]
 # Resolves production's SUPABASE_PROJECT_REF, in priority order:
 #   1. SUPABASE_PROJECT_REF already in the caller's environment
-#   2. backend/.env (single-line grep — never sourced wholesale)
+#   2. apps/api/.env (single-line grep — never sourced wholesale)
 #   3. .env            (single-line grep — never sourced wholesale)
 # Grepping a single line (rather than sourcing the file) means this can
 # never accidentally pull an unrelated secret into the caller's shell.
@@ -91,7 +91,7 @@ _e2e_auth_detect_production_ref() {
     return 0
   fi
 
-  for f in "${repo_root}/backend/.env" "${repo_root}/.env"; do
+  for f in "${repo_root}/apps/api/.env" "${repo_root}/.env"; do
     if [[ -f "$f" ]]; then
       val="$(grep -m1 -E '^SUPABASE_PROJECT_REF=' "$f" 2>/dev/null | cut -d'=' -f2- || true)"
       val="${val%\"}"; val="${val#\"}"

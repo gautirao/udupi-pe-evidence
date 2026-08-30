@@ -20,7 +20,7 @@
 #
 # Prerequisites:
 #   - .env.e2e at project root (credentials for test users)
-#   - backend/.env (database connection for Spring Boot)
+#   - apps/api/.env (database connection for Spring Boot)
 #   - Playwright browsers installed: npx playwright install chromium
 set -euo pipefail
 
@@ -97,7 +97,7 @@ if port_in_use "$BACKEND_PORT"; then
   fi
 else
   echo "🚀 Starting backend..."
-  "$PROJECT_ROOT/backend/run-local.sh" > /tmp/e2e-backend.log 2>&1 &
+  "$PROJECT_ROOT/apps/api/run-local.sh" > /tmp/e2e-backend.log 2>&1 &
   BACKEND_PID=$!
   echo "   PID $BACKEND_PID — log at /tmp/e2e-backend.log"
 

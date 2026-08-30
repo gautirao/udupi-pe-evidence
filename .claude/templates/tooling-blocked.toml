@@ -77,5 +77,5 @@ suggested_action = "Re-spawn team-lead OR obtain explicit user authorisation to 
 items = [
   "do not skip PLAN_REVIEW, code-reviewer, security-reviewer, QA, WORKDONE_REVIEW, or PR_REVIEW",
   "do not commit, push, open PR, or merge based on TOOLING_BLOCKED alone",
-  "do not edit application code (src/**, backend/**, supabase/**, migrations, e2e/**) — TOOLING_BLOCKED is a process signal, not an execution authority",
+  "do not edit application code (apps/web/src/**, apps/api/**, supabase/**, migrations, e2e/**) — TOOLING_BLOCKED is a process signal, not an execution authority",
 ]

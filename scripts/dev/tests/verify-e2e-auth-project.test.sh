@@ -8,7 +8,7 @@
 #
 # IMPORTANT: verify-e2e-auth-project.sh resolves REPO_ROOT from its OWN
 # script path (SCRIPT_DIR/../..), not from $PWD — so to control what it sees
-# as ".env.e2e.auth at the repo root" or "backend/.env for production-ref
+# as ".env.e2e.auth at the repo root" or "apps/api/.env for production-ref
 # detection", each sandbox must contain a full copy of the script + its lib
 # at the matching relative path (scripts/dev/verify-e2e-auth-project.sh +
 # scripts/dev/lib/e2e-auth-common.sh), exactly like new_fixture_sandbox() in
@@ -240,12 +240,12 @@ assert_contains "B3c: step 2 reported PASSED (not SKIPPED, not FAILED)" "$CONTEN
 
 # ===========================================================================
 # B4 — READ-ONLY: sandbox file tree unchanged before/after (with a plausible
-# backend/.env present, so production-ref detection has something to read)
+# apps/api/.env present, so production-ref detection has something to read)
 # ===========================================================================
 
 SB4="$(new_verify_sandbox)"
-mkdir -p "$SB4/backend"
-cat > "$SB4/backend/.env" <<'EOF'
+mkdir -p "$SB4/apps/api"
+cat > "$SB4/apps/api/.env" <<'EOF'
 SUPABASE_PROJECT_REF=prodref
 EOF
 BEFORE4="$(snapshot_tree "$SB4")"
@@ -258,7 +258,7 @@ if [[ ! -f "$SB4/.env.e2e.auth" ]]; then
 else
   not_ok "B4: .env.e2e.auth never written by verify script"
 fi
-assert_contains "B4 sanity: production ref WAS read from sandbox backend/.env (proves REPO_ROOT resolution)" "$(cat "$LOG4")" "Step 2/7 PASSED"
+assert_contains "B4 sanity: production ref WAS read from sandbox apps/api/.env (proves REPO_ROOT resolution)" "$(cat "$LOG4")" "Step 2/7 PASSED"
 
 # ===========================================================================
 # B5 — zero HTTP calls attempted when .env.e2e.auth is absent
@@ -288,8 +288,8 @@ rm -f /tmp/b5.log
 # ===========================================================================
 
 SB6="$(new_verify_sandbox)"
-mkdir -p "$SB6/backend"
-cat > "$SB6/backend/.env" <<'EOF'
+mkdir -p "$SB6/apps/api"
+cat > "$SB6/apps/api/.env" <<'EOF'
 SUPABASE_PROJECT_REF=prodref
 EOF
 cat > "$SB6/.env.e2e.auth" <<'EOF'
@@ -335,8 +335,8 @@ done
 # ===========================================================================
 
 SB7="$(new_verify_sandbox)"
-mkdir -p "$SB7/backend"
-cat > "$SB7/backend/.env" <<'EOF'
+mkdir -p "$SB7/apps/api"
+cat > "$SB7/apps/api/.env" <<'EOF'
 SUPABASE_PROJECT_REF=prodref
 EOF
 cat > "$SB7/.env.e2e.auth" <<'EOF'

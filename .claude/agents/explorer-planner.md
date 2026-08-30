@@ -58,7 +58,7 @@ ref = "src/path/File.tsx:L10-L40"
 proves = "Single specific claim."
 
 [likely_files]
-items = ["src/path/File.tsx", "backend/path/File.java"]
+items = ["apps/web/src/path/File.tsx", "apps/api/path/File.java"]
 
 [gaps]
 items = ["Concrete unknown needing architect/engineer/user clarification."]

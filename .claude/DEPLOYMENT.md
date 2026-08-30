@@ -111,6 +111,24 @@ Reference: `.env.e2e` at repo root contains example values for local development
 
 ---
 
+## Deployment provider config (external — cannot be changed from this repo)
+
+The frontend build lives in `apps/web` and the backend build lives in `apps/api`.
+Both Cloudflare Pages and Render are configured via their own dashboards, not
+via a file checked into this repo, so a structure migration that moves these
+directories requires a manual, one-time update on each provider:
+
+- **Cloudflare Pages**: set the project's root/build directory to `apps/web`
+  (build command `npm run build`, output directory `apps/web/dist`).
+- **Render** (service `srv-d648gt0gjchc739iegb0`): set the service's root
+  directory to `apps/api` (Dockerfile at `apps/api/Dockerfile`).
+
+Until both are updated, production deploys will keep building from the old
+`backend/` / repo-root paths — this is expected and does not indicate a
+problem with the code in this repository.
+
+---
+
 ## Enforcement
 
 If a deployment decision conflicts with this document:

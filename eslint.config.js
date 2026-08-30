@@ -11,7 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Issue #1992 Slice 1B — import-boundary guardrails (warn-only). Discovered
 // dynamically so new feature folders are covered without editing this file.
-const featuresDir = path.join(__dirname, "src/features");
+const featuresDir = path.join(__dirname, "apps/web/src/features");
 const featureNames = fs.existsSync(featuresDir)
   ? fs
       .readdirSync(featuresDir, { withFileTypes: true })
@@ -44,7 +44,7 @@ const featureBoundaryConfigs = featureNames.map((feature) => {
   }
 
   return {
-    files: [`src/features/${feature}/**/*.{ts,tsx}`],
+    files: [`apps/web/src/features/${feature}/**/*.{ts,tsx}`],
     rules: {
       "@typescript-eslint/no-restricted-imports": ["error", { patterns }],
     },
@@ -71,10 +71,10 @@ export default tseslint.config(
     },
   },
   ...featureBoundaryConfigs,
-  // Forward guard: src/shared/ doesn't exist yet, but when it does, it must
-  // not depend on features/*.
+  // Forward guard: apps/web/src/shared/ doesn't exist yet, but when it does,
+  // it must not depend on features/*.
   {
-    files: ["src/shared/**/*.{ts,tsx}"],
+    files: ["apps/web/src/shared/**/*.{ts,tsx}"],
     rules: {
       "@typescript-eslint/no-restricted-imports": [
         "error",

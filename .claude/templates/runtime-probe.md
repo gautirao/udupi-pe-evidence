@@ -140,7 +140,7 @@ evidence for runtime claims; it never removes a check.
 ## When a probe is NOT required
 
 The probe is NOT required when the PR touches none of the trigger paths above
-— e.g. product code under `src/**`, `backend/**`, `supabase/**`, migrations,
+— e.g. product code under `apps/web/src/**`, `apps/api/**`, `supabase/**`, migrations,
 E2E specs, dependency manifests, or workflow docs that do not assert runtime
 tool behaviour. Routine PRs continue under the standard ROUTE_AND_RUN flow.
 

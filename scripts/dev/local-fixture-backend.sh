@@ -15,18 +15,18 @@
 #      mirroring e2e/admin-approval.spec.ts's call shape.
 #   5. Idempotently seed auth.users + public.user_roles('admin') for that
 #      admin's UUID inside the local fixture.
-#   6. exec backend/run-local.sh with SKIP_BACKEND_ENV_LOAD=true and local
+#   6. exec apps/api/run-local.sh with SKIP_BACKEND_ENV_LOAD=true and local
 #      datasource overrides, keeping hosted JWT validation (SUPABASE_PROJECT_REF).
 #
 # Usage (from anywhere):
 #   bash scripts/dev/local-fixture-backend.sh
 #
 # Required files (not sourced for their DB_* values — see below):
-#   backend/.env   — SUPABASE_PROJECT_REF, AI_API_KEY
+#   apps/api/.env  — SUPABASE_PROJECT_REF, AI_API_KEY
 #   .env.e2e       — ADMIN_EMAIL, ADMIN_PASSWORD
 #   .env           — VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY
 #
-# IMPORTANT: this script sources ALL of backend/.env (Step B), which may include
+# IMPORTANT: this script sources ALL of apps/api/.env (Step B), which may include
 # SUPABASE_DB_HOST/PORT/PASSWORD (the remote datasource values) if present — but
 # it never dereferences/uses those specific values afterward. It only ever
 # constructs its own local fixture datasource values (localhost / PG_TEST_PORT /
@@ -42,7 +42,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-BACKEND_ENV_FILE="${REPO_ROOT}/backend/.env"
+BACKEND_ENV_FILE="${REPO_ROOT}/apps/api/.env"
 E2E_ENV_FILE="${REPO_ROOT}/.env.e2e"
 ROOT_ENV_FILE="${REPO_ROOT}/.env"
 RESTORE_SCRIPT="${REPO_ROOT}/scripts/db/restore-test-fixture.sh"
@@ -88,11 +88,11 @@ fi
 echo ">>> Prerequisites present."
 
 # ---------------------------------------------------------------------------
-# Load required vars from .env, .env.e2e, backend/.env — never for SUPABASE_DB_*
+# Load required vars from .env, .env.e2e, apps/api/.env — never for SUPABASE_DB_*
 # ---------------------------------------------------------------------------
 
 # A caller (e.g. scripts/dev-worktree-stack.sh, scripts/run-e2e-local.sh) may
-# already have exported a per-worktree CORS_ALLOWED_ORIGINS. backend/.env also
+# already have exported a per-worktree CORS_ALLOWED_ORIGINS. apps/api/.env also
 # defines it, and `source` always wins over an existing exported value — so
 # without this, the caller's origin is silently clobbered by backend/.env's
 # hardcoded allowlist (#2285; same class as run-local.sh's #2078 SERVER_PORT
@@ -111,7 +111,7 @@ set +a
 if [[ -n "$CALLER_CORS_ALLOWED_ORIGINS" ]]; then
   CORS_ALLOWED_ORIGINS="$CALLER_CORS_ALLOWED_ORIGINS"
   export CORS_ALLOWED_ORIGINS
-  echo ">>> CORS_ALLOWED_ORIGINS overridden by caller: $CORS_ALLOWED_ORIGINS (backend/.env value ignored)"
+  echo ">>> CORS_ALLOWED_ORIGINS overridden by caller: $CORS_ALLOWED_ORIGINS (apps/api/.env value ignored)"
 fi
 
 if [[ -z "${VITE_SUPABASE_URL:-}" || -z "${VITE_SUPABASE_PUBLISHABLE_KEY:-}" ]]; then
@@ -183,7 +183,7 @@ if [[ "$AUTH_MODE" == "option2" ]]; then
   SMOKE_USER_PASSWORD="$E2E_USER_PASSWORD"
 
   # This is the WHOLE backend mechanism — no Spring code change needed.
-  # backend/src/main/resources/application.yml:46 does pure env
+  # apps/api/src/main/resources/application.yml:46 does pure env
   # substitution: issuer-uri: https://${SUPABASE_PROJECT_REF}.supabase.co/auth/v1
   SUPABASE_PROJECT_REF="$E2E_SUPABASE_PROJECT_REF"
 fi
@@ -279,7 +279,7 @@ trap 'rm -f "$TOKEN_FILE"' EXIT
 printf '%s' "$ACCESS_TOKEN" > "$TOKEN_FILE"
 
 echo ">>> Access token written to: $TOKEN_FILE (mode 600; build your own 'Authorization: Bearer \$(cat $TOKEN_FILE)' header)"
-echo ">>> NOTE: this script execs backend/run-local.sh at the end (Step G) to keep it in the"
+echo ">>> NOTE: this script execs apps/api/run-local.sh at the end (Step G) to keep it in the"
 echo "    foreground, and bash's EXIT trap does NOT fire across exec. The token file above"
 echo "    therefore intentionally survives past this script's own lifetime — use it before"
 echo "    restarting the fixture, or remove it manually: rm -f $TOKEN_FILE"
@@ -401,7 +401,7 @@ echo ">>> Starting Spring Boot against the local fixture (hosted JWT validation 
 # SPRING_FLYWAY_ENABLED=false: restore-test-fixture.sh (Step C) already applied every
 # migration to this fixture via its own Docker Flyway run against a temp copy of the
 # migration files with CONCURRENTLY stripped for throwaway-fixture safety — those temp
-# files checksum differently than backend/src/main/resources/db/migration's real files.
+# files checksum differently than apps/api/src/main/resources/db/migration's real files.
 # Spring Boot's embedded Flyway would re-validate on startup and fail with checksum
 # mismatches for every affected migration. The fixture's schema is already correct and
 # complete (asserted by restore-test-fixture.sh's own flyway_schema_history row-count
@@ -430,4 +430,4 @@ SPRING_DATASOURCE_HIKARI_DATA_SOURCE_PROPERTIES_SSLMODE=disable \
 SPRING_FLYWAY_ENABLED=false \
 SUPABASE_PROJECT_REF="$SUPABASE_PROJECT_REF" \
 AI_API_KEY="${AI_API_KEY:-}" \
-exec "${REPO_ROOT}/backend/run-local.sh"
+exec "${REPO_ROOT}/apps/api/run-local.sh"

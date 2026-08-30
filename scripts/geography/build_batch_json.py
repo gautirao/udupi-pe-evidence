@@ -7,7 +7,7 @@ user-correction rework of PR #1904's HOLD findings — see
 design this file implements verbatim).
 
 Output shape matches
-backend/src/main/java/com/example/realestate/discover/AreaOnboardingRunner.java's
+apps/api/src/main/java/com/example/realestate/discover/AreaOnboardingRunner.java's
 CandidateBatchFile record (lines 153-161) and
 AreaOnboardingService.CandidateInput (lines 73-84) BYTE-FOR-BYTE:
 

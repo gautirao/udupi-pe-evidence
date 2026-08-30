@@ -5,7 +5,7 @@
  * Runs `tsc -p tsconfig.app.json --noEmit`, parses the primary diagnostic
  * lines it emits, fingerprints each distinct (file, code, normalised
  * message) tuple, and compares the resulting set against a committed
- * baseline (typecheck-baseline.json) at the repo root.
+ * baseline (typecheck-baseline.json) in apps/web.
  *
  * Modes (mutually exclusive — always invoke separately, never combined):
  *   (default)  GATE    — exit non-zero if any current fingerprint is not
@@ -38,7 +38,8 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const REPO_ROOT = path.resolve(__dirname, '..');
-const BASELINE_PATH = path.join(REPO_ROOT, 'typecheck-baseline.json');
+const APP_ROOT = path.join(REPO_ROOT, 'apps/web');
+const BASELINE_PATH = path.join(APP_ROOT, 'typecheck-baseline.json');
 
 // Matches a primary tsc diagnostic line, e.g.:
 //   src/foo/Bar.ts(12,34): error TS2345: Argument of type 'X' is not assignable...
@@ -221,14 +222,14 @@ export function compareAgainstBaseline(currentEntries, baselineEntries) {
  * "non-zero exit because type errors were found" from "non-zero exit
  * because the compiler itself failed to run" via isBrokenCompilerRun().
  *
- * @param {string} [repoRoot]
+ * @param {string} [appRoot]
  * @returns {{ output: string, status: number | null }}
  */
-export function runTsc(repoRoot = REPO_ROOT) {
+export function runTsc(appRoot = APP_ROOT) {
   const result = spawnSync(
     'npx',
     ['tsc', '-p', 'tsconfig.app.json', '--noEmit'],
-    { cwd: repoRoot, encoding: 'utf8', shell: process.platform === 'win32' }
+    { cwd: appRoot, encoding: 'utf8', shell: process.platform === 'win32' }
   );
   if (result.error) {
     throw result.error;

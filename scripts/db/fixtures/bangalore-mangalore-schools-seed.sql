@@ -3,7 +3,7 @@
 -- Idempotent and deterministic local/dev seed fixture
 --
 -- NOTE (issue #1737): the area_key column below is INERT. The V80 BEFORE INSERT trigger
--- (backend/src/main/resources/db/migration/V80__school_area_key_trigger.sql) OVERWRITES
+-- (apps/api/src/main/resources/db/migration/V80__school_area_key_trigger.sql) OVERWRITES
 -- area_key with a freshly-computed nearest-area value on every INSERT — the literal written
 -- here is never what ends up stored once V106's finer area catalogue is present. The
 -- DATABASE ROW (schools.area_key), not this file, is the source of truth; the corrective

@@ -1,0 +1,335 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT:6543}/${SUPABASE_DB_NAME:postgres}?prepareThreshold=0&stringtype=unspecified
+    username: ${SUPABASE_DB_USER}
+    password: ${SUPABASE_DB_PASSWORD}
+    hikari:
+      pool-name: udupi-pool
+      maximum-pool-size: 10
+      minimum-idle: 2
+      data-source-properties:
+        ssl: true
+        sslmode: require
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration,classpath:com/example/realestate/migration
+    placeholders:
+      concurrently_keyword: "CONCURRENTLY "
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 12MB
+
+  data:
+    web:
+      pageable:
+        max-page-size: 100
+        default-page-size: 20
+        serialization-mode: via_dto
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        default_schema: public
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://${SUPABASE_PROJECT_REF}.supabase.co/auth/v1
+
+app:
+  ai:
+    api-url: ${AI_API_URL:https://generativelanguage.googleapis.com/v1beta/openai/chat/completions}
+    api-key: ${AI_API_KEY}
+    model: ${AI_MODEL:gemini-2.0-flash}
+
+  ingestion:
+    batch-size: ${INGESTION_BATCH_SIZE:10}
+    poll-interval-ms: ${INGESTION_POLL_INTERVAL_MS:30000}
+    api-key: ${INGESTION_API_KEY:changeme-local-dev-only}
+
+  email:
+    resend-api-key: ${RESEND_API_KEY:disabled}
+    from-address: ${RESEND_FROM_ADDRESS:alerts@udupi-properties.com}
+
+  regional-classification:
+    backfill-enabled: false  # Set to true on a single deployment to populate regional_area_classifications
+    city-slug: ""  # Optional: scope the backfill to one city (e.g. "bangalore"). Blank = all active cities.
+
+  # Public discover GET anti-abuse rate limit (#1671). Per-IP in-memory Bucket4j guard for the
+  # unauthenticated discover GET family (see DiscoverRateLimitFilter). Does NOT apply to
+  # authenticated discover GETs (/api/discover/markers, /api/discover/listings) or to any non-GET
+  # method. Distributed/Redis-backed limiting across multiple instances is a follow-up.
+  ratelimit:
+    discover:
+      enabled: ${RATE_LIMIT_DISCOVER_ENABLED:true}
+      # ~3x a heavy real single-user session, incl. some headroom for NAT-shared IPs.
+      requests-per-minute: ${RATE_LIMIT_DISCOVER_REQUESTS_PER_MINUTE:120}
+      # false (default): key on getRemoteAddr() only — safe for direct/unproxied deployments.
+      # true: key on the leftmost X-Forwarded-For entry instead — only enable behind a trusted
+      # reverse proxy that overwrites/strips client-supplied XFF; otherwise this is spoofable.
+      trust-forwarded-header: ${RATE_LIMIT_DISCOVER_TRUST_FORWARDED_HEADER:false}
+      # Hard cap on concurrently tracked buckets; the map is cleared (not evicted piecemeal) once
+      # this is reached, in addition to the unconditional hourly eviction.
+      max-entries: ${RATE_LIMIT_DISCOVER_MAX_ENTRIES:100000}
+
+    # Public trends GET anti-abuse rate limit (#1612). Per-IP in-memory Bucket4j guard for the
+    # fully-anonymous trends GET family (see TrendsRateLimitFilter): /api/trends/options,
+    # /api/trends/overview, /api/trends/area-intelligence, /api/trends/resolve-area. Does NOT
+    # apply to any non-GET/HEAD method. Distributed/Redis-backed limiting across multiple
+    # instances is a follow-up.
+    trends:
+      enabled: ${RATE_LIMIT_TRENDS_ENABLED:true}
+      # Lower default than discover — trends endpoints are lighter-traffic, single-page lookups.
+      requests-per-minute: ${RATE_LIMIT_TRENDS_REQUESTS_PER_MINUTE:60}
+      # false (default): key on getRemoteAddr() only — safe for direct/unproxied deployments.
+      # true: key on the leftmost X-Forwarded-For entry instead — only enable behind a trusted
+      # reverse proxy that overwrites/strips client-supplied XFF; otherwise this is spoofable.
+      trust-forwarded-header: ${RATE_LIMIT_TRENDS_TRUST_FORWARDED_HEADER:false}
+      # Hard cap on concurrently tracked buckets; the map is cleared (not evicted piecemeal) once
+      # this is reached, in addition to the unconditional hourly eviction.
+      max-entries: ${RATE_LIMIT_TRENDS_MAX_ENTRIES:100000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+  endpoint:
+    health:
+      show-details: never
+      group:
+        # #1907: scoped detail visibility for the city-region backfill readiness indicator only —
+        # does NOT change the app-wide show-details: never default above. See
+        # CityRegionBackfillReadinessHealthIndicator for why this indicator always reports UP.
+        cityRegionBackfill:
+          include: cityRegionBackfillReadiness
+          show-details: always
+        # #1955 Areas PR A, SLICE 2d: genuine readiness gate (unlike cityRegionBackfill above, this
+        # ONE contributes real DOWN to the aggregate /actuator/health while the navigation-hierarchy
+        # cache preload is still in flight). See NavigationHierarchyReadinessHealthIndicator.
+        navigationHierarchy:
+          include: navigationHierarchyReadiness
+          show-details: always
+
+  metrics:
+    tags:
+      application: ${spring.application.name:udupi-property-explorer}
+    distribution:
+      percentiles-histogram:
+        discover.markers.query.latency.seconds: true
+        discover.listings.query.latency.seconds: true
+        discover.opensearch.listings.query.latency.seconds: true
+        discover.opensearch.markers.query.latency.seconds: true
+        discover.opensearch.shadow.latency.seconds: true
+        discover.opensearch.rebuild.duration.seconds: true
+      percentiles:
+        discover.markers.query.latency.seconds: 0.5,0.95,0.99
+        discover.listings.query.latency.seconds: 0.5,0.95,0.99
+        discover.opensearch.listings.query.latency.seconds: 0.5,0.95,0.99
+        discover.opensearch.markers.query.latency.seconds: 0.5,0.95,0.99
+        discover.opensearch.shadow.latency.seconds: 0.5,0.95,0.99
+        discover.opensearch.rebuild.duration.seconds: 0.5,0.95,0.99
+  info:
+    env:
+      enabled: false
+
+server:
+  port: ${SERVER_PORT:8085}
+  tomcat:
+    max-http-post-size: 12582912
+  error:
+    include-message: never
+    include-stack-trace: never
+    include-exception: false
+    include-binding-errors: never
+
+listing:
+  lifecycle:
+    booking-cascade:
+      enabled: true
+  images:
+    upload-url:
+      # Per-user in-memory Bucket4j rate limit for POST /api/listings/{id}/images/upload-url (#1699).
+      # Local/in-memory/per-instance only — not distributed across app instances.
+      rate-limit:
+        per-minute: ${LISTING_IMAGES_UPLOAD_URL_RATE_LIMIT_PER_MINUTE:30}
+
+logging:
+  level:
+    com.example.realestate: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [requestId=%X{requestId:-none}] %logger{36} - %msg%n"
+
+# CORS Configuration (SEC-2 remediation)
+# Production: set CORS_ALLOWED_ORIGINS=https://your-domain.pages.dev in Render env vars
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5174,http://localhost:3000}
+
+# Supabase Storage — used by SupabaseStorageService for server-side object deletion.
+# Set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in Render env vars before enabling.
+# Defaults to disabled so the app starts cleanly when keys are absent.
+supabase:
+  url: ${SUPABASE_URL:}
+  service-role-key: ${SUPABASE_SERVICE_ROLE_KEY:}
+  storage:
+    enabled: ${SUPABASE_STORAGE_ENABLED:false}
+    bucket: ${SUPABASE_STORAGE_BUCKET:listing-images}
+    # TTL hint forwarded to the Supabase upload-sign endpoint. Note: the upload token lifetime
+    # is server-fixed in many storage-api versions; this is a best-effort hint only.
+    upload-url-ttl-seconds: 300
+
+# Local dev photo-upload storage stub (#2351) — filesystem-backed fallback used ONLY when
+# supabase.storage.enabled=false (no real Supabase creds, e.g. every local worktree). Never set
+# LOCAL_DEV_STORAGE_ENABLED in production or CI config. See docs/local-dev-storage.md.
+local:
+  dev:
+    storage:
+      enabled: ${LOCAL_DEV_STORAGE_ENABLED:false}
+      root: ${LOCAL_DEV_STORAGE_ROOT:${java.io.tmpdir}/udupi-local-storage}
+      # Left empty by default: each worktree runs its backend on its own port, so the signed
+      # upload URL's host/port is derived from the current request rather than a fixed value
+      # in the worktree-shared apps/api/.env. Only set LOCAL_DEV_STORAGE_PUBLIC_BASE_URL to
+      # override this (e.g. behind a reverse proxy).
+      public-base-url: ${LOCAL_DEV_STORAGE_PUBLIC_BASE_URL:}
+
+# Sentry error monitoring
+# DSN must be set in Render env vars: SENTRY_DSN=https://...@sentry.io/...
+# When SENTRY_DSN is absent (empty default), Sentry initializes in no-op mode — no crash.
+# SECURITY: send-default-pii MUST remain false. Do NOT set to true under any circumstances.
+#   This prevents Authorization headers, JWT payloads, and user PII from being sent to Sentry.
+sentry:
+  dsn: ${SENTRY_DSN:}
+  send-default-pii: false
+  environment: ${RENDER_SERVICE_NAME:local}
+  traces-sample-rate: 0
+
+# Phone encryption at rest (AES-256-GCM).
+# Production: set PHONE_ENCRYPTION_KEY env var to a Base64-encoded 32-byte secret.
+# The default below is a DEVELOPMENT-ONLY test key — NOT suitable for production.
+security:
+  phone:
+    encryption-key: ${PHONE_ENCRYPTION_KEY:QUVTMjU2R0NNLXRlc3Qta2V5LWZvci1kZXYtb25seTA=}
+
+# Trust configuration (RE-150, RE-158).
+# otp.provider: stub (default, NOT for production) | msg91 (issue #552)
+# tierBase: base score per tier letter. weights: multipliers for each score component.
+trust:
+  otp:
+    provider: stub
+  ranking:
+    tier-base:
+      A: 1000
+      B: 750
+      C: 500
+      D: 0
+    weights:
+      freshness: 200
+      profile: 100
+      listing: 100
+
+# Proximity duplicate batch job — nightly backfill scan.
+# Cron uses Spring 6-field format: seconds minutes hours day-of-month month day-of-week.
+# Default: 02:00 UTC. Override via PROXIMITY_BATCH_CRON env var (e.g. "0/5 * * * * *" for dev).
+proximity:
+  batch:
+    cron: ${PROXIMITY_BATCH_CRON:0 0 2 * * *}
+
+# OpenSearch discover adapter — disabled by default.
+# Set discover.opensearch.enabled=true + OPENSEARCH_URL to enable.
+# The timeout values are intentionally aggressive: OS must respond in 500ms (read)
+# or 1000ms (connect) or the routing service falls back to Postgres.
+discover:
+  # Navigation-hierarchy cache lifecycle (#1955 Areas PR A, SLICE 2d) — Caffeine, in-process only
+  # (no Redis). Eager-preloads every public-active city's navigation graph at startup, refreshes
+  # on promotion (AFTER_COMMIT event) with a load-before-swap + grace-period-eviction contract, and
+  # self-heals via a periodic safety poll. See NavigationCacheProperties for field-level detail.
+  navigation:
+    cache:
+      max-size: ${DISCOVER_NAVIGATION_CACHE_MAX_SIZE:200}
+      ttl-seconds: ${DISCOVER_NAVIGATION_CACHE_TTL_SECONDS:3600}
+      preview-max-size: ${DISCOVER_NAVIGATION_CACHE_PREVIEW_MAX_SIZE:50}
+      preview-ttl-seconds: ${DISCOVER_NAVIGATION_CACHE_PREVIEW_TTL_SECONDS:900}
+      grace-period-seconds: ${DISCOVER_NAVIGATION_CACHE_GRACE_PERIOD_SECONDS:30}
+      preload-timeout-seconds: ${DISCOVER_NAVIGATION_CACHE_PRELOAD_TIMEOUT_SECONDS:60}
+      preload-max-retries: ${DISCOVER_NAVIGATION_CACHE_PRELOAD_MAX_RETRIES:3}
+      preload-retry-backoff-millis: ${DISCOVER_NAVIGATION_CACHE_PRELOAD_RETRY_BACKOFF_MILLIS:200}
+      poll-interval-seconds: ${DISCOVER_NAVIGATION_CACHE_POLL_INTERVAL_SECONDS:45}
+    # Structural node/ancestry HTTP Cache-Control max-age (#1955 Areas PR A, SLICE 2e, AC8) — the
+    # hierarchy only changes on a promotion, so this can be far longer-lived than the counts cache
+    # below; the response ETag (revisionId:checksum) still lets a client revalidate cheaply.
+    structural:
+      cache:
+        max-age-seconds: ${DISCOVER_NAVIGATION_STRUCTURAL_CACHE_MAX_AGE_SECONDS:300}
+    # Short-TTL, revision-aware display-time counts cache (#1955 Areas PR A, SLICE 2e, AC12) —
+    # deliberately much shorter than the structural cache above: live listing volume changes far
+    # more often than the generated hierarchy shape. See AreaCountRollupService.
+    counts:
+      cache:
+        ttl-seconds: ${DISCOVER_NAVIGATION_COUNTS_CACHE_TTL_SECONDS:30}
+        max-size: ${DISCOVER_NAVIGATION_COUNTS_CACHE_MAX_SIZE:500}
+  summary:
+    cache:
+      # Kill switch: set DISCOVER_SUMMARY_CACHE_ENABLED=false to bypass the cache entirely and
+      # delegate to RoutingDiscoverSummaryService on every request (#1760).
+      enabled: ${DISCOVER_SUMMARY_CACHE_ENABLED:true}
+      # Staleness bound — matches the existing Cache-Control max-age=120 HTTP contract on
+      # GET /api/discover/summary, so cache staleness never exceeds what clients already accept.
+      ttl-seconds: ${DISCOVER_SUMMARY_CACHE_TTL_SECONDS:120}
+      max-size: ${DISCOVER_SUMMARY_CACHE_MAX_SIZE:1000}
+  opensearch:
+    enabled: false
+    url: ${OPENSEARCH_URL:http://localhost:9200}
+    index-alias: listings_read
+    timeout-ms: 500
+    connect-timeout-ms: 1000
+    # Optional auth for production OpenSearch clusters (leave blank for unauthenticated/local).
+    # API key takes precedence over username+password when both are set.
+    username: ${OPENSEARCH_USERNAME:}
+    password: ${OPENSEARCH_PASSWORD:}
+    api-key: ${OPENSEARCH_API_KEY:}
+    # Shadow-read / parity mode: fires OS query fire-and-forget beside Postgres response.
+    # Only active when shadow-enabled=true AND enabled=false (Postgres-primary path).
+    shadow-enabled: false
+    shadow-timeout-ms: 500
+    shadow-sample-rate: 1.0
+    shadow-top-n: 10
+
+# Search indexer — outbox-driven OpenSearch write path.
+# Disabled by default; set SEARCH_INDEXER_ENABLED=true to activate the poller.
+# Reuses discover.opensearch.* for URL and credentials (same cluster, same index alias).
+search:
+  indexer:
+    enabled: ${SEARCH_INDEXER_ENABLED:false}
+  outbox:
+    poll-interval-seconds: ${SEARCH_OUTBOX_POLL_INTERVAL_SECONDS:30}
+    batch-size: ${SEARCH_OUTBOX_BATCH_SIZE:100}
+    min-event-age-seconds: ${SEARCH_OUTBOX_MIN_EVENT_AGE_SECONDS:0}
+    # Retry: bounded attempts with delay before marking an entry DEAD (terminal).
+    # Override via SEARCH_OUTBOX_MAX_RETRY_ATTEMPTS / SEARCH_OUTBOX_RETRY_DELAY_SECONDS.
+    max-retry-attempts: ${SEARCH_OUTBOX_MAX_RETRY_ATTEMPTS:3}
+    retry-delay-seconds: ${SEARCH_OUTBOX_RETRY_DELAY_SECONDS:60}
+
+# Area region-reclassification outbox consumer (#1887 PR3) — a DISTINCT namespace/table from the
+# search indexer above: never reuses search.indexer.enabled and never touches
+# listing_search_outbox. Disabled by default; set AREA_REGION_RECLASS_ENABLED=true to activate the
+# poller, which drains area_region_reclass_outbox (enqueued by AreaOnboardingApplyService in PR2)
+# and calls CityRegionOnboardingService.apply(cityId) — never synchronously from an apply/ingest
+# transaction.
+area:
+  region-reclass:
+    enabled: ${AREA_REGION_RECLASS_ENABLED:false}
+    poll-interval-seconds: 30
+    batch-size: 50
+    max-retry-attempts: 3
+    retry-delay-seconds: 60
+    max-backoff-seconds: 3600
+    min-event-age-seconds: 0

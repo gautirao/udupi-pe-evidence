@@ -60,7 +60,7 @@ npm run test:watch    # watch mode — re-runs on save
 npx vitest --ui       # browser UI at localhost:51204 with test explorer + diffs
 ```
 
-Tests live in `src/**/*.test.tsx`.
+Tests live in `apps/web/src/**/*.test.tsx`.
 
 ### E2E tests (Playwright)
 

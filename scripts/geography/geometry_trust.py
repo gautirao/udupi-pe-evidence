@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Python port of GeometryTrust.classify (#1887 PR1, issue #1900 AC4/D4/R5).
 
-Mirrors backend/src/main/java/com/example/realestate/discover/GeometryTrust.java
+Mirrors apps/api/src/main/java/com/example/realestate/discover/GeometryTrust.java
 (lines 23-39) EXACTLY: computed only from geometry_source + centre/bbox
 presence, never from listing coordinates or listing density, never from
 candidate popularity.

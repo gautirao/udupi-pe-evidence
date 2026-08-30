@@ -38,7 +38,7 @@
 -- PART (b) — SCHOOLS. Places 2 school rows so their V80 BEFORE INSERT trigger-computed area_key
 -- resolves to seeded Bangalore AREA leaves under d:southeast.
 --
--- V80 trigger mechanism (backend/src/main/resources/db/migration/V80__school_area_key_trigger.sql,
+-- V80 trigger mechanism (apps/api/src/main/resources/db/migration/V80__school_area_key_trigger.sql,
 -- read in full before writing this file): on INSERT, if district + lat/lon are present, it
 -- normalises district ('bengaluru urban'/'bangalore urban'/'bangalore' -> 'bengaluru'; 'Bengaluru'
 -- itself already lowercases to that same token) and assigns area_key = the NEAREST areas row in the

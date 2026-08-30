@@ -32,7 +32,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-MIGRATION_DIR="${REPO_ROOT}/backend/src/main/resources/db/migration"
+MIGRATION_DIR="${REPO_ROOT}/apps/api/src/main/resources/db/migration"
 SEED_FILE="${SCRIPT_DIR}/fixtures/discover-smoke-seed.sql"
 
 # Bangalore navigation-hierarchy fixture (#2256): the canonical E2E suite's Bangalore-targeted
@@ -81,7 +81,7 @@ fi
 
 if [[ ! -d "${MIGRATION_DIR}" ]]; then
   echo "ERROR: Migration directory not found: ${MIGRATION_DIR}" >&2
-  echo "Run this script from the repository root or ensure backend/src/main/resources/db/migration exists." >&2
+  echo "Run this script from the repository root or ensure apps/api/src/main/resources/db/migration exists." >&2
   exit 1
 fi
 

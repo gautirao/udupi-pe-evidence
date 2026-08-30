@@ -2,7 +2,7 @@
 # scripts/dev/tests/local-fixture-backend.test.sh — #1981
 #
 # Minimal, dependency-free bash assertion harness for:
-#   - backend/run-local.sh (SKIP_BACKEND_ENV_LOAD guard)
+#   - apps/api/run-local.sh (SKIP_BACKEND_ENV_LOAD guard)
 #   - scripts/dev/local-fixture-backend.sh (local-fixture workflow)
 #
 # No bats/shunit2 dependency. Mocks docker/psql/curl/mvn via stub executables
@@ -140,16 +140,16 @@ run_runlocal() {
   # $1 = sandbox dir; remaining args = NAME=VALUE env assignments for the child
   local sandbox="$1"
   shift
-  env -i PATH="$MOCKBIN:$ORIG_PATH" HOME="${HOME:-/tmp}" "$@" bash "$sandbox/backend/run-local.sh"
+  env -i PATH="$MOCKBIN:$ORIG_PATH" HOME="${HOME:-/tmp}" "$@" bash "$sandbox/apps/api/run-local.sh"
 }
 
 new_runlocal_sandbox() {
   local sb
   sb="$(mktemp -d)"
   CLEANUP_DIRS+=("$sb")
-  mkdir -p "$sb/backend"
-  cp "$REPO_ROOT/backend/run-local.sh" "$sb/backend/run-local.sh"
-  chmod +x "$sb/backend/run-local.sh"
+  mkdir -p "$sb/apps/api"
+  cp "$REPO_ROOT/apps/api/run-local.sh" "$sb/apps/api/run-local.sh"
+  chmod +x "$sb/apps/api/run-local.sh"
   echo "$sb"
 }
 
@@ -157,9 +157,9 @@ new_fixture_sandbox() {
   local sb
   sb="$(mktemp -d)"
   CLEANUP_DIRS+=("$sb")
-  mkdir -p "$sb/backend" "$sb/scripts/db" "$sb/scripts/dev"
+  mkdir -p "$sb/apps/api" "$sb/scripts/db" "$sb/scripts/dev"
 
-  cat > "$sb/backend/.env" <<'EOF'
+  cat > "$sb/apps/api/.env" <<'EOF'
 SUPABASE_PROJECT_REF=testref
 AI_API_KEY=test-ai-key-secret
 CORS_ALLOWED_ORIGINS=http://fromenv-origin-should-not-be-used
@@ -187,7 +187,7 @@ exit 0
 EOF
   chmod +x "$sb/scripts/db/restore-test-fixture.sh"
 
-  cat > "$sb/backend/run-local.sh" <<'EOF'
+  cat > "$sb/apps/api/run-local.sh" <<'EOF'
 #!/usr/bin/env bash
 echo "MOCK_RUN_LOCAL_INVOKED"
 {
@@ -202,7 +202,7 @@ echo "MOCK_RUN_LOCAL_INVOKED"
 } > "${RUN_LOCAL_CAPTURE:?RUN_LOCAL_CAPTURE not set}"
 exit 0
 EOF
-  chmod +x "$sb/backend/run-local.sh"
+  chmod +x "$sb/apps/api/run-local.sh"
 
   echo "$sb"
 }
@@ -217,11 +217,11 @@ run_fixture_script() {
 VALID_LOGIN_JSON='{"access_token":"mock-access-token-secret","user":{"id":"11111111-2222-3333-4444-555555555555"}}'
 
 # ===========================================================================
-# T1 — SKIP_BACKEND_ENV_LOAD unset: run-local.sh still sources backend/.env
+# T1 — SKIP_BACKEND_ENV_LOAD unset: run-local.sh still sources apps/api/.env
 # ===========================================================================
 
 SB1="$(new_runlocal_sandbox)"
-cat > "$SB1/backend/.env" <<'EOF'
+cat > "$SB1/apps/api/.env" <<'EOF'
 SUPABASE_DB_HOST=fromenv-host
 SUPABASE_DB_USER=fromenv-user
 SUPABASE_DB_PASSWORD=fromenv-pass-secret
@@ -235,14 +235,14 @@ RC1=$?
 CAP1="$(cat "$MVN_CAP1" 2>/dev/null || true)"
 
 if [[ $RC1 -eq 0 ]]; then ok "T1: run-local.sh (SKIP_BACKEND_ENV_LOAD unset) exits 0"; else not_ok "T1: run-local.sh (SKIP_BACKEND_ENV_LOAD unset) exits 0 (rc=$RC1)"; fi
-assert_contains "T1: backend/.env values are sourced and passed to mvn (AC1)" "$CAP1" "SUPABASE_DB_HOST=fromenv-host"
+assert_contains "T1: apps/api/.env values are sourced and passed to mvn (AC1)" "$CAP1" "SUPABASE_DB_HOST=fromenv-host"
 
 # ===========================================================================
 # T2 — SKIP_BACKEND_ENV_LOAD=true preserves caller-exported overrides
 # ===========================================================================
 
 SB2="$(new_runlocal_sandbox)"
-cat > "$SB2/backend/.env" <<'EOF'
+cat > "$SB2/apps/api/.env" <<'EOF'
 SUPABASE_DB_HOST=fromenv-host-should-not-be-used
 SUPABASE_DB_USER=fromenv-user-should-not-be-used
 SUPABASE_DB_PASSWORD=fromenv-pass-should-not-be-used
@@ -264,7 +264,7 @@ CAP2="$(cat "$MVN_CAP2" 2>/dev/null || true)"
 
 if [[ $RC2 -eq 0 ]]; then ok "T2: run-local.sh (SKIP_BACKEND_ENV_LOAD=true) exits 0"; else not_ok "T2: run-local.sh (SKIP_BACKEND_ENV_LOAD=true) exits 0 (rc=$RC2)"; fi
 assert_contains "T2: caller-exported SUPABASE_DB_HOST survives (AC2)" "$CAP2" "SUPABASE_DB_HOST=preset-host"
-assert_not_contains "T2: backend/.env is NOT sourced when skipping" "$CAP2" "fromenv-host-should-not-be-used"
+assert_not_contains "T2: apps/api/.env is NOT sourced when skipping" "$CAP2" "fromenv-host-should-not-be-used"
 
 # ===========================================================================
 # T3/T4 — custom PG_TEST_PORT / PG_TEST_PASSWORD propagate into Spring env
@@ -307,8 +307,8 @@ assert_contains "T4d: Hikari sslmode is disabled in the final exec env (AC8)" "$
 # vs. caller-override, through its own Step B three-file source sequence
 # ===========================================================================
 
-# Baseline: no caller override -> backend/.env's own CORS value is used.
-assert_contains "T4e: no caller override -> backend/.env CORS value used (baseline)" "$CAP3" "CORS_ALLOWED_ORIGINS=http://fromenv-origin-should-not-be-used"
+# Baseline: no caller override -> apps/api/.env's own CORS value is used.
+assert_contains "T4e: no caller override -> apps/api/.env CORS value used (baseline)" "$CAP3" "CORS_ALLOWED_ORIGINS=http://fromenv-origin-should-not-be-used"
 assert_not_contains "T4e: no caller override -> no override log line" "$LOG3_CONTENT" "CORS_ALLOWED_ORIGINS overridden by caller"
 
 SB4E="$(new_fixture_sandbox)"
@@ -336,7 +336,7 @@ LOG4E_CONTENT="$(cat "$LOG4E" 2>/dev/null || true)"
 
 if [[ $RC4E -eq 0 ]]; then ok "T4f setup: fixture run with caller CORS override exits 0"; else not_ok "T4f setup: fixture run with caller CORS override exits 0 (rc=$RC4E, log: $LOG4E_CONTENT)"; fi
 assert_contains "T4f: caller-exported CORS_ALLOWED_ORIGINS survives Step B's three-file source (#2285)" "$CAP4E" "CORS_ALLOWED_ORIGINS=http://worktree-override-origin"
-assert_not_contains "T4f: conflicting backend/.env CORS value is NOT used" "$CAP4E" "fromenv-origin-should-not-be-used"
+assert_not_contains "T4f: conflicting apps/api/.env CORS value is NOT used" "$CAP4E" "fromenv-origin-should-not-be-used"
 assert_contains "T4f: override log line is emitted" "$LOG4E_CONTENT" "CORS_ALLOWED_ORIGINS overridden by caller: http://worktree-override-origin"
 
 # ===========================================================================
@@ -472,7 +472,7 @@ FIXTURE_SRC="$REPO_ROOT/scripts/dev/local-fixture-backend.sh"
 FIXTURE_SRC_CONTENT="$(cat "$FIXTURE_SRC")"
 # The script must never *read* SUPABASE_DB_HOST (i.e. never dereference it via
 # $SUPABASE_DB_HOST / ${SUPABASE_DB_HOST) — it only ever assigns it the literal
-# "localhost" once, when constructing Step G's env for backend/run-local.sh.
+# "localhost" once, when constructing Step G's env for apps/api/run-local.sh.
 HOST_DEREF_COUNT="$(grep -c '\$SUPABASE_DB_HOST\|\${SUPABASE_DB_HOST' "$FIXTURE_SRC" || true)"
 
 if [[ "$HOST_DEREF_COUNT" -eq 0 ]] && [[ "$FIXTURE_SRC_CONTENT" == *"SUPABASE_DB_HOST=localhost"* ]]; then

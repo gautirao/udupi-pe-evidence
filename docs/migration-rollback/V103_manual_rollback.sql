@@ -1,6 +1,6 @@
 -- =============================================================================
 -- V103 MANUAL ROLLBACK (NOT a Flyway migration — never place this in
--- backend/src/main/resources/db/migration/). Forward-only Flyway repo.
+-- apps/api/src/main/resources/db/migration/). Forward-only Flyway repo.
 -- =============================================================================
 -- Issue: #1626 (M38-13A)
 --

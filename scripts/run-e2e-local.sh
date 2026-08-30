@@ -100,7 +100,7 @@ fi
 BACKEND_PID=""
 FRONTEND_PID=""
 
-# backend/run-local.sh binds to $SERVER_PORT (defaulting to backend/.env's
+# apps/api/run-local.sh binds to $SERVER_PORT (defaulting to apps/api/.env's
 # value, historically 8085) unless told otherwise — without this, the backend
 # started here would ignore BACKEND_PORT entirely and the health-check below
 # would wait forever on the WRONG port. CORS_ALLOWED_ORIGINS is one of the
@@ -110,20 +110,20 @@ FRONTEND_PID=""
 export SERVER_PORT="$BACKEND_PORT"
 export CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-http://localhost:$FRONTEND_PORT,http://127.0.0.1:$FRONTEND_PORT}"
 # VITE_API_BASE_URL is the third port-coupled knob (see scripts/dev-worktree-
-# stack.sh, which already exports it): what the APP itself calls (src/lib/
-# api.ts, default :8085). Without this, a worktree assigned a non-default
-# BACKEND_PORT gets a frontend that silently keeps calling :8085 — the
-# backend started above never sees that traffic, and every API-dependent
+# stack.sh, which already exports it): what the APP itself calls (apps/web/
+# src/lib/api.ts, default :8085). Without this, a worktree assigned a
+# non-default BACKEND_PORT gets a frontend that silently keeps calling :8085 —
+# the backend started above never sees that traffic, and every API-dependent
 # test in this run fails with a false-negative CORS/connection error instead
 # of exercising the backend this script just started.
 export VITE_API_BASE_URL="$BACKEND_BASE_URL"
 
 echo "[e2e] Starting backend..."
-"$SCRIPT_DIR/../backend/run-local.sh" > "$BACKEND_LOG" 2>&1 &
+"$SCRIPT_DIR/../apps/api/run-local.sh" > "$BACKEND_LOG" 2>&1 &
 BACKEND_PID=$!
 
 echo "[e2e] Starting frontend..."
-npm --prefix "$SCRIPT_DIR/.." run dev -- --port "$FRONTEND_PORT" > "$FRONTEND_LOG" 2>&1 &
+npm --prefix "$SCRIPT_DIR/../apps/web" run dev -- --port "$FRONTEND_PORT" > "$FRONTEND_LOG" 2>&1 &
 FRONTEND_PID=$!
 
 # Cleanup on exit — stop services we started

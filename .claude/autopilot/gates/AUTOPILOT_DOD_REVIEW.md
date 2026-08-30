@@ -146,7 +146,7 @@ change in context.)
   not explicitly listed above.
 
 **Not, by itself, governance-sensitive:** ordinary product / application code and its tests
-(`src/**`, `backend/**`, `e2e/**`, `**/*.spec.*`, `**/*.test.*`). Those follow the normal DoD
+(`apps/web/src/**`, `apps/api/**`, `e2e/**`, `**/*.spec.*`, `**/*.test.*`). Those follow the normal DoD
 roll-up below and **remain eligible for `WOULD_AUTOMERGE`** when no governance path is touched.
 (Security-sensitive *product* changes — auth / public endpoints / RLS / migrations / secrets —
 are escalated by a **separate** mechanism tracked under issue #1277; they are **not** in scope
@@ -181,7 +181,7 @@ verdict. It is a phase-entry short-circuit.
 3. All-or-nothing criterion roll-up — evaluated only if **neither** pre-filter fires.
 
 If a PR happens to touch both a governance-sensitive path (e.g. `.claude/**`) and a
-security-sensitive product path (e.g. `backend/src/**/auth/**`), the governance pre-filter
+security-sensitive product path (e.g. `apps/api/src/**/auth/**`), the governance pre-filter
 fires on step 1 and `NEEDS_USER_DECISION` is emitted — the security pre-filter is not
 separately evaluated. The ordering ensures `NEEDS_USER_DECISION` is always the outcome; no PR
 can slip through by matching only the second filter.
@@ -206,20 +206,20 @@ routes to `NEEDS_USER_DECISION` — even if the same PR also touches non-securit
 
 **Security-sensitive path list.** A path is security-sensitive if it matches any of:
 
-- `backend/src/**/auth/**` — auth services, filters, guards
-- `backend/src/**/security/**` — Spring Security configuration
-- `backend/src/**/Jwt*` — JWT token creation, validation, and filter classes
-- `backend/src/**/config/**` — security-relevant backend configuration (CORS, CSP,
+- `apps/api/src/**/auth/**` — auth services, filters, guards
+- `apps/api/src/**/security/**` — Spring Security configuration
+- `apps/api/src/**/Jwt*` — JWT token creation, validation, and filter classes
+- `apps/api/src/**/config/**` — security-relevant backend configuration (CORS, CSP,
   session, rate-limiting, token settings)
-- `backend/src/**/controller/**` — controller classes (public endpoint and access-guard
+- `apps/api/src/**/controller/**` — controller classes (public endpoint and access-guard
   changes are the primary risk; human review confirms)
-- `backend/src/**/dto/**` — DTO classes (public field projection and field-addition
+- `apps/api/src/**/dto/**` — DTO classes (public field projection and field-addition
   changes are the primary risk; human review confirms)
-- `backend/src/**/listing/**` — listing-domain classes (visibility/status filtering and
+- `apps/api/src/**/listing/**` — listing-domain classes (visibility/status filtering and
   LIVE vs non-LIVE logic are the primary risk; human review confirms)
-- `backend/src/main/resources/db/migration/**` — Flyway database migrations (schema,
+- `apps/api/src/main/resources/db/migration/**` — Flyway database migrations (schema,
   data, permission, or role changes)
-- `backend/src/main/resources/db/supabase-rpcs/**` — Supabase RLS and storage policy definitions
+- `apps/api/src/main/resources/db/supabase-rpcs/**` — Supabase RLS and storage policy definitions
 - `.env*` — any `.env` file variant (`.env`, `.env.local`, `.env.seed`, etc.)
 - `*.env*` — env file variants at any path depth
 - `.gitignore` — when the change affects how env files or secrets are tracked

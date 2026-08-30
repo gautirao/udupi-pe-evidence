@@ -68,8 +68,8 @@ fi
 PG_PASSWORD="${REMOTE_DEV_DB_PASSWORD:-${SUPABASE_DB_PASSWORD:-}}"
 
 if [[ -z "${PG_PASSWORD}" ]]; then
-  if [[ -f "${SCRIPT_DIR}/../../backend/.env" ]]; then
-    PG_PASSWORD=$(grep "^SUPABASE_DB_PASSWORD=" "${SCRIPT_DIR}/../../backend/.env" | cut -d= -f2- || true)
+  if [[ -f "${SCRIPT_DIR}/../../apps/api/.env" ]]; then
+    PG_PASSWORD=$(grep "^SUPABASE_DB_PASSWORD=" "${SCRIPT_DIR}/../../apps/api/.env" | cut -d= -f2- || true)
   fi
 fi
 
