@@ -250,7 +250,9 @@ describe('PropertyMap — AgriMarkerClusterLayer (Issue #1372)', () => {
     render(<PropertyMap listings={[houseListing]} />);
 
     expect(capturedIconCreateFn).toBeDefined();
-    capturedIconCreateFn!({ getChildCount: () => 1 });
+    // count=2 (not 1) — a 1-member cluster now bypasses divIcon entirely
+    // (Issue #2409), so it can't be used to probe the divIcon HTML here.
+    capturedIconCreateFn!({ getChildCount: () => 2 });
 
     const lastCall = capturedDivIconCalls[capturedDivIconCalls.length - 1];
     expect(lastCall.html).not.toContain('agri-cluster');

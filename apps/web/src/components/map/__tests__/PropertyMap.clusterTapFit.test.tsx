@@ -365,6 +365,129 @@ describe('Issue #1762 — MarkerClusterLayer clusterclick handler', () => {
   });
 });
 
+describe('Issue #2409 — genuine 1-member cluster bypasses split/spiderfy entirely', () => {
+  it('clusterclick on a childCount===1 cluster resolves the sole child back to its listing, opens the preview via onSelectListing + onMarkerClickWithPosition, and never publishes a camera intent', () => {
+    const onMarkerClusterCameraIntent = vi.fn();
+    const onSelectListing = vi.fn();
+    const onMarkerClickWithPosition = vi.fn();
+
+    vi.mocked(L.marker).mockClear();
+    render(
+      <PropertyMap
+        {...baseProps}
+        onSelectListing={onSelectListing}
+        onMarkerClickWithPosition={onMarkerClickWithPosition}
+        onMarkerClusterCameraIntent={onMarkerClusterCameraIntent}
+      />,
+    );
+
+    expect(capturedClusterHandler).toBeDefined();
+    // The exact marker instance MarkerClusterLayer created for houseListing —
+    // this is what listingByMarker's reverse lookup maps back to the listing.
+    const soleMarkerInstance = vi.mocked(L.marker).mock.results[0]!.value;
+
+    const singletonCluster = {
+      getChildCount: () => 1,
+      getAllChildMarkers: () => [soleMarkerInstance],
+    };
+    act(() => {
+      capturedClusterHandler!({
+        type: 'clusterclick',
+        layer: singletonCluster,
+        containerPoint: { x: 42, y: 84 },
+      });
+    });
+
+    expect(onSelectListing).toHaveBeenCalledTimes(1);
+    expect(onSelectListing).toHaveBeenCalledWith(houseListing);
+    expect(onMarkerClickWithPosition).toHaveBeenCalledTimes(1);
+    expect(onMarkerClickWithPosition).toHaveBeenCalledWith({ x: 42, y: 84 });
+    expect(onMarkerClusterCameraIntent).not.toHaveBeenCalled();
+    expect(mapStub.setView).not.toHaveBeenCalled();
+    expect(mapStub.flyTo).not.toHaveBeenCalled();
+    expect(mapStub.fitBounds).not.toHaveBeenCalled();
+  });
+
+  // Issue #2409 AC — "manual zoom and cluster-tap at equivalent scale
+  // converge on the same terminal one-member presentation." Leaflet's own
+  // 'clusterclick' event (bound in this file's mock the same way the real
+  // leaflet.markercluster plugin binds it) carries NO information about how
+  // the map camera reached its current zoom/bounds — a click on a
+  // childCount===1 MarkerCluster node looks identical to handleClusterActivate
+  // whether that node exists because the user tapped a larger cluster that
+  // decomposed down to it, or because they manually panned/zoomed there and
+  // leaflet.markercluster's own grid math independently wrapped the sole
+  // listing in a childCount===1 node (the documented #2409 root cause — see
+  // the iconCreateFunction comment in ResidentialMarkerClusterLayer.tsx).
+  // Proves this holds across two independently-mounted instances (standing
+  // in for two different navigation histories arriving at the same terminal
+  // state), not just the single cluster-tap scenario in the test above.
+  it('Issue #2409 AC (manual-zoom / cluster-tap convergence): a childCount===1 cluster reached by a real cluster-tap decomposition and one reached with NO prior tap at all (standing in for a manual zoom/pan) resolve to the identical listing-preview outcome, neither ever publishing a camera intent', () => {
+    const onMarkerClusterCameraIntent = vi.fn();
+
+    // "Cluster-tap" instance — a clusterclick event is what a real tap on a
+    // decomposing cluster fires.
+    const onSelectListingViaTap = vi.fn();
+    const onMarkerClickWithPositionViaTap = vi.fn();
+    vi.mocked(L.marker).mockClear();
+    const { unmount } = render(
+      <PropertyMap
+        {...baseProps}
+        onSelectListing={onSelectListingViaTap}
+        onMarkerClickWithPosition={onMarkerClickWithPositionViaTap}
+        onMarkerClusterCameraIntent={onMarkerClusterCameraIntent}
+      />,
+    );
+    const soleMarkerViaTap = vi.mocked(L.marker).mock.results[0]!.value;
+    act(() => {
+      capturedClusterHandler!({
+        type: 'clusterclick',
+        layer: { getChildCount: () => 1, getAllChildMarkers: () => [soleMarkerViaTap] },
+        containerPoint: { x: 42, y: 84 },
+      });
+    });
+    unmount();
+
+    // "Manual zoom" instance — a completely separate mount, no cluster-tap
+    // fit/setView ever happened; the map is simply presented with this
+    // single-listing dataset at whatever zoom it settled at. The click on
+    // the resulting childCount===1 node still arrives as the SAME
+    // 'clusterclick' event shape, because leaflet.markercluster's own
+    // clusterclick binding (mirrored by this file's mock) is unconditional —
+    // there is no "was this reached via tap" flag anywhere in the contract.
+    const onSelectListingViaZoom = vi.fn();
+    const onMarkerClickWithPositionViaZoom = vi.fn();
+    vi.mocked(L.marker).mockClear();
+    render(
+      <PropertyMap
+        {...baseProps}
+        onSelectListing={onSelectListingViaZoom}
+        onMarkerClickWithPosition={onMarkerClickWithPositionViaZoom}
+        onMarkerClusterCameraIntent={onMarkerClusterCameraIntent}
+      />,
+    );
+    const soleMarkerViaZoom = vi.mocked(L.marker).mock.results[0]!.value;
+    act(() => {
+      capturedClusterHandler!({
+        type: 'clusterclick',
+        layer: { getChildCount: () => 1, getAllChildMarkers: () => [soleMarkerViaZoom] },
+        containerPoint: { x: 42, y: 84 },
+      });
+    });
+
+    // Both paths converge on the identical outcome: the same listing opens
+    // via the same callbacks at the same click position, and NEITHER path
+    // ever publishes a camera intent — no secondary zoom/fit step for either.
+    expect(onSelectListingViaTap).toHaveBeenCalledTimes(1);
+    expect(onSelectListingViaTap).toHaveBeenCalledWith(houseListing);
+    expect(onSelectListingViaZoom).toHaveBeenCalledTimes(1);
+    expect(onSelectListingViaZoom).toHaveBeenCalledWith(houseListing);
+    expect(onMarkerClickWithPositionViaTap).toHaveBeenCalledWith({ x: 42, y: 84 });
+    expect(onMarkerClickWithPositionViaZoom).toHaveBeenCalledWith({ x: 42, y: 84 });
+    expect(onMarkerClusterCameraIntent).not.toHaveBeenCalled();
+  });
+});
+
 describe('Issue #1762 fix cycle 3 — tight/coincident-coordinate cluster spiderfy readability', () => {
   it('sets a wide spiderfyDistanceMultiplier so leaflet.markercluster\'s native spiderfy (which fires for a coincident-coordinate cluster our own clusterCanSplit gate correctly declines to zoom) fans large custom pill markers out legibly instead of collapsing them into an overlapping stack', () => {
     // Live-reproduced regression (2026-08-11, real browser against the dev
@@ -1005,6 +1128,36 @@ describe('Issue #1762 fix cycle 7 — spiderfy fan stays open across repeated cl
     const threeListings = [listingA, listingB, listingC] as never;
     rerender(
       <PropertyMap {...baseProps} listings={threeListings} onSelectListing={onSelectListing} />,
+    );
+
+    expect(mapStub.removeLayer).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(L.markerClusterGroup).mock.calls.length).toBe(buildCountAfterMount + 1);
+  });
+
+  // Issue #2409 AC — "Filter changes from N properties to 1 immediately
+  // reconcile to the individual property marker without stale 1 HOME UI."
+  // A live filter (e.g. a bedroom chip) shrinking the active listings array
+  // from 2 members to 1 is, at this layer, just another `listings` prop
+  // change — same structural-effect dependency exercised by the N->N+1 test
+  // above. Proves the OLD (2-member) cluster group is torn down via
+  // map.removeLayer and a fresh one is constructed from the reduced set, so a
+  // stale "2 HOMES" badge can never persist after the reconciliation; the
+  // rebuilt group's iconCreateFunction returning the sole child's own icon
+  // for a genuine 1-member cluster is already covered by
+  // PropertyMap.listingClusterMarker.test.tsx's "never renders a cluster
+  // badge for a 1-member cluster" test.
+  it('Issue #2409 AC (active filter N→1 reconciliation): a listings prop change from 2 to 1 tears down and rebuilds the layer, never leaving the stale 2-member group mounted', () => {
+    const onSelectListing = vi.fn();
+    const { rerender } = render(
+      <PropertyMap {...baseProps} listings={twoListings} onSelectListing={onSelectListing} />,
+    );
+
+    const buildCountAfterMount = vi.mocked(L.markerClusterGroup).mock.calls.length;
+    expect(lastClusterGroupInstance!._spiderfied).toBeFalsy();
+    mapStub.removeLayer.mockClear();
+
+    rerender(
+      <PropertyMap {...baseProps} listings={[listingA] as never} onSelectListing={onSelectListing} />,
     );
 
     expect(mapStub.removeLayer).toHaveBeenCalledTimes(1);

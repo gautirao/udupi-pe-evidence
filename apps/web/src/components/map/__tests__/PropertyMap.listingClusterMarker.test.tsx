@@ -232,18 +232,26 @@ describe('PropertyMap — listing-cluster marker redesign (count + HOMES badge)'
     expect(lastCall.html).toContain('aria-label="3 homes in this cluster. Activate to zoom in."');
   });
 
-  it('sets a singular aria-label ("1 home") when count is 1', async () => {
-    // Note: in practice Leaflet.markercluster does not create clusters of a
-    // single marker (a lone marker renders as a normal, non-clustered pin),
-    // so this branch is not reachable through real user interaction today.
-    // It is implemented defensively per the design brief and exercised here
-    // directly against iconCreateFunction.
+  it('Issue #2409: never renders a cluster badge for a 1-member cluster — returns the sole child\'s own icon instead', async () => {
+    // leaflet.markercluster's own grid-based hierarchical clustering CAN wrap
+    // a single, spatially-isolated marker in a childCount===1 MarkerCluster
+    // node at intermediate zoom levels — the "1 HOME" badge this test used to
+    // assert on is exactly the invariant-violating cluster #2409 forbids.
+    // iconCreateFunction must instead return the sole child marker's own icon
+    // so a singleton cluster is visually indistinguishable from an individual
+    // pin, and must NOT emit any cluster-badge divIcon/aria-label for it.
     const iconCreateFn = await renderAndCaptureIconCreateFn();
 
-    iconCreateFn({ getChildCount: () => 1 });
+    const soleIcon = { options: { html: '<div>individual-pin</div>' } };
+    const divIconCallCountBefore = capturedDivIconCalls.length;
 
-    const lastCall = capturedDivIconCalls[capturedDivIconCalls.length - 1];
-    expect(lastCall.html).toContain('aria-label="1 home in this cluster. Activate to zoom in."');
+    const result = iconCreateFn({
+      getChildCount: () => 1,
+      getAllChildMarkers: () => [{ options: { icon: soleIcon } }],
+    });
+
+    expect(result).toBe(soleIcon);
+    expect(capturedDivIconCalls.length).toBe(divIconCallCountBefore);
   });
 
   it('includes the "Tap to zoom in ›" caption in the HTML with the CSS-reveal class (not inline-visible)', async () => {
@@ -309,5 +317,26 @@ describe('PropertyMap — listing-cluster marker redesign (count + HOMES badge)'
     );
 
     expect(clickSpy).not.toHaveBeenCalled();
+  });
+
+  // Issue #2409 AC (zero members) — from the issue's own "Tests" checklist.
+  // (The N→1 active-filter reconciliation scenario from the same checklist is
+  // covered in PropertyMap.clusterTapFit.test.tsx, whose stable `mapStub`
+  // singleton supports asserting rebuild deltas across a `rerender()`; this
+  // file's `useMap` mock returns a fresh object per call, which isn't safe to
+  // rerender against.)
+  it('Issue #2409 AC (zero members): an empty listings array constructs no NEW marker and adds nothing to the cluster group', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+    // `L.marker`/`mockClusterGroupAddLayer` are module-level mocks whose call
+    // history is NOT reset in this file's beforeEach (only their icon/group
+    // counterparts are) — assert the delta from this render, not an absolute
+    // "never called" across the whole suite.
+    const markerCallsBefore = vi.mocked(L.marker).mock.calls.length;
+    const addLayerCallsBefore = mockClusterGroupAddLayer.mock.calls.length;
+
+    render(<PropertyMap listings={[] as unknown as PropertyListingWithImages[]} />);
+
+    expect(vi.mocked(L.marker).mock.calls.length).toBe(markerCallsBefore);
+    expect(mockClusterGroupAddLayer.mock.calls.length).toBe(addLayerCallsBefore);
   });
 });

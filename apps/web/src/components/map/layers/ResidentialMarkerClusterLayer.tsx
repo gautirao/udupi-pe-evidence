@@ -237,6 +237,22 @@ export function MarkerClusterLayer({
       spiderLegPolylineOptions: { interactive: false },
       iconCreateFunction: (cluster) => {
         const count = cluster.getChildCount();
+
+        // Issue #2409 — leaflet.markercluster's own grid-based hierarchical
+        // clustering can wrap a single, spatially-isolated listing in a
+        // MarkerCluster node at intermediate zoom levels (independent of
+        // maxClusterRadius proximity — live-reproduced against the real
+        // pipeline, not a test-double artifact). A 1-member "cluster" must
+        // never surface as a cluster badge: return the SAME icon the child's
+        // own individual marker was built with (already computed above with
+        // the correct highlighted/price-band state), so a singleton cluster
+        // renders pixel-identical to an individual pin.
+        if (count === 1) {
+          const soleMarker = cluster.getAllChildMarkers()[0];
+          const soleIcon = soleMarker?.options.icon;
+          if (soleIcon) return soleIcon;
+        }
+
         let size: 'small' | 'medium' | 'large' = 'small';
         // Sized with real padding around the 17px count + 8px "HOMES" label
         // (0.05em letter-spacing) so the label never crowds/overflows the
@@ -317,6 +333,11 @@ export function MarkerClusterLayer({
     // byte-for-byte unchanged, while still letting the rendered markers
     // themselves be visually/interactively separated.
     const rawLatLngByMarker = new Map<L.Marker, { lat: number; lng: number }>();
+    // Issue #2409 — reverse lookup so handleClusterActivate can resolve a
+    // genuine 1-member cluster's sole child back to its listing, to fire the
+    // exact same onSelectListing/onMarkerClickWithPosition an individual
+    // marker click would.
+    const listingByMarker = new Map<L.Marker, PropertyListingWithImages>();
 
     validListings.forEach((listing) => {
       // Issue #1547 — copper icon when id matches the URL-selected listing OR the
@@ -340,6 +361,7 @@ export function MarkerClusterLayer({
       // specific `leaflet` exports each test needs); a {lat,lng} literal is
       // a valid LatLngExpression for L.latLngBounds below.
       rawLatLngByMarker.set(marker, { lat: listing.latitude!, lng: listing.longitude! });
+      listingByMarker.set(marker, listing);
 
       // Attach listing-id to the marker element for E2E selectors.
       marker.on('add', () => {
@@ -376,6 +398,7 @@ export function MarkerClusterLayer({
         type: string;
         layer?: L.MarkerCluster;
         originalEvent?: KeyboardEvent;
+        containerPoint?: { x: number; y: number };
       };
       // Mirrors leaflet.markercluster's own _zoomOrSpiderfy gate: a
       // 'clusterkeypress' only activates on Enter (keyCode 13). Not
@@ -388,6 +411,23 @@ export function MarkerClusterLayer({
       }
       const cluster = evt.layer;
       if (!cluster) return;
+
+      // Issue #2409 — a genuine 1-member cluster (see the iconCreateFunction
+      // comment above for why leaflet.markercluster can produce one) must
+      // behave exactly like tapping that listing's own individual marker:
+      // no zoom/fit, no spiderfy, one tap opens the listing preview
+      // directly. Bypasses every split/spiderfy decision below entirely.
+      if (cluster.getChildCount() === 1) {
+        const soleMarker = cluster.getAllChildMarkers()[0];
+        const listing = soleMarker ? listingByMarker.get(soleMarker) : undefined;
+        if (listing) {
+          onSelectListing?.(listing);
+          if (onMarkerClickWithPosition && evt.containerPoint) {
+            onMarkerClickWithPosition({ x: evt.containerPoint.x, y: evt.containerPoint.y });
+          }
+        }
+        return;
+      }
 
       // Issue #1762 fix-cycle 5 — viewport-aware spiderfy fan clamp
       // (WORKDONE_REVIEW BLOCKING finding on the fix-cycle-3 flat
