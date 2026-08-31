@@ -596,16 +596,40 @@ export function DiscoverControlBar({ mobileMapTrigger }: DiscoverControlBarProps
         labelClassName="hidden lg:inline"
       />
       {mobileMapTrigger && (
-        <button
-          ref={mobileMapTrigger.triggerRef}
-          type="button"
-          onClick={mobileMapTrigger.onOpenMap}
-          aria-label="Map"
-          data-testid="control-bar-map-trigger"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md lg:hidden"
+        // Issue #2408 AC — the mock's Map/List control is a segmented
+        // "List | Map" pill (both labels always visible, the active one
+        // highlighted), not a standalone circular Map icon button. This
+        // control bar only ever renders while in LIST presentation (the
+        // trigger prop is omitted entirely once mobileMapOpen — see the
+        // prop doc above), so "List" is always the active segment here;
+        // the mirrored "Map"-active pill lives in buildMapSurfaceModel.tsx's
+        // mobileListButton, which renders once the overlay is open. Same
+        // testid/aria-label/onClick/ref as before — this is a visual
+        // restyle, not a behavior change — so the existing List<->Map
+        // e2e/unit coverage keeps working unchanged.
+        <div
+          role="group"
+          aria-label="List or Map view"
+          className="flex h-11 shrink-0 items-center gap-0.5 rounded-full border border-border bg-muted p-0.5 lg:hidden"
         >
-          <MapIcon className="h-5 w-5" aria-hidden="true" />
-        </button>
+          <span
+            aria-hidden="true"
+            className="flex h-full items-center rounded-full bg-primary px-3 text-xs font-bold text-primary-foreground"
+          >
+            List
+          </span>
+          <button
+            ref={mobileMapTrigger.triggerRef}
+            type="button"
+            onClick={mobileMapTrigger.onOpenMap}
+            aria-label="Map"
+            data-testid="control-bar-map-trigger"
+            className="flex h-full items-center gap-1 rounded-full px-3 text-xs font-bold text-muted-foreground"
+          >
+            <MapIcon className="h-3.5 w-3.5" aria-hidden="true" />
+            Map
+          </button>
+        </div>
       )}
       <AreaAutocomplete areas={areas} journey={nav.journey} onSelectArea={handleSelectArea} />
     </div>

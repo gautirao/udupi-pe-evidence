@@ -488,18 +488,34 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
     isMarkerPopoverEligible: rawIsMarkerPopoverEligible,
   } = params;
 
-  // The mobile "List" toggle button. Same JSX/onClick/testid/className it has
-  // had since it was an inline conditional on DiscoverMapMount's
-  // `mobileListButton` prop.
+  // Issue #2408 AC — restyled as the mock's segmented "List | Map" pill
+  // (both labels visible, active one highlighted) instead of a standalone
+  // "List" button. Same onClick/testid as before (`mobile-map-close-list-
+  // button`, `setMobileView('LIST')`) — this is a visual restyle only, so
+  // the existing List<->Map e2e/unit coverage keeps working unchanged. The
+  // mirrored "List"-active pill lives in DiscoverControlBar.tsx, which
+  // renders while this overlay is closed.
   const mobileListButton = _mobileMapOpen ? (
-    <button
-      type="button"
-      onClick={() => setMobileView('LIST')}
-      data-testid="mobile-map-close-list-button"
-      className="pointer-events-auto shrink-0 self-start rounded-full border border-border bg-background/95 px-4 py-2 text-sm font-medium shadow-md"
+    <div
+      role="group"
+      aria-label="List or Map view"
+      className="pointer-events-auto flex shrink-0 items-center gap-0.5 self-start rounded-full border border-border bg-background/95 p-0.5 shadow-md"
     >
-      List
-    </button>
+      <button
+        type="button"
+        onClick={() => setMobileView('LIST')}
+        data-testid="mobile-map-close-list-button"
+        className="rounded-full px-3 py-1.5 text-xs font-bold text-muted-foreground"
+      >
+        List
+      </button>
+      <span
+        aria-hidden="true"
+        className="rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground"
+      >
+        Map
+      </span>
+    </div>
   ) : null;
 
   // Issue #2089 — bounded Browse covers BOTH the group-results and the

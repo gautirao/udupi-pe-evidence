@@ -32,13 +32,13 @@ export interface UseDiscoverJourneyChromeControllerParams {
  * and fires no effect; the `useMemo` exists solely to give the surface
  * builders a stable object identity.
  *
- * BRIDGE DISCIPLINE (issue #2083 cycle 4) — three of these read the RAW
- * `legacySelectedArea` and each is individually justified:
+ * BRIDGE DISCIPLINE (issue #2083 cycle 4) — one of these reads the RAW
+ * `legacySelectedArea` and is individually justified:
  *   - showSchoolBreadcrumb: outer-ANDed with journey === 'school-first', a
  *     journey the canonical node hierarchy never drives.
- *   - isAreaFirstSelectedAreaState: derivePanelContent only ever returns
- *     'area-selected' when the legacy areaKey is truthy.
- * Everything else reads `effectiveSelectedArea`.
+ * Everything else reads `effectiveSelectedArea`, including
+ * `isAreaFirstSelectedAreaState` (issue #2408 fix — see its own comment
+ * below for why the earlier legacy-only reasoning didn't hold).
  */
 export function useDiscoverJourneyChromeController({
   nav,
@@ -133,14 +133,42 @@ export function useDiscoverJourneyChromeController({
   // Issue #1606 — area-first selected-AREA results state (terminal area chosen). Drives
   // the redesigned Manipal-style results panel and the 3-level map breadcrumb. Distinct
   // from isSelectedGroupState (no area yet) — here selectedArea is present.
-  // Issue #2083 cycle 4 — genuinely legacy-only: derivePanelContent only ever
-  // returns 'area-selected' when the legacy areaKey is truthy
-  // (discoverPanelState.ts:123-135), so legacySelectedArea is correct here
-  // (verified by code review).
+  //
+  // Issue #2408 (5th recurrence of the #2083 bug class) — was gated on
+  // `resolvedPanelContent === 'area-selected' && !!legacySelectedArea`. That
+  // reasoning ("derivePanelContent only ever returns 'area-selected' when the
+  // legacy areaKey is truthy") was correct as far as it went, but incomplete:
+  // a canonical `node=` drill-down to a single AREA leaf under the area-first
+  // journey (no legacy `areaKey=`) never reaches `derivePanelContent`'s
+  // areaKey-gated branch at all — it stays on `resolvedPanelContent ===
+  // 'area-groups-landing'` (the plain area-first entry point; #1956 PR-1's
+  // non-regression matrix pins `node` as a routing no-op for that function).
+  // `effectiveSelectedArea` still resolves correctly there via the
+  // node-bridge, so the ONLY thing missing was this predicate's own branch
+  // for "area-groups-landing, but a specific area IS resolved" — i.e. the
+  // canonical mirror of the legacy 'area-selected' panel. Confirmed live:
+  // this state rendered the map's "N homes in {area}" pill at the
+  // collision-prone bottom-right position (behind the Leaflet zoom control)
+  // instead of the safe centered position, at
+  // ?journey=area-first&node=<AREA leaf> with no areaKey param.
+  //
+  // Issue #2408 review fix (worker 48) — the first cut of this ALSO required
+  // `!focusedGroup`, on the assumption that a focused group implies no area
+  // is selected yet. That's false: `node`/`groupId` are independent URL
+  // axes (see isSelectedGroupState's own #2083 cycle-4 comment above), so
+  // `?journey=area-first&groupId=<group>&node=<AREA leaf in that group>` is
+  // reachable with BOTH focusedGroup and effectiveSelectedArea truthy. The
+  // `!focusedGroup` guard wrongly excluded exactly that state, leaving both
+  // this predicate and isSelectedGroupState false and the badge falling
+  // through to the collision-prone fallback again. No separate guard is
+  // needed here: isSelectedGroupState already requires `!effectiveSelectedArea`
+  // (mutually exclusive with this branch by construction), so the two stay
+  // disjoint without this predicate re-deriving that exclusion itself.
   const isAreaFirstSelectedAreaState =
-    resolvedPanelContent === 'area-selected' &&
     nav.journey === 'area-first' &&
-    !!legacySelectedArea;
+    !!effectiveSelectedArea &&
+    (resolvedPanelContent === 'area-selected' ||
+      resolvedPanelContent === 'area-groups-landing');
 
   return useMemo(
     () => ({

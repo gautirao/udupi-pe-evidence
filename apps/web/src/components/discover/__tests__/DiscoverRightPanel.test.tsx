@@ -223,8 +223,30 @@ describe('DiscoverRightPanel', () => {
     // function do not pin it either. Claiming "pins the derivation" from two samples was
     // exactly the overstatement this file warns about, and "closes that gap" was a second,
     // smaller instance of the same thing caught by the same reviewer.
-    renderPanel(<DiscoverRightPanel {...baseProps} panelContent="guided-entry" city="udupi" areas={[]} />);
-    expect(screen.getByText('Choose how you want to search')).toBeInTheDocument();
+    //
+    // Issue #2408 — `isMobileShell` now ALSO forces compact at guided-entry (mobile
+    // never shows the full stacked cards, see the JourneySwitcher call site). This
+    // endpoint is specifically the DESKTOP full-card assertion, so it must now opt
+    // OUT of `isMobileShell`'s default (`true` — see the prop's doc comment: that
+    // default exists so unrelated test files that don't wire the mobile shell keep
+    // compiling, not because desktop is an unusual case to assert).
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="guided-entry"
+        city="udupi"
+        areas={[]}
+        isMobileShell={false}
+      />,
+    );
+    // Pre-existing drift, unrelated to #2408: issue #2108 removed this heading as
+    // visible text and moved it to an aria-label on the tablist container (see
+    // JourneySwitcher.tsx and JourneySwitcher.test.tsx's `getByRole('tablist', ...)`
+    // idiom). This getByText assertion has been unable to pass since #2108 landed,
+    // confirmed by reproducing the failure against this file's pre-#2408 baseline.
+    expect(
+      screen.getByRole('tablist', { name: /choose how you want to search/i }),
+    ).toBeInTheDocument();
     // getByText, not getAllByText(...).length >= 1: only one node can match, and getByText
     // THROWS on multiple matches — so it also catches a resurrected duplicate JourneySwitcher
     // mount, which is a live risk because build step 6 removed exactly such a second copy.
@@ -233,6 +255,40 @@ describe('DiscoverRightPanel', () => {
     expect(screen.getByTestId('journey-card-area-first')).toHaveAttribute('aria-selected', 'false');
     expect(screen.getByTestId('journey-card-school-first')).toHaveAttribute('aria-selected', 'false');
     expect(screen.getByTestId('journey-card-agri-first')).toHaveAttribute('aria-selected', 'false');
+  });
+
+  it('issue #2408 regression — renders the COMPACT pill row (not full stacked cards) on the guided-entry landing when isMobileShell is true', () => {
+    // Direct focused regression for the `compact={isMobileShell ||
+    // panelContent !== 'guided-entry'}` derivation added for #2408. Without
+    // the `isMobileShell` disjunct, this exact state (guided-entry landing +
+    // mobile shell) falls through to the desktop endpoint above and renders
+    // the full stacked cards, which is the real-device defect #2408 reported
+    // (guided-entry cards dominating the 390×844 viewport). This is the
+    // MOBILE mirror of the desktop-full-cards test immediately above it —
+    // together they bracket the `isMobileShell` disjunct itself, not just
+    // the pre-existing `panelContent` density derivation.
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="guided-entry"
+        city="udupi"
+        areas={[]}
+        isMobileShell
+      />,
+    );
+    // Compact density hides the full-card chrome (badge, CTA copy) — see
+    // JourneySwitcher.test.tsx's 'compact vs full density' describe block
+    // for the same assertions at the JourneySwitcher unit level.
+    expect(screen.queryByText('Recommended')).not.toBeInTheDocument();
+    expect(screen.queryByText('Explore areas')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Pick a school as your anchor and see only the homes/),
+    ).not.toBeInTheDocument();
+    // The compact tab strip itself must still be present and identifiable.
+    expect(screen.getByTestId('journey-card-area-first')).toHaveTextContent('Explore by area');
+    expect(screen.getByTestId('journey-card-area-first')).toHaveAttribute('role', 'tab');
+    expect(screen.getByTestId('journey-card-school-first')).toHaveAttribute('role', 'tab');
+    expect(screen.getByTestId('journey-card-agri-first')).toHaveAttribute('role', 'tab');
   });
 
   // Sampling the density function beyond its two endpoints. Each state here is one a

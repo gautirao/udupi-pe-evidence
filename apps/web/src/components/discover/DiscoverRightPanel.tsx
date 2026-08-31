@@ -1847,7 +1847,17 @@ export function DiscoverRightPanel({
           // and can never flip transiently mid-navigation from a momentary
           // null `journey` (panelContent is derived synchronously from the
           // same URL state on every render — no separate async signal).
-          compact={panelContent !== 'guided-entry'}
+          //
+          // Issue #2408 — on the mobile shell, guided-entry ALSO goes
+          // compact. The approved mock (390×844, both its Areas-first and
+          // dedicated Mobile scenarios) never depicts the full stacked-card
+          // mode selector; the bare-landing state there is always the
+          // compact pill row. Full cards at guided-entry were sized for a
+          // desktop-width column (#1953 AC27) and dominate a 390px viewport,
+          // which is exactly the "cards can dominate the viewport" defect
+          // reported against real-device testing. Desktop guided-entry is
+          // unchanged (still full cards) — this is mobile-only.
+          compact={isMobileShell || panelContent !== 'guided-entry'}
           // `journey` still wins when present (explicit journey=... URLs);
           // otherwise infer the equivalent journey from panelContent so the
           // matching tab still reports aria-selected=true on a journey-less
