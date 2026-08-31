@@ -358,3 +358,67 @@ describe('AgriculturalListingForm — residential/commercial regression guard', 
     expect(body).not.toMatch(/bedrooms \(bhk\)/i);
   });
 });
+
+describe('AgriculturalListingForm — positive submit lifecycle (PR #2405 evidence gap): confirmed pin + enough photos -> Review allowed -> Submit for review succeeds', () => {
+  it('opens every ListingTransitionPolicy agricultural_land submit gate (price, locality, area, >=3 photos, location entered, confirmed pin), enables Submit for review, and drives a real successful submit end-to-end', async () => {
+    // Gate 1/6 (price) + Gate 2/6 (locality) + Gate 5/6 (location entered):
+    // resolveLocation() resolves a search result (sets locality + locationEntered).
+    // Gate 6/6 (confirmed pin): mockCreateSucceedsWithAddressConfirmed() makes the
+    // create-listing response report addressConfirmed: true, exactly like a broker
+    // who confirmed the map pin before saving — the SAME mechanism the existing
+    // pin re-lock test (above) uses to reach a confirmed-pin state.
+    mockCreateSucceedsWithAddressConfirmed();
+    // Gate 4/6 (>=3 photos): unlike every other test in this file (which leaves
+    // this at 0 to prove the BLOCKED state), this is the one test that opens it.
+    mockImageCount.current = 3;
+    const user = userEvent.setup();
+    const { navigate } = renderForm();
+
+    await resolveLocation(user);
+    await user.type(screen.getByLabelText(/price \(inr\)/i), '78 lakh');
+    // Gate 3/6 (area + unit): the "1 acre" quick-pick chip sets both landArea
+    // and landAreaUnit in one click (AreaField's radiogroup).
+    await user.click(screen.getByRole('radio', { name: '1 acre' }));
+
+    // "Review" persists the draft (create-listing succeeds -> addressConfirmed
+    // hydrates true) and switches mode to 'review' in one round-trip, mirroring
+    // the existing blocked-submit test's own path into AgriculturalReviewScreen.
+    await user.click(screen.getByRole('button', { name: /^review$/i }));
+
+    const submitButton = await screen.findByRole('button', { name: /submit for review/i });
+    // All six ListingTransitionPolicy agricultural_land gates are met — unlike
+    // the existing blocked-submit test (0 photos), Submit for review must be
+    // enabled here. This is the positive assertion PR #2405's evidence gate
+    // flagged as missing: the unit suite previously only proved the disabled/
+    // blocked case, never that the button actually becomes clickable.
+    await waitFor(() => expect(submitButton).toBeEnabled());
+    expect(screen.getByText(/ready to submit for review/i)).toBeInTheDocument();
+
+    // Drive the actual submit mutation through to a real success transition —
+    // not just "button enabled". useSubmitListing is mocked at the module
+    // boundary (same boundary as create/update, consistent with this file's
+    // established mocking pattern); here it resolves successfully.
+    mockSubmitMutate.mockImplementation((_vars: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+    });
+
+    await user.click(submitButton);
+
+    // useAgriculturalListingDraft.handleSubmitForReview success path: fires the
+    // "Submitted for review" toast and flips draft.submitted, which swaps the
+    // whole form out for the dedicated confirmation panel
+    // (data-testid="agricultural-submitted-panel" in AgriculturalListingForm.tsx).
+    expect(mockSubmitMutate).toHaveBeenCalledTimes(1);
+    expect(await screen.findByTestId('agricultural-submitted-panel')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /submitted for review/i })).toBeInTheDocument();
+    expect(screen.getByText(/pending admin approval/i)).toBeInTheDocument();
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Submitted for review', description: 'Pending admin approval.' }),
+    );
+
+    // "Back to dashboard" on the confirmation panel navigates away — confirms
+    // the success state is a real terminal UI, not just an unasserted toast.
+    await user.click(screen.getByRole('button', { name: /back to dashboard/i }));
+    expect(navigate).toHaveBeenCalledWith('/broker/listings');
+  });
+});
