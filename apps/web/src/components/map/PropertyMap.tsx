@@ -1460,13 +1460,49 @@ function AreaPanner({
             // extend this same total inset with the worst-case card
             // footprint, so the floor accounts for real card pixel size
             // instead of treating anchors as dimensionless points.
-            const containmentZoom = map.getBoundsZoom(
-              envelopeBounds,
-              false,
-              L.point(padH * 2 + maxFootprintWidthPx, padV * 2 + bottomOcclusionPx + maxFootprintHeightPx),
-            );
-            if (Number.isFinite(containmentZoom)) {
-              derivedMinZoom = Math.max(0, Math.min(Math.floor(containmentZoom), LEAF_FIT_MAX_ZOOM));
+            const chromePadX = padH * 2;
+            const chromePadY = padV * 2 + bottomOcclusionPx;
+            const footprintPaddedX = chromePadX + maxFootprintWidthPx;
+            const footprintPaddedY = chromePadY + maxFootprintHeightPx;
+            // Issue #2413 — on a narrow mobile viewport, `footprintPaddedX`
+            // (two horizontal chrome insets plus a worst-case card's own
+            // full width) can meet or exceed the container's actual width —
+            // routine once several sibling root destinations are in play,
+            // since a single card's footprint alone is comparable to a
+            // phone's viewport width. Leaflet's `getBoundsZoom` has no
+            // defense against the resulting non-positive "padded size":
+            // `size.subtract(padding)` goes zero/negative, its internal
+            // scale computation degenerates, and it silently returns the
+            // map's own `maxZoom` instead of a real containment floor — the
+            // SAME failure mode the `isDegenerateEnvelope` guard above
+            // defends against, via a different trigger (padding-vs-
+            // container, not anchor spread). That bogus ceiling then got
+            // clamped to `LEAF_FIT_MAX_ZOOM` and adopted as `derivedMinZoom`,
+            // collapsing `narrowToLegibleZoomWindow`'s candidate window to a
+            // single degenerate zoom regardless of the anchors' real
+            // placement — reproduced live at 390x844: a Bangalore root fit
+            // with 5 well-separated destinations landed on zoom=16
+            // (LEAF_FIT_MAX_ZOOM), clipping every one of them.
+            //
+            // Fall back to chrome-only padding (still a REAL geometry-
+            // derived containment zoom, just without the worst-case-
+            // footprint over-estimate this specific container cannot
+            // structurally accommodate) whenever the footprint-padded size
+            // would be non-positive on either axis. `resolveHierarchyCameraFit`'s
+            // own per-anchor card-rect placement below still does the
+            // precise, footprint-aware containment/overlap check against the
+            // real `usableViewport` — this is only the coarse starting
+            // floor, never the final legibility decision.
+            const useFootprintPadding =
+              size.x - footprintPaddedX > 0 && size.y - footprintPaddedY > 0;
+            const paddingPoint = useFootprintPadding
+              ? L.point(footprintPaddedX, footprintPaddedY)
+              : L.point(chromePadX, chromePadY);
+            if (size.x - paddingPoint.x > 0 && size.y - paddingPoint.y > 0) {
+              const containmentZoom = map.getBoundsZoom(envelopeBounds, false, paddingPoint);
+              if (Number.isFinite(containmentZoom)) {
+                derivedMinZoom = Math.max(0, Math.min(Math.floor(containmentZoom), LEAF_FIT_MAX_ZOOM));
+              }
             }
           }
         }

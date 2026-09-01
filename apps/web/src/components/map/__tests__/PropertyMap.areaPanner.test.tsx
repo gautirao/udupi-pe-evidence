@@ -1251,6 +1251,142 @@ describe('Issue #1943 Slice B — AreaPanner hierarchy camera-fit branch (canoni
     expect(largePadding.y).toBeGreaterThan(smallPadding.y);
   });
 
+  // Issue #2413 — on a narrow mobile viewport, `MOBILE_CAMERA_PADDING`'s
+  // chrome inset (40*2=80) PLUS a worst-case card's own footprint width
+  // (315, matching production's estimateDestinationCardFootprint output for
+  // a busy root destination) can meet or exceed the container's actual
+  // width. Real Leaflet's `getBoundsZoom` has no defense against the
+  // resulting non-positive padded size: it silently returns the map's own
+  // maxZoom, which then gets clamped to LEAF_FIT_MAX_ZOOM and collapses the
+  // resolver's entire candidate window to one degenerate zoom — reproduced
+  // live at 390x844 (a Bangalore root fit landed on zoom=16, clipping every
+  // one of 5 well-separated destinations). This regression-guards the fix:
+  // AreaPanner must fall back to chrome-only padding (dropping the
+  // footprint term) rather than feed getBoundsZoom a padding that would
+  // consume the whole container.
+  it('T-B14 (issue #2413): on a narrow mobile container where chrome+footprint padding would exceed the container width, getBoundsZoom is queried with chrome-only padding', () => {
+    Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true });
+    (mapStub as { getSize: () => { x: number; y: number } }).getSize = vi.fn(() => ({ x: 390, y: 844 }));
+
+    renderWithPan(
+      makeCanonicalPayload({
+        hierarchyChildAnchors: [
+          { lat: 12.973375, lon: 77.59658, footprintWidthPx: 315, footprintHeightPx: 120 },
+          { lat: 13.121752, lon: 77.581242, footprintWidthPx: 315, footprintHeightPx: 120 },
+        ],
+      }) as SeqAreaPoint,
+    );
+
+    // Mobile padding is [40, 40] (MOBILE_CAMERA_PADDING) -> chrome-only
+    // inset is (40*2, 40*2) = (80, 80). The footprint-inflated inset would
+    // have been (80+315, 80+120) = (395, 200) — 395 > the 390px container
+    // width, the exact structurally-invalid case this test pins.
+    expect(mapStub.getBoundsZoom).toHaveBeenCalledTimes(1);
+    const [, , padding] = mapStub.getBoundsZoom.mock.calls[0];
+    expect(padding).toEqual({ x: 80, y: 80 });
+  });
+
+  // Issue #2413 (PR #2415 review round 1) — T-B14 above only proves the
+  // INTERMEDIATE `getBoundsZoom` call argument changes; `mapStub.getBoundsZoom`
+  // is a constant stub there, so it cannot show whether the fix actually
+  // changes the RESULTING camera (`setView`'s committed centre/zoom). This
+  // test closes that gap: `getBoundsZoom` is given a mock implementation that
+  // reproduces real Leaflet's own defect — returning the map's maxZoom (18)
+  // whenever the padding argument meets/exceeds the container's width, and a
+  // real, low containment zoom (10) for a valid (chrome-only) padding — the
+  // exact behaviour the fix's inline comment documents. That lets this test
+  // prove, end to end, that on a narrow mobile container with a real,
+  // 5-destination Bangalore-root-shaped payload:
+  //   (a) the OLD (footprint-inflated) padding would have driven the mock to
+  //       18 -> clamped to LEAF_FIT_MAX_ZOOM (16) -> a collapsed [16,16]
+  //       search window -> a committed zoom of exactly 16 (the live-repro'd
+  //       defect: every destination clipped off-screen at street level);
+  //   (b) the FIXED code instead commits a materially different, lower zoom
+  //       that matches independently resolving the same anchors with the
+  //       mock's chrome-only-padding answer (10) as the search floor.
+  it('T-B15 (issue #2413): on a narrow mobile container, the chrome-only-padding fallback changes the RESOLVED camera, not just the getBoundsZoom call arg', () => {
+    Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true });
+    (mapStub as { getSize: () => { x: number; y: number } }).getSize = vi.fn(() => ({ x: 390, y: 844 }));
+
+    // Mirrors real Leaflet's `getBoundsZoom` degenerate-padding behaviour
+    // (see this fix's inline comment in PropertyMap.tsx): a padding that
+    // meets/exceeds the container's own width makes its internal padded-size
+    // computation degenerate, and it returns the map's own maxZoom instead of
+    // a real containment zoom.
+    mapStub.getBoundsZoom.mockImplementation(
+      (_bounds: unknown, _inside: boolean, padding: { x: number; y: number }) =>
+        padding.x >= 390 ? 18 : 10,
+    );
+
+    // The exact 5-anchor Bangalore-root shape reproduced live (footprint
+    // 315x120 — production's estimateDestinationCardFootprint output for a
+    // busy root destination).
+    const realBangaloreRootAnchors = [
+      { lat: 12.973375, lon: 77.59658, footprintWidthPx: 315, footprintHeightPx: 120 },
+      { lat: 13.121752, lon: 77.581242, footprintWidthPx: 315, footprintHeightPx: 120 },
+      { lat: 13.023391, lon: 77.714112, footprintWidthPx: 315, footprintHeightPx: 120 },
+      { lat: 12.856264, lon: 77.681505, footprintWidthPx: 315, footprintHeightPx: 120 },
+      { lat: 12.89937, lon: 77.495557, footprintWidthPx: 315, footprintHeightPx: 120 },
+    ];
+    const realRootBbox: [[number, number], [number, number]] = [
+      [12.579089, 77.230649],
+      [13.826627, 77.940854],
+    ];
+
+    renderWithPan(
+      makeCanonicalPayload({
+        hierarchyChildAnchors: realBangaloreRootAnchors,
+        bbox: realRootBbox,
+      }) as SeqAreaPoint,
+    );
+
+    expect(mapStub.setView).toHaveBeenCalledTimes(1);
+    const [committedCentre, committedZoom] = mapStub.setView.mock.calls[0];
+
+    // Sanity check on the mock itself (test-of-the-test): the fixed code
+    // must have queried getBoundsZoom with the chrome-only padding, not the
+    // footprint-inflated one — otherwise this test would be exercising the
+    // OLD behaviour and everything below would trivially fail.
+    expect(mapStub.getBoundsZoom).toHaveBeenCalledWith(expect.anything(), false, { x: 80, y: 80 });
+
+    // The regression this closes: the live-reproduced defect committed
+    // zoom=16 (LEAF_FIT_MAX_ZOOM) for this exact shape — every one of the 5
+    // destinations clipped off-screen. The fix must never reach that.
+    expect(committedZoom).not.toBe(LEAF_FIT_MAX_ZOOM);
+
+    // Independently resolve the SAME anchors/bbox with the SAME inputs the
+    // fixed production code now feeds the resolver: derivedMinZoom=10 (the
+    // mock's chrome-only-padding answer) as the search floor, proving the
+    // actual committed camera — not just an intermediate call argument.
+    const projectMercator = (lat: number, lon: number, z: number) => {
+      const scale = 2 ** z;
+      return { x: (lon + 180) * scale, y: (90 - lat) * scale };
+    };
+    const expected = resolveHierarchyCameraFit({
+      anchors: realBangaloreRootAnchors,
+      containmentBounds: {
+        south: realRootBbox[0][0],
+        west: realRootBbox[0][1],
+        north: realRootBbox[1][0],
+        east: realRootBbox[1][1],
+      },
+      viewport: {
+        widthPx: 390,
+        heightPx: 844,
+        insetTopPx: 40,
+        insetRightPx: 40,
+        insetBottomPx: 40,
+        insetLeftPx: 40,
+      },
+      project: projectMercator,
+      minZoom: 10,
+      maxZoom: LEAF_FIT_MAX_ZOOM,
+    });
+    expect(expected).not.toBeNull();
+    expect(committedCentre).toEqual(expected?.centre);
+    expect(committedZoom).toBe(expected?.zoom);
+  });
+
   it('T-B9: getBoundsZoom is queried against the child-anchor union when panToArea.bbox is null (Udupi synthetic-root case)', () => {
     // Two anchors (not one) — a single anchor with no bbox is itself a
     // degenerate (zero-span) point and would be skipped by the FIX 3 guard
