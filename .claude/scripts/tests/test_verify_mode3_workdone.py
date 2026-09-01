@@ -151,6 +151,9 @@ def test_happy_path():
         script_dst = tmpdir_path / '.claude' / 'scripts' / 'verify-mode3-workdone.py'
         script_dst.parent.mkdir(parents=True, exist_ok=True)
         script_dst.write_text(script_src.read_text())
+        helper_src = Path('.claude/scripts/mode3_git_target.py')
+        helper_dst = script_dst.parent / 'mode3_git_target.py'
+        helper_dst.write_text(helper_src.read_text())
 
         # Run script
         rc, stdout, stderr = run_script(9999, cwd=tmpdir_path)
@@ -183,6 +186,9 @@ def test_missing_file():
         script_dst = tmpdir_path / '.claude' / 'scripts' / 'verify-mode3-workdone.py'
         script_dst.parent.mkdir(parents=True, exist_ok=True)
         script_dst.write_text(script_src.read_text())
+        helper_src = Path('.claude/scripts/mode3_git_target.py')
+        helper_dst = script_dst.parent / 'mode3_git_target.py'
+        helper_dst.write_text(helper_src.read_text())
 
         rc, stdout, stderr = run_script(9999, cwd=tmpdir_path)
 
@@ -214,6 +220,9 @@ def test_sha256_mismatch():
         script_dst = tmpdir_path / '.claude' / 'scripts' / 'verify-mode3-workdone.py'
         script_dst.parent.mkdir(parents=True, exist_ok=True)
         script_dst.write_text(script_src.read_text())
+        helper_src = Path('.claude/scripts/mode3_git_target.py')
+        helper_dst = script_dst.parent / 'mode3_git_target.py'
+        helper_dst.write_text(helper_src.read_text())
 
         rc, stdout, stderr = run_script(9999, cwd=tmpdir_path)
 
@@ -248,6 +257,9 @@ def test_eval_checklist_missing_item():
         script_dst = tmpdir_path / '.claude' / 'scripts' / 'verify-mode3-workdone.py'
         script_dst.parent.mkdir(parents=True, exist_ok=True)
         script_dst.write_text(script_src.read_text())
+        helper_src = Path('.claude/scripts/mode3_git_target.py')
+        helper_dst = script_dst.parent / 'mode3_git_target.py'
+        helper_dst.write_text(helper_src.read_text())
 
         rc, stdout, stderr = run_script(9999, cwd=tmpdir_path)
 
@@ -276,6 +288,9 @@ def test_exit_code_nonzero_on_failure():
         script_dst = tmpdir_path / '.claude' / 'scripts' / 'verify-mode3-workdone.py'
         script_dst.parent.mkdir(parents=True, exist_ok=True)
         script_dst.write_text(script_src.read_text())
+        helper_src = Path('.claude/scripts/mode3_git_target.py')
+        helper_dst = script_dst.parent / 'mode3_git_target.py'
+        helper_dst.write_text(helper_src.read_text())
 
         rc, stdout, stderr = run_script(9999, cwd=tmpdir_path)
 
@@ -311,6 +326,9 @@ def test_multiline_eval_checklist():
         script_dst = tmpdir_path / '.claude' / 'scripts' / 'verify-mode3-workdone.py'
         script_dst.parent.mkdir(parents=True, exist_ok=True)
         script_dst.write_text(script_src.read_text())
+        helper_src = Path('.claude/scripts/mode3_git_target.py')
+        helper_dst = script_dst.parent / 'mode3_git_target.py'
+        helper_dst.write_text(helper_src.read_text())
 
         rc, stdout, stderr = run_script(9999, cwd=tmpdir_path)
 
@@ -369,6 +387,9 @@ def test_special_chars_in_checklist_key():
         script_dst = tmpdir_path / '.claude' / 'scripts' / 'verify-mode3-workdone.py'
         script_dst.parent.mkdir(parents=True, exist_ok=True)
         script_dst.write_text(script_src.read_text())
+        helper_src = Path('.claude/scripts/mode3_git_target.py')
+        helper_dst = script_dst.parent / 'mode3_git_target.py'
+        helper_dst.write_text(helper_src.read_text())
 
         rc, stdout, stderr = run_script(9999, cwd=tmpdir_path)
 
@@ -410,6 +431,9 @@ def test_forbidden_globs_list():
         script_dst = tmpdir_path / '.claude' / 'scripts' / 'verify-mode3-workdone.py'
         script_dst.parent.mkdir(parents=True, exist_ok=True)
         script_dst.write_text(script_src.read_text())
+        helper_src = Path('.claude/scripts/mode3_git_target.py')
+        helper_dst = script_dst.parent / 'mode3_git_target.py'
+        helper_dst.write_text(helper_src.read_text())
 
         rc, stdout, stderr = run_script(9999, cwd=tmpdir_path)
 

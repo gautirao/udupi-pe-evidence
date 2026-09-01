@@ -41,9 +41,18 @@ Runs **after** Phase 7A (and 7B if triggered) have PASSed. WORKDONE_REVIEW is th
 Before submitting WORKDONE_REVIEW, run the automated preflight scripts, **in this order**, to verify all deterministic checks:
 
 ```bash
-python .claude/scripts/verify-mode3-gate-receipts.py --issue <N> --base origin/main
-python .claude/scripts/verify-mode3-workdone.py --issue <N> --base origin/main
+python .claude/scripts/verify-mode3-gate-receipts.py --issue <N> --base origin/main --worktree <path-to-worker-worktree>
+python .claude/scripts/verify-mode3-workdone.py --issue <N> --base origin/main --worktree <path-to-worker-worktree>
 ```
+
+Both invoked from the **main repo checkout** (where `.claude/handoffs/issue-<N>/`
+artefacts live — `--repo` defaults to CWD). Pass `--worktree` explicitly with
+the path to the Mode-3 worker's dedicated git worktree so the scripts' git
+operations (diff, commit resolution) are scoped to the worktree's HEAD, not
+the main checkout's — see `.claude/scripts/mode3_git_target.py`. Omitting
+`--worktree` falls back to `--repo` (backward compatible for the
+main-checkout-only case, e.g. running against a branch checked out directly
+in the main repo with no separate worktree).
 
 `verify-mode3-gate-receipts.py` runs FIRST. It reconciles the per-gate receipts
 (`.claude/handoffs/issue-<N>/gates/*.toml`) against the handoff's
@@ -104,7 +113,7 @@ loudly in bootstrap mode exactly as it would in `enforce` mode.
    - Verify every entry in `skipped` has all four AC26 fields: `specialist_skipped`, `reason`, `rule_citation`, `replacement_evidence`. Any missing field → halt.
    - Verify every specialist named in `selected_sequence` is in `category_allowlist` OR a triggered `conditional_gates` entry. Any unlisted specialist → halt.
    - Verify the `[routing_decision_log]` section of `workdone-candidate.toml` summarises the same sequence + skip justifications + rule citations as the log entry. Mismatch → halt.
-3. Run authoritative scope-lock: `git diff --name-status origin/main...HEAD`. Any A/M/D/R path (or rename source/target) outside `executor.allowed_file_globs` blocks WORKDONE_REVIEW unless scope expansion is explicitly approved by the user. Orchestrator's `scope_lock_self_check` is advisory; lead's is authoritative.
+3. Run authoritative scope-lock: `git -C <worker-worktree> diff --name-status origin/main...HEAD` (scoped explicitly to the worker's worktree — never a bare CWD-relative `git diff`). Any A/M/D/R path (or rename source/target) outside `executor.allowed_file_globs` blocks WORKDONE_REVIEW unless scope expansion is explicitly approved by the user. Orchestrator's `scope_lock_self_check` is advisory; lead's is authoritative.
 4. Independently verify QA/E2E evidence files exist and contain PASS or justified NOT_REQUIRED. Re-run tests locally if the approved plan requires it.
 5. **Confirm Phase 7A (and 7B if triggered) PASSed.** Read `product-verification.toml` (and `product-sweep.toml` if present). If 7A is not PASS, or 7B is BLOCKING_REGRESSION, do NOT invoke WORKDONE_REVIEW — the run should already have rerouted/halted upstream.
 6. **Verify the eval-checklist satisfaction matrix.** Read `workdone-candidate.toml` `[eval_checklist_result]` (and `[bug_eval_checklist_result]` for bugs). Confirm it covers every `[eval_checklist].items` entry from `approved-execution-handoff.toml`. Any item not marked `PASS` (i.e. `FAIL`/`BLOCKED`/missing) → halt; do NOT invoke WORKDONE_REVIEW. The Team Lead must not hand back work with an unsatisfied eval-checklist item presented as done.

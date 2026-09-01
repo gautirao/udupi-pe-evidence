@@ -17,13 +17,15 @@ Usage:
 import argparse
 import json
 import hashlib
-import subprocess
 import sys
 import re
 import fnmatch
 import tomllib
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from mode3_git_target import add_target_args, resolve_target, run_git  # noqa: E402
 
 
 def load_toml_file(path: Path) -> Dict[str, Any]:
@@ -161,11 +163,11 @@ def check_routing_decision_log(log_path: Path, candidate_path: Path, handoff_pat
     return True, []
 
 
-def check_scope_lock(base_ref: str, issue: int, handoff_path: Path) -> Tuple[bool, List[str], List[str]]:
+def check_scope_lock(base_ref: str, issue: int, handoff_path: Path, worktree_path: Path) -> Tuple[bool, List[str], List[str]]:
     """
     Check 3: Scope-lock / forbidden-file check.
 
-    Use: git diff --name-only <base>...HEAD
+    Use: git diff --name-only <base>...HEAD (scoped to worktree_path)
 
     Compare against handoff scope if available.
 
@@ -181,12 +183,7 @@ def check_scope_lock(base_ref: str, issue: int, handoff_path: Path) -> Tuple[boo
 
     # Get changed files
     try:
-        result = subprocess.run(
-            ['git', 'diff', '--name-only', f'{base_ref}...HEAD'],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
+        result = run_git(worktree_path, ['diff', '--name-only', f'{base_ref}...HEAD'], timeout=10)
         if result.returncode != 0:
             # If we're not in a git repo, this check is skipped (not a failure)
             if 'not a git repository' in result.stderr.lower():
@@ -341,10 +338,12 @@ def main():
     )
     parser.add_argument('--issue', type=int, required=True, help='GitHub issue number')
     parser.add_argument('--base', default='origin/main', help='Base ref for git diff')
+    add_target_args(parser)
 
     args = parser.parse_args()
+    repo_path, worktree_path = resolve_target(args)
 
-    handoff_dir = Path(f'.claude/handoffs/issue-{args.issue}')
+    handoff_dir = repo_path / f'.claude/handoffs/issue-{args.issue}'
 
     handoff_path = handoff_dir / 'approved-execution-handoff.toml'
     candidate_path = handoff_dir / 'workdone-candidate.toml'
@@ -377,7 +376,7 @@ def main():
         result['pass'] = False
 
     # Check 3: Scope lock
-    scope_pass, scope_details, changed_files, violations = check_scope_lock(args.base, args.issue, handoff_path)
+    scope_pass, scope_details, changed_files, violations = check_scope_lock(args.base, args.issue, handoff_path, worktree_path)
     result['checks']['scope_lock']['pass'] = scope_pass
     result['checks']['scope_lock']['details'] = scope_details
     result['checks']['scope_lock']['changed_files'] = changed_files

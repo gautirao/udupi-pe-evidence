@@ -53,6 +53,9 @@ import tomllib
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from mode3_git_target import add_target_args, resolve_target, run_git  # noqa: E402
+
 VERDICT_ENUM = {"APPROVE", "PASS", "NOT_REQUIRED", "NEEDS_FIXES", "FAIL", "BLOCKED"}
 SATISFYING_VERDICTS = {"APPROVE", "PASS", "NOT_REQUIRED"}
 
@@ -189,34 +192,25 @@ def authoritative_receipt(entries: List[Dict[str, Any]]) -> Optional[Dict[str, A
     return max(entries, key=lambda e: e["level"])
 
 
-def git_is_repo() -> bool:
+def git_is_repo(worktree_path: Path) -> bool:
     try:
-        r = subprocess.run(
-            ["git", "rev-parse", "--is-inside-work-tree"],
-            capture_output=True, text=True, timeout=10,
-        )
+        r = run_git(worktree_path, ["rev-parse", "--is-inside-work-tree"], timeout=10)
         return r.returncode == 0 and r.stdout.strip() == "true"
     except (OSError, subprocess.SubprocessError):
         return False
 
 
-def git_commit_resolvable(commit: str) -> bool:
+def git_commit_resolvable(worktree_path: Path, commit: str) -> bool:
     try:
-        r = subprocess.run(
-            ["git", "rev-parse", "--verify", f"{commit}^{{commit}}"],
-            capture_output=True, text=True, timeout=10,
-        )
+        r = run_git(worktree_path, ["rev-parse", "--verify", f"{commit}^{{commit}}"], timeout=10)
         return r.returncode == 0
     except (OSError, subprocess.SubprocessError):
         return False
 
 
-def git_changed_files_since(commit: str) -> Optional[List[str]]:
+def git_changed_files_since(worktree_path: Path, commit: str) -> Optional[List[str]]:
     try:
-        r = subprocess.run(
-            ["git", "diff", "--name-only", f"{commit}..HEAD"],
-            capture_output=True, text=True, timeout=20,
-        )
+        r = run_git(worktree_path, ["diff", "--name-only", f"{commit}..HEAD"], timeout=20)
         if r.returncode != 0:
             return None
         return [l for l in r.stdout.strip().split("\n") if l]
@@ -252,8 +246,8 @@ def check_transcript(evidence_path: Path, expected_sha: Optional[str]) -> Dict[s
             "last_verdict": last_verdict, "issues": issues}
 
 
-def run_runtime_checks(issue: int, base_ref: str) -> Dict[str, Any]:
-    handoff_dir = Path(f".claude/handoffs/issue-{issue}")
+def run_runtime_checks(issue: int, base_ref: str, repo_path: Path, worktree_path: Path) -> Dict[str, Any]:
+    handoff_dir = repo_path / f".claude/handoffs/issue-{issue}"
     handoff_path = handoff_dir / "approved-execution-handoff.toml"
     gates_dir = handoff_dir / "gates"
 
@@ -316,7 +310,7 @@ def run_runtime_checks(issue: int, base_ref: str) -> Dict[str, Any]:
                 seen[lvl] = str(e["path"])
     record("receipt_no_duplicate", not dup_details, dup_details)
 
-    is_git_repo = git_is_repo()
+    is_git_repo = git_is_repo(worktree_path)
     if not is_git_repo:
         record("reviewed_commit_fresh", True,
                ["not_machine_verifiable: not in a git repository (freshness check skipped)"])
@@ -476,13 +470,13 @@ def run_runtime_checks(issue: int, base_ref: str) -> Dict[str, Any]:
 
         # reviewed_commit_fresh (a7)
         if is_git_repo:
-            if not r_reviewed_commit or not git_commit_resolvable(r_reviewed_commit):
+            if not r_reviewed_commit or not git_commit_resolvable(worktree_path, r_reviewed_commit):
                 record("reviewed_commit_fresh", False,
                        [f"{gate_name}: reviewed_commit {r_reviewed_commit!r} is not a resolvable "
                         "commit (reviewed_commit_unresolvable) — fail closed"])
                 gate_status = "INVALID"
             else:
-                changed = git_changed_files_since(r_reviewed_commit)
+                changed = git_changed_files_since(worktree_path, r_reviewed_commit)
                 if changed is None:
                     record("reviewed_commit_fresh", False,
                            [f"{gate_name}: git diff against {r_reviewed_commit} failed"])
@@ -549,7 +543,9 @@ def main() -> int:
     ap.add_argument("--json", action="store_true", help="Compact JSON (default: pretty-printed)")
     ap.add_argument("--receipts-only", action="store_true", help="Run only the runtime receipt reconciliation")
     ap.add_argument("--docs-only", action="store_true", help="Run only the static doc-invariant checks")
+    add_target_args(ap)
     args = ap.parse_args()
+    repo_path, worktree_path = resolve_target(args)
 
     result: Dict[str, Any] = {
         "pass": True,
@@ -563,7 +559,7 @@ def main() -> int:
 
     try:
         if not args.receipts_only:
-            d_checks = doc_checks(Path("."))
+            d_checks = doc_checks(worktree_path)
             docs_passed = all(ok for _, ok, _ in d_checks)
             result["docs"] = {
                 "passed": docs_passed,
@@ -574,7 +570,7 @@ def main() -> int:
                 result["failed"].extend(f"doc:{c}" for c, ok, _ in d_checks if not ok)
 
         if not args.docs_only:
-            rt = run_runtime_checks(args.issue, args.base)
+            rt = run_runtime_checks(args.issue, args.base, repo_path, worktree_path)
             result["mode"] = rt["mode"]
             result["receipts_bootstrap"] = rt["receipts_bootstrap"]
             result["gate_evidence"] = rt["gate_evidence"]

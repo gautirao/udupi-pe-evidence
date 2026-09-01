@@ -29,8 +29,15 @@ and skip gates, so the Orchestrator cannot be the sole verifier that those
 gates actually ran with a satisfying verdict. The Main Agent runs:
 
 ```bash
-python .claude/scripts/verify-mode3-gate-receipts.py --issue <N> --base origin/main
+python .claude/scripts/verify-mode3-gate-receipts.py --issue <N> --base origin/main --worktree <path-to-worker-worktree>
 ```
+
+Run from the **main repo checkout** (`--repo` defaults to CWD, where
+`.claude/handoffs/issue-<N>/` artefacts live). Pass `--worktree` with the
+path to the Mode-3 worker's dedicated git worktree so the reconciliation's
+git operations are scoped to the worktree's HEAD, not the main checkout's —
+see `.claude/scripts/mode3_git_target.py`. Omitting `--worktree` falls back
+to `--repo` (backward compatible for the main-checkout-only case).
 
 - **At Phase 7C preflight**, before `verify-mode3-workdone.py` (see
   `.claude/mode3/contracts/workdone-review.md` → Preflight validation). A
