@@ -204,6 +204,39 @@ describe('useDiscoverGroupResults', () => {
     expect(result.current.groupResultsMarkers[0].id).toBe('a1');
   });
 
+  it('#2145 regression: groupResultsMarkers (anon branch) still renders markers when the backend only sends latitude/longitude (no lat/lon)', () => {
+    const { result } = renderHook(() =>
+      useDiscoverGroupResults(
+        makeParams({
+          isAuthenticated: false,
+          groupResultsAnonData: {
+            city: 'udupi',
+            limitPerArea: 20,
+            areas: [
+              {
+                areaKey: 'IN|KA|Udupi|Udupi',
+                areaName: 'Udupi',
+                listings: [
+                  makeAnonItem({
+                    id: 'latlng-only',
+                    lat: undefined,
+                    lon: undefined,
+                    latitude: 13.35,
+                    longitude: 74.79,
+                  }),
+                ],
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    expect(result.current.groupResultsMarkers).toHaveLength(1);
+    expect(result.current.groupResultsMarkers[0].id).toBe('latlng-only');
+    expect(result.current.groupResultsMarkers[0].latitude).toBe(13.35);
+    expect(result.current.groupResultsMarkers[0].longitude).toBe(74.79);
+  });
+
   it('returns empty results when isGroupResultsState=false', () => {
     const { result } = renderHook(() =>
       useDiscoverGroupResults(

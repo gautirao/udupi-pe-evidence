@@ -4,7 +4,8 @@ import type { DiscoverCityListingItem, useDiscoverCityListings } from '@/hooks/u
 import type { useDiscoverFilteredMarkers } from '@/hooks/useDiscoverFilteredMarkers';
 import { PropertyListing, PropertyImage, PropertyFilters } from '@/hooks/usePropertyListings';
 import { applyAnonPropertyFilters } from '@/features/discover/presentation/anonPropertyFilters';
-import { cityListingToPropertyListing, filteredMarkerToPropertyListing } from '@/lib/discoverMappers';
+import { filteredMarkerToPropertyListing } from '@/lib/discoverMappers';
+import { resolveGroupResultsAnonMarkers } from '@/features/discover/adapters/anonMarkerAdapter';
 
 type DiscoverListingsResult = ReturnType<typeof useDiscoverListings>;
 type DiscoverCityListingsResult = ReturnType<typeof useDiscoverCityListings>;
@@ -153,8 +154,9 @@ export function useDiscoverGroupResults({
 
   // Issue #1597 — convert group-filtered markers to PropertyListingWithImages[] for PropertyMap.
   // Auth path: filteredMarkerToPropertyListing from /api/discover/markers (full predicate).
-  // Anon path: cityListingToPropertyListing derived from groupResultsAnonListings (same recipe
-  // as areaMarkerListings — filter null coords then reuse the city-listing mapper).
+  // Anon path: resolveGroupResultsAnonMarkers (shared anonMarkerAdapter, issue #2145) derived
+  // from groupResultsAnonRaw — falls back from lat/lon to latitude/longitude (issue #2089's
+  // fix, matching resolveNodeListingsAnonMarkers) before filtering out items with no coords.
   // Returns [] when:
   //   - Not in the group-results state (no-op for all other panel states)
   //   - areaGroupsData is still loading (resolvedGroupAreaKeys is empty → hook disabled → data undefined)
@@ -167,19 +169,8 @@ export function useDiscoverGroupResults({
       const now = new Date().toISOString();
       return groupResultsMarkersData.markers.map((m) => filteredMarkerToPropertyListing(m, now));
     }
-    // Anon: derive markers from the same filtered city listings already shown in the panel.
-    // Uses groupResultsAnonRaw (DiscoverCityListingItem[], has lat/lon fields from the
-    // public endpoint) rather than the normalized DiscoverListingItem[] shape, because
-    // cityListingToPropertyListing expects the raw city-listing shape.
-    // Filters null/undefined coords so Leaflet never receives NaN lat/lon.
-    if (groupResultsAnonRaw.length === 0) return [];
     const now = new Date().toISOString();
-    return groupResultsAnonRaw
-      .filter((l) => l.lat != null && l.lon != null)
-      .map((l) => cityListingToPropertyListing(
-        { ...l, lat: l.lat as number, lon: l.lon as number },
-        now,
-      ));
+    return resolveGroupResultsAnonMarkers(groupResultsAnonRaw, now);
   }, [isGroupResultsState, isAuthenticated, groupResultsMarkersData, groupResultsAnonRaw]);
 
   return {

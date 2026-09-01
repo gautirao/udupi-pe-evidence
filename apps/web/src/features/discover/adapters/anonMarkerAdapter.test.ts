@@ -14,25 +14,23 @@ const LATITUDE_ONLY_ITEM: DiscoverCityListingItem = {
   longitude: 74.79,
 };
 
-describe('anonMarkerAdapter R7 differential test (#2142 Commit 2)', () => {
-  it('R7: the two implementations DIVERGE on latitude/longitude-only items — NOT byte-identical, so they stay separately named (plan stop condition)', () => {
+describe('anonMarkerAdapter R7 differential test (#2142 Commit 2, converged in #2145)', () => {
+  it('#2145 regression: both implementations now agree on latitude/longitude-only items — resolveGroupResultsAnonMarkers gained the same fallback resolveNodeListingsAnonMarkers already had', () => {
     const nodeListingsResult = resolveNodeListingsAnonMarkers(
       { areas: [{ listings: [LATITUDE_ONLY_ITEM] }] },
       NOW,
     );
     const groupResultsResult = resolveGroupResultsAnonMarkers([LATITUDE_ONLY_ITEM], NOW);
 
-    // resolveNodeListingsAnonMarkers falls back to latitude/longitude (issue
-    // #2089 fix) — the marker survives.
+    // Both fall back to latitude/longitude (issue #2089's fix, now applied to
+    // both call sites) — the marker survives on both paths.
     expect(nodeListingsResult).toHaveLength(1);
     expect(nodeListingsResult[0].latitude).toBe(13.35);
     expect(nodeListingsResult[0].longitude).toBe(74.79);
 
-    // resolveGroupResultsAnonMarkers has NO such fallback — the item is
-    // silently filtered out. This reproduces the SAME class of bug #2089
-    // fixed on the node-listings path, still latent on the group-results
-    // path (reported to team-lead; out of scope to fix in this commit).
-    expect(groupResultsResult).toHaveLength(0);
+    expect(groupResultsResult).toHaveLength(1);
+    expect(groupResultsResult[0].latitude).toBe(13.35);
+    expect(groupResultsResult[0].longitude).toBe(74.79);
   });
 
   it('both implementations agree when lat/lon ARE present (the common case both were designed for)', () => {
@@ -68,12 +66,12 @@ describe('resolveNodeListingsAnonMarkers (moved verbatim from MapDiscovery.tsx)'
   });
 });
 
-describe('resolveGroupResultsAnonMarkers (moved verbatim from useDiscoverGroupResults.ts)', () => {
+describe('resolveGroupResultsAnonMarkers (wired into useDiscoverGroupResults.ts as of #2145)', () => {
   it('returns [] for empty input', () => {
     expect(resolveGroupResultsAnonMarkers([], NOW)).toEqual([]);
   });
 
-  it('filters out items with no lat/lon', () => {
+  it('filters out items with no coordinates at all', () => {
     const item: DiscoverCityListingItem = { id: 'no-coords' };
     expect(resolveGroupResultsAnonMarkers([item], NOW)).toEqual([]);
   });
@@ -84,5 +82,13 @@ describe('resolveGroupResultsAnonMarkers (moved verbatim from useDiscoverGroupRe
     expect(result).toHaveLength(1);
     expect(result[0].latitude).toBe(5);
     expect(result[0].longitude).toBe(6);
+  });
+
+  it('#2145: falls back to latitude/longitude when lat/lon are absent (public city-listings endpoint shape)', () => {
+    const item: DiscoverCityListingItem = { id: 'latlng-only', latitude: 13.35, longitude: 74.79 };
+    const result = resolveGroupResultsAnonMarkers([item], NOW);
+    expect(result).toHaveLength(1);
+    expect(result[0].latitude).toBe(13.35);
+    expect(result[0].longitude).toBe(74.79);
   });
 });
