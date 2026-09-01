@@ -3,6 +3,8 @@ import { api } from '@/lib/api';
 import { PropertyFilters } from '@/hooks/usePropertyListings';
 import { snapBbox } from '@/lib/bboxUtils';
 import { buildDiscoverSearchParams } from '@/lib/discoverSearchParams';
+import { computeScopeFingerprint } from '@/features/discover/state/resultScope';
+import type { ResultScope } from '@/features/discover/state/resultScope';
 
 export interface DiscoverListingItem {
   id: string;
@@ -49,6 +51,8 @@ export interface DiscoverListingsPage {
   aggregates?: {
     topLocalities: { locality: string; count: number }[];
   } | null;
+  /** Issue #2016 — the request's `scopeFingerprint` echoed back unchanged. */
+  scopeFingerprint?: string | null;
 }
 
 export interface UseDiscoverListingsParams {
@@ -82,6 +86,17 @@ export interface UseDiscoverListingsParams {
    * Issue #2087 — bounded local-scope Browse listings CTA.
    */
   nodeKey?: string | null;
+  /**
+   * Issue #2016 — the committed geography that owns this fetch's identity.
+   * When VIEWPORT, its bounds are sent as the new `viewportScope` param
+   * (distinct from `bbox`). A `scopeFingerprint` derived from
+   * (resultScope, filters, listingPurpose) is always sent and included in
+   * the query key, so a response answering a since-superseded scope lands
+   * in its own (now-unread) cache entry instead of overwriting the current
+   * one. Defaults to null — existing callers that predate this param keep
+   * compiling and behaving identically.
+   */
+  resultScope?: ResultScope;
 }
 
 export function useDiscoverListings({
@@ -96,12 +111,17 @@ export function useDiscoverListings({
   listingPurpose,
   areaKeys,
   nodeKey,
+  resultScope = null,
 }: UseDiscoverListingsParams) {
   // Snap bbox to grid for cache efficiency; null when not provided or contains non-finite values.
   const snapped: [number, number, number, number] | null =
     bbox != null && bbox.every(Number.isFinite) ? snapBbox(bbox) : null;
 
   const trimmedQ = q?.trim() || null;
+
+  // Issue #2016 — see UseDiscoverListingsParams.resultScope's doc.
+  const scopeFingerprint = computeScopeFingerprint(resultScope, filters, listingPurpose);
+  const viewportScope = resultScope?.kind === 'VIEWPORT' ? resultScope.bounds : null;
 
   // Issue #1597 — sort areaKeys for stable cache keys; null when not in group-results mode.
   // Distinct key segment 'areaKeys' prevents collision with the existing ['discover-listings', ...]
@@ -130,6 +150,10 @@ export function useDiscoverListings({
       // null when no areaKeys filter — distinct from [] (empty, fetch disabled).
       sortedAreaKeys,
       nodeKey,
+      // Issue #2016 — part of the query key so a response for a
+      // since-superseded scope can never land in the CURRENT scope's cache
+      // entry (each distinct fingerprint gets its own entry).
+      scopeFingerprint,
     ],
     queryFn: ({ signal }) => {
       const params = buildDiscoverSearchParams({
@@ -143,6 +167,8 @@ export function useDiscoverListings({
         trimmedQ,
         listingPurpose,
         nodeKey,
+        scopeFingerprint,
+        viewportScope,
       });
 
       return api.get<DiscoverListingsPage>(`/api/discover/listings?${params.toString()}`, { signal });

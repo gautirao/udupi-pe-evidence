@@ -29,6 +29,7 @@ import {
   cityListingToPropertyListing,
 } from '@/lib/discoverMappers';
 import type { DiscoverMarkerScope } from '@/features/discover/selectors/markerScope';
+import type { ResultScope } from '@/features/discover/state/resultScope';
 
 /**
  * Issue #1801 — optimistic camera-navigation intent for area-marker clicks.
@@ -304,6 +305,19 @@ export interface UseDiscoverMapDataParams {
    * the #1806/#1597/#2087 producers this replaces.
    */
   scope?: DiscoverMarkerScope;
+  /**
+   * Issue #2016 — the committed geography (AREA_SET | POLYGON | VIEWPORT |
+   * null) forwarded verbatim to useDiscoverListings/useDiscoverFilteredMarkers
+   * so cards, markers, and totals share one scopeFingerprint identity, and so
+   * a committed VIEWPORT's bounds reach the new `viewportScope` request
+   * param. Defaults to null (existing callers that predate this param keep
+   * compiling and behaving identically — no fingerprint/viewportScope sent).
+   * Orthogonal to `scope` above (the navigation-resolution view); a
+   * committed POLYGON already reaches this hook via `filters.polygon` (the
+   * caller's bridge from the committed scope), so `resultScope` here is
+   * purely for the shared query identity.
+   */
+  resultScope?: ResultScope;
 }
 
 export interface UseDiscoverMapDataResult {
@@ -489,6 +503,7 @@ export function useDiscoverMapData({
   journey,
   listingPurpose,
   scope = { kind: 'city' },
+  resultScope = null,
 }: UseDiscoverMapDataParams): UseDiscoverMapDataResult {
   const isCityValid = city in CITY_CONFIG;
 
@@ -514,6 +529,8 @@ export function useDiscoverMapData({
     bbox,
     q: debouncedSearch || undefined,
     listingPurpose,
+    // Issue #2016 — shared query identity across cards/markers/totals.
+    resultScope,
   });
 
   // ── Filtered markers (auth-only, same predicate as listings) ──────────────
@@ -543,6 +560,8 @@ export function useDiscoverMapData({
     // Issue #2185 S2 — the caller-resolved scope (city/node/legacy areas/
     // unresolved). Replaces the separate groupAreaKeys/nodeKey params.
     scope,
+    // Issue #2016 — shared query identity across cards/markers/totals.
+    resultScope,
   );
 
   // ── Static data ───────────────────────────────────────────────────────────

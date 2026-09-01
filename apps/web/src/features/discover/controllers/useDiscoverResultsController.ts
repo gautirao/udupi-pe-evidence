@@ -8,6 +8,7 @@ import type { useAreaGroups } from '@/hooks/useAreaGroups';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import type { DiscoverPanelContent } from '@/features/discover/selectors/panelContent';
 import type { DiscoverMarkerScope } from '@/features/discover/selectors/markerScope';
+import type { ResultScope } from '@/features/discover/state/resultScope';
 
 export interface UseDiscoverResultsControllerParams {
   panelContent: DiscoverPanelContent;
@@ -58,6 +59,14 @@ export function useDiscoverResultsController({
     : null;
   const resolvedGroupAreaKeys: string[] = resolvedGroupForResults?.area_keys ?? [];
 
+  // Issue #2016 — the group-results surface's own committed AREA_SET scope,
+  // used ONLY to derive the shared scopeFingerprint for this surface's two
+  // direct query hooks below (cards + markers), so they can never answer
+  // for two different area sets at once.
+  const resultsScope: ResultScope = isGroupResultsState
+    ? { kind: 'AREA_SET', areaKeys: resolvedGroupAreaKeys }
+    : null;
+
   // ── Authenticated path: /api/discover/listings (paginated, fully filtered) ──
   const {
     data: groupResultsAuthedData,
@@ -72,6 +81,7 @@ export function useDiscoverResultsController({
     enabled: isGroupResultsState && isAuthenticated,
     listingPurpose: intentListingPurpose,
     areaKeys: isGroupResultsState ? resolvedGroupAreaKeys : undefined,
+    resultScope: resultsScope,
   });
 
   // ── Authenticated path: /api/discover/markers (full predicate, list+map consistent) ──
@@ -97,6 +107,7 @@ export function useDiscoverResultsController({
     intentListingPurpose,
     undefined,
     groupResultsScope,
+    resultsScope,
   );
 
   // ── Anonymous path: /api/discover/cities/{city}/listings (public, multi-areaKeys) ──

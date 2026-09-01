@@ -12,6 +12,19 @@ export interface DiscoverSearchParamsOptions {
   listingPurpose?: string | null;
   excludePropertyType?: string | null;
   nodeKey?: string | null;
+  /**
+   * Issue #2016 — opaque scope+filters+listingPurpose identity (see
+   * computeScopeFingerprint). The server echoes it back unchanged so a
+   * response answering a since-superseded scope can be identified.
+   */
+  scopeFingerprint?: string | null;
+  /**
+   * Issue #2016 — committed VIEWPORT scope bounds, distinct from the
+   * always-on `bbox` render-prefilter (which stays untouched and is sent
+   * independently). Only present when VIEWPORT is the COMMITTED result
+   * scope — never populated by ordinary camera pan/zoom.
+   */
+  viewportScope?: { s: number; w: number; n: number; e: number } | null;
 }
 
 /**
@@ -30,6 +43,8 @@ export function buildDiscoverSearchParams({
   listingPurpose,
   excludePropertyType,
   nodeKey,
+  scopeFingerprint,
+  viewportScope,
 }: DiscoverSearchParamsOptions): URLSearchParams {
   const params = new URLSearchParams();
   params.set('city', city);
@@ -122,6 +137,12 @@ export function buildDiscoverSearchParams({
   }
   if (excludePropertyType) {
     params.set('excludePropertyType', excludePropertyType);
+  }
+  if (scopeFingerprint) {
+    params.set('scopeFingerprint', scopeFingerprint);
+  }
+  if (viewportScope) {
+    params.set('viewportScope', `${viewportScope.s},${viewportScope.w},${viewportScope.n},${viewportScope.e}`);
   }
 
   return params;

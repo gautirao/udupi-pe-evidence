@@ -92,7 +92,15 @@ type MapLayersView = Pick<
   Pick<DiscoverMapCanvasProps, 'overviewAreas' | 'areaSearchMatchKeys' | 'hoveredAreaKeyForMap'> &
   Pick<DiscoverMapCanvasProps, 'schoolZoneLabels'> &
   Pick<DiscoverMapCanvasProps, 'isRegionOverview' | 'regionOverviewShortLabel'>;
-type MapDrawingCommands = Pick<DiscoverMapCanvasProps, 'handlePolygonDrawn' | 'handlePolygonCleared'>;
+type MapDrawingCommands = Pick<
+  DiscoverMapCanvasProps,
+  | 'handlePolygonDrawn'
+  | 'handlePolygonCleared'
+  // Issue #2016 — J3.3 replace-confirmation dialog state.
+  | 'isReplaceScopeConfirmOpen'
+  | 'handleConfirmReplaceScope'
+  | 'handleCancelReplaceScope'
+>;
 
 type MapNavigationView = Pick<DiscoverMapCanvasProps, 'showSchoolBreadcrumb' | 'focusedGroup' | 'city'> &
   Pick<
@@ -357,6 +365,10 @@ export type BuildMapSurfaceViewParams = Omit<
   | 'navigate'
   | 'handlePolygonDrawn'
   | 'handlePolygonCleared'
+  // Issue #2016 — commands, not view data; live in MapDrawingCommands below.
+  | 'isReplaceScopeConfirmOpen'
+  | 'handleConfirmReplaceScope'
+  | 'handleCancelReplaceScope'
   | 'setMapZoom'
   | 'setMapReady'
   | 'handleCityChange'
@@ -720,6 +732,10 @@ export type BuildMapSurfaceCommandsParams = Pick<
     ReturnType<typeof useDiscoverPageStateController>,
     | 'handlePolygonDrawn'
     | 'handlePolygonCleared'
+    // Issue #2016 — J3.3 replace-confirmation dialog state.
+    | 'isReplaceScopeConfirmOpen'
+    | 'handleConfirmReplaceScope'
+    | 'handleCancelReplaceScope'
     | 'setMapZoom'
     | 'setMapReady'
     | 'handleCityChange'
@@ -780,7 +796,17 @@ export function buildMapSurfaceCommands(
 ): DiscoverMapSurfaceCommands {
   const {
     pageContextController: { navigate },
-    pageStateController: { handlePolygonDrawn, handlePolygonCleared, setMapZoom, setMapReady, handleCityChange },
+    pageStateController: {
+      handlePolygonDrawn,
+      handlePolygonCleared,
+      // Issue #2016 — J3.3 replace-confirmation dialog state.
+      isReplaceScopeConfirmOpen,
+      handleConfirmReplaceScope,
+      handleCancelReplaceScope,
+      setMapZoom,
+      setMapReady,
+      handleCityChange,
+    },
     mapDataController: { publishCameraIntent, publishClusterCameraIntent, publishMarkerClusterCameraIntent },
     geographyController: { handleAreaMarkersComputed },
     markerPopoverController: { handleStepMarkerListing },
@@ -809,7 +835,14 @@ export function buildMapSurfaceCommands(
 
   return {
     camera: { publishCameraIntent, setMapZoom, handleBoundsChange },
-    drawing: { handlePolygonDrawn, handlePolygonCleared },
+    drawing: {
+      handlePolygonDrawn,
+      handlePolygonCleared,
+      // Issue #2016 — J3.3 replace-confirmation dialog state.
+      isReplaceScopeConfirmOpen,
+      handleConfirmReplaceScope,
+      handleCancelReplaceScope,
+    },
     navigation: {
       handleOverviewAreaClick,
       publishClusterCameraIntent,

@@ -353,4 +353,198 @@ class DiscoverListingsControllerTest {
                 q.areaKeys() != null && q.areaKeys().size() == 15
         ));
     }
+
+    // ── #2016: result-scope exclusivity — AREA_SET/POLYGON/VIEWPORT ──────────
+
+    private static final String VALID_POLYGON = "[[13.3,74.7],[13.4,74.8],[13.3,74.8]]";
+    private static final String VALID_BBOX = "13.3,74.7,13.4,74.8";
+
+    // ── 17. areaKeys + polygon → 400 (two active result scopes) ──────────────
+
+    @Test
+    void areaKeysAndPolygon_returns400_resultScopeMustBeExclusive() throws Exception {
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("areaKeys", "IN|KA|Udupi|Manipal")
+                        .param("polygon", VALID_POLYGON)
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("result_scope_must_be_exclusive")));
+
+        verifyNoInteractions(service);
+    }
+
+    // ── 18. areaKeys + viewportScope → 400 (two active result scopes) ────────
+
+    @Test
+    void areaKeysAndViewportScope_returns400_resultScopeMustBeExclusive() throws Exception {
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("areaKeys", "IN|KA|Udupi|Manipal")
+                        .param("viewportScope", VALID_BBOX)
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("result_scope_must_be_exclusive")));
+
+        verifyNoInteractions(service);
+    }
+
+    // ── 19. polygon + viewportScope → 400 (two active result scopes) ─────────
+
+    @Test
+    void polygonAndViewportScope_returns400_resultScopeMustBeExclusive() throws Exception {
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("polygon", VALID_POLYGON)
+                        .param("viewportScope", VALID_BBOX)
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("result_scope_must_be_exclusive")));
+
+        verifyNoInteractions(service);
+    }
+
+    // ── 19b. nodeKey + polygon → 400 — review fix-cycle-1: exclusivity must run AFTER
+    //         nodeKey resolves to effectiveAreaKeys, not just check the raw (absent) areaKeys
+    //         param, since nodeKey is the dominant AREA_SET path from live area-first nav.
+
+    @Test
+    void nodeKeyAndPolygon_returns400_resultScopeMustBeExclusive() throws Exception {
+        com.example.realestate.discover.navigation.NavigationGraph graph = mock(com.example.realestate.discover.navigation.NavigationGraph.class);
+        when(navigationGraphCache.getActiveGraph("udupi")).thenReturn(java.util.Optional.of(graph));
+        when(graph.containsNodeKey("d:n")).thenReturn(true);
+        when(graph.descendantAreaKeysOf("d:n")).thenReturn(List.of("a:alpha", "a:bravo"));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("nodeKey", "d:n")
+                        .param("polygon", VALID_POLYGON)
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("result_scope_must_be_exclusive")));
+
+        verifyNoInteractions(service);
+    }
+
+    // ── 19c. nodeKey + viewportScope → 400 — same review fix-cycle-1 guard ───
+
+    @Test
+    void nodeKeyAndViewportScope_returns400_resultScopeMustBeExclusive() throws Exception {
+        com.example.realestate.discover.navigation.NavigationGraph graph = mock(com.example.realestate.discover.navigation.NavigationGraph.class);
+        when(navigationGraphCache.getActiveGraph("udupi")).thenReturn(java.util.Optional.of(graph));
+        when(graph.containsNodeKey("d:n")).thenReturn(true);
+        when(graph.descendantAreaKeysOf("d:n")).thenReturn(List.of("a:alpha", "a:bravo"));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("nodeKey", "d:n")
+                        .param("viewportScope", VALID_BBOX)
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("result_scope_must_be_exclusive")));
+
+        verifyNoInteractions(service);
+    }
+
+    // ── 20. areaKeys + bbox → 200 — CRITICAL REGRESSION GUARD: bbox (the
+    //        always-on render/perf viewport prefilter) must stay excluded from
+    //        the new exclusivity check and keep combining with areaKeys as today.
+
+    @Test
+    void areaKeysAndBbox_returns200_bboxExcludedFromExclusivityCheck() throws Exception {
+        when(service.getListings(any())).thenReturn(
+                new DiscoverListingsPage(List.of(), 0, 20, 0L, 0, null));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("areaKeys", "IN|KA|Udupi|Manipal")
+                        .param("bbox", VALID_BBOX)
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getListings(argThat(q ->
+                q.areaKeys() != null && q.areaKeys().contains("IN|KA|Udupi|Manipal")
+                && q.bbox() != null
+        ));
+    }
+
+    // ── 21. polygon + bbox → 200 — CRITICAL REGRESSION GUARD: same as above,
+    //        for the polygon + bbox combination (existing behaviour, not the defect).
+
+    @Test
+    void polygonAndBbox_returns200_bboxExcludedFromExclusivityCheck() throws Exception {
+        when(service.getListings(any())).thenReturn(
+                new DiscoverListingsPage(List.of(), 0, 20, 0L, 0, null));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("polygon", VALID_POLYGON)
+                        .param("bbox", VALID_BBOX)
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getListings(argThat(q ->
+                q.polygon() != null && q.bbox() != null
+        ));
+    }
+
+    // ── 22. viewportScope alone → 200, not folded into service query (inert) ──
+
+    @Test
+    void viewportScopeAlone_returns200() throws Exception {
+        when(service.getListings(any())).thenReturn(
+                new DiscoverListingsPage(List.of(), 0, 20, 0L, 0, null));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("viewportScope", VALID_BBOX)
+                        .with(jwt()))
+                .andExpect(status().isOk());
+    }
+
+    // ── 23. viewportScope malformed (3 values) → 400, reuses bbox validation ─
+
+    @Test
+    void viewportScopeMalformed_returns400() throws Exception {
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("viewportScope", "13.3,74.7,13.4")   // only 3 values
+                        .with(jwt()))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
+
+    // ── 24. scopeFingerprint supplied → echoed back unchanged in the response ─
+
+    @Test
+    void scopeFingerprint_echoedBackUnchanged() throws Exception {
+        when(service.getListings(any())).thenReturn(
+                new DiscoverListingsPage(List.of(), 0, 20, 0L, 0, null, "fp-abc123"));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("scopeFingerprint", "fp-abc123")
+                        .with(jwt()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scopeFingerprint", is("fp-abc123")));
+
+        verify(service).getListings(argThat(q -> "fp-abc123".equals(q.scopeFingerprint())));
+    }
+
+    // ── 25. scopeFingerprint absent → field omitted from JSON (NON_NULL) ─────
+
+    @Test
+    void scopeFingerprint_absent_omittedFromJson() throws Exception {
+        when(service.getListings(any())).thenReturn(
+                new DiscoverListingsPage(List.of(), 0, 20, 0L, 0, null));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .with(jwt()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scopeFingerprint").doesNotExist());
+
+        verify(service).getListings(argThat(q -> q.scopeFingerprint() == null));
+    }
 }

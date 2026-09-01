@@ -676,4 +676,40 @@ class DiscoverListingPredicateBuilderTest {
         assertTrue(sql.whereFragment().contains("ST_Contains("), "Polygon predicate must be present");
         assertTrue(sql.whereFragment().contains("AND pl.area_key IN (?"), "areaKeys predicate must be present");
     }
+
+    // ── A6. #2016: areaKeys IN-clause is a scalar predicate — structurally dedup-safe ─
+    //
+    // Confirms (does not fix — no gap exists) that the areaKeys filter cannot cause a listing
+    // to be counted/returned more than once. pl.area_key is tested directly on the base
+    // property_listings row via a plain IN-list; it is not a join or a correlated subquery
+    // that could multiply matching rows, so no SELECT DISTINCT / dedup-by-id is required for
+    // this predicate. The areaKeys clause is the last one appended in build(), so nothing
+    // introduced by it can follow within the WHERE fragment.
+
+    @Test
+    void build_areaKeysInClause_isScalarPredicate_structurallyDedupSafe() {
+        DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null,
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
+                List.of("IN|KA|Udupi|Manipal", "IN|KA|Udupi|Katapadi", "IN|KA|Udupi|Malpe"));
+
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
+
+        String frag = sql.whereFragment();
+        int areaKeyClauseStart = frag.indexOf("AND pl.area_key IN (?, ?, ?)");
+        assertTrue(areaKeyClauseStart >= 0,
+                "Expected a single scalar IN-list clause directly on pl.area_key");
+
+        // Nothing after the areaKeys IN-list introduces a JOIN that could duplicate rows —
+        // it is the final predicate appended by build().
+        String afterAreaKeyClause = frag.substring(areaKeyClauseStart);
+        assertFalse(afterAreaKeyClause.contains(" JOIN "),
+                "areaKeys clause must not introduce a JOIN — it is a scalar IN-list on "
+                + "pl.area_key, which cannot duplicate rows and therefore needs no DISTINCT");
+
+        // Exactly one param per area key, plus the city param — no fan-out.
+        assertEquals(4, sql.params().size(),
+                "Expected exactly 4 params: city + 3 area keys, no duplication");
+    }
 }

@@ -85,6 +85,8 @@ import {
   cancelPendingViewportCommit,
   useNavigationUrlDomain,
 } from '@/features/discover/state/url/navigation';
+import { useResultScopeUrlDomain } from '@/features/discover/state/url/resultScope';
+import type { CommittedResultScope, ResultScope } from '@/features/discover/state/resultScope';
 
 // Byte-identical re-export: DEFAULT_MAX_KM is now declared in agricultural.ts
 // (the only domain that uses it), but every existing consumer imports it from
@@ -287,6 +289,22 @@ export interface DiscoverUrlState {
    * Same presence-flag read style as groupResults (`=== '1' ? true : undefined`).
    */
   nodeListings?: boolean;
+  /**
+   * Issue #2016 — the single canonical geography controlling Discover
+   * results (AREA_SET | POLYGON | VIEWPORT), strictly separate from
+   * navigation (`node`) and from PropertyFilters. `active` is the committed
+   * scope; `previous` is the scope it replaced, restored BY NAME on J3.5
+   * ("Return to selected areas"), never inferred from the camera. See
+   * features/discover/state/resultScope.ts for the type and
+   * features/discover/state/url/resultScope.ts for the `r`-prefixed URL
+   * param contract.
+   *
+   * Optional, like scope/selectedRegion/node/etc. above, so existing tests
+   * and callers that build a partial DiscoverUrlState literal keep
+   * compiling. Consumers must treat an absent value the same as
+   * `{ active: null, previous: null }`.
+   */
+  resultScope?: CommittedResultScope;
 }
 
 export interface DiscoverUrlActions {
@@ -301,10 +319,24 @@ export interface DiscoverUrlActions {
    * Kept for backward compatibility; prefer `changeCity` for user-initiated changes.
    */
   setCity: (city: string) => void;
-  /** Select an area — pushes a new history entry */
-  selectArea: (areaKey: string) => void;
-  /** Deselect the current area — replaces current entry (removes areaKey) */
-  deselectArea: () => void;
+  /**
+   * Select an area — pushes a new history entry.
+   *
+   * `resultScope` (Issue #2016 code-review Finding 5) — optional: when
+   * passed (even `null`), the result-scope commit (see `commitResultScope`)
+   * is folded into this SAME `setUrlParams` write/history entry instead of
+   * firing as a second independent action, which would race on
+   * react-router-dom's functional-updater `prev` and can silently drop one
+   * of the two deltas. Omit entirely to leave the committed scope untouched
+   * (pre-#2016 behaviour, unchanged for every caller that predates this
+   * param).
+   */
+  selectArea: (areaKey: string, resultScope?: ResultScope) => void;
+  /**
+   * Deselect the current area — replaces current entry (removes areaKey).
+   * `resultScope` — same fold-into-one-write contract as `selectArea` above.
+   */
+  deselectArea: (resultScope?: ResultScope) => void;
   /** Report map viewport change — debounced replace (300 ms), does NOT push history */
   reportViewport: (vp: DiscoverViewport) => void;
   /** Set filters as a live/uncommitted change — debounced replace */
@@ -595,6 +627,14 @@ export interface DiscoverUrlActions {
    * preserved — they remain meaningful across an Area change.
    */
   goToNodeAndClearAgriculturalLocality: (nodeKey: string) => void;
+  /**
+   * Issue #2016 — commit a new result scope. Moves the current `active`
+   * scope into `previous` (rprev) and writes the new scope's payload key in
+   * ONE history PUSH. Passing `null` clears the committed scope entirely.
+   * Never call this for draft/in-progress state (drawing, camera movement)
+   * — those never touch the URL at all (see state/url/resultScope.ts).
+   */
+  commitResultScope: (scope: ResultScope) => void;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -703,6 +743,9 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
   // Issue #1956 PR 1 — read-only domain (no actions), appended LAST so the
   // existing seven-domain call order is byte-for-byte unchanged.
   const navigationDomain = useNavigationUrlDomain(ctx);
+  // Issue #2016 — appended last, same rationale: never disturb the existing
+  // eight-domain call order.
+  const resultScopeDomain = useResultScopeUrlDomain(ctx);
 
   // Explicit literal in the ORIGINAL 18-key order (qa-fast R3) — guards any
   // Object.keys/snapshot assertion a caller may add later.
@@ -734,6 +777,8 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     nodeListings: navigationDomain.state.nodeListings,
     // Issue #2083 (cycle 5) — appended last, same rationale as the two keys above.
     historyAction,
+    // Issue #2016 — appended last, same rationale.
+    resultScope: resultScopeDomain.state.resultScope,
   };
 
   // Spread merge is safe under this explicit `DiscoverUrlActions` annotation —
@@ -753,6 +798,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     ...agriculturalDomain.actions,
     ...compatibilityDomain.actions,
     ...navigationDomain.actions,
+    ...resultScopeDomain.actions,
   };
 
   return [state, actions];

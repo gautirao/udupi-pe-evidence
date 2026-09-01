@@ -121,6 +121,8 @@ const URL_ACTIONS: DiscoverUrlActions = {
   clearAgriFilters: vi.fn(),
   setIntent: vi.fn(),
   setSchoolJourney: vi.fn(),
+  // Issue #2016 — result-scope commit.
+  commitResultScope: vi.fn(),
 };
 
 const JOURNEY_VIEW: DiscoverJourneyTransitionsView = {

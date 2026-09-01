@@ -147,6 +147,42 @@ export function useDiscoverMapDataController({
     groupAreaKeys: groupAreaKeysForMapData,
   });
 
+  // Issue #2016 — the committed geography (AREA_SET | POLYGON | VIEWPORT |
+  // null), read from `nav` (which already carries the full facade state —
+  // see DiscoverContext.tsx's `nav = { ...urlState, viewport: removed }`).
+  // Forwarded to useDiscoverMapData so its two direct query hooks
+  // (useDiscoverListings/useDiscoverFilteredMarkers) share the SAME
+  // scopeFingerprint as every other consumer of this ResultScope, and so a
+  // committed VIEWPORT's bounds reach the new `viewportScope` request param.
+  // Orthogonal to `markerScope` above: markerScope stays the navigation-
+  // resolution view (city/node/legacy-areas/unresolved) per the approved
+  // decision — POLYGON already reaches the query via the `filters.polygon`
+  // bridge (useDiscoverPageState.ts), this is purely for the shared identity.
+  const resultScope = nav.resultScope?.active ?? null;
+
+  // Issue #2016 code-review Finding 11 — a committed POLYGON/VIEWPORT scope
+  // and a navigation-derived AREA_SET-equivalent markerScope (areas/node)
+  // are NOT independent at the wire level: buildDiscoverSearchParams would
+  // emit BOTH areaKeys/nodeKey (from markerScope) AND polygon (from the
+  // filters.polygon bridge) on the same request, exactly the combination
+  // the new backend 400 exclusivity check forbids. Suppress the
+  // navigation-derived scope down to unscoped-city at the single point the
+  // query params are assembled whenever a non-AREA_SET result scope is
+  // committed — resolveDiscoverMarkerScope itself stays untouched (pure
+  // navigation view, per the approved decision).
+  //
+  // Issue #2016 code-review Finding 3 — `markerScope.kind !== 'unresolved'`
+  // guard added: an `{kind:'unresolved'}` markerScope (mid-resolution — a
+  // `node=` still resolving, or a legacy group cold-load) must NEVER be
+  // rewritten to `{kind:'city'}` here, even while a non-AREA_SET result
+  // scope is committed — that would defeat useDiscoverFilteredMarkers.ts's
+  // own `scope.kind !== 'unresolved'` enabled-guard, whose whole purpose is
+  // "never silently degrade a mid-resolution scope to unscoped city-wide".
+  const effectiveMarkerScope =
+    resultScope && resultScope.kind !== 'AREA_SET' && markerScope.kind !== 'unresolved'
+      ? { kind: 'city' as const }
+      : markerScope;
+
   const mapData = useDiscoverMapData({
     // Issue #1956 PR-4 (gate 3) — feeds the bridged AreaPoint so the
     // areaKeys derivation (useDiscoverMapData.ts:511) resolves to
@@ -159,7 +195,10 @@ export function useDiscoverMapDataController({
     // fetch reached this hook with NO scope at all (unscoped city-wide) —
     // the map/panel divergence this issue fixes. markerScope now resolves
     // deterministically for every journey/state combination.
-    scope: markerScope,
+    // Issue #2016 code-review Finding 11 — effectiveMarkerScope (not raw
+    // markerScope) so a committed POLYGON/VIEWPORT scope never leaves a
+    // stale areaKeys/nodeKey param on the request alongside it.
+    scope: effectiveMarkerScope,
     // Issue #1118: do NOT include !!nav.schoolId here. The /api/discover/markers
     // endpoint is auth-gated (returns 401 for anonymous users). Enabling the query for
     // unauthenticated school-first users caused a delayed marker disappearance: placeholderData
@@ -209,6 +248,8 @@ export function useDiscoverMapDataController({
     journey: nav.journey,
     // Issue #1494 — thread buy/rent intent as listingPurpose filter
     listingPurpose: intentListingPurpose,
+    // Issue #2016 — see the `resultScope` const's doc above.
+    resultScope,
   });
 
   // isLoading depends on both hooks and useAuth — must be computed here (Rule 1).

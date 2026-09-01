@@ -33,6 +33,7 @@ import type { UseInfiniteQueryResult, InfiniteData } from '@tanstack/react-query
 import type { SchoolsByAreaResponse } from '@/hooks/useSchoolsByArea';
 import type { DiscoverBadgeResult } from '@/features/discover/presentation/discoverBadge';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
+import { ReplaceResultScopeDialog } from '@/features/discover/components/ReplaceResultScopeDialog';
 
 /**
  * Issue #1824 Slice S11a — the map-half return-tree region (mapContainerRef
@@ -85,6 +86,17 @@ export interface DiscoverMapCanvasProps {
   isLandingState: boolean;
   handlePolygonDrawn: (polygon: [number, number][]) => void;
   handlePolygonCleared: () => void;
+  /**
+   * Issue #2016 — J3.3 replace-confirmation dialog state, owned by
+   * useDiscoverPageState.ts. Optional (like isColdNavigate above) so
+   * existing test fixtures/callers that predate this prop keep compiling —
+   * the dialog simply never opens when omitted. The real page composition
+   * call site supplies it from the same pageStateController instance that
+   * already supplies handlePolygonDrawn/handlePolygonCleared.
+   */
+  isReplaceScopeConfirmOpen?: boolean;
+  handleConfirmReplaceScope?: () => void;
+  handleCancelReplaceScope?: () => void;
   selectedSchool: SchoolResult | null;
   memoizedInitialCenter: [number, number] | undefined;
   /**
@@ -334,6 +346,9 @@ export function DiscoverMapCanvas({
   isLandingState,
   handlePolygonDrawn,
   handlePolygonCleared,
+  isReplaceScopeConfirmOpen = false,
+  handleConfirmReplaceScope,
+  handleCancelReplaceScope,
   selectedSchool,
   memoizedInitialCenter,
   isColdNavigate,
@@ -439,6 +454,20 @@ export function DiscoverMapCanvas({
   const nav = useDiscoverNav();
   const viewport = useDiscoverViewport();
   const urlActions = useDiscoverActions();
+
+  // Issue #2016 — human-readable label for J3.3's confirmation body (the
+  // scope about to be REPLACED, i.e. still the committed one while the
+  // dialog is open). `selectedArea.areaLabel` gives the real area name for
+  // AREA_SET when it matches the current single-area selection; falls back
+  // to the raw areaKey(s) if it doesn't (defensive — should not happen while
+  // only size-1 AREA_SET is committable in this PR).
+  const outgoingScope = nav.resultScope?.active ?? null;
+  const outgoingScopeLabel =
+    outgoingScope?.kind === 'AREA_SET'
+      ? selectedArea?.areaLabel ?? outgoingScope.areaKeys.join(', ')
+      : outgoingScope?.kind === 'POLYGON'
+        ? 'Your drawn boundary'
+        : 'Your current selection';
   // Issue #1956 PR 6 (final cutover, RULED A1 MINIMAL, restored by the
   // [rulings.oq_a_v2] rework after the superseded Option A guard) — the SAME
   // journey==='area-first' condition DiscoverRightPanelContainer evaluates
@@ -961,6 +990,17 @@ export function DiscoverMapCanvas({
         markerPopoverStepper={markerPopoverStepper}
         handleStepMarkerListing={handleStepMarkerListing}
         showMarkerInList={showMarkerInList}
+      />
+
+      {/* Issue #2016 (J3.3) — replace-confirmation for finishing a drawn
+          polygon while an AREA_SET/POLYGON scope is already committed.
+          AlertDialog renders via a portal, so its position in this tree
+          does not affect layout. */}
+      <ReplaceResultScopeDialog
+        open={isReplaceScopeConfirmOpen}
+        outgoingScopeLabel={outgoingScopeLabel}
+        onConfirm={handleConfirmReplaceScope ?? (() => {})}
+        onCancel={handleCancelReplaceScope ?? (() => {})}
       />
     </div>
   );

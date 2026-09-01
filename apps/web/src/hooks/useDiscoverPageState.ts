@@ -9,6 +9,7 @@ import { CITY_CONFIG } from '@/lib/localityUtils';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import { DiscoverUrlState, DiscoverUrlActions } from '@/hooks/useDiscoverUrlState';
 import { resolveEffectiveCity } from '@/features/discover/selectors/effectiveDiscoverContext';
+import type { CommittedResultScope } from '@/features/discover/state/resultScope';
 
 export interface UseDiscoverPageStateParams {
   urlState: DiscoverUrlState;
@@ -67,6 +68,23 @@ export interface UseDiscoverPageStateResult {
   // Pagination
   page: number;
   setPage: React.Dispatch<React.SetStateAction<number>>;
+
+  // Issue #2016 — result-scope state
+  /** The committed ResultScope (AREA_SET | POLYGON | VIEWPORT | null) + the scope it replaced. */
+  resultScope: CommittedResultScope;
+  /**
+   * A just-drawn polygon awaiting either a direct commit (no scope was
+   * previously committed) or J3.3 replace-confirmation (a scope WAS already
+   * committed). Null once resolved (confirmed or cancelled). Never written
+   * to the URL or PropertyFilters while pending — see handlePolygonDrawn.
+   */
+  draftPolygon: [number, number][] | null;
+  /** True while the J3.3 "Replace selected areas with this boundary?" dialog should be shown. */
+  isReplaceScopeConfirmOpen: boolean;
+  /** J3.3 primary action ("Replace and search") — commits draftPolygon as the new POLYGON scope. */
+  handleConfirmReplaceScope: () => void;
+  /** J3.3 secondary action ("Keep selected areas") — discards the draft; the prior committed scope is untouched. */
+  handleCancelReplaceScope: () => void;
 }
 
 export function useDiscoverPageState({
@@ -299,15 +317,93 @@ export function useDiscoverPageState({
     [selectedSchool, urlActions],
   );
 
-  const handlePolygonDrawn = useCallback((polygon: [number, number][]) => {
-    setFilters((prev) => ({ ...prev, polygon }));
-  }, []);
+  // Issue #2016 — result-scope state. `draftPolygon` is DRAFT-ONLY local
+  // state for a just-drawn polygon that has not been committed yet; it is
+  // never written to PropertyFilters or the URL (J3.2: delta.history "no
+  // entry"). `filters.polygon` below stays a DERIVED, read-only projection
+  // of the COMMITTED resultScope (populated by the effect further down) so
+  // existing consumers of PropertyFilters.polygon (map draw-shape display,
+  // stats bar, filter-clear affordance) keep working unchanged — only the
+  // SOURCE of that value moves from ad-hoc draw state to the canonical
+  // ResultScope, per the approved plan.
+  const [draftPolygon, setDraftPolygon] = useState<[number, number][] | null>(null);
+  const [isReplaceScopeConfirmOpen, setIsReplaceScopeConfirmOpen] = useState(false);
 
-  const handlePolygonCleared = useCallback(() => {
+  const resultScope: CommittedResultScope = urlState.resultScope ?? { active: null, previous: null };
+
+  // Keep the DERIVED filters.polygon in sync with the committed resultScope
+  // (URL restore on refresh, Back/Forward, and confirm/replace commits all
+  // flow through here) — never written directly by handlePolygonDrawn.
+  //
+  // LOAD-BEARING: the `prev.polygon === resultScope.active.coordinates`
+  // identity check below (and this effect's `[resultScope.active]` dep) only
+  // terminate correctly because state/url/resultScope.ts's
+  // useResultScopeUrlDomain memoizes `active` BY VALUE (on the raw rscope/
+  // rareas/rpoly/rvp param strings), not by re-decoding urlParams fresh every
+  // render. Issue #2016 code-review Finding 4: re-decoding without that
+  // memoization gives `active`/`active.coordinates` a NEW identity every
+  // render even when the URL is unchanged, so this identity check would
+  // never short-circuit — setFilters fires, triggers a re-render, produces a
+  // new `active` again — an infinite loop. Do not "simplify" the URL domain
+  // back to a plain per-render decode without re-verifying this effect still
+  // terminates.
+  useEffect(() => {
     setFilters((prev) => {
-      const { polygon: _removed, ...rest } = prev;
+      if (resultScope.active?.kind === 'POLYGON') {
+        return prev.polygon === resultScope.active.coordinates
+          ? prev
+          : { ...prev, polygon: resultScope.active.coordinates };
+      }
+      if (prev.polygon === undefined) return prev;
+      const { polygon: _drop, ...rest } = prev;
       return rest;
     });
+  }, [resultScope.active]);
+
+  const handlePolygonDrawn = useCallback(
+    (polygon: [number, number][]) => {
+      // The map's draw tool (PropertyMap's DrawControl) fires this once, on
+      // completion, with the finished shape — there is no separate
+      // intermediate "still drawing" callback today, so completion is
+      // treated as J3.2's "Use this boundary".
+      setDraftPolygon(polygon);
+      if (resultScope.active != null) {
+        // A scope (AREA_SET or another POLYGON) is already committed —
+        // surface the J3.3 replace-confirmation instead of committing
+        // immediately. Filters/URL are untouched until the user confirms.
+        setIsReplaceScopeConfirmOpen(true);
+      } else {
+        // Nothing committed yet — going from "nothing" to POLYGON is not a
+        // replacement, so commit directly without confirmation.
+        urlActions.commitResultScope({ kind: 'POLYGON', coordinates: polygon });
+        setDraftPolygon(null);
+      }
+    },
+    [resultScope.active, urlActions],
+  );
+
+  const handlePolygonCleared = useCallback(() => {
+    setDraftPolygon(null);
+    setIsReplaceScopeConfirmOpen(false);
+    // Only clear the committed scope when it is actually the POLYGON this
+    // clear button applies to — never an unrelated committed AREA_SET.
+    if (resultScope.active?.kind === 'POLYGON') {
+      urlActions.commitResultScope(null);
+    }
+  }, [resultScope.active, urlActions]);
+
+  const handleConfirmReplaceScope = useCallback(() => {
+    if (draftPolygon) {
+      urlActions.commitResultScope({ kind: 'POLYGON', coordinates: draftPolygon });
+    }
+    setIsReplaceScopeConfirmOpen(false);
+    setDraftPolygon(null);
+  }, [draftPolygon, urlActions]);
+
+  const handleCancelReplaceScope = useCallback(() => {
+    // Discard the draft only — the prior committed scope is never touched.
+    setIsReplaceScopeConfirmOpen(false);
+    setDraftPolygon(null);
   }, []);
 
   const handleAreaClick = useCallback(
@@ -320,7 +416,20 @@ export function useDiscoverPageState({
         return rest;
       });
       setSelectedArea(area);
-      urlActions.selectArea(area.areaKey);
+      // Issue #2016 — wire the existing single-area commit path into
+      // ResultScope. Multi-area chip add/remove ("Edit areas") is out of
+      // scope; only a size-1 AREA_SET is committed here. Ordinary area
+      // navigation is not a "replace" gesture (unlike drawing a polygon
+      // over an already-committed scope), so this commits directly.
+      //
+      // Issue #2016 code-review Finding 5 — the scope delta is passed as
+      // selectArea's SECOND argument so it lands in the SAME setUrlParams
+      // write/history entry as the areaKey PUSH, never as a second,
+      // independent commitResultScope() call (which would race on
+      // react-router-dom's functional-updater `prev` and can silently drop
+      // one of the two deltas — see state/url/resultScope.ts's
+      // applyResultScopeCommit doc).
+      urlActions.selectArea(area.areaKey, { kind: 'AREA_SET', areaKeys: [area.areaKey] });
     },
     [urlActions],
   );
@@ -335,7 +444,8 @@ export function useDiscoverPageState({
       });
       setSelectedArea(area);
       setPanToArea(area);
-      urlActions.selectArea(area.areaKey);
+      // Issue #2016 — see handleAreaClick's comment above.
+      urlActions.selectArea(area.areaKey, { kind: 'AREA_SET', areaKeys: [area.areaKey] });
     },
     [urlActions],
   );
@@ -344,8 +454,14 @@ export function useDiscoverPageState({
     setSelectedArea(null);
     setPanToArea(null);
     setResetMapTick((t) => t + 1);
-    urlActions.deselectArea();
-  }, [urlActions]);
+    // Issue #2016 — deselecting the area clears the AREA_SET scope it
+    // committed. Guarded to AREA_SET only so backing out of an area
+    // selection can never clobber an unrelated committed POLYGON scope.
+    // Issue #2016 code-review Finding 5 — folded into deselectArea's SAME
+    // REPLACE write (not a second, independent commitResultScope(null)
+    // call), so Browser Back needs exactly one press, not two.
+    urlActions.deselectArea(resultScope.active?.kind === 'AREA_SET' ? null : undefined);
+  }, [urlActions, resultScope.active]);
 
   return {
     filters,
@@ -382,5 +498,10 @@ export function useDiscoverPageState({
     handleAreaBack,
     page,
     setPage,
+    resultScope,
+    draftPolygon,
+    isReplaceScopeConfirmOpen,
+    handleConfirmReplaceScope,
+    handleCancelReplaceScope,
   };
 }

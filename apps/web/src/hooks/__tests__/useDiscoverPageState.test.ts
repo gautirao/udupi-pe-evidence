@@ -54,6 +54,8 @@ function makeUrlActions(overrides: Partial<DiscoverUrlActions> = {}): DiscoverUr
     clearRegionAndMaxKm: vi.fn(),
     // Issue #1494 — buy/rent intent
     setIntent: vi.fn(),
+    // Issue #2016 — result-scope commit
+    commitResultScope: vi.fn(),
     ...overrides,
     // Cast: the Partial<DiscoverUrlActions> spread widens each property to
     // `fn | Mock<Procedure>`, which is not assignable to the exact action
@@ -598,5 +600,162 @@ describe('useDiscoverUrlState — board filters (issue #1131)', () => {
     expect(result.current.state.city).toBe('udupi');
     expect(result.current.state.journey).toBeNull();
     expect(result.current.state.areaKey).toBeNull();
+  });
+});
+
+describe('useDiscoverPageState — Issue #2016 result-scope', () => {
+  it('handleAreaClick_commits_a_single-area_AREA_SET_scope', () => {
+    const commitResultScope = vi.fn();
+    const { result } = renderHook(() =>
+      useDiscoverPageState({
+        urlState: makeUrlState(),
+        urlActions: makeUrlActions({ commitResultScope }),
+      }),
+    );
+
+    act(() => {
+      result.current.handleAreaClick({
+        areaKey: 'IN|KA|Udupi|Manipal',
+        areaLabel: 'Manipal',
+        geo_center_lat: 13.34,
+        geo_center_lon: 74.74,
+        bbox: null,
+      });
+    });
+
+    expect(commitResultScope).toHaveBeenCalledWith({
+      kind: 'AREA_SET',
+      areaKeys: ['IN|KA|Udupi|Manipal'],
+    });
+  });
+
+  it('handleAreaBack_clears_an_AREA_SET_scope_but_never_a_committed_POLYGON', () => {
+    const commitResultScope = vi.fn();
+    const { result } = renderHook(() =>
+      useDiscoverPageState({
+        urlState: makeUrlState({
+          resultScope: {
+            active: { kind: 'POLYGON', coordinates: [[12.9, 77.5], [12.95, 77.55], [12.9, 77.6]] },
+            previous: null,
+          },
+        }),
+        urlActions: makeUrlActions({ commitResultScope }),
+      }),
+    );
+
+    act(() => {
+      result.current.handleAreaBack();
+    });
+
+    expect(commitResultScope).not.toHaveBeenCalled();
+  });
+
+  it('handlePolygonDrawn_is_draft-only_and_commits_directly_when_nothing_was_previously_committed', () => {
+    const commitResultScope = vi.fn();
+    const { result } = renderHook(() =>
+      useDiscoverPageState({
+        urlState: makeUrlState(),
+        urlActions: makeUrlActions({ commitResultScope }),
+      }),
+    );
+
+    const coords: [number, number][] = [[12.9, 77.5], [12.95, 77.55], [12.9, 77.6]];
+    act(() => {
+      result.current.handlePolygonDrawn(coords);
+    });
+
+    // No existing scope to replace -> commits immediately, no confirmation.
+    expect(commitResultScope).toHaveBeenCalledWith({ kind: 'POLYGON', coordinates: coords });
+    expect(result.current.isReplaceScopeConfirmOpen).toBe(false);
+    expect(result.current.draftPolygon).toBeNull();
+  });
+
+  it('handlePolygonDrawn_surfaces_the_J3.3_confirmation_instead_of_committing_when_an_AREA_SET_is_already_active', () => {
+    const commitResultScope = vi.fn();
+    const { result } = renderHook(() =>
+      useDiscoverPageState({
+        urlState: makeUrlState({
+          resultScope: { active: { kind: 'AREA_SET', areaKeys: ['hebbal'] }, previous: null },
+        }),
+        urlActions: makeUrlActions({ commitResultScope }),
+      }),
+    );
+
+    const coords: [number, number][] = [[12.9, 77.5], [12.95, 77.55], [12.9, 77.6]];
+    act(() => {
+      result.current.handlePolygonDrawn(coords);
+    });
+
+    // Draft only — no commit yet, no URL/filters write.
+    expect(commitResultScope).not.toHaveBeenCalled();
+    expect(result.current.isReplaceScopeConfirmOpen).toBe(true);
+    expect(result.current.draftPolygon).toEqual(coords);
+  });
+
+  it('confirming_the_replacement_commits_the_draft_as_POLYGON', () => {
+    const commitResultScope = vi.fn();
+    const { result } = renderHook(() =>
+      useDiscoverPageState({
+        urlState: makeUrlState({
+          resultScope: { active: { kind: 'AREA_SET', areaKeys: ['hebbal'] }, previous: null },
+        }),
+        urlActions: makeUrlActions({ commitResultScope }),
+      }),
+    );
+
+    const coords: [number, number][] = [[12.9, 77.5], [12.95, 77.55], [12.9, 77.6]];
+    act(() => {
+      result.current.handlePolygonDrawn(coords);
+    });
+    act(() => {
+      result.current.handleConfirmReplaceScope();
+    });
+
+    expect(commitResultScope).toHaveBeenCalledWith({ kind: 'POLYGON', coordinates: coords });
+    expect(result.current.isReplaceScopeConfirmOpen).toBe(false);
+    expect(result.current.draftPolygon).toBeNull();
+  });
+
+  it('cancelling_the_replacement_discards_the_draft_and_never_commits', () => {
+    const commitResultScope = vi.fn();
+    const { result } = renderHook(() =>
+      useDiscoverPageState({
+        urlState: makeUrlState({
+          resultScope: { active: { kind: 'AREA_SET', areaKeys: ['hebbal'] }, previous: null },
+        }),
+        urlActions: makeUrlActions({ commitResultScope }),
+      }),
+    );
+
+    const coords: [number, number][] = [[12.9, 77.5], [12.95, 77.55], [12.9, 77.6]];
+    act(() => {
+      result.current.handlePolygonDrawn(coords);
+    });
+    act(() => {
+      result.current.handleCancelReplaceScope();
+    });
+
+    expect(commitResultScope).not.toHaveBeenCalled();
+    expect(result.current.isReplaceScopeConfirmOpen).toBe(false);
+    expect(result.current.draftPolygon).toBeNull();
+  });
+
+  it('filters.polygon_is_a_derived_projection_of_the_committed_scope_only — never written directly by the draft', () => {
+    const { result } = renderHook(() =>
+      useDiscoverPageState({
+        urlState: makeUrlState(),
+        urlActions: makeUrlActions(),
+      }),
+    );
+
+    const coords: [number, number][] = [[12.9, 77.5], [12.95, 77.55], [12.9, 77.6]];
+    act(() => {
+      result.current.handlePolygonDrawn(coords);
+    });
+
+    // Nothing was committed (urlState.resultScope never changes in this unit
+    // test — commitResultScope is a mock, not a real URL writer), so the
+    // derived filters.polygon must stay absent even though a draft exists.
+    expect(result.current.filters.polygon).toBeUndefined();
   });
 });

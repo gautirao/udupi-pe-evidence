@@ -399,6 +399,51 @@ describe('useDiscoverJourneyTransitions', () => {
 
       expect(deselectArea).toHaveBeenCalledTimes(1);
     });
+
+    it('Issue #2016 code-review Finding 1 — no match + a committed AREA_SET scope: deselectArea(null) clears rscope in the SAME write', () => {
+      const deselectArea = vi.fn();
+      const params = makeParams({
+        urlActions: makeUrlActions({ deselectArea }),
+        urlState: makeUrlState({
+          city: 'udupi',
+          resultScope: {
+            active: { kind: 'AREA_SET', areaKeys: ['IN|KA|Udupi|Nowhere'] },
+            previous: null,
+          },
+        }),
+        city: 'udupi',
+        discoverAreas: [],
+        areasLoading: false,
+        pendingAreaKeyRef: { current: 'IN|KA|Udupi|Nowhere' },
+      });
+      renderHook(() => useDiscoverJourneyTransitions(params));
+
+      // `null` (not omitted) — folds the scope-clear into this SAME
+      // deselectArea() write so rscope/rareas never survive pointed at an
+      // area the resolve failure just removed from the selection.
+      expect(deselectArea).toHaveBeenCalledWith(null);
+    });
+
+    it('Issue #2016 code-review Finding 1 — no match + a committed POLYGON scope: deselectArea() never clobbers the unrelated scope', () => {
+      const deselectArea = vi.fn();
+      const params = makeParams({
+        urlActions: makeUrlActions({ deselectArea }),
+        urlState: makeUrlState({
+          city: 'udupi',
+          resultScope: {
+            active: { kind: 'POLYGON', coordinates: [[12.9, 77.5], [12.95, 77.55], [12.9, 77.6]] },
+            previous: null,
+          },
+        }),
+        city: 'udupi',
+        discoverAreas: [],
+        areasLoading: false,
+        pendingAreaKeyRef: { current: 'IN|KA|Udupi|Nowhere' },
+      });
+      renderHook(() => useDiscoverJourneyTransitions(params));
+
+      expect(deselectArea).toHaveBeenCalledWith(undefined);
+    });
   });
 
   it('selectSchoolById: resolved school sets selectedSchool + filters synchronously and resets boundedSearchTriggered', () => {

@@ -211,7 +211,7 @@ public class DiscoverListingsService implements DiscoverListingsPort {
             }
 
             log.debug("getListings city={} page={} size={} total={}", query.city(), query.page(), effectiveSize, totalElements);
-            return new DiscoverListingsPage(content, query.page(), effectiveSize, totalElements, totalPages, aggregates);
+            return new DiscoverListingsPage(content, query.page(), effectiveSize, totalElements, totalPages, aggregates, query.scopeFingerprint());
         } catch (DataAccessException ex) {
             if (hasFts && isFtsSyntaxError(ex)) {
                 resultStatus = "malformed_fts";

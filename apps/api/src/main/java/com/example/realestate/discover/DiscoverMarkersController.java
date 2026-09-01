@@ -68,7 +68,9 @@ public class DiscoverMarkersController {
             @RequestParam(name = "listingPurpose", required = false) String listingPurpose,
             @RequestParam(required = false) String excludePropertyType,
             @RequestParam(name = "areaKeys", required = false) List<String> areaKeys,
-            @RequestParam(name = "nodeKey", required = false) String nodeKey
+            @RequestParam(name = "nodeKey", required = false) String nodeKey,
+            @RequestParam(name = "viewportScope", required = false) String viewportScopeParam,
+            @RequestParam(name = "scopeFingerprint", required = false) String scopeFingerprint
     ) {
         log.debug("GET /api/discover/markers city={}", city);
 
@@ -82,6 +84,19 @@ public class DiscoverMarkersController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "school_lat_and_lon_required_together");
         }
 
+        // Parse and validate polygon
+        List<List<Double>> polygon = parsePolygon(polygonJson);
+
+        // Parse and validate bbox — the always-on render/perf viewport prefilter.
+        DiscoverListingPredicateBuilder.Bbox bbox = BboxParser.parse(bboxParam);
+
+        // Parse and validate viewportScope (#2016) — structurally distinct from bbox above.
+        // Same "south,west,north,east" encoding (reuses BboxParser's validation), but this is a
+        // candidate result SCOPE (one of AREA_SET/POLYGON/VIEWPORT), not the render/perf
+        // prefilter. It currently lands inert: no query behaviour is derived from its bounds
+        // yet; only its presence participates in the exclusivity check below.
+        DiscoverListingPredicateBuilder.Bbox viewportScope = BboxParser.parse(viewportScopeParam);
+
         // areaKeys: absent (null) = no area filter; present-but-empty = client bug → reject.
         List<String> effectiveAreaKeys = areaKeys;
         if (nodeKey != null) {
@@ -93,11 +108,14 @@ public class DiscoverMarkersController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "area_keys_must_not_be_empty");
         }
 
-        // Parse and validate polygon
-        List<List<Double>> polygon = parsePolygon(polygonJson);
-
-        // Parse and validate bbox
-        DiscoverListingPredicateBuilder.Bbox bbox = BboxParser.parse(bboxParam);
+        // Result-scope exclusivity (#2016): AREA_SET (effectiveAreaKeys — from either the raw
+        // areaKeys param OR a resolved nodeKey), POLYGON and VIEWPORT are three mutually
+        // exclusive geographic result scopes — at most one may be active per request. Must run
+        // AFTER effectiveAreaKeys is resolved above so nodeKey+polygon / nodeKey+viewportScope
+        // are caught too, not just the raw-areaKeys combinations (#2016 review fix-cycle-1).
+        // bbox is deliberately EXCLUDED from this check: it is the always-on render/perf
+        // viewport prefilter and legitimately combines with any of the three scopes today.
+        ResultScopeExclusivity.check(effectiveAreaKeys, polygon, viewportScope);
 
         // Convert rupees → paise
         Long priceMinPaise = priceMin != null ? priceMin * 100L : null;
@@ -129,9 +147,25 @@ public class DiscoverMarkersController {
                 effectiveAreaKeys
         );
 
+        DiscoverMarkersResponse response = service.getMarkers(filters);
+
+        // #2016: scopeFingerprint is a controller-boundary echo only — it is deliberately NOT
+        // threaded through Filters/the port/either adapter (see DiscoverMarkersService), so it
+        // is added here by reconstructing the response with the client-supplied value.
+        DiscoverMarkersResponse withFingerprint = new DiscoverMarkersResponse(
+                response.city(),
+                response.markers(),
+                response.truncated(),
+                response.returnedElements(),
+                response.totalFilteredElements(),
+                response.limit(),
+                response.boundsApplied(),
+                scopeFingerprint
+        );
+
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
-                .body(service.getMarkers(filters));
+                .body(withFingerprint);
     }
 
     /**

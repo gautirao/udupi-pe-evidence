@@ -152,6 +152,8 @@ const { BASE_URL_STATE, URL_ACTIONS } = vi.hoisted(() => {
     clearAgriFilters: vi.fn(),
     setIntent: vi.fn(),
     setSchoolJourney: vi.fn(),
+    // Issue #2016 — result-scope commit.
+    commitResultScope: vi.fn(),
   };
 
   return { BASE_URL_STATE: urlState, URL_ACTIONS: urlActions };

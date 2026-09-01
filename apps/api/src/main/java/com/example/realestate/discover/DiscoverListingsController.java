@@ -71,7 +71,9 @@ public class DiscoverListingsController {
             @RequestParam(name = "includeAggregates", required = false, defaultValue = "false") boolean includeAggregates,
             @RequestParam(name = "listingPurpose", required = false) String listingPurpose,
             @RequestParam(name = "areaKeys", required = false) List<String> areaKeys,
-            @RequestParam(name = "nodeKey", required = false) String nodeKey
+            @RequestParam(name = "nodeKey", required = false) String nodeKey,
+            @RequestParam(name = "viewportScope", required = false) String viewportScopeParam,
+            @RequestParam(name = "scopeFingerprint", required = false) String scopeFingerprint
     ) {
         log.debug("GET /api/discover/listings city={} page={} size={}", city, page, size);
 
@@ -96,8 +98,16 @@ public class DiscoverListingsController {
         // Parse and validate polygon
         List<List<Double>> polygon = parsePolygon(polygonJson);
 
-        // Parse and validate bbox
+        // Parse and validate bbox — the always-on render/perf viewport prefilter.
         DiscoverListingPredicateBuilder.Bbox bbox = BboxParser.parse(bboxParam);
+
+        // Parse and validate viewportScope (#2016) — structurally distinct from bbox above.
+        // Same "south,west,north,east" encoding (reuses BboxParser's validation), but this is
+        // a candidate result SCOPE (one of AREA_SET/POLYGON/VIEWPORT), not the render/perf
+        // prefilter. It currently lands inert: no query behaviour is derived from its bounds
+        // yet (the #2015 "Search this area" activation is a separate, not-yet-shipped change);
+        // only its presence participates in the exclusivity check below.
+        DiscoverListingPredicateBuilder.Bbox viewportScope = BboxParser.parse(viewportScopeParam);
 
         // areaKeys: absent (null) = no area filter; present-but-empty = client bug → reject.
         // Non-empty list is forwarded as-is and ANDed with the city subselect in the builder.
@@ -114,6 +124,15 @@ public class DiscoverListingsController {
         if (effectiveAreaKeys != null && effectiveAreaKeys.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "area_keys_must_not_be_empty");
         }
+
+        // Result-scope exclusivity (#2016): AREA_SET (effectiveAreaKeys — from either the raw
+        // areaKeys param OR a resolved nodeKey), POLYGON and VIEWPORT are three mutually
+        // exclusive geographic result scopes — at most one may be active per request. Must run
+        // AFTER effectiveAreaKeys is resolved above so nodeKey+polygon / nodeKey+viewportScope
+        // are caught too, not just the raw-areaKeys combinations (#2016 review fix-cycle-1).
+        // bbox is deliberately EXCLUDED from this check: it is the always-on render/perf
+        // viewport prefilter and legitimately combines with any of the three scopes today.
+        ResultScopeExclusivity.check(effectiveAreaKeys, polygon, viewportScope);
 
         // Convert rupees → paise
         Long priceMinPaise = priceMin != null ? priceMin * 100L : null;
@@ -142,7 +161,8 @@ public class DiscoverListingsController {
                 effectiveSize,
                 includeAggregates,
                 listingPurpose,
-                effectiveAreaKeys
+                effectiveAreaKeys,
+                scopeFingerprint
         );
 
         return ResponseEntity.ok()

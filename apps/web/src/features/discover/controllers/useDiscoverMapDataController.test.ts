@@ -335,3 +335,98 @@ describe('useDiscoverMapDataController — Issue #2193 AC2: same-geography contr
     expect(EFFECTIVE_SELECTED_AREA.areaKey).toBe(AREA_LEAF.areaKey);
   });
 });
+
+describe('useDiscoverMapDataController — Issue #2016 code-review Finding 11: committed POLYGON/VIEWPORT suppresses navigation-derived areaKeys/nodeKey', () => {
+  const POLYGON_COORDS: [number, number][] = [[12.9, 77.5], [12.95, 77.55], [12.9, 77.6]];
+
+  it('a committed POLYGON scope over a resolved canonical node sends polygon and OMITS nodeKey/areaKeys', async () => {
+    renderHook(
+      () =>
+        useDiscoverMapDataController({
+          ...BASE_CONTROLLER_PARAMS,
+          // The filters.polygon bridge (useDiscoverPageState.ts) would set this
+          // from the committed scope in the real app; set it directly here since
+          // this test exercises the controller in isolation.
+          filters: { polygon: POLYGON_COORDS },
+          nav: makeNav({
+            journey: 'area-first',
+            rawNodeParam: 'n:area-1',
+            node: 'n:area-1',
+            resultScope: { active: { kind: 'POLYGON', coordinates: POLYGON_COORDS }, previous: null },
+          }),
+          effectiveSelectedArea: EFFECTIVE_SELECTED_AREA,
+          areasNavigationJourney: makeAreasNavigationJourney({ node: AREA_LEAF }),
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(findMarkersCall()).toBeDefined();
+    });
+
+    const [url] = findMarkersCall() as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+
+    expect(params.get('polygon')).toBeTruthy();
+    expect(params.has('nodeKey')).toBe(false);
+    expect(params.getAll('areaKeys')).toEqual([]);
+  });
+
+  it('a committed POLYGON scope over a legacy areaKeys group scope sends polygon and OMITS areaKeys', async () => {
+    renderHook(
+      () =>
+        useDiscoverMapDataController({
+          ...BASE_CONTROLLER_PARAMS,
+          filters: { polygon: POLYGON_COORDS },
+          groupAreaKeysForMapData: ['IN|KA|Bengaluru|Hebbal', 'IN|KA|Bengaluru|Nagawara'],
+          nav: makeNav({
+            journey: 'area-first',
+            groupId: 'hebbal-belt',
+            resultScope: { active: { kind: 'POLYGON', coordinates: POLYGON_COORDS }, previous: null },
+          }),
+          effectiveSelectedArea: null,
+          areasNavigationJourney: makeAreasNavigationJourney(),
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(findMarkersCall()).toBeDefined();
+    });
+
+    const [url] = findMarkersCall() as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+
+    expect(params.get('polygon')).toBeTruthy();
+    expect(params.getAll('areaKeys')).toEqual([]);
+  });
+
+  it('control: a committed AREA_SET scope does NOT suppress the navigation-derived nodeKey — only POLYGON/VIEWPORT do', async () => {
+    renderHook(
+      () =>
+        useDiscoverMapDataController({
+          ...BASE_CONTROLLER_PARAMS,
+          nav: makeNav({
+            journey: 'area-first',
+            rawNodeParam: 'n:area-1',
+            node: 'n:area-1',
+            resultScope: {
+              active: { kind: 'AREA_SET', areaKeys: [EFFECTIVE_SELECTED_AREA.areaKey] },
+              previous: null,
+            },
+          }),
+          effectiveSelectedArea: EFFECTIVE_SELECTED_AREA,
+          areasNavigationJourney: makeAreasNavigationJourney({ node: AREA_LEAF }),
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(findMarkersCall()).toBeDefined();
+    });
+
+    const [url] = findMarkersCall() as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.get('nodeKey')).toBe('n:area-1');
+  });
+});

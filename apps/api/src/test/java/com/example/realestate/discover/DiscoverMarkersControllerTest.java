@@ -431,4 +431,165 @@ class DiscoverMarkersControllerTest {
 
         verifyNoInteractions(service);
     }
+
+    // ── #2016: result-scope exclusivity — AREA_SET/POLYGON/VIEWPORT (mirrors listings) ──
+
+    private static final String VALID_POLYGON = "[[13.3,74.7],[13.4,74.8],[13.3,74.8]]";
+    private static final String VALID_BBOX = "13.3,74.7,13.4,74.8";
+
+    @Test
+    void areaKeysAndPolygon_returns400_resultScopeMustBeExclusive() throws Exception {
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("areaKeys", "IN|KA|Udupi|Manipal")
+                        .param("polygon", VALID_POLYGON)
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("result_scope_must_be_exclusive")));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void areaKeysAndViewportScope_returns400_resultScopeMustBeExclusive() throws Exception {
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("areaKeys", "IN|KA|Udupi|Manipal")
+                        .param("viewportScope", VALID_BBOX)
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("result_scope_must_be_exclusive")));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void polygonAndViewportScope_returns400_resultScopeMustBeExclusive() throws Exception {
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("polygon", VALID_POLYGON)
+                        .param("viewportScope", VALID_BBOX)
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("result_scope_must_be_exclusive")));
+
+        verifyNoInteractions(service);
+    }
+
+    // nodeKey + polygon / viewportScope → 400 — review fix-cycle-1: exclusivity must run AFTER
+    // nodeKey resolves to effectiveAreaKeys, not just check the raw (absent) areaKeys param.
+
+    @Test
+    void nodeKeyAndPolygon_returns400_resultScopeMustBeExclusive() throws Exception {
+        NavigationGraph graph = mock(NavigationGraph.class);
+        when(navigationGraphCache.getActiveGraph("udupi")).thenReturn(java.util.Optional.of(graph));
+        when(graph.containsNodeKey("d:n")).thenReturn(true);
+        when(graph.descendantAreaKeysOf("d:n")).thenReturn(List.of("IN|KA|Udupi|A1", "IN|KA|Udupi|A2"));
+
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("nodeKey", "d:n")
+                        .param("polygon", VALID_POLYGON)
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("result_scope_must_be_exclusive")));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void nodeKeyAndViewportScope_returns400_resultScopeMustBeExclusive() throws Exception {
+        NavigationGraph graph = mock(NavigationGraph.class);
+        when(navigationGraphCache.getActiveGraph("udupi")).thenReturn(java.util.Optional.of(graph));
+        when(graph.containsNodeKey("d:n")).thenReturn(true);
+        when(graph.descendantAreaKeysOf("d:n")).thenReturn(List.of("IN|KA|Udupi|A1", "IN|KA|Udupi|A2"));
+
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("nodeKey", "d:n")
+                        .param("viewportScope", VALID_BBOX)
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("result_scope_must_be_exclusive")));
+
+        verifyNoInteractions(service);
+    }
+
+    // CRITICAL REGRESSION GUARD: bbox (the always-on render/perf viewport prefilter) must stay
+    // excluded from the new exclusivity check and keep combining with areaKeys as today.
+    @Test
+    void areaKeysAndBbox_returns200_bboxExcludedFromExclusivityCheck() throws Exception {
+        when(service.getMarkers(any())).thenReturn(
+                new DiscoverMarkersResponse("udupi", List.of(), false, 0, 0L, 1000, true));
+
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("areaKeys", "IN|KA|Udupi|Manipal")
+                        .param("bbox", VALID_BBOX)
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getMarkers(argThat(f ->
+                f.areaKeys() != null && f.areaKeys().contains("IN|KA|Udupi|Manipal")
+                && f.bbox() != null
+        ));
+    }
+
+    // Same regression guard for polygon + bbox.
+    @Test
+    void polygonAndBbox_returns200_bboxExcludedFromExclusivityCheck() throws Exception {
+        when(service.getMarkers(any())).thenReturn(
+                new DiscoverMarkersResponse("udupi", List.of(), false, 0, 0L, 1000, true));
+
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("polygon", VALID_POLYGON)
+                        .param("bbox", VALID_BBOX)
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getMarkers(argThat(f ->
+                f.polygon() != null && f.bbox() != null
+        ));
+    }
+
+    @Test
+    void viewportScopeAlone_returns200_notFoldedIntoFilters() throws Exception {
+        when(service.getMarkers(any())).thenReturn(
+                new DiscoverMarkersResponse("udupi", List.of(), false, 0, 0L, 1000, false));
+
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("viewportScope", VALID_BBOX)
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        // viewportScope lands inert (#2016 non-goal): not part of Filters/predicate.
+        verify(service).getMarkers(argThat(f -> f.bbox() == null));
+    }
+
+    @Test
+    void scopeFingerprint_echoedBackUnchanged() throws Exception {
+        when(service.getMarkers(any())).thenReturn(
+                new DiscoverMarkersResponse("udupi", List.of(), false, 0, 0L, 1000, false));
+
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("scopeFingerprint", "fp-abc123")
+                        .with(jwt()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scopeFingerprint", is("fp-abc123")));
+    }
+
+    @Test
+    void scopeFingerprint_absent_isNullInResponse() throws Exception {
+        when(service.getMarkers(any())).thenReturn(
+                new DiscoverMarkersResponse("udupi", List.of(), false, 0, 0L, 1000, false));
+
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .with(jwt()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scopeFingerprint").doesNotExist());
+    }
 }

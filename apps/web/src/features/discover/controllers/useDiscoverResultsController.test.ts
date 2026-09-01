@@ -122,6 +122,9 @@ describe('useDiscoverResultsController (#2142 Commit 3 — moved verbatim from M
       'rent',
       undefined,
       { kind: 'areas', areaKeys: ['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Tiger Circle'] },
+      // Issue #2016 — the group-results surface's own committed AREA_SET
+      // ResultScope, threaded through for the shared scopeFingerprint.
+      { kind: 'AREA_SET', areaKeys: ['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Tiger Circle'] },
     );
   });
 

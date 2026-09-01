@@ -5,6 +5,8 @@ import { snapBbox } from '@/lib/bboxUtils';
 import { buildDiscoverSearchParams } from '@/lib/discoverSearchParams';
 import { useDiscoverSource, discoverPath, discoverKey } from '@/features/discover/state/DiscoverDataSourceContext';
 import type { DiscoverMarkerScope } from '@/features/discover/selectors/markerScope';
+import { computeScopeFingerprint } from '@/features/discover/state/resultScope';
+import type { ResultScope } from '@/features/discover/state/resultScope';
 
 export interface DiscoverFilteredMarker {
   id: string;
@@ -42,6 +44,8 @@ export interface DiscoverFilteredMarkersResponse {
   limit?: number;
   /** True only when a valid bbox was applied to this query. */
   boundsApplied?: boolean;
+  /** Issue #2016 — the request's `scopeFingerprint` echoed back unchanged. */
+  scopeFingerprint?: string | null;
 }
 
 export function useDiscoverFilteredMarkers(
@@ -75,6 +79,13 @@ export function useDiscoverFilteredMarkers(
    *                   a mid-resolution/undefined scope.
    */
   scope: DiscoverMarkerScope = { kind: 'city' },
+  /**
+   * Issue #2016 — the committed geography that owns this fetch's identity
+   * (see UseDiscoverListingsParams.resultScope's doc in useDiscoverListings.ts
+   * for the full rationale). Defaults to null — existing callers that
+   * predate this param keep compiling and behaving identically.
+   */
+  resultScope: ResultScope = null,
 ) {
   // Issue #1911 PR3 — see useDiscoverRegionSummary.ts for the default-context
   // ({mode:'live'}) byte-identical-live-behaviour rationale.
@@ -95,6 +106,10 @@ export function useDiscoverFilteredMarkers(
   // Empty-areaKeys guard: do NOT fire when the group has no member areas (backend returns 400 on []).
   const areasEmpty = scope.kind === 'areas' && scope.areaKeys.length === 0;
 
+  // Issue #2016 — see the `resultScope` param's doc above.
+  const scopeFingerprint = computeScopeFingerprint(resultScope, filters, listingPurpose);
+  const viewportScope = resultScope?.kind === 'VIEWPORT' ? resultScope.bounds : null;
+
   return useQuery<DiscoverFilteredMarkersResponse>({
     // Flattened into discrete fields (kind + nodeKey + sorted areaKeys)
     // rather than the `scope` object itself — TanStack Query keys rely on
@@ -106,6 +121,9 @@ export function useDiscoverFilteredMarkers(
       source,
       'discover-filtered-markers', city, filters, snapped, trimmedQ, listingPurpose ?? null, excludePropertyType ?? null,
       scope.kind, scopeNodeKey ?? null, sortedAreaKeys,
+      // Issue #2016 — keeps a response for a since-superseded scope out of
+      // the CURRENT scope's cache entry.
+      scopeFingerprint,
     ),
     queryFn: ({ signal }) => {
       const params = buildDiscoverSearchParams({
@@ -117,6 +135,8 @@ export function useDiscoverFilteredMarkers(
         listingPurpose,
         excludePropertyType,
         nodeKey: scopeNodeKey,
+        scopeFingerprint,
+        viewportScope,
       });
 
       const livePath = `/api/discover/markers?${params.toString()}`;

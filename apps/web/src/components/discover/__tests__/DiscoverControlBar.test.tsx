@@ -80,6 +80,8 @@ const { BASE_NAV, ACTIONS } = vi.hoisted(() => {
     // Issue #2203 — journey-preserving node selection for School-first/Agri-first.
     goToNodeAndClearSchoolSelection: vi.fn(),
     goToNodeAndClearAgriculturalLocality: vi.fn(),
+    // Issue #2016 — result-scope commit.
+    commitResultScope: vi.fn(),
   };
 
   return { BASE_NAV: nav, ACTIONS: actions };

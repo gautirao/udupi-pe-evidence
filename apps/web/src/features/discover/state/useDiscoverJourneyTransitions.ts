@@ -545,6 +545,11 @@ export function useDiscoverJourneyTransitions({
   cityRef.current = city;
   const urlCityRef = useRef(urlState.city ?? city);
   urlCityRef.current = urlState.city ?? city;
+  // Issue #2016 code-review Finding 1 — same ref-currency pattern as
+  // cityRef/urlCityRef above, read ONLY inside the resolve-failure effect
+  // below, so it never needs to join that effect's dep array.
+  const resultScopeActiveRef = useRef(urlState.resultScope?.active ?? null);
+  resultScopeActiveRef.current = urlState.resultScope?.active ?? null;
 
   // Deferred areaKey hydration — resolve once area data loads (Rule 2).
   // Lives here because it references refs from useDiscoverPageState AND data from useDiscoverMapData.
@@ -570,7 +575,17 @@ export function useDiscoverJourneyTransitions({
       // discoverAreas may be stale. Re-arm and wait for the re-fetch to complete.
       pendingAreaKeyRef.current = pending;
     } else {
-      deselectArea();
+      // Issue #2016 code-review Finding 1 — a pending areaKey that fails to
+      // resolve here means the area committed via handleAreaClick/
+      // handleAreaSelect (which also commits an AREA_SET result scope in
+      // the SAME write, see useDiscoverPageState.ts) never became the
+      // rendered selection. Mirror handleAreaBack's exact pattern: fold the
+      // scope-clear into this SAME deselectArea() write when the committed
+      // scope is the AREA_SET that resolution just failed for, so
+      // `rscope`/`rareas` never survive pointed at an area the UI no longer
+      // shows selected. Guarded to AREA_SET only — never clobbers an
+      // unrelated committed POLYGON/VIEWPORT scope.
+      deselectArea(resultScopeActiveRef.current?.kind === 'AREA_SET' ? null : undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [areasLoading, discoverAreas, deselectArea, resolveSignal]);

@@ -114,6 +114,12 @@ const ACTION_KEYS = [
   // #2203 — Option A' journey-preserving node selection (School-first/Agri-first).
   'goToNodeAndClearSchoolSelection',
   'goToNodeAndClearAgriculturalLocality',
+  // Issue #2016 — result-scope commit. Required here: without it,
+  // `ActionKeysExhaustive` below fails the build, AND `actions.commitResultScope`
+  // (the STABLE action every production caller of useDiscoverPageState actually
+  // receives) would silently be undefined at runtime even though TypeScript
+  // reports it as present — buildStableActions only forwards keys listed here.
+  'commitResultScope',
 ] as const satisfies readonly (keyof DiscoverUrlActions)[];
 
 // A deliberately-omitted (or renamed/added) DiscoverUrlActions key makes this

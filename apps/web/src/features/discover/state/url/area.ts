@@ -17,12 +17,14 @@ import {
 } from '@/features/discover/navigation/types';
 import { AREAS_NAVIGATION_RESOLVE_QUERY_KEY_BASE } from '@/features/discover/navigation/useAreasNavigationJourney';
 import { clearClusterFocusParam } from './clusterFocus';
+import { applyResultScopeCommit } from './resultScope';
 import type { UrlDomainCtx, UrlDomainModule } from './_shared';
 import type {
   DiscoverJourney,
   DiscoverUrlActions,
   DiscoverUrlState,
 } from '@/hooks/useDiscoverUrlState';
+import type { ResultScope } from '@/features/discover/state/resultScope';
 
 type AreaState = Pick<DiscoverUrlState, 'areaKey' | 'journey' | 'groupId' | 'groupResults'>;
 type AreaActions = Pick<
@@ -254,11 +256,17 @@ export function useAreaUrlDomain(ctx: UrlDomainCtx): UrlDomainModule<AreaState, 
           : 'area-first';
 
   const selectArea = useCallback(
-    (newAreaKey: string) => {
+    (newAreaKey: string, resultScope?: ResultScope) => {
       setUrlParams(
         (prev) => {
           const next = new URLSearchParams(prev);
           next.set('areaKey', newAreaKey);
+          // Issue #2016 code-review Finding 5 — fold the result-scope commit into
+          // THIS SAME write when the caller passes one, so areaKey and rscope/rareas
+          // land in one setUrlParams call / one history entry, never two racing writes.
+          if (resultScope !== undefined) {
+            applyResultScopeCommit(next, resultScope);
+          }
           // groupId is preserved intentionally: when the user selects an area while
           // inside a group (area-groups-landing → area-selected), both ?groupId= and
           // ?areaKey= must be present so the back-navigation can return to the group.
@@ -271,7 +279,7 @@ export function useAreaUrlDomain(ctx: UrlDomainCtx): UrlDomainModule<AreaState, 
     [setUrlParams],
   );
 
-  const deselectArea = useCallback(() => {
+  const deselectArea = useCallback((resultScope?: ResultScope) => {
     // Cancel any pending viewport debounce so it cannot re-write stale lat/lon/zoom
     // back into the URL after we clear them below (race: user was panning just before
     // clicking Back → timer fires ~300 ms later and undoes the clear).
@@ -289,6 +297,12 @@ export function useAreaUrlDomain(ctx: UrlDomainCtx): UrlDomainModule<AreaState, 
         next.delete('lat');
         next.delete('lon');
         next.delete('zoom');
+        // Issue #2016 code-review Finding 5 — see selectArea's comment above.
+        // Folded into this REPLACE (not a second, independent PUSH) so backing
+        // out of an area selection never costs Browser Back two presses.
+        if (resultScope !== undefined) {
+          applyResultScopeCommit(next, resultScope);
+        }
         return next;
       },
       { replace: true }, // REPLACE — not a new destination; restores "no area" state
