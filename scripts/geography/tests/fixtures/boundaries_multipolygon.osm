@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Hand-authored fixture for #2422 (canonical boundary geometry, "D6" relation/
+  multipolygon assembly). Illustrative data near the Udupi bbox used by
+  fixtures/tiny_city.osm (74.70,13.30,74.80,13.40) — not real OSM extract data.
+
+  Exercises the geometry shapes extract_osm_boundaries.py must handle:
+    - way 4005: a simple closed way, tagged boundary=administrative directly
+      (no relation) -> the "closed-way" half of D6.
+    - relation 9001 (outer way 4001 + inner way 4002): a single-outer-ring
+      multipolygon WITH a hole -> outer/inner ring semantics.
+    - relation 9002 (outer ways 4003 + 4004, two disjoint rings): a multipart
+      multipolygon -> the MultiPolygon-with-several-outer-rings case.
+    - relation 9003 (outer way 4006, a self-intersecting "bowtie" ring, same
+      technique as tiny_city.osm's BowtieInvalidWay): must be quarantined by
+      the extractor's shapely validity check, not silently repaired.
+-->
+<osm version="0.6" generator="hand-authored-fixture">
+
+  <!-- ── relation 9001: single ring with a hole ─────────────────────────── -->
+  <node id="5001" lat="13.31" lon="74.71" version="1"/>
+  <node id="5002" lat="13.31" lon="74.75" version="1"/>
+  <node id="5003" lat="13.35" lon="74.75" version="1"/>
+  <node id="5004" lat="13.35" lon="74.71" version="1"/>
+  <way id="4001" version="1">
+    <nd ref="5001"/>
+    <nd ref="5002"/>
+    <nd ref="5003"/>
+    <nd ref="5004"/>
+    <nd ref="5001"/>
+  </way>
+
+  <node id="5005" lat="13.32" lon="74.72" version="1"/>
+  <node id="5006" lat="13.32" lon="74.74" version="1"/>
+  <node id="5007" lat="13.34" lon="74.74" version="1"/>
+  <node id="5008" lat="13.34" lon="74.72" version="1"/>
+  <way id="4002" version="1">
+    <nd ref="5005"/>
+    <nd ref="5006"/>
+    <nd ref="5007"/>
+    <nd ref="5008"/>
+    <nd ref="5005"/>
+  </way>
+
+  <relation id="9001" version="1">
+    <member type="way" ref="4001" role="outer"/>
+    <member type="way" ref="4002" role="inner"/>
+    <tag k="type" v="multipolygon"/>
+    <tag k="boundary" v="administrative"/>
+    <tag k="admin_level" v="8"/>
+    <tag k="name" v="AreaWithHole"/>
+  </relation>
+
+  <!-- ── relation 9002: multipart (two disjoint outer rings) ────────────── -->
+  <node id="5009" lat="13.31" lon="74.76" version="1"/>
+  <node id="5010" lat="13.31" lon="74.78" version="1"/>
+  <node id="5011" lat="13.33" lon="74.78" version="1"/>
+  <node id="5012" lat="13.33" lon="74.76" version="1"/>
+  <way id="4003" version="1">
+    <nd ref="5009"/>
+    <nd ref="5010"/>
+    <nd ref="5011"/>
+    <nd ref="5012"/>
+    <nd ref="5009"/>
+  </way>
+
+  <node id="5013" lat="13.34" lon="74.76" version="1"/>
+  <node id="5014" lat="13.34" lon="74.78" version="1"/>
+  <node id="5015" lat="13.36" lon="74.78" version="1"/>
+  <node id="5016" lat="13.36" lon="74.76" version="1"/>
+  <way id="4004" version="1">
+    <nd ref="5013"/>
+    <nd ref="5014"/>
+    <nd ref="5015"/>
+    <nd ref="5016"/>
+    <nd ref="5013"/>
+  </way>
+
+  <relation id="9002" version="1">
+    <member type="way" ref="4003" role="outer"/>
+    <member type="way" ref="4004" role="outer"/>
+    <tag k="type" v="multipolygon"/>
+    <tag k="boundary" v="administrative"/>
+    <tag k="admin_level" v="8"/>
+    <tag k="name" v="MultipartArea"/>
+  </relation>
+
+  <!-- ── way 4005: simple closed way, boundary tag directly on the way ──── -->
+  <node id="5017" lat="13.36" lon="74.71" version="1"/>
+  <node id="5018" lat="13.36" lon="74.73" version="1"/>
+  <node id="5019" lat="13.38" lon="74.73" version="1"/>
+  <node id="5020" lat="13.38" lon="74.71" version="1"/>
+  <way id="4005" version="1">
+    <nd ref="5017"/>
+    <nd ref="5018"/>
+    <nd ref="5019"/>
+    <nd ref="5020"/>
+    <nd ref="5017"/>
+    <tag k="boundary" v="administrative"/>
+    <tag k="admin_level" v="8"/>
+    <tag k="name" v="SimpleWayCity"/>
+  </way>
+
+  <!-- ── relation 9003: self-intersecting ("bowtie") outer ring ─────────── -->
+  <node id="5021" lat="13.36" lon="74.74" version="1"/>
+  <node id="5022" lat="13.38" lon="74.76" version="1"/>
+  <node id="5023" lat="13.36" lon="74.76" version="1"/>
+  <node id="5024" lat="13.38" lon="74.74" version="1"/>
+  <way id="4006" version="1">
+    <nd ref="5021"/>
+    <nd ref="5022"/>
+    <nd ref="5023"/>
+    <nd ref="5024"/>
+    <nd ref="5021"/>
+  </way>
+
+  <relation id="9003" version="1">
+    <member type="way" ref="4006" role="outer"/>
+    <tag k="type" v="multipolygon"/>
+    <tag k="boundary" v="administrative"/>
+    <tag k="admin_level" v="8"/>
+    <tag k="name" v="BowtieRelation"/>
+  </relation>
+
+</osm>

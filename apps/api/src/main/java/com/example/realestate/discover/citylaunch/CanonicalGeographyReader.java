@@ -5,8 +5,16 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+
+import com.example.realestate.discover.citylaunch.BoundaryGeometryResult.Reason;
+import com.example.realestate.discover.citylaunch.BoundaryGeometryResult.Unavailable;
 
 /**
  * Read-only access to a city's CANONICAL (already-materialized) geography:
@@ -130,6 +138,85 @@ public class CanonicalGeographyReader {
                 cityId);
 
         return new CanonicalGeography(areas, aliases, regions, memberships, groups, groupMembers);
+    }
+
+    // ── Canonical boundary geometry (#2422) ─────────────────────────────────────────────────
+    //
+    // Additive: reads canonical_boundary_geometry only. Never touches areas.geometry_source or
+    // areas.osm_* — those remain GeometryTrust's/AreaOnboardingApplyService's exclusive inputs,
+    // untouched by this feature. Fail-closed: a missing/quarantined boundary is surfaced as
+    // BoundaryGeometryResult.Unavailable, never approximated from bbox/centroid.
+
+    private static final String BOUNDARY_COLUMNS =
+            "status, unavailable_reason, ST_AsGeoJSON(geom) AS geo_json, geometry_source, "
+                    + "osm_element_type, osm_element_id, osm_version, osm_extract_date, "
+                    + "osm_source_name, osm_source_checksum_sha256, imported_at";
+
+    /**
+     * Looks up the authoritative boundary polygon for a city's own outer boundary.
+     * Returns {@link Reason#UNKNOWN_ENTITY} if {@code cityId} does not exist in {@code cities} at
+     * all, {@link Reason#NOT_IMPORTED} if the city exists but no boundary import has run for it.
+     */
+    @Transactional(readOnly = true)
+    public BoundaryGeometryResult findCityBoundary(int cityId) {
+        List<BoundaryGeometryResult> rows = jdbcOperations.query(
+                "SELECT " + BOUNDARY_COLUMNS
+                        + " FROM public.canonical_boundary_geometry "
+                        + "WHERE entity_type = 'CITY' AND city_id = ?",
+                (rs, rowNum) -> mapBoundaryRow(rs),
+                cityId);
+        if (!rows.isEmpty()) {
+            return rows.get(0);
+        }
+        boolean cityExists = findCity(cityId).isPresent();
+        return new Unavailable(cityExists ? Reason.NOT_IMPORTED : Reason.UNKNOWN_ENTITY);
+    }
+
+    /**
+     * Looks up the authoritative boundary polygon for one area within a city.
+     * Returns {@link Reason#UNKNOWN_ENTITY} if {@code (cityId, areaKey)} does not exist in
+     * {@code areas} at all, {@link Reason#NOT_IMPORTED} if the area exists but no boundary import
+     * has run for it.
+     */
+    @Transactional(readOnly = true)
+    public BoundaryGeometryResult findAreaBoundary(int cityId, String areaKey) {
+        List<BoundaryGeometryResult> rows = jdbcOperations.query(
+                "SELECT " + BOUNDARY_COLUMNS
+                        + " FROM public.canonical_boundary_geometry "
+                        + "WHERE entity_type = 'AREA' AND city_id = ? AND area_key = ?",
+                (rs, rowNum) -> mapBoundaryRow(rs),
+                cityId, areaKey);
+        if (!rows.isEmpty()) {
+            return rows.get(0);
+        }
+        Integer areaExists = jdbcOperations.queryForObject(
+                "SELECT count(*) FROM public.areas WHERE city_id = ? AND area_key = ?",
+                Integer.class, cityId, areaKey);
+        boolean exists = areaExists != null && areaExists > 0;
+        return new Unavailable(exists ? Reason.NOT_IMPORTED : Reason.UNKNOWN_ENTITY);
+    }
+
+    private static BoundaryGeometryResult mapBoundaryRow(ResultSet rs) throws SQLException {
+        // status is constrained to VALID/QUARANTINED/ABSENT_IN_SOURCE (ck_cbg_status) — it maps
+        // directly onto Reason for the two non-VALID cases. unavailable_reason is a free-text
+        // explanation for humans (coverage reports), not itself a Reason enum value.
+        String status = rs.getString("status");
+        if (!"VALID".equals(status)) {
+            Reason reason = "ABSENT_IN_SOURCE".equals(status) ? Reason.ABSENT_IN_SOURCE : Reason.QUARANTINED;
+            return new Unavailable(reason);
+        }
+        java.sql.Date extractDate = rs.getDate("osm_extract_date");
+        Timestamp importedAt = rs.getTimestamp("imported_at");
+        BoundaryProvenance provenance = new BoundaryProvenance(
+                rs.getString("geometry_source"),
+                rs.getString("osm_element_type"),
+                (Long) rs.getObject("osm_element_id"),
+                (Long) rs.getObject("osm_version"),
+                extractDate == null ? null : extractDate.toLocalDate(),
+                rs.getString("osm_source_name"),
+                rs.getString("osm_source_checksum_sha256"),
+                importedAt == null ? null : importedAt.toInstant().atOffset(OffsetDateTime.now().getOffset()));
+        return new BoundaryGeometryResult.Found(provenance, rs.getString("geo_json"));
     }
 
     private static Double nullableDouble(Object val) {

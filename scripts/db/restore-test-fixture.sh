@@ -55,7 +55,12 @@ NAV_SCHOOLS_AGRI_SEED_FILE="${SCRIPT_DIR}/fixtures/navigation-hierarchy-schools-
 
 PG_PASSWORD="${PG_TEST_PASSWORD:-fixture_test_only}"
 PG_PORT="${PG_TEST_PORT:-5434}"
-CONTAINER="pg-test-fixture"
+# PG_TEST_CONTAINER_NAME lets a caller (e.g. scripts/run-e2e-local.sh) run its
+# own uniquely-named, disposable fixture instead of the shared machine-wide
+# "pg-test-fixture" singleton other concurrent worktrees/agents may already be
+# using — colliding with that name would corrupt their runs (#2422 follow-up).
+# Default is unchanged, so every existing caller keeps today's behaviour.
+CONTAINER="${PG_TEST_CONTAINER_NAME:-pg-test-fixture}"
 DB_NAME="postgres"
 DB_USER="postgres"
 

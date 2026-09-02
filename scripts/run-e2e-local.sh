@@ -99,6 +99,100 @@ fi
 
 BACKEND_PID=""
 FRONTEND_PID=""
+E2E_DB_CONTAINER_NAME=""
+
+# Cleanup on exit — stop services (and the local DB fixture) we started. Set
+# up before anything below can fail, so a mid-setup error (fixture start,
+# safety gate, .env parsing) never leaks the docker container.
+cleanup() {
+  [ -n "$BACKEND_PID" ] && kill "$BACKEND_PID" 2>/dev/null || true
+  [ -n "$FRONTEND_PID" ] && kill "$FRONTEND_PID" 2>/dev/null || true
+  [ -n "$E2E_DB_CONTAINER_NAME" ] && docker rm -f "$E2E_DB_CONTAINER_NAME" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+# ---------------------------------------------------------------------------
+# Ephemeral local Postgres/PostGIS fixture (#2422 follow-up)
+#
+# Without this, apps/api/run-local.sh (invoked below) falls through to
+# whatever apps/api/.env resolves for SUPABASE_DB_HOST/PORT/etc — in a
+# worktree configured against the shared hosted Supabase pooler, every
+# backend start (and hence every Flyway migration this script triggers) would
+# hit a shared, production-adjacent database. That already happened once
+# (issue #2422 push incident, cleaned up manually). Start our OWN disposable
+# PostGIS container, scoped to this run, and point the backend at it instead.
+#
+# This deliberately does NOT reuse scripts/dev/local-fixture-backend.sh's
+# "pg-test-fixture" container — that name is a machine-wide singleton other
+# concurrent worktrees/agents may be using right now; colliding with it would
+# corrupt their runs. A unique name (worktree + PID) and a probed-free port
+# avoid that collision. (scripts/dev-worktree-stack.sh has the identical
+# shared-DB fallthrough gap but is intentionally left untouched here — it is
+# in active use by other concurrent worktrees right now; tracked as a
+# follow-up, not fixed in this change.)
+# ---------------------------------------------------------------------------
+
+WORKTREE_SLUG="$(basename "$WORKTREE_ROOT" | tr -c 'a-zA-Z0-9' '-')"
+E2E_DB_CONTAINER_NAME="pg-e2e-${WORKTREE_SLUG}-$$"
+E2E_DB_PASSWORD="${E2E_DB_PASSWORD:-e2e_local_only}"
+
+# Probe forward from a worktree-derived base port so concurrent worktrees
+# rarely collide, and never reuse a port something else already holds.
+find_free_port() {
+  local port="$1" tries=0
+  while [ -n "$(port_holder_pid "$port")" ]; do
+    port=$((port + 1))
+    tries=$((tries + 1))
+    if [ "$tries" -ge 50 ]; then
+      echo "ERROR: could not find a free port for the local E2E DB fixture near $1." >&2
+      exit 1
+    fi
+  done
+  echo "$port"
+}
+E2E_DB_PORT_BASE=$(( (BACKEND_PORT * 7) % 20000 + 20000 ))
+E2E_DB_PORT="$(find_free_port "$E2E_DB_PORT_BASE")"
+
+echo "[e2e] Starting ephemeral local Postgres/PostGIS fixture ($E2E_DB_CONTAINER_NAME on port $E2E_DB_PORT)..."
+PG_TEST_CONTAINER_NAME="$E2E_DB_CONTAINER_NAME" \
+PG_TEST_PORT="$E2E_DB_PORT" \
+PG_TEST_PASSWORD="$E2E_DB_PASSWORD" \
+bash "$SCRIPT_DIR/db/restore-test-fixture.sh" | grep -v '^postgresql://'
+RESTORE_EXIT="${PIPESTATUS[0]}"
+if [ "$RESTORE_EXIT" -ne 0 ]; then
+  echo "ERROR: local E2E DB fixture setup failed (exit $RESTORE_EXIT)." >&2
+  exit 1
+fi
+
+# Safety gate: confirm the fixture we're about to point the backend at is a
+# local container we just started, reachable on localhost — before any
+# credential is read or the backend is launched against it.
+E2E_DB_CONTAINER_ID="$(docker ps --filter "name=${E2E_DB_CONTAINER_NAME}" --filter status=running -q || true)"
+if [ -z "$E2E_DB_CONTAINER_ID" ]; then
+  echo "ERROR: safety gate: local E2E DB fixture container '$E2E_DB_CONTAINER_NAME' not running." >&2
+  exit 1
+fi
+if ! PGPASSWORD="$E2E_DB_PASSWORD" psql -h localhost -p "$E2E_DB_PORT" -U postgres -d postgres -c 'SELECT 1' >/dev/null 2>&1; then
+  echo "ERROR: safety gate: unable to reach local E2E DB fixture at localhost:${E2E_DB_PORT}." >&2
+  exit 1
+fi
+echo "[e2e] Local E2E DB fixture ready (localhost:${E2E_DB_PORT})."
+
+# The backend still needs SUPABASE_PROJECT_REF/AI_API_KEY for hosted JWT
+# validation even though the DB_* values below bypass apps/api/.env entirely —
+# read only those two, the same way scripts/dev/local-fixture-backend.sh does
+# (#1981), never the file's SUPABASE_DB_* values.
+BACKEND_ENV_FILE="$SCRIPT_DIR/../apps/api/.env"
+if [ ! -f "$BACKEND_ENV_FILE" ]; then
+  echo "ERROR: $BACKEND_ENV_FILE not found (needed for SUPABASE_PROJECT_REF / AI_API_KEY)." >&2
+  exit 1
+fi
+E2E_SUPABASE_PROJECT_REF="$(grep -E '^SUPABASE_PROJECT_REF=' "$BACKEND_ENV_FILE" | tail -1 | cut -d= -f2-)"
+E2E_AI_API_KEY="$(grep -E '^AI_API_KEY=' "$BACKEND_ENV_FILE" | tail -1 | cut -d= -f2-)"
+if [ -z "$E2E_SUPABASE_PROJECT_REF" ]; then
+  echo "ERROR: SUPABASE_PROJECT_REF missing from $BACKEND_ENV_FILE." >&2
+  exit 1
+fi
 
 # apps/api/run-local.sh binds to $SERVER_PORT (defaulting to apps/api/.env's
 # value, historically 8085) unless told otherwise — without this, the backend
@@ -118,6 +212,25 @@ export CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-http://localhost:$FRONTEND_
 # of exercising the backend this script just started.
 export VITE_API_BASE_URL="$BACKEND_BASE_URL"
 
+# Point the backend at the local fixture above instead of apps/api/.env's
+# datasource — the whole point of this block (#2422 follow-up). Mirrors
+# scripts/dev/local-fixture-backend.sh Step G's override set exactly.
+export SKIP_BACKEND_ENV_LOAD=true
+export SUPABASE_DB_HOST=localhost
+export SUPABASE_DB_PORT="$E2E_DB_PORT"
+export SUPABASE_DB_NAME=postgres
+export SUPABASE_DB_USER=postgres
+export SUPABASE_DB_PASSWORD="$E2E_DB_PASSWORD"
+export SPRING_DATASOURCE_HIKARI_DATA_SOURCE_PROPERTIES_SSL=false
+export SPRING_DATASOURCE_HIKARI_DATA_SOURCE_PROPERTIES_SSLMODE=disable
+# restore-test-fixture.sh already applied every migration to this fixture
+# (see its own flyway_schema_history row-count assertion); Spring Boot's
+# embedded Flyway would otherwise re-validate against checksums that don't
+# match the CONCURRENTLY-stripped copy it migrated with, and fail startup.
+export SPRING_FLYWAY_ENABLED=false
+export SUPABASE_PROJECT_REF="$E2E_SUPABASE_PROJECT_REF"
+export AI_API_KEY="$E2E_AI_API_KEY"
+
 echo "[e2e] Starting backend..."
 "$SCRIPT_DIR/../apps/api/run-local.sh" > "$BACKEND_LOG" 2>&1 &
 BACKEND_PID=$!
@@ -125,13 +238,6 @@ BACKEND_PID=$!
 echo "[e2e] Starting frontend..."
 npm --prefix "$SCRIPT_DIR/../apps/web" run dev -- --port "$FRONTEND_PORT" > "$FRONTEND_LOG" 2>&1 &
 FRONTEND_PID=$!
-
-# Cleanup on exit — stop services we started
-cleanup() {
-  [ -n "$BACKEND_PID" ] && kill "$BACKEND_PID" 2>/dev/null || true
-  [ -n "$FRONTEND_PID" ] && kill "$FRONTEND_PID" 2>/dev/null || true
-}
-trap cleanup EXIT
 
 # Wait for backend
 echo "[e2e] Waiting for backend on $BACKEND_BASE_URL..."

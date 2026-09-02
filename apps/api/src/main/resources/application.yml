@@ -14,6 +14,12 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
+    # Required for V73/V90/V105/V131-style migrations that combine ordinary transactional DDL
+    # (CREATE TABLE/EXTENSION) with a non-transactional CREATE INDEX CONCURRENTLY in the same
+    # script. Flyway refuses to mix statement types within one migration unless `mixed` is true
+    # (default false). IT tests separately opt into this per-test via @TestPropertySource — this
+    # is the real-runtime (non-test) equivalent, previously missing here (#2422 fix-round).
+    mixed: true
     locations: classpath:db/migration,classpath:com/example/realestate/migration
     placeholders:
       concurrently_keyword: "CONCURRENTLY "
