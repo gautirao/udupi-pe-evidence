@@ -200,18 +200,7 @@ public class DiscoverListingPredicateBuilder {
         //
         // The WKT string is built once and bound twice (once per ? placeholder).
         if (f.polygon() != null && f.polygon().size() >= 3) {
-            // Build WKT polygon string from [[lat,lon],...] — PostGIS expects lon lat order
-            StringBuilder wkt = new StringBuilder("POLYGON((");
-            for (int i = 0; i < f.polygon().size(); i++) {
-                List<Double> pt = f.polygon().get(i);
-                if (i > 0) wkt.append(",");
-                wkt.append(pt.get(1)).append(" ").append(pt.get(0)); // lon lat
-            }
-            // Close the ring
-            List<Double> first = f.polygon().get(0);
-            wkt.append(",").append(first.get(1)).append(" ").append(first.get(0));
-            wkt.append("))");
-            String wktStr = wkt.toString();
+            String wktStr = PolygonWkt.toWkt(f.polygon());
             // Prefilter: envelope intersect via GiST index on pl.geog
             sb.append(" AND ST_Intersects(ST_Envelope(ST_GeomFromText(?, 4326))::geography, pl.geog)");
             params.add(wktStr);

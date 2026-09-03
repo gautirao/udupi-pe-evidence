@@ -62,6 +62,9 @@ class DiscoverMarkersControllerTest {
     @MockitoBean
     private NavigationGraphCache navigationGraphCache;
 
+    @MockitoBean
+    private PolygonGeographicSafetyPolicy polygonGeographicSafetyPolicy;
+
     @BeforeEach
     void setUp() {
         reset(service, userRoleService);
@@ -644,5 +647,58 @@ class DiscoverMarkersControllerTest {
                         .with(jwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.scopeFingerprint").doesNotExist());
+    }
+
+    // ── #2420: polygon geographic-safety policy wiring ────────────────────────
+    // Threshold/geometry behaviour is covered by PolygonGeographicSafetyPolicyIT (real
+    // Testcontainers PostGIS). These tests only prove the controller calls the policy for a
+    // POLYGON scope, surfaces its rejection as the documented 4xx reason, and never calls the
+    // service when rejected.
+
+    @Test
+    void polygonRejectedByGeographicSafetyPolicy_outsideCity_returns400() throws Exception {
+        doThrow(new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.BAD_REQUEST, "polygon_outside_searchable_city"))
+                .when(polygonGeographicSafetyPolicy).validate(eq("udupi"), any());
+
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("polygon", VALID_POLYGON)
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("polygon_outside_searchable_city")));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void polygonRejectedByGeographicSafetyPolicy_tooBroad_returns400() throws Exception {
+        doThrow(new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.BAD_REQUEST, "polygon_scope_too_broad"))
+                .when(polygonGeographicSafetyPolicy).validate(eq("udupi"), any());
+
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("polygon", VALID_POLYGON)
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("polygon_scope_too_broad")));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void polygonAcceptedByGeographicSafetyPolicy_returns200_serviceCalledWithPolygon() throws Exception {
+        when(service.getMarkers(any())).thenReturn(
+                new DiscoverMarkersResponse("udupi", List.of(), false, 0, 0L, 1000, true));
+
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("polygon", VALID_POLYGON)
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(polygonGeographicSafetyPolicy).validate(eq("udupi"), any());
+        verify(service).getMarkers(argThat(f -> f.polygon() != null));
     }
 }

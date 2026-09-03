@@ -62,6 +62,9 @@ class DiscoverListingsControllerTest {
     @MockitoBean
     private com.example.realestate.discover.navigation.NavigationGraphCache navigationGraphCache;
 
+    @MockitoBean
+    private PolygonGeographicSafetyPolicy polygonGeographicSafetyPolicy;
+
     @BeforeEach
     void setUp() {
         reset(service, userRoleService);
@@ -635,5 +638,73 @@ class DiscoverListingsControllerTest {
                 .andExpect(jsonPath("$.scopeFingerprint").doesNotExist());
 
         verify(service).getListings(argThat(q -> q.scopeFingerprint() == null));
+    }
+
+    // ── #2420: polygon geographic-safety policy wiring ────────────────────────
+    // Threshold/geometry behaviour is covered by PolygonGeographicSafetyPolicyIT (real
+    // Testcontainers PostGIS). These tests only prove the controller calls the policy for a
+    // POLYGON scope, surfaces its rejection as the documented 4xx reason, and never calls the
+    // service when rejected — and that an accepted polygon behaves exactly as before (#2420
+    // DoD: "ordinary valid POLYGON query results remain unchanged").
+
+    @Test
+    void polygonRejectedByGeographicSafetyPolicy_outsideCity_returns400() throws Exception {
+        doThrow(new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.BAD_REQUEST, "polygon_outside_searchable_city"))
+                .when(polygonGeographicSafetyPolicy).validate(eq("udupi"), anyList());
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("polygon", VALID_POLYGON)
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("polygon_outside_searchable_city")));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void polygonRejectedByGeographicSafetyPolicy_tooBroad_returns400() throws Exception {
+        doThrow(new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.BAD_REQUEST, "polygon_scope_too_broad"))
+                .when(polygonGeographicSafetyPolicy).validate(eq("udupi"), anyList());
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("polygon", VALID_POLYGON)
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("polygon_scope_too_broad")));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void polygonAcceptedByGeographicSafetyPolicy_returns200_serviceCalledWithPolygon() throws Exception {
+        // Default MockitoBean behaviour: validate(...) is a no-op — mirrors an accepted polygon.
+        when(service.getListings(any())).thenReturn(
+                new DiscoverListingsPage(List.of(), 0, 20, 0L, 0, null));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("polygon", VALID_POLYGON)
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(polygonGeographicSafetyPolicy).validate(eq("udupi"), anyList());
+        verify(service).getListings(argThat(q -> q.polygon() != null));
+    }
+
+    @Test
+    void noPolygon_geographicSafetyPolicyNeverInvoked() throws Exception {
+        when(service.getListings(any())).thenReturn(
+                new DiscoverListingsPage(List.of(), 0, 20, 0L, 0, null));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(polygonGeographicSafetyPolicy).validate(eq("udupi"), isNull());
     }
 }

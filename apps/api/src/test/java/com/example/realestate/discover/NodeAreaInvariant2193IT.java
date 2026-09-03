@@ -193,8 +193,9 @@ class NodeAreaInvariant2193IT {
         DiscoverListingsService listingsService = new DiscoverListingsService(jdbcTemplate, new SimpleMeterRegistry());
         DiscoverMarkersService markersService = new DiscoverMarkersService(jdbcTemplate, new SimpleMeterRegistry());
         ObjectMapper objectMapper = new ObjectMapper();
-        listingsController = new DiscoverListingsController(listingsService, objectMapper, navigationGraphCache);
-        markersController = new DiscoverMarkersController(markersService, objectMapper, navigationGraphCache);
+        PolygonGeographicSafetyPolicy polygonGeographicSafetyPolicy = new PolygonGeographicSafetyPolicy(jdbcTemplate);
+        listingsController = new DiscoverListingsController(listingsService, objectMapper, navigationGraphCache, polygonGeographicSafetyPolicy);
+        markersController = new DiscoverMarkersController(markersService, objectMapper, navigationGraphCache, polygonGeographicSafetyPolicy);
     }
 
     @Test

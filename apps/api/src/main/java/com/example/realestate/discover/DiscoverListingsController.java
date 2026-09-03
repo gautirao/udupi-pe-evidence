@@ -46,11 +46,14 @@ public class DiscoverListingsController {
     private final DiscoverListingsPort service;
     private final ObjectMapper objectMapper;
     private final NavigationGraphCache navigationGraphCache;
+    private final PolygonGeographicSafetyPolicy polygonGeographicSafetyPolicy;
 
-    public DiscoverListingsController(DiscoverListingsPort service, ObjectMapper objectMapper, NavigationGraphCache navigationGraphCache) {
+    public DiscoverListingsController(DiscoverListingsPort service, ObjectMapper objectMapper,
+            NavigationGraphCache navigationGraphCache, PolygonGeographicSafetyPolicy polygonGeographicSafetyPolicy) {
         this.service = service;
         this.objectMapper = objectMapper;
         this.navigationGraphCache = navigationGraphCache;
+        this.polygonGeographicSafetyPolicy = polygonGeographicSafetyPolicy;
     }
 
     @GetMapping
@@ -142,6 +145,11 @@ public class DiscoverListingsController {
         // bbox is deliberately EXCLUDED from this check: it is the always-on render/perf
         // viewport prefilter and legitimately combines with any of the three scopes today.
         ResultScopeExclusivity.check(effectiveAreaKeys, polygon, viewportScope);
+
+        // Geographic-safety/eligibility policy for a committed POLYGON scope (#2420): rejects a
+        // polygon materially outside the selected city or too broad to be a meaningful
+        // neighbourhood-level search. No-op when polygon is null.
+        polygonGeographicSafetyPolicy.validate(city, polygon);
 
         // Convert rupees → paise
         Long priceMinPaise = priceMin != null ? priceMin * 100L : null;
