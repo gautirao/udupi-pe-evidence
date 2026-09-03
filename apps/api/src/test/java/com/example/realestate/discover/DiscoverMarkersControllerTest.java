@@ -553,8 +553,14 @@ class DiscoverMarkersControllerTest {
         ));
     }
 
+    // viewportScope alone → 200, populated on the outbound Filters (#2015)
+    //
+    // Was previously "inert" pre-#2015/#2016; the predicate builder and query pipeline now
+    // thread viewportScope through end-to-end, so this asserts the populated field rather than
+    // merely a 200 status.
+
     @Test
-    void viewportScopeAlone_returns200_notFoldedIntoFilters() throws Exception {
+    void viewportScopeAlone_returns200_andViewportScopePassedToService() throws Exception {
         when(service.getMarkers(any())).thenReturn(
                 new DiscoverMarkersResponse("udupi", List.of(), false, 0, 0L, 1000, false));
 
@@ -564,8 +570,55 @@ class DiscoverMarkersControllerTest {
                         .with(jwt()))
                 .andExpect(status().isOk());
 
-        // viewportScope lands inert (#2016 non-goal): not part of Filters/predicate.
-        verify(service).getMarkers(argThat(f -> f.bbox() == null));
+        verify(service).getMarkers(argThat(f ->
+                f.viewportScope() != null
+                && f.viewportScope().south() == 13.3
+                && f.viewportScope().west() == 74.7
+                && f.viewportScope().north() == 13.4
+                && f.viewportScope().east() == 74.8
+        ));
+    }
+
+    // viewportScope south > north → 400 (inverted bounds)
+
+    @Test
+    void viewportScopeSouthGreaterThanNorth_returns400() throws Exception {
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("viewportScope", "13.5,74.7,13.3,74.8")   // south=13.5 > north=13.3
+                        .with(jwt()))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
+
+    // viewportScope latitude out of [-90,90] range → 400 (oversized/invalid bounds)
+    //
+    // BboxParser (shared by bbox and viewportScope) has no dedicated max-span/max-area check —
+    // "oversized bounds" maps to the existing lat/lon range validation ("bbox_lat_out_of_range").
+
+    @Test
+    void viewportScopeLatitudeOutOfRange_returns400() throws Exception {
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("viewportScope", "13.3,74.7,95,74.8")   // north=95 > 90
+                        .with(jwt()))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
+
+    // viewportScope malformed (3 values) → 400, reuses bbox validation
+
+    @Test
+    void viewportScopeMalformed_returns400() throws Exception {
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("viewportScope", "13.3,74.7,13.4")   // only 3 values
+                        .with(jwt()))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
     }
 
     @Test

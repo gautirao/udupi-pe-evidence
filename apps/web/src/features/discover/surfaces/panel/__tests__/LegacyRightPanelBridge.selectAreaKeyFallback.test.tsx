@@ -250,6 +250,14 @@ function buildParams(overrides: {
       listingDataLoading: false,
       totalPages: 1,
       totalElements: 0,
+      // Issue #2015 (caller-wiring follow-up) — anon "Search this area"
+      // (VIEWPORT scope) reconciled-cards fields, threaded through the panel
+      // surface model.
+      isAnonViewport: false,
+      anonViewportListings: [],
+      anonViewportListingsLoading: false,
+      isErrorAnonViewport: false,
+      refetchAnonViewport: vi.fn(),
     },
     agri: {
       corridorGroups: [],

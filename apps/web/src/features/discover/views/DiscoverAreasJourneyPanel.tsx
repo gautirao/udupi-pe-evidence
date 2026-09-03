@@ -242,6 +242,23 @@ export interface DiscoverAreasJourneyPanelProps {
    */
   mapAreaListingsFetching?: boolean;
   /**
+   * Issue #2015 — the committed VIEWPORT-scope ("Search this area")
+   * listings, mirroring the legacy `DiscoverRightPanel` bridge's own
+   * `isAnonViewport`/`isAuthViewport`/`*ViewportListings*` fields. When
+   * either flag is true, `AreaLeafListingsSurface` renders these listings
+   * (and the VIEWPORT-scoped heading/copy on `AreaSelectedPanel`) instead of
+   * the AREA_SET `mapAreaListings` above, which otherwise stays keyed to the
+   * previously-committed area even after the map's own markers/query have
+   * already moved to VIEWPORT scope. Optional so every pre-existing render
+   * path/test (no VIEWPORT scope ever committed) keeps compiling unchanged.
+   */
+  isAnonViewport?: boolean;
+  anonViewportListings?: DiscoverCityListingItem[];
+  anonViewportListingsLoading?: boolean;
+  isAuthViewport?: boolean;
+  authViewportListings?: DiscoverCityListingItem[];
+  authViewportListingsLoading?: boolean;
+  /**
    * Issue #1956 PR-4 FINAL FIX PASS (regression fix) — the SAME
    * `urlActions.enterSchoolPicking` handler `DiscoverRightPanelContainer`
    * already wires to the legacy `DiscoverRightPanel`'s `onAddSchool` (see
@@ -324,6 +341,12 @@ export function DiscoverAreasJourneyPanel({
   mapAreaListingsFetching,
   mapAreaListingsAreaKey,
   mapAreaListingsRefetch,
+  isAnonViewport,
+  anonViewportListings,
+  anonViewportListingsLoading,
+  isAuthViewport,
+  authViewportListings,
+  authViewportListingsLoading,
   onAddSchool,
   onSelectedListingPreviewChange,
   cityLabel,
@@ -571,6 +594,16 @@ export function DiscoverAreasJourneyPanel({
         mapAreaListingsFetching={mapAreaListingsFetching}
         mapAreaListingsAreaKey={mapAreaListingsAreaKey}
         mapAreaListingsRefetch={mapAreaListingsRefetch}
+        // Issue #2015 — the committed VIEWPORT-scope ("Search this area")
+        // signals, forwarded from `AreaFirstJourneyPanel`. See
+        // `AreaLeafListingsSurface`'s own doc comment for how these swap the
+        // surface away from the stale AREA_SET `mapAreaListings` above.
+        isAnonViewport={isAnonViewport}
+        anonViewportListings={anonViewportListings}
+        anonViewportListingsLoading={anonViewportListingsLoading}
+        isAuthViewport={isAuthViewport}
+        authViewportListings={authViewportListings}
+        authViewportListingsLoading={authViewportListingsLoading}
         onAddSchool={onAddSchool}
         // Issue #1956 PR-5 (AC5.9 breadcrumb omission-class fix) — the SAME
         // journey.selectNode reference (AC3.9's ONE selection action) every
@@ -668,6 +701,18 @@ interface AreaLeafListingsSurfaceProps {
   mapAreaListingsAreaKey?: string | null;
   /** See `DiscoverAreasJourneyPanelProps.mapAreaListingsRefetch` — the working Retry handler. */
   mapAreaListingsRefetch?: () => void;
+  /**
+   * Issue #2015 — see `DiscoverAreasJourneyPanelProps.isAnonViewport`/etc.
+   * the committed VIEWPORT-scope ("Search this area") listings, which take
+   * priority over the AREA_SET `mapAreaListings` above whenever either flag
+   * is true.
+   */
+  isAnonViewport?: boolean;
+  anonViewportListings?: DiscoverCityListingItem[];
+  anonViewportListingsLoading?: boolean;
+  isAuthViewport?: boolean;
+  authViewportListings?: DiscoverCityListingItem[];
+  authViewportListingsLoading?: boolean;
   /** See `DiscoverAreasJourneyPanelProps.onAddSchool` — forwarded unchanged to `AreaSelectedPanel`. */
   onAddSchool?: () => void;
   /**
@@ -740,6 +785,12 @@ function AreaLeafListingsSurface({
   mapAreaListingsFetching,
   mapAreaListingsAreaKey,
   mapAreaListingsRefetch,
+  isAnonViewport,
+  anonViewportListings,
+  anonViewportListingsLoading,
+  isAuthViewport,
+  authViewportListings,
+  authViewportListingsLoading,
   onAddSchool,
   selectNode,
   onSelectedListingPreviewChange,
@@ -845,9 +896,25 @@ function AreaLeafListingsSurface({
   // failure mode degrades to "one extra fetch", never "wrong data".
   const hasMapAreaListings =
     mapAreaListings !== undefined && mapAreaListingsAreaKey === areaPoint.areaKey;
+  // Issue #2015 — a committed VIEWPORT scope ("Search this area") takes
+  // priority over the AREA_SET `mapAreaListings` above: once the map has
+  // moved to VIEWPORT scope, `mapAreaListings`/`mapAreaListingsAreaKey`
+  // still reflect the PREVIOUSLY-committed AREA leaf (nothing re-derives
+  // them on a viewport pan/search), so `hasMapAreaListings` alone would keep
+  // this surface pinned to stale AREA_SET data forever. Mirrors the legacy
+  // `DiscoverRightPanel` bridge's own `isViewportScope = isAnonViewport ||
+  // isAuthViewport` derivation.
+  const isViewportScope = Boolean(isAnonViewport || isAuthViewport);
+  const viewportListings = isAnonViewport ? (anonViewportListings ?? []) : (authViewportListings ?? []);
+  const viewportListingsLoading = isAnonViewport
+    ? (anonViewportListingsLoading ?? false)
+    : (authViewportListingsLoading ?? false);
   const areaListingsQuery = useDiscoverCityListings({
     city: resolveEffectiveCity(nav.city),
-    areaKeys: hasMapAreaListings ? [] : [areaPoint.areaKey],
+    // A VIEWPORT scope disables this surface's own AREA-keyed query too —
+    // it would otherwise issue a wasted fetch whose result is never used
+    // (viewportListings takes priority below regardless).
+    areaKeys: hasMapAreaListings || isViewportScope ? [] : [areaPoint.areaKey],
     limitPerArea: 50,
     propertyType:
       effectiveFilters.propertyTypes?.length === 1 ? effectiveFilters.propertyTypes[0] : undefined,
@@ -866,14 +933,18 @@ function AreaLeafListingsSurface({
   // this component's own (now-disabled-when-prop-present) query above.
   const rawAreaListings = useMemo(
     () =>
-      hasMapAreaListings
-        ? (mapAreaListings ?? [])
-        : (areaListingsQuery.data?.areas.flatMap((a) => a.listings) ?? []),
-    [hasMapAreaListings, mapAreaListings, areaListingsQuery.data],
+      isViewportScope
+        ? viewportListings
+        : hasMapAreaListings
+          ? (mapAreaListings ?? [])
+          : (areaListingsQuery.data?.areas.flatMap((a) => a.listings) ?? []),
+    [isViewportScope, viewportListings, hasMapAreaListings, mapAreaListings, areaListingsQuery.data],
   );
-  const isLoadingAreaListingsResolved = hasMapAreaListings
-    ? (mapAreaListingsLoading ?? false)
-    : areaListingsQuery.isLoading;
+  const isLoadingAreaListingsResolved = isViewportScope
+    ? viewportListingsLoading
+    : hasMapAreaListings
+      ? (mapAreaListingsLoading ?? false)
+      : areaListingsQuery.isLoading;
   // Issue #2353 (code-review fix) — was hardcoded `false` on the prop path.
   // `useDiscoverCityListings` uses `placeholderData: keepPreviousData`, so on
   // a filter/search rekey it deliberately keeps rendering the PREVIOUS
@@ -1160,6 +1231,14 @@ function AreaLeafListingsSurface({
         onCrumbGroup={onCrumbGroup}
         areaListings={areaListingsForPanel}
         isLoadingListings={isLoadingAreaListingsResolved}
+        // Issue #2015 — once a VIEWPORT scope ("Search this area") is
+        // committed, `areaListingsForPanel`/`isLoadingAreaListingsResolved`
+        // above already carry the VIEWPORT-scoped data (see
+        // `rawAreaListings`'s `isViewportScope` branch); this flag only
+        // switches `AreaSelectedPanel`'s own heading/copy (e.g. "Properties
+        // in this area" vs "Properties in {areaLabel}") to match, mirroring
+        // the legacy `DiscoverRightPanel` bridge's identical prop.
+        isViewportScope={isViewportScope}
         // Issue #2353 (code-review fix) — was omitted at this call site, so
         // AreaSelectedPanel's own `isFetching && !isInitialLoading` dimmed/
         // disabled-overlay convention (its established signal for "showing

@@ -92,7 +92,7 @@ public class RegionSummaryService {
                 citySlug, null, null, null, null, null, null, null,
                 null, null, null, null, null,
                 null, null, null,
-                null, null, normalizedPurpose, null, null
+                null, null, normalizedPurpose, null, null, null
         );
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(filters);
 

@@ -363,16 +363,16 @@ class CityActiveGating1935IT {
             + "active city returns the seeded listing")
     void cityAreaListings_inactiveEqualsUnknown_activeReturnsData() {
         CityAreaListingsResponse active = cityAreaListingsService.getAreaListings(
-                ACTIVE_CITY, List.of(ACTIVE_AREA), null, null, null, null, null, null, null, null, true);
+                ACTIVE_CITY, List.of(ACTIVE_AREA), null, null, null, null, null, null, null, null, null, true);
         assertThat(active.areas()).hasSize(1);
         assertThat(active.areas().get(0).listings()).isNotEmpty();
 
         assertThatThrownBy(() -> cityAreaListingsService.getAreaListings(
-                INACTIVE_CITY, List.of(INACTIVE_AREA), null, null, null, null, null, null, null, null, true))
+                INACTIVE_CITY, List.of(INACTIVE_AREA), null, null, null, null, null, null, null, null, null, true))
                 .hasMessageContaining("unknown_city");
 
         assertThatThrownBy(() -> cityAreaListingsService.getAreaListings(
-                UNKNOWN_CITY, List.of(UNKNOWN_AREA), null, null, null, null, null, null, null, null, true))
+                UNKNOWN_CITY, List.of(UNKNOWN_AREA), null, null, null, null, null, null, null, null, null, true))
                 .hasMessageContaining("unknown_city");
     }
 
@@ -658,7 +658,7 @@ class CityActiveGating1935IT {
                 city, null, null, null, null, null, null, null,
                 null, null, null, null, null,
                 null, null, null,
-                null, null, 0, 20, false, null, null);
+                null, null, 0, 20, false, null, null, null);
     }
 
     @Test
@@ -691,7 +691,7 @@ class CityActiveGating1935IT {
                 city, null, null, null, null, null, null, null,
                 null, null, null, null, null,
                 null, null, null,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
     }
 
     @Test

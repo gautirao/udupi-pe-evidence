@@ -1,6 +1,7 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useDiscoverSource, discoverPath, discoverKey } from '@/features/discover/state/DiscoverDataSourceContext';
+import { snapBbox } from '@/lib/bboxUtils';
 
 /**
  * Client freshness for public city listings, mirroring the endpoint's
@@ -109,6 +110,17 @@ export interface DiscoverCityListingsParams {
    */
   readyToMove?: boolean;
   /**
+   * Issue #2015 — viewport rectangle `[south, west, north, east]` for the anonymous
+   * "Search this area" bbox-only mode. Snapped to a 0.02° grid via `snapBbox()` before
+   * being sent (mirrors the convention in `useDiscoverListings.ts`). Non-finite values
+   * are treated as absent. When `areaKeys` is empty, a non-null `bbox` is REQUIRED — the
+   * backend rejects a request with both absent (400 `areaKeys_required`). When both are
+   * present, bbox narrows each area's results (existing behavior, unchanged). Preview
+   * mode does not forward bbox — its sandbox `/listings` endpoint only understands
+   * `areaKeys` (see the `source.mode === 'preview'` branch below).
+   */
+  bbox?: [number, number, number, number] | null;
+  /**
    * Issue #1616 — auth-branched price contract. When true, the api helper attaches
    * the JWT so the backend returns exact pricePaise (no priceBand). When false/absent,
    * no JWT is sent and the backend returns a coarse priceBand string.
@@ -138,12 +150,18 @@ export function useDiscoverCityListings({
   q,
   listingPurpose,
   readyToMove,
+  bbox,
   isAuthenticated = false,
 }: DiscoverCityListingsParams) {
   // Issue #1911 PR3 — see useDiscoverRegionSummary.ts for the default-context
   // ({mode:'live'}) byte-identical-live-behaviour rationale.
   const source = useDiscoverSource();
   const sortedKeys = [...areaKeys].sort();
+  // Issue #2015 — same snap/omission convention as useDiscoverListings.ts: non-finite
+  // values are treated as absent, and the snapped (not raw) tuple is what participates
+  // in the cache key so nearby camera jitter doesn't fragment the cache.
+  const snappedBbox =
+    bbox != null && bbox.every(Number.isFinite) ? snapBbox(bbox) : null;
 
   return useQuery<DiscoverCityListingsResponse>({
     queryKey: discoverKey(
@@ -159,6 +177,7 @@ export function useDiscoverCityListings({
       q?.trim() || null,
       listingPurpose ?? null,
       readyToMove ?? null,
+      snappedBbox ? snappedBbox.join(',') : null,
       // Issue #1616: include auth state so login/logout produces a separate cache bucket.
       // Anon callers receive priceBand; authed callers receive pricePaise — they must not
       // share a cache entry or a stale band response would be served post-login.
@@ -197,6 +216,9 @@ export function useDiscoverCityListings({
       if (q?.trim()) params.append('q', q.trim());
       if (listingPurpose) params.append('listingPurpose', listingPurpose);
       if (readyToMove) params.append('readyToMove', 'true');
+      // Issue #2015 — bbox-only "Search this area" viewport narrowing (or, when combined
+      // with areaKeys, in-area viewport narrowing — existing behavior, unchanged).
+      if (snappedBbox) params.append('bbox', snappedBbox.join(','));
       // Issue #1616: do NOT force skipAuth. When the user has a valid session the api
       // helper attaches the JWT (Bearer token) automatically, causing the backend to
       // return exact pricePaise. Anonymous callers have no session so no token is
@@ -209,7 +231,10 @@ export function useDiscoverCityListings({
     // with an empty city segment (`/api/discover/cities//listings`, 401). Boolean(city)
     // mirrors the existing city-readiness idiom used by useAreasNavigationJourney.ts
     // and area.ts rather than introducing a second city-validity owner.
-    enabled: areaKeys.length > 0 && Boolean(city),
+    // Issue #2015 — bbox-only mode: enabled when either areaKeys or a bbox is present
+    // (the backend requires at least one; areaKeys.length === 0 alone no longer disables
+    // the query when a bbox has been supplied instead).
+    enabled: (areaKeys.length > 0 || snappedBbox != null) && Boolean(city),
     staleTime: DISCOVER_CITY_LISTINGS_STALE_TIME_MS,
     placeholderData: keepPreviousData,
   });

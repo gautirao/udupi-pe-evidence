@@ -37,7 +37,7 @@ class RoutingDiscoverListingsServiceTest {
             "udupi", null, null, null, null, null, null, null,
             null, null, null, null, null, null, null, null,
             null, null, 0, 20, false, null, null
-    );
+    , null);
 
     private static final DiscoverListingsPage POSTGRES_PAGE =
             new DiscoverListingsPage(List.of(), 0, 20, 0L, 0, null);

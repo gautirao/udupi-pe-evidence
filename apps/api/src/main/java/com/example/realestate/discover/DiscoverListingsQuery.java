@@ -27,6 +27,7 @@ public record DiscoverListingsQuery(
         boolean includeAggregates,
         String listingPurpose,
         List<String> areaKeys,  // null = no area filter; non-empty = restrict to group members
+        DiscoverListingPredicateBuilder.Bbox viewportScope,
         /**
          * Opaque client-supplied echo (#2016). Never inspected or interpreted by the server —
          * the frontend uses it to detect and drop stale responses that raced ahead of a
@@ -62,11 +63,12 @@ public record DiscoverListingsQuery(
             int size,
             boolean includeAggregates,
             String listingPurpose,
-            List<String> areaKeys
+            List<String> areaKeys,
+            DiscoverListingPredicateBuilder.Bbox viewportScope
     ) {
         this(city, propertyTypes, priceMinPaise, priceMaxPaise, dateFrom, dateTo, bedrooms,
                 sellerTypes, backOnMarket, newToMarket, reraRegistered, readyToMove, polygon,
                 schoolLat, schoolLon, schoolRadiusKm, q, bbox, page, size, includeAggregates,
-                listingPurpose, areaKeys, null);
+                listingPurpose, areaKeys, viewportScope, null);
     }
 }

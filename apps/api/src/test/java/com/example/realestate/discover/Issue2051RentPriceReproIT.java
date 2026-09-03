@@ -126,7 +126,7 @@ class Issue2051RentPriceReproIT {
             + "monthlyRentRupees (exact) or a sale priceBand")
     void anonymousCaller_rentRowsExposeMonthlyRentBand() throws Exception {
         CityAreaListingsResponse resp = service.getAreaListings(
-                "udupi", List.of(MANIPAL), 10, null, null, null, null, null, null, null, false);
+                "udupi", List.of(MANIPAL), 10, null, null, null, null, null, null, null, null, false);
 
         List<AreaListingCard> cards = resp.areas().get(0).listings();
         assertThat(cards).hasSize(4);
@@ -180,7 +180,7 @@ class Issue2051RentPriceReproIT {
             + "the exact monthlyRentRupees verbatim from monthly_rent, with NO 100x conversion error")
     void authenticatedCaller_rentRowsExposeExactMonthlyRentRupees() throws Exception {
         CityAreaListingsResponse resp = service.getAreaListings(
-                "udupi", List.of(MANIPAL), 10, null, null, null, null, null, null, null, true);
+                "udupi", List.of(MANIPAL), 10, null, null, null, null, null, null, null, null, true);
 
         List<AreaListingCard> cards = resp.areas().get(0).listings();
         AreaListingCard saleCard = cards.stream().filter(c -> c.id().equals(saleListingId)).findFirst().orElseThrow();
@@ -217,7 +217,7 @@ class Issue2051RentPriceReproIT {
         // controller-level distinction (single city listings vs area-scoped) collapses to the
         // same service call, which is what we exercise here.
         CityAreaListingsResponse resp = service.getAreaListings(
-                "udupi", List.of(MANIPAL), 10, null, null, null, null, null, "rent", null, false);
+                "udupi", List.of(MANIPAL), 10, null, null, null, null, null, "rent", null, null, false);
 
         List<AreaListingCard> cards = resp.areas().get(0).listings();
         assertThat(cards).hasSize(3); // listingPurpose=rent filter applied server-side

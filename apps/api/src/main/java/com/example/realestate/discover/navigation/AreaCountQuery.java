@@ -192,7 +192,8 @@ public record AreaCountQuery(
                 null, // q — deliberately excluded
                 listingPurpose,
                 null, // excludePropertyTypes — not an applicable filter for this query
-                null  // areaKeys — deliberately excluded; would break the whole-city invariant
+                null, // areaKeys — deliberately excluded; would break the whole-city invariant
+                null  // viewportScope — deliberately excluded; navigation counts are city/area-scoped
         );
     }
 

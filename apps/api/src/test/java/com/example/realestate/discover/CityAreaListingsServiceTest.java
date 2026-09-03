@@ -117,7 +117,7 @@ class CityAreaListingsServiceTest {
         stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, 13.34091, 74.74215);
 
         CityAreaListingsResponse resp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, false);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, null, false);
 
         AreaListingCard card = resp.areas().get(0).listings().get(0);
         assertThat(card.latitude()).isEqualTo(13.34);
@@ -133,7 +133,7 @@ class CityAreaListingsServiceTest {
         stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, 13.34091, 74.74215);
 
         CityAreaListingsResponse resp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, true);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, null, true);
 
         AreaListingCard card = resp.areas().get(0).listings().get(0);
         assertThat(card.latitude()).isEqualTo(13.34);
@@ -150,7 +150,7 @@ class CityAreaListingsServiceTest {
         stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, null, null);
 
         CityAreaListingsResponse resp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, false);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, null, false);
 
         AreaListingCard card = resp.areas().get(0).listings().get(0);
         assertThat(card.latitude()).isNull();
@@ -168,7 +168,7 @@ class CityAreaListingsServiceTest {
         stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, null, null);
 
         service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, true, false);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, true, null, false);
 
         org.mockito.ArgumentCaptor<String> sqlCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
         org.mockito.Mockito.verify(jdbc).query(sqlCaptor.capture(), any(RowCallbackHandler.class), any(Object[].class));
@@ -182,7 +182,7 @@ class CityAreaListingsServiceTest {
         stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, null, null);
 
         service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, false);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, null, false);
 
         org.mockito.ArgumentCaptor<String> sqlCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
         org.mockito.Mockito.verify(jdbc).query(sqlCaptor.capture(), any(RowCallbackHandler.class), any(Object[].class));
@@ -196,7 +196,7 @@ class CityAreaListingsServiceTest {
         stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, null, null);
 
         service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, false, false);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, false, null, false);
 
         org.mockito.ArgumentCaptor<String> sqlCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
         org.mockito.Mockito.verify(jdbc).query(sqlCaptor.capture(), any(RowCallbackHandler.class), any(Object[].class));
@@ -211,9 +211,9 @@ class CityAreaListingsServiceTest {
         stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, 13.34091, 74.74215);
 
         CityAreaListingsResponse anonResp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, false);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, null, false);
         CityAreaListingsResponse authedResp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, true);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, null, true);
 
         AreaListingCard anonCard = anonResp.areas().get(0).listings().get(0);
         AreaListingCard authedCard = authedResp.areas().get(0).listings().get(0);
@@ -257,7 +257,7 @@ class CityAreaListingsServiceTest {
                 purpose, pricePaise, monthlyRent);
 
         CityAreaListingsResponse resp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, isAuthenticated);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, null, isAuthenticated);
 
         AreaListingCard card = resp.areas().get(0).listings().get(0);
         assertThat(card.listingPurpose()).isEqualTo(purpose);
@@ -280,9 +280,9 @@ class CityAreaListingsServiceTest {
                 "rent", SALE_PRICE_PAISE, RENT_MONTHLY_RENT);
 
         CityAreaListingsResponse anonResp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, false);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, null, false);
         CityAreaListingsResponse authedResp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, true);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, null, true);
 
         AreaListingCard anonCard = anonResp.areas().get(0).listings().get(0);
         AreaListingCard authedCard = authedResp.areas().get(0).listings().get(0);
@@ -310,9 +310,9 @@ class CityAreaListingsServiceTest {
                 "rent", null, null);
 
         CityAreaListingsResponse anonResp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, false);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, null, false);
         CityAreaListingsResponse authedResp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, true);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, null, true);
 
         assertThat(anonResp.areas().get(0).listings().get(0).monthlyRentBand()).isNull();
         assertThat(anonResp.areas().get(0).listings().get(0).monthlyRentRupees()).isNull();
@@ -329,9 +329,9 @@ class CityAreaListingsServiceTest {
                 "rent", null, 0L);
 
         CityAreaListingsResponse anonResp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, false);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, null, false);
         CityAreaListingsResponse authedResp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, true);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, null, true);
 
         AreaListingCard anonCard = anonResp.areas().get(0).listings().get(0);
         assertThat(anonCard.monthlyRentBand()).isNull();
@@ -350,9 +350,9 @@ class CityAreaListingsServiceTest {
                 "rent", null, -1000L);
 
         CityAreaListingsResponse anonResp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, false);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, null, false);
         CityAreaListingsResponse authedResp = service.getAreaListings(
-                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, true);
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, null, null, true);
 
         AreaListingCard anonCard = anonResp.areas().get(0).listings().get(0);
         assertThat(anonCard.monthlyRentBand()).isNull();
@@ -361,5 +361,120 @@ class CityAreaListingsServiceTest {
         AreaListingCard authedCard = authedResp.areas().get(0).listings().get(0);
         assertThat(authedCard.monthlyRentRupees()).isNull();
         assertThat(authedCard.monthlyRentBand()).isNull();
+    }
+
+    // ── #2015: bbox-only "Search this area" viewport path (areaKeys absent, bbox present) ──
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#2015: areaKeys=null + bbox present routes to the bbox-only path; "
+            + "response groups by the row's own area_key and lat/lng stays coarsened")
+    void getAreaListings_bboxOnly_areaKeysNull_routesToBboxOnlyPath_coarsensLatLng() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, 13.34091, 74.74215);
+        DiscoverListingPredicateBuilder.Bbox bbox =
+                new DiscoverListingPredicateBuilder.Bbox(13.30, 74.70, 13.40, 74.80);
+
+        CityAreaListingsResponse resp = service.getAreaListings(
+                "udupi", null, null, null, null, null, null, null, null, null, bbox, false);
+
+        assertThat(resp.areas()).hasSize(1);
+        AreaListingsEntry entry = resp.areas().get(0);
+        assertThat(entry.areaKey()).isEqualTo("IN|KA|Udupi|Malpe");
+        assertThat(entry.areaName()).isEqualTo("Malpe");
+        assertThat(entry.unknown()).isNull();
+        AreaListingCard card = entry.listings().get(0);
+        assertThat(card.latitude()).isEqualTo(13.34);
+        assertThat(card.longitude()).isEqualTo(74.74);
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#2015: empty areaKeys list (not null) with bbox present also routes to the bbox-only path")
+    void getAreaListings_bboxOnly_emptyAreaKeysList_alsoRoutesToBboxOnlyPath() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, 13.34091, 74.74215);
+        DiscoverListingPredicateBuilder.Bbox bbox =
+                new DiscoverListingPredicateBuilder.Bbox(13.30, 74.70, 13.40, 74.80);
+
+        CityAreaListingsResponse resp = service.getAreaListings(
+                "udupi", List.of(), null, null, null, null, null, null, null, null, bbox, false);
+
+        assertThat(resp.areas()).hasSize(1);
+        assertThat(resp.limitPerArea()).isEqualTo(20);
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#2015: blank-only areaKeys entries (e.g. areaKeys= with no value) with bbox present "
+            + "also route to the bbox-only path, same as null/empty")
+    void getAreaListings_bboxOnly_blankOnlyAreaKeysList_alsoRoutesToBboxOnlyPath() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, 13.34091, 74.74215);
+        DiscoverListingPredicateBuilder.Bbox bbox =
+                new DiscoverListingPredicateBuilder.Bbox(13.30, 74.70, 13.40, 74.80);
+
+        CityAreaListingsResponse resp = service.getAreaListings(
+                "udupi", List.of("", "  "), null, null, null, null, null, null, null, null, bbox, false);
+
+        assertThat(resp.areas()).hasSize(1);
+        assertThat(resp.limitPerArea()).isEqualTo(20);
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#2015: bbox-only SQL filters property_listings directly by the bbox rectangle "
+            + "(no areaKeys IN-clause) and binds the global BBOX_ONLY_MAX_RESULTS cap as the LIMIT, "
+            + "in west/south/east/north order")
+    void getAreaListings_bboxOnly_sqlUsesBboxPredicateAndBindsGlobalCapAsLimit() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, 13.34091, 74.74215);
+        // Bbox(south, west, north, east) — see DiscoverListingPredicateBuilder.Bbox.
+        DiscoverListingPredicateBuilder.Bbox bbox =
+                new DiscoverListingPredicateBuilder.Bbox(13.30, 74.70, 13.40, 74.80);
+
+        service.getAreaListings(
+                "udupi", null, null, null, null, null, null, null, null, null, bbox, false);
+
+        org.mockito.ArgumentCaptor<String> sqlCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.ArgumentCaptor<Object[]> paramsCaptor = org.mockito.ArgumentCaptor.forClass(Object[].class);
+        org.mockito.Mockito.verify(jdbc)
+                .query(sqlCaptor.capture(), any(RowCallbackHandler.class), paramsCaptor.capture());
+
+        assertThat(sqlCaptor.getValue()).contains("pl.geog && ST_MakeEnvelope(?, ?, ?, ?, 4326)::geography");
+        assertThat(sqlCaptor.getValue()).doesNotContain(" IN (");
+
+        // No optional filters set here: [city, bbox.west, bbox.south, bbox.east, bbox.north, LIMIT].
+        Object[] params = paramsCaptor.getValue();
+        assertThat(params).containsExactly("udupi", 74.70, 13.30, 74.80, 13.40, 20);
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#2015: bbox-only response's limitPerArea carries the global cap "
+            + "(BBOX_ONLY_MAX_RESULTS=20), not a per-area limit — even when a per-area limitPerArea is supplied")
+    void getAreaListings_bboxOnly_limitPerAreaFieldCarriesGlobalCapRegardlessOfRawLimit() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, 13.34091, 74.74215);
+        DiscoverListingPredicateBuilder.Bbox bbox =
+                new DiscoverListingPredicateBuilder.Bbox(13.30, 74.70, 13.40, 74.80);
+
+        // limitPerArea=3 has no effect on the bbox-only path — the global cap always wins.
+        CityAreaListingsResponse resp = service.getAreaListings(
+                "udupi", null, 3, null, null, null, null, null, null, null, bbox, false);
+
+        assertThat(resp.limitPerArea()).isEqualTo(20);
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#2015: bbox-only path unconditionally excludes agricultural_land, "
+            + "same as the area-grouped path")
+    void getAreaListings_bboxOnly_excludesAgriculturalLand() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", listingId, 13.34091, 74.74215);
+        DiscoverListingPredicateBuilder.Bbox bbox =
+                new DiscoverListingPredicateBuilder.Bbox(13.30, 74.70, 13.40, 74.80);
+
+        service.getAreaListings(
+                "udupi", null, null, null, null, null, null, null, null, null, bbox, false);
+
+        org.mockito.ArgumentCaptor<String> sqlCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(jdbc).query(sqlCaptor.capture(), any(RowCallbackHandler.class), any(Object[].class));
+        assertThat(sqlCaptor.getValue()).containsIgnoringCase("agricultural_land");
     }
 }

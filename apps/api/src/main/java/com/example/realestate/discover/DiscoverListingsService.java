@@ -325,7 +325,8 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                 q.q(),
                 q.listingPurpose(),
                 null,      // excludePropertyTypes — listings path does not apply type exclusion
-                q.areaKeys()
+                q.areaKeys(),
+                q.viewportScope()
         );
     }
 }

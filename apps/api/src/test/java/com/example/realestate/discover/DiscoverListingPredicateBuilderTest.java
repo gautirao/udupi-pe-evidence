@@ -16,7 +16,7 @@ class DiscoverListingPredicateBuilderTest {
         return new DiscoverListingPredicateBuilder.Filters(
                 city, null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
     }
 
     // ── 1. Empty/default filters → base predicate + city only ───────────────
@@ -40,7 +40,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", List.of("house"), null, null, null, null,
                 null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -56,7 +56,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 List.of(4), null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -72,7 +72,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 List.of(2, 4), null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -88,7 +88,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, 10_000L, null, null, null,
                 null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -103,7 +103,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, Boolean.TRUE, null, null, null,
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -118,7 +118,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, Boolean.TRUE, null, null,
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -143,7 +143,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                polygon, null, null, null, null, null, null, null, null);
+                polygon, null, null, null, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -191,7 +191,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                twoPoints, null, null, null, null, null, null, null, null);
+                twoPoints, null, null, null, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -215,7 +215,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                polygon, null, null, null, null, null, null, null, null);
+                polygon, null, null, null, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -242,7 +242,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                polygon, null, null, null, null, null, null, null, null);
+                polygon, null, null, null, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -261,7 +261,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, 13.0, 74.0, 3.0, null, null, null, null, null);
+                null, 13.0, 74.0, 3.0, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -288,7 +288,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, 13.0, 74.0, null, null, null, null, null, null); // schoolRadiusKm = null
+                null, 13.0, 74.0, null, null, null, null, null, null, null); // schoolRadiusKm = null
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -307,7 +307,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, 13.0, null, 2.0, null, null, null, null, null); // schoolLon = null
+                null, 13.0, null, 2.0, null, null, null, null, null, null); // schoolLon = null
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -324,7 +324,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, null, null, null, bbox, null, null, null, null);
+                null, null, null, null, bbox, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -352,6 +352,96 @@ class DiscoverListingPredicateBuilderTest {
                 "No bbox clause should be added when bbox is null");
     }
 
+    // ── 10c. viewportScope (#2015 "Search this area") ─────────────────────────
+    //
+    // Structurally identical envelope predicate to bbox (10a/10b above), but sourced from
+    // Filters.viewportScope() rather than Filters.bbox(). ResultScopeExclusivity (viewportScope
+    // mutually exclusive with polygon/areaKeys) is enforced at the controller layer, BEFORE a
+    // Filters instance reaches this builder — it is intentionally NOT re-verified here; see
+    // DiscoverListingsControllerTest / DiscoverMarkersControllerTest for that coverage.
+
+    @Test
+    void build_viewportScope_generatesEnvelopeClause_boundaryInclusive() {
+        DiscoverListingPredicateBuilder.Bbox viewportScope =
+                new DiscoverListingPredicateBuilder.Bbox(13.3, 74.7, 13.4, 74.8);
+        DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null,
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, viewportScope);
+
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
+
+        // Boundary-inclusive: && is the PostGIS bounding-box OVERLAP operator (not a strict
+        // containment test), so a point exactly on the envelope edge still matches.
+        assertTrue(sql.whereFragment().contains("pl.geog && ST_MakeEnvelope(?, ?, ?, ?, 4326)::geography"),
+                "Expected GIST-compatible boundary-inclusive envelope overlap predicate for viewportScope");
+        // param order: west, south, east, north
+        int wi = sql.params().indexOf(74.7);  // west
+        int si = sql.params().indexOf(13.3);  // south
+        int ei = sql.params().indexOf(74.8);  // east
+        int ni = sql.params().indexOf(13.4);  // north
+        assertTrue(wi >= 0 && si >= 0 && ei >= 0 && ni >= 0,
+                "All four viewportScope values must appear in params");
+        assertTrue(wi < si && si < ei && ei < ni,
+                "Param order must be west, south, east, north per ST_MakeEnvelope signature");
+    }
+
+    @Test
+    void build_viewportScope_doesNotSetBboxApplied() {
+        // Only the literal `bbox` field drives Sql.bboxApplied() — viewportScope is a distinct
+        // result-scope concept and must NOT be conflated with the always-on bbox render prefilter,
+        // even though it reuses the identical WHERE predicate shape.
+        DiscoverListingPredicateBuilder.Bbox viewportScope =
+                new DiscoverListingPredicateBuilder.Bbox(13.3, 74.7, 13.4, 74.8);
+        DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null,
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, viewportScope);
+
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
+
+        assertTrue(sql.whereFragment().contains("ST_MakeEnvelope"),
+                "viewportScope must still contribute the envelope clause to whereFragment");
+        assertFalse(sql.bboxApplied(),
+                "bboxApplied must stay false when only viewportScope (not bbox) is set");
+    }
+
+    @Test
+    void build_viewportScope_combinesWithOtherFilters_viaAnd() {
+        DiscoverListingPredicateBuilder.Bbox viewportScope =
+                new DiscoverListingPredicateBuilder.Bbox(13.3, 74.7, 13.4, 74.8);
+        DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", List.of("apartment"), null, null, null, null,
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, viewportScope);
+
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
+
+        assertTrue(sql.whereFragment().contains("pl.property_type IN (?)"),
+                "propertyTypes clause must still be present alongside viewportScope");
+        assertTrue(sql.whereFragment().contains("pl.geog && ST_MakeEnvelope(?, ?, ?, ?, 4326)::geography"),
+                "viewportScope envelope clause must still be present alongside propertyTypes");
+        assertTrue(sql.params().contains("apartment"), "propertyTypes param must be bound");
+        assertTrue(sql.params().contains(74.7) && sql.params().contains(13.3)
+                        && sql.params().contains(74.8) && sql.params().contains(13.4),
+                "viewportScope params must be bound");
+        // Both clauses are ANDed onto the same fragment — order in the SQL string mirrors
+        // build() field order (propertyTypes precedes viewportScope).
+        int propIdx = sql.whereFragment().indexOf("pl.property_type IN");
+        int scopeIdx = sql.whereFragment().indexOf("pl.geog && ST_MakeEnvelope");
+        assertTrue(propIdx >= 0 && scopeIdx > propIdx,
+                "propertyTypes clause must precede viewportScope clause in the assembled WHERE fragment");
+    }
+
+    @Test
+    void build_nullViewportScope_noEnvelopeClause() {
+        DiscoverListingPredicateBuilder.Sql sql =
+                DiscoverListingPredicateBuilder.build(minimal("udupi"));
+
+        assertFalse(sql.whereFragment().contains("ST_MakeEnvelope"),
+                "No envelope clause should be added when both bbox and viewportScope are null");
+    }
+
     // ── 11. reraRegistered=true → PG regex on rera_number ─────────────────
 
     @Test
@@ -359,7 +449,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, Boolean.TRUE, null,
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -389,7 +479,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, null, null, null, null, "apartment", null, null, null);
+                null, null, null, null, null, "apartment", null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -412,7 +502,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, null, null, null, null, "   ", null, null, null);
+                null, null, null, null, null, "   ", null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -429,7 +519,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, 13.0, 74.0, 2.0, null, "flat", null, null, null);
+                null, 13.0, 74.0, 2.0, null, "flat", null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -470,7 +560,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, null, null, null, null, null, "sale", null, null);
+                null, null, null, null, null, null, "sale", null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -487,7 +577,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, null, null, null, null, null, "rent", null, null);
+                null, null, null, null, null, null, "rent", null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -518,7 +608,7 @@ class DiscoverListingPredicateBuilderTest {
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null,
-                List.of("AGRICULTURAL_LAND"), null);
+                List.of("AGRICULTURAL_LAND"), null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -546,7 +636,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, null, null, null, null, null, "   ", null, null);
+                null, null, null, null, null, null, "   ", null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -583,7 +673,7 @@ class DiscoverListingPredicateBuilderTest {
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
-                List.of("IN|KA|Udupi|Manipal", "IN|KA|Udupi|Katapadi"));
+                List.of("IN|KA|Udupi|Manipal", "IN|KA|Udupi|Katapadi"), null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -612,7 +702,7 @@ class DiscoverListingPredicateBuilderTest {
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
-                List.of("IN|KA|Udupi|Manipal"));
+                List.of("IN|KA|Udupi|Manipal"), null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -645,7 +735,7 @@ class DiscoverListingPredicateBuilderTest {
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
-                List.of()); // empty list — controller would have rejected this
+                List.of(), null); // empty list — controller would have rejected this
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -669,7 +759,7 @@ class DiscoverListingPredicateBuilderTest {
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
                 polygon, null, null, null, null, null, null, null,
-                List.of("IN|KA|Udupi|Manipal"));
+                List.of("IN|KA|Udupi|Manipal"), null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -692,7 +782,7 @@ class DiscoverListingPredicateBuilderTest {
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
-                List.of("IN|KA|Udupi|Manipal", "IN|KA|Udupi|Katapadi", "IN|KA|Udupi|Malpe"));
+                List.of("IN|KA|Udupi|Manipal", "IN|KA|Udupi|Katapadi", "IN|KA|Udupi|Malpe"), null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 

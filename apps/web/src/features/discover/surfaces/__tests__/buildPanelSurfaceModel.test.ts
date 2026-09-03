@@ -97,6 +97,11 @@ function makeParams(overrides: DeepPartial<BuildPanelSurfaceModelParams> = {}): 
       listingDataLoading: false,
       totalPages: 1,
       totalElements: 0,
+      isAnonViewport: false,
+      anonViewportListings: [],
+      anonViewportListingsLoading: false,
+      isErrorAnonViewport: false,
+      refetchAnonViewport: vi.fn(),
     },
     agri: {
       corridorGroups: [],

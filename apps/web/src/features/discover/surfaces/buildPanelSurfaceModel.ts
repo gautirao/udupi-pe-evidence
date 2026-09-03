@@ -166,6 +166,29 @@ type MapDataSlice = Pick<
   | 'listingDataLoading'
   | 'totalPages'
   | 'totalElements'
+  // Issue #2015 — the anon "Search this area" (VIEWPORT scope) reconciled
+  // card list, threaded through so the panel surface can render the same
+  // listing identities the map's anon-viewport markers already use.
+  | 'isAnonViewport'
+  | 'anonViewportListings'
+  | 'anonViewportListingsLoading'
+  // Issue #2015 (caller-wiring follow-up) — the anon-viewport query's error
+  // state, threaded through so a consumer of `anonViewportListings` can
+  // distinguish "the anon-viewport fetch errored" from "genuinely zero
+  // listings" (mirrors #2353's `isErrorAreaListings` precedent above).
+  | 'isErrorAnonViewport'
+  // Issue #2015 (caller-wiring follow-up) — the SAME query's refetch, so a
+  // consumer of `anonViewportListings` can offer a working Retry-on-error
+  // instead of a dead button.
+  | 'refetchAnonViewport'
+  // Issue #2015 — the authenticated "Search this area" (VIEWPORT scope)
+  // reconciled card list, mirroring the anon-viewport fields above so the
+  // panel surface can swap away from the stale AREA_SET `areaListings` for
+  // an authenticated caller too.
+  | 'isAuthViewport'
+  | 'authViewportListings'
+  | 'authViewportListingsLoading'
+  | 'isErrorAuthViewport'
 >;
 type AgriSlice = Pick<
   ReturnType<typeof useDiscoverAgriController>,
@@ -383,6 +406,18 @@ type PanelGeographyView = Pick<
   | 'selectedGroupName'
   | 'focusedGroup'
   | 'isResolvingGroupMemberArea'
+  // Issue #2015 — see MapDataSlice's own doc comment.
+  | 'isAnonViewport'
+  | 'anonViewportListings'
+  | 'anonViewportListingsLoading'
+  // Issue #2015 (caller-wiring follow-up) — see MapDataSlice's own doc comment.
+  | 'isErrorAnonViewport'
+  // Issue #2015 — the authenticated-VIEWPORT equivalent of the anon fields
+  // above. See MapDataSlice's own doc comment.
+  | 'isAuthViewport'
+  | 'authViewportListings'
+  | 'authViewportListingsLoading'
+  | 'isErrorAuthViewport'
 >;
 type PanelGeographyCommands = Pick<
   PanelFields,
@@ -394,6 +429,8 @@ type PanelGeographyCommands = Pick<
   | 'selectGroupMemberArea'
   // Issue #2353 — see MapDataSlice's own doc comment.
   | 'refetchAreaListings'
+  // Issue #2015 (caller-wiring follow-up) — see MapDataSlice's own doc comment.
+  | 'refetchAnonViewport'
 >;
 
 /**
@@ -560,6 +597,14 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       listingDataLoading,
       totalPages,
       totalElements,
+      isAnonViewport,
+      anonViewportListings,
+      anonViewportListingsLoading,
+      isErrorAnonViewport,
+      isAuthViewport,
+      authViewportListings,
+      authViewportListingsLoading,
+      isErrorAuthViewport,
     },
     agri: {
       corridorGroups,
@@ -623,6 +668,14 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       selectedGroupName,
       focusedGroup,
       isResolvingGroupMemberArea,
+      isAnonViewport,
+      anonViewportListings,
+      anonViewportListingsLoading,
+      isErrorAnonViewport,
+      isAuthViewport,
+      authViewportListings,
+      authViewportListingsLoading,
+      isErrorAuthViewport,
     },
     regionGuide: { regionGuideRingActive, regionOverviewMarkerKind, regionSelectNonce },
     results: {
@@ -678,7 +731,7 @@ export function buildPanelSurfaceCommands(
     navigation: { setHoveredNavigationNodeKey, setFocusedClusterMemberAreaKeys },
     journeySwitch: { handleSelectJourney, selectGroupMemberArea },
     geography: { refetchRegionScopedGroups },
-    mapData: { refetchAreaListings },
+    mapData: { refetchAreaListings, refetchAnonViewport },
     agri: { refetchRegionalAreaGroups, refetchAgriGroupListings },
     results: { refetchGroupResults },
     school: { handleAreaFirstBack, journeyCommands },
@@ -709,6 +762,7 @@ export function buildPanelSurfaceCommands(
       armRegionSelect,
       selectGroupMemberArea,
       refetchAreaListings,
+      refetchAnonViewport,
     },
     results: { refetchGroupResults, setPage, handleBoundedSearch },
     agri: { refetchAgriGroupListings, refetchRegionalAreaGroups },

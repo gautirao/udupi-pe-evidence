@@ -183,6 +183,23 @@ export function useDiscoverMapDataController({
       ? { kind: 'city' as const }
       : markerScope;
 
+  // Issue #2015 code-review BLOCKING fix — `mapBbox` (useDiscoverViewportTracker)
+  // is a LIVE value that keeps drifting on every pan/zoom, regardless of what
+  // scope is actually committed. Once a VIEWPORT scope is committed, its
+  // frozen rectangle already reaches the query as its own `viewportScope`
+  // request param (see useDiscoverListings.ts/useDiscoverFilteredMarkers.ts —
+  // `resultScope.kind === 'VIEWPORT' ? resultScope.bounds : null`). `bbox` is
+  // a SEPARATE always-on render/perf prefilter that the backend ANDs with
+  // viewportScope (DiscoverListingPredicateBuilder.java) — so forwarding the
+  // still-drifting live `mapBbox` here would silently narrow every committed
+  // VIEWPORT result set to the intersection of the frozen rectangle and
+  // wherever the user has panned to since, without the user re-clicking
+  // "Search this area". Suppressed to `null` exactly like `effectiveMarkerScope`
+  // suppresses the AREA_SET-shaped marker scope for any non-AREA_SET commit —
+  // the frozen `viewportScope` param is already the sole spatial filter for a
+  // committed VIEWPORT scope.
+  const effectiveBbox = resultScope?.kind === 'VIEWPORT' ? null : mapBbox;
+
   const mapData = useDiscoverMapData({
     // Issue #1956 PR-4 (gate 3) — feeds the bridged AreaPoint so the
     // areaKeys derivation (useDiscoverMapData.ts:511) resolves to
@@ -244,7 +261,8 @@ export function useDiscoverMapDataController({
     // clears isTopGroupedLevel and re-enables the fetch.
     listingsEnabled: !isTopGroupedLevel,
     page,
-    bbox: mapBbox,
+    // Issue #2015 code-review BLOCKING fix — see `effectiveBbox`'s doc above.
+    bbox: effectiveBbox,
     journey: nav.journey,
     // Issue #1494 — thread buy/rent intent as listingPurpose filter
     listingPurpose: intentListingPurpose,

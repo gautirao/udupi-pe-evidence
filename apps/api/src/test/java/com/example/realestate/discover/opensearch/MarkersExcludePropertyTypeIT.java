@@ -130,7 +130,7 @@ class MarkersExcludePropertyTypeIT {
                 null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null,
                 null, excludePropertyTypes, null
-        );
+        , null);
     }
 
     /** Create the test index with explicit keyword mapping for property_type and date for sort. */

@@ -401,7 +401,7 @@ class NavigationCountParityAndScaleIT {
         return new DiscoverListingsQuery(
                 city, propertyTypes, null, null, null, null, bedrooms, sellerTypes,
                 null, null, null, null, null, null, null, null, null, null,
-                0, 50, false, listingPurpose, null);
+                0, 50, false, listingPurpose, null, null);
     }
 
     /**
@@ -417,7 +417,7 @@ class NavigationCountParityAndScaleIT {
                 q.dateFrom(), q.dateTo(), q.bedrooms(), q.sellerTypes(),
                 q.backOnMarket(), q.newToMarket(), q.reraRegistered(), q.readyToMove(),
                 q.polygon(), q.schoolLat(), q.schoolLon(), q.schoolRadiusKm(),
-                q.bbox(), q.q(), q.listingPurpose(), null, q.areaKeys());
+                q.bbox(), q.q(), q.listingPurpose(), null, q.areaKeys(), null);
     }
 
     // =========================================================================================
@@ -481,7 +481,7 @@ class NavigationCountParityAndScaleIT {
                 slug, null, null, null, null, null, null, null,
                 null, null, null, null, null,
                 null, null, null,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(filters);
 
         String sqlText = PostgresAreaCountProvider.COUNT_BY_AREA_SQL_TEMPLATE.formatted(

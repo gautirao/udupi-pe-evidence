@@ -328,7 +328,7 @@ class CityActiveGatingOpenSearchIT {
         DiscoverListingsQuery query = new DiscoverListingsQuery(
                 ACTIVE_CITY, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
-                null, null, 0, 20, true, null, List.of(AREA_A1, AREA_A2));
+                null, null, 0, 20, true, null, List.of(AREA_A1, AREA_A2), null);
 
         DiscoverListingsPage page = listingsAdapter.getListings(query);
 
@@ -354,13 +354,13 @@ class CityActiveGatingOpenSearchIT {
         return new DiscoverListingsQuery(
                 city, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
-                null, null, page, size, includeAggregates, null, areaKeys);
+                null, null, page, size, includeAggregates, null, areaKeys, null);
     }
 
     private static DiscoverListingPredicateBuilder.Filters markersFilters(String city, List<String> areaKeys) {
         return new DiscoverListingPredicateBuilder.Filters(
                 city, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null, areaKeys);
+                null, null, null, null, null, null, null, null, null, null, null, null, areaKeys, null);
     }
 
     /** Create the test index with explicit keyword mapping for area_key/city_slug/status, geo_point location, date for sort. */

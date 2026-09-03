@@ -124,12 +124,22 @@ describe('S6/S7 controller-ordering contract — static source-order guard', () 
     expect(controllerCallLine).toBeLessThan(mapDataCallLine);
   });
 
-  it('the composition root threads mapBbox into the map-data controller, and the controller threads it on as useDiscoverMapData\'s bbox', () => {
+  it('the composition root threads mapBbox into the map-data controller, and the controller threads it on (via effectiveBbox) as useDiscoverMapData\'s bbox', () => {
     const callSiteLine = firstLineIndexMatching(/useDiscoverMapDataController\(\{/);
     expect(callSiteLine).toBeGreaterThan(-1);
     const windowText = lines.slice(callSiteLine, callSiteLine + 40).join('\n');
     expect(windowText).toMatch(/^\s*mapBbox,$/m);
-    expect(mapDataControllerSource).toMatch(/bbox:\s*mapBbox,/);
+    // Issue #2015 code-review BLOCKING fix — the controller no longer forwards the
+    // raw, always-live `mapBbox` straight through: a committed VIEWPORT scope's
+    // frozen bounds already reach the query as `viewportScope`, so `mapBbox` is
+    // suppressed to null in that state via the `effectiveBbox` derivation (see
+    // useDiscoverMapDataController.ts's own doc comment on `effectiveBbox`) to
+    // avoid silently re-narrowing a committed "Search this area" result set to
+    // wherever the user has since panned. The property this test guards —
+    // mapBbox is genuinely threaded through to useDiscoverMapData's `bbox` param,
+    // not dropped — still holds; it's just no longer a direct 1:1 forward.
+    expect(mapDataControllerSource).toMatch(/const effectiveBbox = [\s\S]*?\bmapBbox\b/);
+    expect(mapDataControllerSource).toMatch(/bbox:\s*effectiveBbox,/);
   });
 
   it('the markersEnabled expression passed to useDiscoverMapData still references boundedSearchTriggered (school-first bounded-search gate, #1115)', () => {

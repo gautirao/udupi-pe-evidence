@@ -33,6 +33,13 @@ public class DiscoverListingsController {
     private static final int DEFAULT_SIZE = 20;
     private static final int MAX_SIZE = 50;
 
+    // Applies to both bbox and viewportScope — neither BboxParser's lat/lon-range check nor
+    // the south<=north/west<=east checks reject an overly large rectangle (e.g. "-90,-180,90,180"
+    // passes both). This is a shared safety cap so a single request cannot force an unbounded
+    // sequential/bitmap scan over the whole geog index. 10 degrees comfortably covers a
+    // city/metro-scale "Search this area" viewport with headroom to spare.
+    private static final double MAX_BOUNDS_SPAN_DEGREES = 10.0;
+
     private static final TypeReference<List<List<Double>>> POLYGON_TYPE =
             new TypeReference<>() {};
 
@@ -100,14 +107,16 @@ public class DiscoverListingsController {
 
         // Parse and validate bbox — the always-on render/perf viewport prefilter.
         DiscoverListingPredicateBuilder.Bbox bbox = BboxParser.parse(bboxParam);
+        validateBoundsSpan(bbox, "bbox_span_exceeds_max");
 
-        // Parse and validate viewportScope (#2016) — structurally distinct from bbox above.
-        // Same "south,west,north,east" encoding (reuses BboxParser's validation), but this is
-        // a candidate result SCOPE (one of AREA_SET/POLYGON/VIEWPORT), not the render/perf
-        // prefilter. It currently lands inert: no query behaviour is derived from its bounds
-        // yet (the #2015 "Search this area" activation is a separate, not-yet-shipped change);
-        // only its presence participates in the exclusivity check below.
+        // Parse and validate viewportScope (#2015/#2016) — structurally distinct from bbox
+        // above. Same "south,west,north,east" encoding (reuses BboxParser's validation), but
+        // this is a candidate result SCOPE (one of AREA_SET/POLYGON/VIEWPORT), not the
+        // render/perf prefilter: DiscoverListingPredicateBuilder applies it as an additional
+        // pl.geog && ST_MakeEnvelope(...) predicate (#2015), and its presence also participates
+        // in the exclusivity check below.
         DiscoverListingPredicateBuilder.Bbox viewportScope = BboxParser.parse(viewportScopeParam);
+        validateBoundsSpan(viewportScope, "viewport_scope_span_exceeds_max");
 
         // areaKeys: absent (null) = no area filter; present-but-empty = client bug → reject.
         // Non-empty list is forwarded as-is and ANDed with the city subselect in the builder.
@@ -162,12 +171,26 @@ public class DiscoverListingsController {
                 includeAggregates,
                 listingPurpose,
                 effectiveAreaKeys,
+                viewportScope,
                 scopeFingerprint
         );
 
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .body(service.getListings(query));
+    }
+
+    /**
+     * Rejects a bbox/viewportScope rectangle whose lat or lon span exceeds
+     * {@link #MAX_BOUNDS_SPAN_DEGREES}. No-op when {@code bounds} is null (param absent).
+     */
+    private static void validateBoundsSpan(DiscoverListingPredicateBuilder.Bbox bounds, String errorCode) {
+        if (bounds == null) return;
+        double latSpan = bounds.north() - bounds.south();
+        double lonSpan = bounds.east() - bounds.west();
+        if (latSpan > MAX_BOUNDS_SPAN_DEGREES || lonSpan > MAX_BOUNDS_SPAN_DEGREES) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, errorCode);
+        }
     }
 
     /**

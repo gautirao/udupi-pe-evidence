@@ -54,6 +54,19 @@ export interface AreaFirstJourneyPanelView {
     // surface can distinguish "showing stale keepPreviousData while a
     // refetch is in flight" from "fully settled" on the prop path.
     | 'isFetchingAreaListings'
+    // Issue #2015 — the committed VIEWPORT-scope ("Search this area")
+    // listings, mirroring the legacy `DiscoverRightPanel` bridge's own
+    // `isAnonViewport`/`isAuthViewport`/`*ViewportListings*` fields (see
+    // that component's `isViewportScope` derivation). Without these, this
+    // canonical area-first journey has no way to know a VIEWPORT scope is
+    // active at all — `mapAreaListings` below stays keyed to the stale
+    // AREA_SET leaf even after "Search this area" is clicked.
+    | 'isAnonViewport'
+    | 'anonViewportListings'
+    | 'anonViewportListingsLoading'
+    | 'isAuthViewport'
+    | 'authViewportListings'
+    | 'authViewportListingsLoading'
   >;
   filters: Pick<DiscoverPanelSurfaceView['filters'], 'filters'>;
   schools: DiscoverPanelSurfaceView['schools'];
@@ -122,6 +135,12 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
     isErrorAreaListings,
     selectedArea,
     isFetchingAreaListings,
+    isAnonViewport,
+    anonViewportListings,
+    anonViewportListingsLoading,
+    isAuthViewport,
+    authViewportListings,
+    authViewportListingsLoading,
   } = view.geography;
   const { filters } = view.filters;
   const { selectedSchool, schools, schoolsQuery, schoolListings } = view.schools;
@@ -222,6 +241,17 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
         mapAreaListingsFetching={isFetchingAreaListings}
         mapAreaListingsAreaKey={selectedArea?.areaKey ?? null}
         mapAreaListingsRefetch={refetchAreaListings}
+        // Issue #2015 — the committed VIEWPORT-scope ("Search this area")
+        // signals, mirrored from the legacy `DiscoverRightPanel` bridge (see
+        // that component's `isAnonViewport || isAuthViewport` derivation).
+        // `AreaLeafListingsSurface` uses these to swap away from the stale
+        // AREA_SET `mapAreaListings` above once a VIEWPORT scope is active.
+        isAnonViewport={isAnonViewport}
+        anonViewportListings={anonViewportListings}
+        anonViewportListingsLoading={anonViewportListingsLoading}
+        isAuthViewport={isAuthViewport}
+        authViewportListings={authViewportListings}
+        authViewportListingsLoading={authViewportListingsLoading}
         // Issue #1956 PR-4 FINAL FIX PASS (regression fix) — the canonical
         // AREA-leaf surface silently dropped the "Add a school in this
         // area" CTA because this call site never supplied `onAddSchool`

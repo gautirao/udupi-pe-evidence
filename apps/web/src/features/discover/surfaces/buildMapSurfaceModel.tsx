@@ -13,6 +13,7 @@ import type { useDiscoverRegionGuideController } from '@/features/discover/contr
 import type { useDiscoverOverviewNavigationController } from '@/features/discover/controllers/useDiscoverOverviewNavigationController';
 import type { useDiscoverMobilePresentationController } from '@/features/discover/controllers/useDiscoverMobilePresentationController';
 import type { useDiscoverViewportTracker } from '@/features/discover/controllers/useDiscoverViewportTracker';
+import type { useDiscoverViewportSearch } from '@/features/discover/controllers/useDiscoverViewportSearch';
 import type { useDiscoverMarkerController } from '@/features/discover/controllers/useDiscoverMarkerController';
 import type { useDiscoverPageContext } from '@/features/discover/controllers/useDiscoverPageContext';
 import type { useDiscoverPageStateController } from '@/features/discover/controllers/useDiscoverPageStateController';
@@ -89,7 +90,7 @@ type MapLayersView = Pick<
   | 'areaRestoreArea'
 > &
   Pick<DiscoverMapCanvasProps, 'selectedRegion' | 'selectedMaxKm' | 'filteredAgriListings' | 'agriDestinationMarkers'> &
-  Pick<DiscoverMapCanvasProps, 'overviewAreas' | 'areaSearchMatchKeys' | 'hoveredAreaKeyForMap'> &
+  Pick<DiscoverMapCanvasProps, 'overviewAreas' | 'discoverAreas' | 'areaSearchMatchKeys' | 'hoveredAreaKeyForMap'> &
   Pick<DiscoverMapCanvasProps, 'schoolZoneLabels'> &
   Pick<DiscoverMapCanvasProps, 'isRegionOverview' | 'regionOverviewShortLabel'>;
 type MapDrawingCommands = Pick<
@@ -100,6 +101,11 @@ type MapDrawingCommands = Pick<
   | 'isReplaceScopeConfirmOpen'
   | 'handleConfirmReplaceScope'
   | 'handleCancelReplaceScope'
+  // Issue #2015 — commits the live viewport as a VIEWPORT result scope
+  // (AC2/AC7); reuses this already-spread `commands.drawing` group (see
+  // DiscoverMapSurface.tsx) so it reaches DiscoverMapCanvasProps without a
+  // new spread group, same shape as the ReplaceResultScopeDialog fields above.
+  | 'onActivateViewportSearch'
 >;
 
 type MapNavigationView = Pick<DiscoverMapCanvasProps, 'showSchoolBreadcrumb' | 'focusedGroup' | 'city'> &
@@ -163,6 +169,12 @@ type MapStatusView = Pick<
   | 'isAuthenticated'
   | 'hasActiveAnonFilter'
   | 'announcedBadgeText'
+  // Issue #2015 — "Search this area" CTA dirty-state (AC1) and eligibility
+  // gating (MUST-HAVE #2); reuses the already-spread `view.status` group
+  // (see DiscoverMapSurface.tsx) so it reaches DiscoverMapCanvasProps
+  // without a new spread group.
+  | 'viewportSearchIsDirty'
+  | 'viewportSearchIsEligible'
 >;
 
 type MapMobileView = Pick<DiscoverMapCanvasProps, 'mobileListButton'>;
@@ -243,6 +255,7 @@ type MapCameraSlice = Pick<
 type MapLayerSlice = Pick<
   ReturnType<typeof useDiscoverMapLayerController>,
   | 'overviewAreas'
+  | 'discoverAreas'
   | 'areaSearchMatchKeys'
   | 'resolvedRegionLabel'
   | 'regionOverviewMarkerKind'
@@ -281,6 +294,7 @@ export type BuildMapSurfaceViewParams = Omit<
   | 'agriGroupFocusBounds'
   | 'isColdNavigate'
   | 'overviewAreas'
+  | 'discoverAreas'
   | 'handleOverviewAreaClick'
   | 'areaSearchMatchKeys'
   | 'hoveredAreaKeyForMap'
@@ -369,6 +383,13 @@ export type BuildMapSurfaceViewParams = Omit<
   | 'isReplaceScopeConfirmOpen'
   | 'handleConfirmReplaceScope'
   | 'handleCancelReplaceScope'
+  // Issue #2015 — command, not view data; lives in MapDrawingCommands below.
+  | 'onActivateViewportSearch'
+  // Issue #2015 — view data, but derived from viewportSearchController.isDirty
+  // / .isEligible (already a param below) rather than supplied as its own
+  // flat field.
+  | 'viewportSearchIsDirty'
+  | 'viewportSearchIsEligible'
   | 'setMapZoom'
   | 'setMapReady'
   | 'handleCityChange'
@@ -480,6 +501,13 @@ export type BuildMapSurfaceViewParams = Omit<
     'bottomOcclusionPx' | 'previewOcclusionPx' | 'isPreviewSheetOpen' | 'selectedListingPreview'
   >;
   viewportTrackerController: Pick<ReturnType<typeof useDiscoverViewportTracker>, 'handleBoundsChange'>;
+  /**
+   * Issue #2015 — "Search this area" CTA dirty-state (AC1) and eligibility
+   * gating (MUST-HAVE #2, PR review 5085561270): `isEligible` reflects
+   * whether the current navigation level has a committed AREA_SET/POLYGON
+   * ResultScope active — the CTA must never render without it.
+   */
+  viewportSearchController: Pick<ReturnType<typeof useDiscoverViewportSearch>, 'isDirty' | 'isEligible'>;
   markerController: Pick<
     ReturnType<typeof useDiscoverMarkerController>,
     'markerPixelPos' | 'selectedMarkerListing' | 'handlePopoverDismiss' | 'handleSelectMarkerListing' | 'handleMarkerClickWithPosition'
@@ -498,6 +526,9 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
     isGroupResultsState,
     isNodeListingsState,
     isMarkerPopoverEligible: rawIsMarkerPopoverEligible,
+    // Issue #2015 — "Search this area" CTA dirty-state (AC1) and eligibility
+    // gating (MUST-HAVE #2).
+    viewportSearchController: { isDirty: isViewportSearchDirty, isEligible: isViewportSearchEligible },
   } = params;
 
   // Issue #2408 AC — restyled as the mock's segmented "List | Map" pill
@@ -578,6 +609,7 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
     },
     mapLayerController: {
       overviewAreas,
+      discoverAreas,
       areaSearchMatchKeys,
       resolvedRegionLabel,
       regionOverviewMarkerKind,
@@ -620,6 +652,7 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
       filters,
       isLandingState,
       overviewAreas,
+      discoverAreas,
       focusedGroupAreas,
       areaLayerMaxZoom,
       selectedArea,
@@ -689,6 +722,10 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
       isAuthenticated,
       hasActiveAnonFilter,
       announcedBadgeText,
+      /** Issue #2015 — "Search this area" CTA dirty-state (AC1). */
+      viewportSearchIsDirty: isViewportSearchDirty,
+      /** Issue #2015 MUST-HAVE #2 — CTA eligibility gating (PR review 5085561270). */
+      viewportSearchIsEligible: isViewportSearchEligible,
     },
     mobile: { mobileListButton },
     regionGuide: {
@@ -780,6 +817,8 @@ export type BuildMapSurfaceCommandsParams = Pick<
     'handlePreviewSheetHeightChange'
   >;
   viewportTrackerController: Pick<ReturnType<typeof useDiscoverViewportTracker>, 'handleBoundsChange'>;
+  /** Issue #2015 — commits the live viewport as a VIEWPORT result scope (AC2/AC7). */
+  viewportSearchController: Pick<ReturnType<typeof useDiscoverViewportSearch>, 'activate'>;
   markerController: Pick<
     ReturnType<typeof useDiscoverMarkerController>,
     | 'handlePopoverDismiss'
@@ -823,6 +862,8 @@ export function buildMapSurfaceCommands(
     overviewNavigationController: { handleOverviewAreaClick },
     mobilePresentationController: { handlePreviewSheetHeightChange },
     viewportTrackerController: { handleBoundsChange },
+    // Issue #2015 — commits the live viewport as a VIEWPORT result scope (AC2/AC7).
+    viewportSearchController: { activate: activateViewportSearch },
     markerController: {
       handlePopoverDismiss,
       handleSelectMarkerListing,
@@ -842,6 +883,8 @@ export function buildMapSurfaceCommands(
       isReplaceScopeConfirmOpen,
       handleConfirmReplaceScope,
       handleCancelReplaceScope,
+      // Issue #2015 — commits the live viewport as a VIEWPORT result scope (AC2/AC7).
+      onActivateViewportSearch: activateViewportSearch,
     },
     navigation: {
       handleOverviewAreaClick,

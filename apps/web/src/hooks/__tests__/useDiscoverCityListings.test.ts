@@ -460,3 +460,73 @@ describe('useDiscoverCityListings — preview mode (Issue #1911 PR3)', () => {
     expect(previewKey).toEqual(['preview', 7, 42, ...(liveKey as unknown[])]);
   });
 });
+
+/**
+ * useDiscoverCityListings — bbox / anon-viewport mode (Issue #2015, PR #2425 review
+ * comment 5085561270, MUST-HAVE #4)
+ *
+ * WHAT THIS TESTS: stale-response protection. When the bbox query param changes
+ * before the in-flight request for the OLD bbox resolves, and that older response
+ * arrives AFTER the newer request's response, TanStack Query must never let the
+ * older response overwrite the current (newer) query key's rendered `data`. This
+ * is tested against the REAL, unmocked `useDiscoverCityListings` hook — only the
+ * underlying `api.get` transport is mocked — by resolving two overlapping fetches
+ * out of order and asserting `data` tracks the latest bbox, not the last-resolved
+ * promise.
+ *
+ * The two bboxes are chosen 0.6 degrees apart, comfortably wider than the 0.02-degree
+ * snap grid `snapBbox()` uses internally, so they are guaranteed to produce distinct
+ * query keys (and therefore distinct fetches/cache entries) regardless of the exact
+ * floor/ceil snapping behavior.
+ */
+describe('useDiscoverCityListings — bbox / anon-viewport mode (Issue #2015)', () => {
+  it('stale-response protection: an older bbox response that resolves after a newer one never overwrites the current bbox result', async () => {
+    let resolveOld!: (value: unknown) => void;
+    let resolveNew!: (value: unknown) => void;
+    const oldPromise = new Promise((resolve) => {
+      resolveOld = resolve;
+    });
+    const newPromise = new Promise((resolve) => {
+      resolveNew = resolve;
+    });
+
+    mockGet.mockImplementationOnce(() => oldPromise);
+    mockGet.mockImplementationOnce(() => newPromise);
+
+    const OLD_BBOX: [number, number, number, number] = [13.0, 74.0, 13.02, 74.02];
+    const NEW_BBOX: [number, number, number, number] = [13.6, 74.6, 13.62, 74.62];
+
+    const OLD_RESPONSE = {
+      city: 'udupi',
+      limitPerArea: 20,
+      areas: [{ areaKey: 'udupi|old-area', areaName: 'Old Area', listings: [{ id: 'stale-listing' }] }],
+    };
+    const NEW_RESPONSE = {
+      city: 'udupi',
+      limitPerArea: 20,
+      areas: [{ areaKey: 'udupi|new-area', areaName: 'New Area', listings: [{ id: 'current-listing' }] }],
+    };
+
+    const { result, rerender } = renderHook(
+      ({ bbox }: { bbox: [number, number, number, number] }) =>
+        useDiscoverCityListings({ city: 'udupi', areaKeys: [], bbox, isAuthenticated: false }),
+      { wrapper: makeWrapper(), initialProps: { bbox: OLD_BBOX } },
+    );
+
+    // Change bbox before the old request resolves — this fires the second (newer) request.
+    rerender({ bbox: NEW_BBOX });
+
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+
+    // Resolve the NEWER request first.
+    resolveNew(NEW_RESPONSE);
+    await waitFor(() => expect(result.current.data?.areas[0]?.areaKey).toBe('udupi|new-area'));
+
+    // Now resolve the OLDER (stale) request — it must NOT be applied to the current state.
+    resolveOld(OLD_RESPONSE);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(result.current.data?.areas[0]?.areaKey).toBe('udupi|new-area');
+    expect(result.current.data?.areas[0]?.listings[0]?.id).toBe('current-listing');
+  });
+});

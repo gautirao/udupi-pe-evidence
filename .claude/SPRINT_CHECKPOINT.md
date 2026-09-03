@@ -1,3 +1,5 @@
+[lane-2015] Issue #2015 approved plan: .claude/handoffs/issue-2015/approved-plan.toml (sha256: bbf4d862a94d806cdb3e24ad24d37ceea6489b829ade3e1f08e07975f141cd91) — PLAN_REVIEW APPROVED, materialized 2026-09-01
+
 === MILESTONE #15 ROLLING CHECKPOINT (2026-05-07 00:30 GMT+1) ===
 
 **Milestone:** `discover-area-journey-figma-parity`

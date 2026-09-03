@@ -69,6 +69,14 @@ function toMapParams<T extends Record<string, unknown>>(f: T) {
     regionGuideController: { ...(f.regionGuideController as object), regionGuideVisible: g.regionGuideVisible, regionGuideRingActive: g.regionGuideRingActive },
     mobilePresentationController: { ...(f.mobilePresentationController as object), isPreviewSheetOpen: g.isPreviewSheetOpen, selectedListingPreview: g.selectedListingPreview },
     markerController: { ...(f.markerController as object), showMarkerInList: g.showMarkerInList },
+    // MUST-HAVE #2 (PR review 5085561270) — viewportSearchController now feeds
+    // both isDirty/isEligible (view builder) and activate (commands builder).
+    viewportSearchController: {
+      ...(f.viewportSearchController as object),
+      isDirty: g.isDirty,
+      isEligible: g.isEligible,
+      activate: g.activate,
+    },
   } as never;
 }
 
@@ -136,6 +144,10 @@ function makeCameraController(): Record<string, unknown> {
 function makeMapLayerController(): Record<string, unknown> {
   return {
     overviewAreas: [],
+    // Issue #2015 MUST-HAVE #3 — nav-state-independent area lookup added
+    // alongside overviewAreas; kept in this fixture for shape parity with
+    // the real controller's return object (see MapLayerSlice).
+    discoverAreas: [],
     areaSearchMatchKeys: undefined,
     resolvedRegionLabel: null,
     regionOverviewMarkerKind: 'default' as never,
@@ -275,6 +287,10 @@ function makeViewParams(
     mobilePresentationController: makeMobilePresentationController(),
     viewportTrackerController: makeViewportTrackerController(),
     markerController: makeMarkerController(),
+    // MUST-HAVE #2 (PR review 5085561270) — defaults to ineligible/not-dirty;
+    // individual tests override via viewportSearchController.
+    isDirty: false,
+    isEligible: false,
     ...overrides,
   });
 }
@@ -383,6 +399,8 @@ describe('buildMapSurfaceCommands', () => {
       mobilePresentationController: makeMobilePresentationController(),
       viewportTrackerController: makeViewportTrackerController(),
       markerController: makeMarkerController(),
+      // MUST-HAVE #2 (PR review 5085561270) — commands builder only reads activate().
+      activate: vi.fn(),
       ...overrides,
     });
   }

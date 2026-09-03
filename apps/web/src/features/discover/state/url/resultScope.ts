@@ -210,14 +210,19 @@ export function useResultScopeUrlDomain(
   const previous = useMemo(() => decodePrev(rprev), [rprev]);
 
   const commitResultScope = useCallback(
-    (scope: ResultScope) => {
+    (scope: ResultScope, opts?: { history: 'push' | 'replace' }) => {
       setUrlParams(
         (prev) => {
           const next = new URLSearchParams(prev);
           applyResultScopeCommit(next, scope);
           return next;
         },
-        { replace: false }, // PUSH — one history entry per committed scope change (J3.4/J3.5).
+        // PUSH by default — one history entry per committed scope change (J3.4/J3.5).
+        // Issue #2015 AC7 — VIEWPORT activation passes `{ history: 'replace' }` so
+        // rapid pan/zoom -> "Search this area" commits don't spam the back-button;
+        // scope-boundary transitions (Return to Area, AREA_SET/POLYGON selection)
+        // omit opts and keep the original PUSH behavior.
+        { replace: opts?.history === 'replace' },
       );
     },
     [setUrlParams],

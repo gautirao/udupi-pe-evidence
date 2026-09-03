@@ -43,7 +43,8 @@ public class DiscoverListingPredicateBuilder {
             String q,                      // keyword search query; null/blank = no FTS filter
             String listingPurpose,         // 'sale' or 'rent'; null = no filter
             List<String> excludePropertyTypes,  // property types to exclude via NOT IN; null = no exclusion
-            List<String> areaKeys          // restrict to specific area_keys (group members); null = no filter; MUST NOT be empty
+            List<String> areaKeys,         // restrict to specific area_keys (group members); null = no filter; MUST NOT be empty
+            Bbox viewportScope              // #2015 "Search this area" candidate result scope; boundary-inclusive rectangle filter, nullable
     ) {}
 
     /**
@@ -249,6 +250,23 @@ public class DiscoverListingPredicateBuilder {
             params.add(b.east());
             params.add(b.north());
             bboxApplied = true;
+        }
+
+        // viewportScope (#2015) — "Search this area" candidate result scope. Structurally
+        // identical predicate to bbox above (same GiST-indexed pl.geog column, same
+        // boundary-inclusive && overlap operator, same ST_MakeEnvelope(west, south, east, north,
+        // 4326)::geography envelope), but semantically distinct: bbox is the always-on
+        // render/perf viewport prefilter, while viewportScope is one of the three mutually
+        // exclusive candidate result scopes (AREA_SET/POLYGON/VIEWPORT) enforced by
+        // ResultScopeExclusivity at the controller layer before Filters is built. Reuses
+        // idx_property_listings_geog — no new index required.
+        if (f.viewportScope() != null) {
+            Bbox vs = f.viewportScope();
+            sb.append(" AND pl.geog && ST_MakeEnvelope(?, ?, ?, ?, 4326)::geography");
+            params.add(vs.west());
+            params.add(vs.south());
+            params.add(vs.east());
+            params.add(vs.north());
         }
 
         // keyword search — FTS via the search_vector generated column added by V18.

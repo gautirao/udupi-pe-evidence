@@ -33,6 +33,18 @@ export interface UseDiscoverMarkerPopoverControllerParams {
   isLoadingAreaListings: boolean;
   isErrorAreaListings: boolean;
   markersLoading: boolean;
+  /**
+   * Issue #2015 — true only for an anonymous caller with a COMMITTED VIEWPORT
+   * `resultScope` ("Search this area"). Sourced from `useDiscoverMapData.ts`'s
+   * `isAnonViewport` (via `useDiscoverMapDataController`), passed straight through to
+   * `resolveMarkerPopover`/`resolveMarkerListings` unmodified.
+   */
+  isAnonViewport: boolean;
+  /**
+   * Issue #2015 — anon-safe, band-priced marker set for the committed VIEWPORT scope.
+   * Sourced from `useDiscoverMapData.ts`'s `anonViewportMarkerListings`.
+   */
+  anonViewportMarkerListings: PropertyListingWithImages[];
   /** The marker-selection controller's outputs — the local click/URL state this reconciles against. */
   markerSelection: Pick<
     ReturnType<typeof useDiscoverMarkerController>,
@@ -86,6 +98,8 @@ export function useDiscoverMarkerPopoverController({
   isLoadingAreaListings,
   isErrorAreaListings,
   markersLoading,
+  isAnonViewport,
+  anonViewportMarkerListings,
   markerSelection,
 }: UseDiscoverMarkerPopoverControllerParams) {
   const {
@@ -163,6 +177,8 @@ export function useDiscoverMarkerPopoverController({
     isLoadingAreaListings,
     isErrorAreaListings,
     markersLoading,
+    isAnonViewport,
+    anonViewportMarkerListings,
     isMarkerPopoverEligible,
     selectedMarkerListing,
   });

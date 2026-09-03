@@ -125,7 +125,7 @@ class ListingPurposeOpenSearchIT {
                 null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null,
                 listingPurpose, null, null
-        );
+        , null);
     }
 
     /** Create the test index with explicit keyword mapping for listing_purpose and date mapping for sort field. */

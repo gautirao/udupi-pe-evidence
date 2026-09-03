@@ -45,7 +45,7 @@ class DiscoverListingsServiceMetricsTest {
                 null,                // no q
                 null,                // bbox
                 0, 20, false, null, null
-        );
+        , null);
     }
 
     /** radius_search query — schoolLat/schoolLon/schoolRadiusKm all set AND q set. */
@@ -58,7 +58,7 @@ class DiscoverListingsServiceMetricsTest {
                 "sea view",              // q
                 null,                    // bbox
                 0, 20, false, null, null
-        );
+        , null);
     }
 
     /** Minimal radius query — schoolLat/schoolLon/schoolRadiusKm all set, no q. */
@@ -71,7 +71,7 @@ class DiscoverListingsServiceMetricsTest {
                 null,                     // q
                 null,                     // bbox
                 0, 20, false, null, null
-        );
+        , null);
     }
 
     @BeforeEach

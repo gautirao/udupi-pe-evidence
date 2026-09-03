@@ -60,7 +60,7 @@ class OpenSearchListingsAdapterTest {
                 "udupi", null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
                 null, null, 0, 20, includeAggregates, null, null
-        );
+        , null);
     }
 
     private static String buildListingsResponse(int count, long total) {

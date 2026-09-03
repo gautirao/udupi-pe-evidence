@@ -159,6 +159,7 @@ export function useDiscoverMapLayerController({
     isTopGroupedAreaOrSchool,
     isTopGroupedAgri,
     overviewAreas,
+    discoverAreas,
     areaSearchMatchKeys,
     resolvedRegionLabel,
     isRegionOverview,

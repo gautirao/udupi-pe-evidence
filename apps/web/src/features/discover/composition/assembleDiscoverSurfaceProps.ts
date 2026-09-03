@@ -8,6 +8,7 @@ import type { useDiscoverMarkerController } from '@/features/discover/controller
 import type { useBoundedSearchTrigger } from '@/features/discover/controllers/useBoundedSearchTrigger';
 import type { useDiscoverPageStateController } from '@/features/discover/controllers/useDiscoverPageStateController';
 import type { useDiscoverViewportTracker } from '@/features/discover/controllers/useDiscoverViewportTracker';
+import type { useDiscoverViewportSearch } from '@/features/discover/controllers/useDiscoverViewportSearch';
 import type { useDiscoverGeographyController } from '@/features/discover/controllers/useDiscoverGeographyController';
 import type { useDiscoverMapDataController } from '@/features/discover/controllers/useDiscoverMapDataController';
 import type { useDiscoverSchoolController } from '@/features/discover/controllers/useDiscoverSchoolController';
@@ -70,6 +71,8 @@ export interface DiscoverControllerRegistry {
   boundedSearchController: ReturnType<typeof useBoundedSearchTrigger>;
   pageStateController: ReturnType<typeof useDiscoverPageStateController>;
   viewportTrackerController: ReturnType<typeof useDiscoverViewportTracker>;
+  /** Issue #2015 — "Search this area" CTA dirty-detection + activation (AC1/AC2). */
+  viewportSearchController: ReturnType<typeof useDiscoverViewportSearch>;
   geographyController: ReturnType<typeof useDiscoverGeographyController>;
   mapDataController: ReturnType<typeof useDiscoverMapDataController>;
   schoolController: ReturnType<typeof useDiscoverSchoolController>;
@@ -110,6 +113,7 @@ export function assembleDiscoverSurfaceProps(
     boundedSearchController,
     pageStateController,
     viewportTrackerController,
+    viewportSearchController,
     geographyController,
     mapDataController,
     schoolController,
@@ -189,6 +193,7 @@ export function assembleDiscoverSurfaceProps(
     overviewNavigationController,
     mobilePresentationController,
     viewportTrackerController,
+    viewportSearchController,
     markerController,
   };
   const mapView = buildMapSurfaceModel(mapProps);

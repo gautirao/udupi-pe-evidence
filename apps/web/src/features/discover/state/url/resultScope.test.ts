@@ -90,6 +90,23 @@ describe('useResultScopeUrlDomain', () => {
     expect(getParams().has('rvp')).toBe(false);
   });
 
+  it('Issue #2015 AC7 — commit with { history: "replace" } writes replace:true (viewport-drift commits do not push a history entry)', () => {
+    const { ctx, getParams } = makeCtx('city=bangalore');
+    const setUrlParamsSpy = ctx.setUrlParams as unknown as ReturnType<typeof vi.fn>;
+    const { result } = renderHook(() => useResultScopeUrlDomain(ctx));
+
+    act(() => {
+      result.current.actions.commitResultScope(
+        { kind: 'VIEWPORT', bounds: { s: 12.9, w: 77.5, n: 13.0, e: 77.6 } },
+        { history: 'replace' },
+      );
+    });
+
+    expect(setUrlParamsSpy).toHaveBeenCalledTimes(1);
+    expect(setUrlParamsSpy.mock.calls[0][1]).toEqual({ replace: true });
+    expect(getParams().get('rscope')).toBe('vp');
+  });
+
   it('commit_captures_the_outgoing_scope_into_rprev_by_name', () => {
     const { ctx, getParams } = makeCtx('rscope=areas&rareas=hebbal,nagawara,jakkur');
     const { result } = renderHook(() => useResultScopeUrlDomain(ctx));

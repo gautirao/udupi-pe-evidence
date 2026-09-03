@@ -135,7 +135,8 @@ public final class DiscoverQueryDsl {
                 q.q(),
                 q.listingPurpose(),
                 null,      // excludePropertyTypes — OS responses don't carry this input param
-                q.areaKeys()
+                q.areaKeys(),
+                q.viewportScope()
         );
     }
 

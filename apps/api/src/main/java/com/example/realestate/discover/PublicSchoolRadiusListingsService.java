@@ -75,7 +75,8 @@ public class PublicSchoolRadiusListingsService {
                 null,   // q
                 normPurpose,
                 List.of(PropertyType.AGRICULTURAL_LAND.getValue()),  // excludePropertyTypes — school-first never shows agri
-                null   // areaKeys — school-radius path does not apply group filtering
+                null,   // areaKeys — school-radius path does not apply group filtering
+                null    // viewportScope — school-radius path does not apply a viewport scope
         );
 
         DiscoverListingPredicateBuilder.Sql predicate = DiscoverListingPredicateBuilder.build(filters);

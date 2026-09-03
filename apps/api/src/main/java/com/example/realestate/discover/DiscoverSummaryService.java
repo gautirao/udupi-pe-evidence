@@ -100,7 +100,7 @@ public class DiscoverSummaryService implements DiscoverSummaryPort {
                 city, null, null, null, null, null, null, null,
                 null, null, null, null, null,
                 null, null, null,
-                null, null, normalizedPurpose, null, null
+                null, null, normalizedPurpose, null, null, null
         );
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(filters);
 

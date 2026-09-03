@@ -63,7 +63,7 @@ class DiscoverMarkersPropertyTypeTest {
                 null, null, null, null, null,
                 null, null, null,
                 null, null, null, null, null
-        );
+        , null);
 
         when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
                 .thenReturn(List.of());
@@ -110,7 +110,7 @@ class DiscoverMarkersPropertyTypeTest {
                 null, null, null, null, null,
                 null, null, null,
                 null, null, null, null, null
-        );
+        , null);
 
         // Build the marker that the real RowMapper will produce (via Mockito answer below)
         DiscoverMarker expectedMarker = new DiscoverMarker(
@@ -162,7 +162,7 @@ class DiscoverMarkersPropertyTypeTest {
                 null, null, null, null, null,
                 null, null, null,
                 null, null, null, null, null
-        );
+        , null);
 
         when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
                 .thenReturn(List.of());

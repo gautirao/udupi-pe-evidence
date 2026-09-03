@@ -146,7 +146,7 @@ class DiscoverSummaryScaleIT {
                     CITY, null, null, null, null, null, null, null,
                     null, null, null, null, null,
                     null, null, null,
-                    null, null, listingPurpose, null, null);
+                    null, null, listingPurpose, null, null, null);
             DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(filters);
 
             evidence.append("-- shape: total --\n")

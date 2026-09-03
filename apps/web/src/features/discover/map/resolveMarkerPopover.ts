@@ -50,6 +50,8 @@ export function resolveMarkerPopover(input: ResolveMarkerPopoverInput): ResolveM
     isLoadingAreaListings,
     isErrorAreaListings,
     markersLoading,
+    isAnonViewport,
+    anonViewportMarkerListings,
     isMarkerPopoverEligible,
     selectedMarkerListing,
   } = input;
@@ -76,6 +78,8 @@ export function resolveMarkerPopover(input: ResolveMarkerPopoverInput): ResolveM
     isLoadingAreaListings,
     isErrorAreaListings,
     markersLoading,
+    isAnonViewport,
+    anonViewportMarkerListings,
   });
 
   // Issue #1810 (Stage 2A) — MODEL A stepper set: the clicked listing's 1-based

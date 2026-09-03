@@ -57,6 +57,20 @@ export function LegacyRightPanelBridge({ view, commands }: LegacyRightPanelBridg
     isLoadingAreaGroups,
     summaryRegions,
     selectedGroupName,
+    // Issue #2015 — anon "Search this area" (VIEWPORT scope) reconciled cards.
+    isAnonViewport,
+    anonViewportListings,
+    anonViewportListingsLoading,
+    // Issue #2015 (caller-wiring follow-up) — error state for the anon-viewport
+    // query, so the Retry-on-error UI can distinguish an errored fetch from
+    // genuinely zero listings.
+    isErrorAnonViewport,
+    // Issue #2015 — authenticated "Search this area" (VIEWPORT scope)
+    // reconciled cards, mirroring the anon-viewport fields above.
+    isAuthViewport,
+    authViewportListings,
+    authViewportListingsLoading,
+    isErrorAuthViewport,
   } = view.geography;
   // Issue #2142 SOLID follow-up (commit 3) — the #1808 region-guidance signals
   // moved out of `geography` into their own `regionGuide` view group. Same
@@ -68,6 +82,9 @@ export function LegacyRightPanelBridge({ view, commands }: LegacyRightPanelBridg
     setAreaSearchQuery,
     refetchRegionScopedGroups,
     armRegionSelect,
+    // Issue #2015 (caller-wiring follow-up) — pairs with `isErrorAnonViewport`
+    // above to power the anon-viewport Retry-on-error control.
+    refetchAnonViewport,
   } = commands.geography;
   const {
     groupResultsListings,
@@ -244,6 +261,17 @@ export function LegacyRightPanelBridge({ view, commands }: LegacyRightPanelBridg
       // the area-first landing (Level 1 group cards) while preserving journey=area-first.
       selectedGroupName={selectedGroupName}
       onNavigateAreaLanding={() => urlActions.selectGroup(null)}
+      // Issue #2015 — anon "Search this area" (VIEWPORT scope) card slot.
+      isAnonViewport={isAnonViewport}
+      anonViewportListings={anonViewportListings}
+      anonViewportListingsLoading={anonViewportListingsLoading}
+      isErrorAnonViewport={isErrorAnonViewport}
+      onRetryAnonViewport={refetchAnonViewport}
+      // Issue #2015 — authenticated "Search this area" (VIEWPORT scope) card slot.
+      isAuthViewport={isAuthViewport}
+      authViewportListings={authViewportListings}
+      authViewportListingsLoading={authViewportListingsLoading}
+      isErrorAuthViewport={isErrorAuthViewport}
       // Issue #1485 — forward area-groups loading state separately for school-first zone cards
       // so school-browse can show skeletons without coupling to the area-first isLoadingAreaGroups.
       isLoadingAreaGroupsForSchool={isLoadingAreaGroups}

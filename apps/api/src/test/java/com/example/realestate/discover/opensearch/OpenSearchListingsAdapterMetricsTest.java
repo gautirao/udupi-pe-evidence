@@ -99,7 +99,7 @@ class OpenSearchListingsAdapterMetricsTest {
                 null, null, null,   // no school radius
                 null,               // no FTS q
                 new com.example.realestate.discover.DiscoverListingPredicateBuilder.Bbox(13.0, 74.5, 13.5, 75.0),
-                0, 20, false, null, null);
+                0, 20, false, null, null, null);
     }
 
     private DiscoverListingsQuery textQuery() {
@@ -109,7 +109,7 @@ class OpenSearchListingsAdapterMetricsTest {
                 null, null, null,
                 "sea view apartment",   // FTS q — must NEVER appear in metric tag values
                 null,
-                0, 20, false, null, null);
+                0, 20, false, null, null, null);
     }
 
     private DiscoverListingsQuery radiusQuery() {
@@ -119,7 +119,7 @@ class OpenSearchListingsAdapterMetricsTest {
                 13.34, 74.74, 2.0,
                 null,
                 null,
-                0, 20, false, null, null);
+                0, 20, false, null, null, null);
     }
 
     private DiscoverListingsQuery combinedQuery() {
@@ -129,7 +129,7 @@ class OpenSearchListingsAdapterMetricsTest {
                 13.34, 74.74, 2.0,
                 "school near apartment",  // MUST NOT appear in tags
                 null,
-                0, 20, false, null, null);
+                0, 20, false, null, null, null);
     }
 
     // -----------------------------------------------------------------------

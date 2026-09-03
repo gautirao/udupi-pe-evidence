@@ -161,7 +161,7 @@ class GroupAreaKeyFilterIT {
                 null, null,
                 0, 20, false, null,
                 areaKeys
-        );
+        , null);
     }
 
     private DiscoverListingPredicateBuilder.Filters markersFilters(List<String> areaKeys) {
@@ -172,7 +172,7 @@ class GroupAreaKeyFilterIT {
                 null, null, null,
                 null, null, null, null,
                 areaKeys
-        );
+        , null);
     }
 
     private void insertListing(String areaKey) {

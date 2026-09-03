@@ -40,6 +40,21 @@ export interface ResolveMarkerListingsInput {
   isLoadingAreaListings: boolean;
   isErrorAreaListings: boolean;
   markersLoading: boolean;
+  /**
+   * Issue #2015 — true only for an anonymous caller with a COMMITTED VIEWPORT
+   * `resultScope` ("Search this area"). Mirrors `useDiscoverMapData.ts`'s
+   * `isAnonViewport` exactly (not re-derived here) so this selector and the query that
+   * populates `anonViewportMarkerListings` can never disagree on when the branch is
+   * active.
+   */
+  isAnonViewport: boolean;
+  /**
+   * Issue #2015 — anon-safe, band-priced marker set for the committed VIEWPORT scope,
+   * sourced exclusively from the public bbox-only `GET /api/discover/cities/{city}/listings`
+   * mode (never the auth-only `/api/discover/markers`/`/api/discover/listings` — #1118).
+   * Only consulted when `isAnonViewport` is true.
+   */
+  anonViewportMarkerListings: PropertyListingWithImages[];
 }
 
 export function resolveMarkerListings(input: ResolveMarkerListingsInput): PropertyListingWithImages[] {
@@ -61,6 +76,8 @@ export function resolveMarkerListings(input: ResolveMarkerListingsInput): Proper
     isLoadingAreaListings,
     isErrorAreaListings,
     markersLoading,
+    isAnonViewport,
+    anonViewportMarkerListings,
   } = input;
 
   // Issue #1745 Batch B map-hierarchy fix — zoom-independent grouped/landing
@@ -85,6 +102,14 @@ export function resolveMarkerListings(input: ResolveMarkerListingsInput): Proper
   // bounded-Browse session opened at/below areaLayerMaxZoom is not silently
   // suppressed to []).
   if (!selectedArea && !isGroupResultsState && !isNodeListingsState && mapZoom <= areaLayerMaxZoom) return [];
+  // Issue #2015 — a committed anon VIEWPORT scope ("Search this area") is checked here,
+  // ahead of the legacy group/node/journey/selectedArea branches below. Per #2016's
+  // ResultScope contract, resultScope is "the single canonical geography that controls
+  // which listings/markers/totals are shown on Discover, strictly separate from
+  // navigation" — so once VIEWPORT is committed it takes priority over those
+  // navigation-derived states, while still respecting the zoom/layer-category
+  // suppression check immediately above (unchanged — an independent map-UX rule).
+  if (isAnonViewport) return anonViewportMarkerListings;
   // Issue #1597 — area-group-results state: serve ONLY the group-filtered
   // markers. Must come before the area-first/school-first branches so no
   // unfiltered city-wide markerListings leak as ghost/shadow markers.

@@ -156,7 +156,7 @@ class DiscoverMarkersIT {
                 null, null, null, null, null,
                 null, null, null,
                 null, null, null, null, null
-        );
+        , null);
     }
 
     /** Inserts a LIVE agricultural_land listing with the given WKT boundary polygon. */

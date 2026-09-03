@@ -221,6 +221,7 @@ function baseProps(overrides: Partial<DiscoverMapCanvasProps> = {}): DiscoverMap
     cityCenter: undefined,
     cityZoom: undefined,
     overviewAreas: [],
+    discoverAreas: [],
     handleOverviewAreaClick: vi.fn(),
     publishCameraIntent: vi.fn(),
     cameraIntent: null,

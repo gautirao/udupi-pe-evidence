@@ -34,6 +34,8 @@ import type { SchoolsByAreaResponse } from '@/hooks/useSchoolsByArea';
 import type { DiscoverBadgeResult } from '@/features/discover/presentation/discoverBadge';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import { ReplaceResultScopeDialog } from '@/features/discover/components/ReplaceResultScopeDialog';
+import { SearchThisAreaCta } from '@/features/discover/components/map/SearchThisAreaCta';
+import { ActiveScopeChip } from '@/features/discover/components/map/ActiveScopeChip';
 
 /**
  * Issue #1824 Slice S11a — the map-half return-tree region (mapContainerRef
@@ -97,6 +99,23 @@ export interface DiscoverMapCanvasProps {
   isReplaceScopeConfirmOpen?: boolean;
   handleConfirmReplaceScope?: () => void;
   handleCancelReplaceScope?: () => void;
+  /**
+   * Issue #2015 — "Search this area" CTA dirty-state (AC1) and activation
+   * (AC2), owned by useDiscoverViewportSearch.ts. Optional (same rationale
+   * as isReplaceScopeConfirmOpen above) so existing test fixtures/callers
+   * that predate this prop keep compiling — the CTA simply never renders
+   * when omitted.
+   */
+  viewportSearchIsDirty?: boolean;
+  /**
+   * Issue #2015 MUST-HAVE #2 (PR review 5085561270) — true only when the
+   * current navigation level has a committed AREA_SET/POLYGON ResultScope
+   * active, owned by useDiscoverViewportSearch.ts. Optional for the same
+   * reason as viewportSearchIsDirty above; defaults to false so the CTA
+   * never renders when omitted.
+   */
+  viewportSearchIsEligible?: boolean;
+  onActivateViewportSearch?: () => void;
   selectedSchool: SchoolResult | null;
   memoizedInitialCenter: [number, number] | undefined;
   /**
@@ -113,6 +132,15 @@ export interface DiscoverMapCanvasProps {
   cityCenter: [number, number] | undefined;
   cityZoom: number | undefined;
   overviewAreas: AreaPoint[];
+  /**
+   * Issue #2015 MUST-HAVE #3 (PR review 5085561270) — root-level all-areas
+   * list (`useDiscoverMapLayerController`'s `discoverAreas` passthrough),
+   * threaded to `ActiveScopeChip` for its "Return to <Area>" label lookup.
+   * Deliberately separate from `overviewAreas`, which is nav-state-derived
+   * and goes empty once an area is selected — see ActiveScopeChip's doc
+   * comment for the full root-cause explanation.
+   */
+  discoverAreas: AreaPoint[];
   handleOverviewAreaClick: (area: AreaPoint) => void;
   publishCameraIntent: (area: AreaPoint) => void;
   cameraIntent: CameraIntent | null;
@@ -349,12 +377,16 @@ export function DiscoverMapCanvas({
   isReplaceScopeConfirmOpen = false,
   handleConfirmReplaceScope,
   handleCancelReplaceScope,
+  viewportSearchIsDirty = false,
+  viewportSearchIsEligible = false,
+  onActivateViewportSearch,
   selectedSchool,
   memoizedInitialCenter,
   isColdNavigate,
   cityCenter,
   cityZoom,
   overviewAreas,
+  discoverAreas,
   handleOverviewAreaClick,
   publishCameraIntent,
   cameraIntent,
@@ -620,6 +652,15 @@ export function DiscoverMapCanvas({
           page-owned verbatim (see the component's docstring for the full
           rationale). */}
       <DiscoverMapStatusHints showLoader={showLoader} />
+      {/* Issue #2015 — top-anchored "Search this area" CTA (AC1/AC2) and
+          active-scope chip (AC6), placed with the other status overlays so
+          they avoid the bottom-anchored List/zoom/attribution controls. */}
+      <SearchThisAreaCta
+        isEligible={viewportSearchIsEligible}
+        isDirty={viewportSearchIsDirty}
+        onActivate={onActivateViewportSearch ?? (() => {})}
+      />
+      <ActiveScopeChip discoverAreas={discoverAreas} publishCameraIntent={publishCameraIntent} />
       {error ? (
         <div className="absolute inset-0 flex items-center justify-center">
           <Card className="p-6 text-center max-w-sm">

@@ -154,7 +154,7 @@ public class AreaGroupsService {
                 citySlug, null, null, null, null, null, null, null,
                 null, null, null, null, null,
                 null, null, null,
-                null, null, normalizedPurpose, null, null
+                null, null, normalizedPurpose, null, null, null
         );
         DiscoverListingPredicateBuilder.Sql predicate = DiscoverListingPredicateBuilder.build(filters);
 

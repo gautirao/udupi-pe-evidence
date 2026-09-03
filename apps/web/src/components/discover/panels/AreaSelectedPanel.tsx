@@ -134,6 +134,16 @@ interface AreaSelectedPanelProps {
    * silently toggling active with no effect on the results.
    */
   isReadyToMoveSupported?: boolean;
+  /**
+   * Issue #2015 — true when the panel is displaying a committed VIEWPORT
+   * `resultScope` ("Search this area") rather than the selected AREA_SET.
+   * `selectedArea`/`areaLabel` stay populated in this state (the area chip
+   * still shows "Return to {area}" elsewhere), but the headline/sub-copy
+   * below must not claim the listings are scoped to that area anymore —
+   * they're scoped to the panned/zoomed map viewport instead. Defaults to
+   * false so every existing AREA_SET caller/test is unaffected.
+   */
+  isViewportScope?: boolean;
 }
 
 export function AreaSelectedPanel({
@@ -171,6 +181,7 @@ export function AreaSelectedPanel({
   onCrumbRegion,
   onCrumbGroup,
   isReadyToMoveSupported = true,
+  isViewportScope = false,
 }: AreaSelectedPanelProps) {
   const navigate = useNavigate();
   const areaLabel = selectedArea.areaLabel;
@@ -390,10 +401,10 @@ export function AreaSelectedPanel({
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-              Result scope — Selected area
+              {isViewportScope ? 'Result scope — Search this area' : 'Result scope — Selected area'}
             </p>
             <h1 className="mt-0.5 font-['Fraunces',_ui-serif,_Georgia,_serif] text-[1.625rem] font-semibold leading-[1.15] tracking-[-0.02em] text-foreground">
-              Properties in {areaLabel}
+              {isViewportScope ? 'Properties in this area' : `Properties in ${areaLabel}`}
             </h1>
           </div>
           {!isLoadingListings && (
@@ -409,7 +420,9 @@ export function AreaSelectedPanel({
         </div>
         {/* R-C — sub-copy: 15px, 1.55 line-height, --text-body colour. */}
         <p className="mt-1.5 text-[15px] leading-[1.55] text-[hsl(var(--text-body))]">
-          Explore verified listings around {areaLabel}, with map context and area-first filters.
+          {isViewportScope
+            ? 'Explore verified listings in this map area, with map context and area-first filters.'
+            : `Explore verified listings around ${areaLabel}, with map context and area-first filters.`}
         </p>
 
         {/* Controls card — REMOVED (product-owner ruling, #1953 follow-up).
@@ -430,7 +443,9 @@ export function AreaSelectedPanel({
             DiscoverRightPanel / DiscoverRightPanelContainer for this file. */}
 
         <p className="mt-2.5 text-xs text-muted-foreground" data-testid="area-intent-helper">
-          Showing {intentNoun} prices in ₹ for {areaLabel}.
+          {isViewportScope
+            ? `Showing ${intentNoun} prices in ₹ for this area.`
+            : `Showing ${intentNoun} prices in ₹ for ${areaLabel}.`}
         </p>
 
         {activeContextChips != null && (
@@ -726,7 +741,9 @@ export function AreaSelectedPanel({
               <ShieldCheck className="h-4 w-4 shrink-0 text-evergreen" aria-hidden="true" />
               <p className="text-xs font-medium text-foreground" data-testid="area-result-summary-text">
                 {areaResultSummaryText ??
-                  `${count} verified ${count === 1 ? 'property' : 'properties'} for ${intentNoun} in ${areaLabel}`}
+                  `${count} verified ${count === 1 ? 'property' : 'properties'} for ${intentNoun}${
+                    isViewportScope ? ' in this area' : ` in ${areaLabel}`
+                  }`}
               </p>
             </div>
             {/* Issue #2159 reskin — the desktop 2-column grid target (mock's dense

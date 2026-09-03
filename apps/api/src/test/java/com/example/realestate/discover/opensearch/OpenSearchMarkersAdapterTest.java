@@ -62,7 +62,7 @@ class OpenSearchMarkersAdapterTest {
         return new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null
-        );
+        , null);
     }
 
     private String buildHitsResponse(int count) {

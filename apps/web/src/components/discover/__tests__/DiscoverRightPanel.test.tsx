@@ -12,6 +12,7 @@ import { DiscoverRightPanel } from '../DiscoverRightPanel';
 import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import type { AnonViewportListingItem } from '@/lib/anonViewportListing';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
@@ -878,5 +879,186 @@ describe('DiscoverRightPanel — 4-level residential hierarchy (Issue #1745)', (
       // Still just the one mount-time emission — never re-fired on prop updates.
       expect(mockEmitPanelOpen).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+/**
+ * DiscoverRightPanel — anon "Search this area" (VIEWPORT) error + retry rendering
+ * (Issue #2015, PR #2425 review fix 5087672619)
+ *
+ * WHAT THIS TESTS:
+ *   renderAnonViewportListings() branches on isErrorAnonViewport + anonViewportListings.length:
+ *     1. Success — listings render, no error UI, no retry banner/button.
+ *     2. First-load failure (isErrorAnonViewport=true, zero listings) — full-replace
+ *        error state (anon-viewport-error) with a Retry control, same treatment as
+ *        CorridorLandingPanel's fetch-error branch (Issue #1453). The plain empty
+ *        state (anon-viewport-empty-state) and the listing grid are both absent.
+ *     3. Transient failure with data retained (isErrorAnonViewport=true, listings
+ *        non-empty — the retained "last good" set from useDiscoverMapData) — the
+ *        listing grid keeps rendering the retained cards AND shows a non-displacing
+ *        inline retry banner (anon-viewport-retry-banner) above them.
+ *     4. Clicking the Retry control calls onRetryAnonViewport exactly once.
+ *
+ *   These are unit tests at the DiscoverRightPanel boundary: anonViewportListings/
+ *   isErrorAnonViewport/onRetryAnonViewport are passed directly as props (the
+ *   retention/refetch logic itself is covered separately in
+ *   useDiscoverMapData.markersEnabled.test.ts's "I4" case).
+ */
+describe('DiscoverRightPanel — anon viewport error + retry (Issue #2015, review fix 5087672619)', () => {
+  const makeAnonViewportListing = (id: string): AnonViewportListingItem =>
+    ({
+      id,
+      priceBand: 'BAND_2',
+      monthlyRentBand: null,
+      propertyType: 'apartment',
+      locality: 'Manipal',
+      primaryImageUrl: null,
+      listingPurpose: 'sale',
+      bedrooms: 2,
+      title: `Listing ${id}`,
+      bathrooms: 2,
+      builtArea: null,
+      builtAreaUnit: null,
+      landArea: null,
+      landAreaUnit: null,
+      totalFloors: null,
+      parkingCount: null,
+      furnishingStatus: null,
+      createdAt: '2026-01-01T00:00:00Z',
+      confirmedAt: null,
+      trustBadge: null,
+      lat: 13.35,
+      lon: 74.79,
+      latitude: 13.35,
+      longitude: 74.79,
+      kind: 'ANON_VIEWPORT',
+      areaKey: 'udupi|manipal',
+    }) as unknown as AnonViewportListingItem;
+
+  const anonViewportBaseProps = {
+    ...baseProps,
+    panelContent: 'guided-entry' as const,
+    areas: [],
+    isAnonViewport: true,
+  };
+
+  it('success: listings render with no error UI and no retry banner/button', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...anonViewportBaseProps}
+        anonViewportListings={[makeAnonViewportListing('anon-1')]}
+      />,
+    );
+
+    expect(screen.getByTestId('anon-viewport-listing-grid')).toBeInTheDocument();
+    expect(screen.queryByTestId('anon-viewport-error')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('anon-viewport-retry-banner')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('anon-viewport-retry-btn')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('anon-viewport-empty-state')).not.toBeInTheDocument();
+  });
+
+  it('first-load failure with zero retained listings shows the full-replace error state with Retry', () => {
+    renderPanel(
+      <DiscoverRightPanel {...anonViewportBaseProps} anonViewportListings={[]} isErrorAnonViewport />,
+    );
+
+    expect(screen.getByTestId('anon-viewport-error')).toBeInTheDocument();
+    expect(screen.getByTestId('anon-viewport-retry-btn')).toBeInTheDocument();
+    expect(screen.queryByTestId('anon-viewport-empty-state')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('anon-viewport-listing-grid')).not.toBeInTheDocument();
+  });
+
+  it('transient failure with retained listings keeps rendering the cards AND shows the retry banner', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...anonViewportBaseProps}
+        anonViewportListings={[makeAnonViewportListing('retained-1')]}
+        isErrorAnonViewport
+      />,
+    );
+
+    // Retained cards stay visible — the grid is NOT displaced by the error.
+    expect(screen.getByTestId('anon-viewport-listing-grid')).toBeInTheDocument();
+    expect(screen.getByTestId('anon-viewport-retry-banner')).toBeInTheDocument();
+    expect(screen.getByTestId('anon-viewport-retry-btn')).toBeInTheDocument();
+    expect(screen.queryByTestId('anon-viewport-error')).not.toBeInTheDocument();
+  });
+
+  it('full sequence: success -> transient failure (retained) -> retry succeeds (fresh listings, banner clears)', () => {
+    // RTL's `rerender` replaces the WHOLE tree it was given each call, so — matching
+    // the file's "PANEL_OPEN telemetry ... does not re-emit" precedent above — every
+    // call here re-supplies the full provider stack rather than renderPanel()'s
+    // one-shot renderWithProviders().
+    const client = makeTestQueryClient();
+    const fullTree = (ui: React.ReactElement) => (
+      <QueryClientProvider client={client}>
+        <TooltipProvider>
+          <MemoryRouter>
+            <AuthProvider>
+              <AuthModalProvider>
+                <DiscoverProvider>{ui}</DiscoverProvider>
+              </AuthModalProvider>
+            </AuthProvider>
+          </MemoryRouter>
+        </TooltipProvider>
+      </QueryClientProvider>
+    );
+
+    const { rerender } = render(
+      fullTree(
+        <DiscoverRightPanel
+          {...anonViewportBaseProps}
+          anonViewportListings={[makeAnonViewportListing('retained-1')]}
+        />,
+      ),
+    );
+
+    expect(screen.getByText('Listing retained-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('anon-viewport-retry-banner')).not.toBeInTheDocument();
+
+    // Transient failure — prior card is retained/rendered, retry banner appears.
+    rerender(
+      fullTree(
+        <DiscoverRightPanel
+          {...anonViewportBaseProps}
+          anonViewportListings={[makeAnonViewportListing('retained-1')]}
+          isErrorAnonViewport
+        />,
+      ),
+    );
+
+    expect(screen.getByText('Listing retained-1')).toBeInTheDocument();
+    expect(screen.getByTestId('anon-viewport-retry-banner')).toBeInTheDocument();
+
+    // Retry succeeds — fresh listings replace the retained set, banner clears.
+    rerender(
+      fullTree(
+        <DiscoverRightPanel
+          {...anonViewportBaseProps}
+          anonViewportListings={[makeAnonViewportListing('fresh-1')]}
+        />,
+      ),
+    );
+
+    expect(screen.getByText('Listing fresh-1')).toBeInTheDocument();
+    expect(screen.queryByText('Listing retained-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('anon-viewport-retry-banner')).not.toBeInTheDocument();
+  });
+
+  it('clicking Retry calls onRetryAnonViewport exactly once', async () => {
+    const user = userEvent.setup();
+    const onRetryAnonViewport = vi.fn();
+
+    renderPanel(
+      <DiscoverRightPanel
+        {...anonViewportBaseProps}
+        anonViewportListings={[]}
+        isErrorAnonViewport
+        onRetryAnonViewport={onRetryAnonViewport}
+      />,
+    );
+
+    await user.click(screen.getByTestId('anon-viewport-retry-btn'));
+    expect(onRetryAnonViewport).toHaveBeenCalledTimes(1);
   });
 });

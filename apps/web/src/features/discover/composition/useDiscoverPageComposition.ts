@@ -11,6 +11,7 @@ import { useDiscoverMarkerController } from '@/features/discover/controllers/use
 import { useBoundedSearchTrigger } from '@/features/discover/controllers/useBoundedSearchTrigger';
 import { useDiscoverPageStateController } from '@/features/discover/controllers/useDiscoverPageStateController';
 import { useDiscoverViewportTracker } from '@/features/discover/controllers/useDiscoverViewportTracker';
+import { useDiscoverViewportSearch } from '@/features/discover/controllers/useDiscoverViewportSearch';
 import { useDiscoverGeographyController } from '@/features/discover/controllers/useDiscoverGeographyController';
 import { useDiscoverMapDataController } from '@/features/discover/controllers/useDiscoverMapDataController';
 import { useDiscoverSchoolController } from '@/features/discover/controllers/useDiscoverSchoolController';
@@ -121,6 +122,7 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     goToNode: actions.goToNode,
     goToNodeReplacingCurrent: actions.goToNodeReplacingCurrent,
     intentListingPurpose,
+    commitResultScope: actions.commitResultScope,
   });
   const {
     showAreasNavigationJourney,
@@ -346,6 +348,10 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     isFetching,
     discoverAreas, discoverAreasData, filteredListings,
     markerListings, areaListings, isErrorAreaListings, areaMarkerListings,
+    // Issue #2015 — anon "Search this area" VIEWPORT marker-selection inputs, threaded
+    // straight into markerPopoverController below (the sole marker-selection consumer;
+    // the separate cards-side wiring for anonViewportListings is out of scope here).
+    isAnonViewport, anonViewportMarkerListings,
     schoolRadiusListings, schoolRadiusListingsLoading,
     trendsAreaKeys,
     cityCenter, schoolById, schoolByIdError,
@@ -358,6 +364,26 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     // useDiscoverMapLayerController and read by NOTHING else.
     visibleMemberSet,
   } = mapDataController;
+
+  // Issue #2015 — "Search this area" VIEWPORT activation (AC1/AC2/AC7).
+  // Reads the live map bbox/camera intent already threaded through
+  // viewportTrackerController/mapDataController above, and the committed
+  // ResultScope + its commit action from pageContextController's
+  // nav/actions (destructured at the top of this hook). No new plumbing:
+  // every input already exists in this scope.
+  //
+  // Passes the raw `cameraIntent`/`resultScope` inputs through unchanged
+  // rather than pre-deriving `cameraSeq`/`activeScope` here — this file is
+  // composition-only (compositionHookScope.guard.test.ts mechanically
+  // forbids derivation logic, including `?.`/`??`, in this file); the
+  // `?.seq ?? 0` / `?.active ?? null` derivations now live inside
+  // useDiscoverViewportSearch itself, which is a controller and owns them.
+  const viewportSearchController = useDiscoverViewportSearch({
+    mapBbox,
+    cameraIntent: mapDataController.cameraIntent,
+    resultScope: nav.resultScope,
+    commitResultScope: actions.commitResultScope,
+  });
 
   // controllers/useDiscoverSchoolController.ts consolidates
   // useSchoolsByArea + useDiscoverJourneyTransitions (Issue #1824 Slice S6)
@@ -619,6 +645,8 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     isLoadingAreaListings,
     isErrorAreaListings,
     markersLoading,
+    isAnonViewport,
+    anonViewportMarkerListings,
     markerSelection: markerController,
   });
   const {
@@ -683,6 +711,7 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
       boundedSearchController,
       pageStateController,
       viewportTrackerController,
+      viewportSearchController,
       geographyController,
       mapDataController,
       schoolController,

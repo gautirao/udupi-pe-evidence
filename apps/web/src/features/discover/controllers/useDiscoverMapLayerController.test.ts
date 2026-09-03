@@ -117,4 +117,10 @@ describe('useDiscoverMapLayerController', () => {
     // Schools-canonical-geography (#2124) — produced here and nowhere else.
     expect(result.current.schoolJourneySegments).toBe(MAP_PRESENTATION_RESULT.schoolJourneySegments);
   });
+
+  it('passes the input discoverAreas straight through on the return object (Issue #2015 MUST-HAVE #3 — nav-state-independent area lookup for ActiveScopeChip)', () => {
+    const discoverAreas = [{ areaKey: 'koramangala' }] as never;
+    const { result } = renderHook(() => useDiscoverMapLayerController(baseParams({ discoverAreas })));
+    expect(result.current.discoverAreas).toBe(discoverAreas);
+  });
 });

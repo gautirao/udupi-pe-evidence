@@ -488,10 +488,14 @@ class DiscoverListingsControllerTest {
         ));
     }
 
-    // ── 22. viewportScope alone → 200, not folded into service query (inert) ──
+    // ── 22. viewportScope alone → 200, populated on the outbound query (#2015) ─
+    //
+    // Was previously "inert" pre-#2015/#2016; the predicate builder and query pipeline now
+    // thread viewportScope through end-to-end, so this asserts the populated field rather than
+    // merely a 200 status.
 
     @Test
-    void viewportScopeAlone_returns200() throws Exception {
+    void viewportScopeAlone_returns200_andViewportScopePassedToService() throws Exception {
         when(service.getListings(any())).thenReturn(
                 new DiscoverListingsPage(List.of(), 0, 20, 0L, 0, null));
 
@@ -500,6 +504,43 @@ class DiscoverListingsControllerTest {
                         .param("viewportScope", VALID_BBOX)
                         .with(jwt()))
                 .andExpect(status().isOk());
+
+        verify(service).getListings(argThat(q ->
+                q.viewportScope() != null
+                && q.viewportScope().south() == 13.3
+                && q.viewportScope().west() == 74.7
+                && q.viewportScope().north() == 13.4
+                && q.viewportScope().east() == 74.8
+        ));
+    }
+
+    // ── 22b. viewportScope south > north → 400 (inverted bounds) ──────────────
+
+    @Test
+    void viewportScopeSouthGreaterThanNorth_returns400() throws Exception {
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("viewportScope", "13.5,74.7,13.3,74.8")   // south=13.5 > north=13.3
+                        .with(jwt()))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
+
+    // ── 22c. viewportScope latitude out of [-90,90] range → 400 (oversized/invalid bounds) ─
+    //
+    // BboxParser (shared by bbox and viewportScope) has no dedicated max-span/max-area check —
+    // "oversized bounds" maps to the existing lat/lon range validation ("bbox_lat_out_of_range").
+
+    @Test
+    void viewportScopeLatitudeOutOfRange_returns400() throws Exception {
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("viewportScope", "13.3,74.7,95,74.8")   // north=95 > 90
+                        .with(jwt()))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
     }
 
     // ── 23. viewportScope malformed (3 values) → 400, reuses bbox validation ─
@@ -513,6 +554,54 @@ class DiscoverListingsControllerTest {
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(service);
+    }
+
+    // ── 23b. viewportScope span exceeds MAX_BOUNDS_SPAN_DEGREES → 400 ─────────
+    //
+    // Distinct from 22c above: this rectangle is fully within the valid lat/lon range
+    // (BboxParser's checks pass), so only a dedicated oversized-bounds guard can reject it.
+
+    @Test
+    void viewportScopeSpanExceedsMax_returns400() throws Exception {
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("viewportScope", "10,70,25,85")   // 15° lat span, 15° lon span
+                        .with(jwt()))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
+
+    // ── 23c. bbox span exceeds MAX_BOUNDS_SPAN_DEGREES → 400 (consistent cap) ─
+
+    @Test
+    void bboxSpanExceedsMax_returns400() throws Exception {
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("bbox", "10,70,25,85")   // 15° lat span, 15° lon span
+                        .with(jwt()))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
+
+    // ── 23d. viewportScope span exactly at MAX_BOUNDS_SPAN_DEGREES → accepted ─
+
+    @Test
+    void viewportScopeSpanExactlyAtMax_returns200() throws Exception {
+        when(service.getListings(any())).thenReturn(
+                new DiscoverListingsPage(List.of(), 0, 20, 0L, 0, null, null));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("viewportScope", "5,70,15,80")   // exactly 10° lat span, 10° lon span
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getListings(argThat(q ->
+                q.viewportScope() != null
+                && q.viewportScope().south() == 5
+                && q.viewportScope().north() == 15));
     }
 
     // ── 24. scopeFingerprint supplied → echoed back unchanged in the response ─

@@ -1,4 +1,4 @@
-import { useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { deriveAreaPointFromNode } from '@/features/discover/navigation/nodeAreaPoint';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { useAreasNavigationJourney } from '@/features/discover/navigation/useAreasNavigationJourney';
@@ -7,6 +7,7 @@ import { useClusterFocusUrlParam } from '@/features/discover/state/url/clusterFo
 import { buildNavigationCountsFilters } from '@/features/discover/adapters/navigationCountsFilters';
 import { DEFAULT_CITY } from '@/lib/localityUtils';
 import type { DiscoverNavContextValue } from '@/features/discover/context/types';
+import type { ResultScope } from '@/features/discover/state/resultScope';
 
 export interface UseDiscoverNavigationControllerParams {
   /** Whole nav context object — mirrors how most existing hooks on this page already consume it. */
@@ -21,6 +22,14 @@ export interface UseDiscoverNavigationControllerParams {
   goToNodeReplacingCurrent: (nodeKey: string) => void;
   /** Issue #2083 RC_C — nav.intent mapped to backend listingPurpose; computed by the caller (page-global, not navigation-specific). */
   intentListingPurpose: string;
+  /**
+   * Issue #2015 — actions.commitResultScope from useDiscoverActions(), passed
+   * through so this controller can auto-commit an AREA_SET result scope once
+   * direct `node=` navigation resolves a canonical AREA leaf (see the guarded
+   * effect below). Never invoked for a user click — those already commit via
+   * useDiscoverPageState's handleAreaClick/handleAreaSelect.
+   */
+  commitResultScope: (scope: ResultScope, opts?: { history: 'push' | 'replace' }) => void;
 }
 
 export interface UseDiscoverNavigationControllerResult {
@@ -81,6 +90,7 @@ export function useDiscoverNavigationController({
   goToNode,
   goToNodeReplacingCurrent,
   intentListingPurpose,
+  commitResultScope,
 }: UseDiscoverNavigationControllerParams): UseDiscoverNavigationControllerResult {
   // Issue #1956 PR 2 (Slice 3) — this is one of THREE identical gate sites
   // (this file, DiscoverRightPanelContainer.tsx, DiscoverMapCanvas.tsx) —
@@ -185,6 +195,34 @@ export function useDiscoverNavigationController({
   // is strictly narrower and requires no new import.
   const isNodeAreaLeafActive =
     showAreasNavigationJourney && nav.journey === 'area-first' && nodeAreaPoint != null;
+
+  // Issue #2015 — direct/deep-link node navigation to an AREA leaf never ran
+  // through the click-driven commit paths (handleAreaClick/handleAreaSelect
+  // in useDiscoverPageState.ts), so `nav.resultScope?.active` stayed null
+  // even though the panel already renders "Result scope: Selected area" off
+  // `nodeAreaPoint`/`isNodeAreaLeafActive` alone. That left the VIEWPORT
+  // "Search this area" CTA's eligibility gate (fed by `activeScope`) unable
+  // to ever see a committed AREA_SET scope for this entry path, so panning
+  // never surfaced the CTA.
+  //
+  // This auto-commits an AREA_SET scope, once, the first time a resolved
+  // AREA leaf appears with no scope already committed — a load-time
+  // reconciliation, not a user gesture, so it uses REPLACE (matching the
+  // precedent at useDiscoverViewportSearch.ts's own non-click commit) rather
+  // than the PUSH every user-initiated commit uses. `settledNodeKeyRef`
+  // tracks the node key this effect has already resolved for, so it never
+  // re-fires (and never clobbers an explicit "back out of scope" action, or
+  // a scope restored from a shared URL) while `node=` stays unchanged —
+  // it only re-evaluates when the leaf's node key actually changes.
+  const settledNodeKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const nodeKey = isNodeAreaLeafActive && nodeAreaPoint ? nodeAreaPoint.areaKey : null;
+    if (nodeKey === settledNodeKeyRef.current) return;
+    settledNodeKeyRef.current = nodeKey;
+    if (!nodeKey) return;
+    if (nav.resultScope?.active != null) return;
+    commitResultScope({ kind: 'AREA_SET', areaKeys: [nodeKey] }, { history: 'replace' });
+  }, [isNodeAreaLeafActive, nodeAreaPoint, nav.resultScope?.active, commitResultScope]);
 
   return {
     showAreasNavigationJourney,

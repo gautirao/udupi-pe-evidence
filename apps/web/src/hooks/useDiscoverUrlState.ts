@@ -630,11 +630,17 @@ export interface DiscoverUrlActions {
   /**
    * Issue #2016 — commit a new result scope. Moves the current `active`
    * scope into `previous` (rprev) and writes the new scope's payload key in
-   * ONE history PUSH. Passing `null` clears the committed scope entirely.
+   * ONE history entry. Passing `null` clears the committed scope entirely.
    * Never call this for draft/in-progress state (drawing, camera movement)
    * — those never touch the URL at all (see state/url/resultScope.ts).
+   *
+   * Issue #2015 AC7 — `opts.history` defaults to `'push'` (one history entry
+   * per committed scope change, J3.4/J3.5). Pass `{ history: 'replace' }`
+   * only for a VIEWPORT "Search this area" activation, so rapid pan/zoom ->
+   * activate cycles don't spam the back-button. Scope-boundary transitions
+   * (Return to Area, selecting AREA_SET/POLYGON) must keep the default PUSH.
    */
-  commitResultScope: (scope: ResultScope) => void;
+  commitResultScope: (scope: ResultScope, opts?: { history: 'push' | 'replace' }) => void;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────

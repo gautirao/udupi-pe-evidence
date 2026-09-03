@@ -23,7 +23,7 @@ class DiscoverFilterNormalizerTest {
             List<String> propertyTypes, List<Integer> bedrooms, List<String> sellerTypes, String purpose) {
         return new DiscoverListingPredicateBuilder.Filters(
                 "udupi", propertyTypes, null, null, null, null, bedrooms, sellerTypes,
-                null, null, null, null, null, null, null, null, null, null, purpose, null, null);
+                null, null, null, null, null, null, null, null, null, null, purpose, null, null, null);
     }
 
     // ── listingPurpose ──────────────────────────────────────────────────────────────────────
@@ -204,7 +204,7 @@ class DiscoverFilterNormalizerTest {
                 "udupi", null, 100L, 200L, "2024-01-01", "2024-12-31", null, null,
                 Boolean.TRUE, Boolean.TRUE, Boolean.TRUE, Boolean.TRUE, polygon,
                 13.0, 74.0, 3.0, bbox, "Flat  ", null,
-                List.of("AGRICULTURAL_LAND"), List.of("IN|KA|Udupi|Manipal"));
+                List.of("AGRICULTURAL_LAND"), List.of("IN|KA|Udupi|Manipal"), null);
 
         assertThat(DiscoverFilterNormalizer.normalize(in)).isEqualTo(in);
     }

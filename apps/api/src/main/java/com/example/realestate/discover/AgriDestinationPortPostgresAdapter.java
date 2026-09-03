@@ -500,7 +500,7 @@ public class AgriDestinationPortPostgresAdapter implements AgriDestinationPort {
                 null, null, null, null, null, null,
                 null, null, null, null, null,
                 null, null, null,
-                bbox, null, purpose, null, areaKeys);
+                bbox, null, purpose, null, areaKeys, null);
         DiscoverListingPredicateBuilder.Sql base = DiscoverListingPredicateBuilder.build(f);
         return new DiscoverListingPredicateBuilder.Sql(
                 base.whereFragment() + AGRI_BASE_PREDICATE_GUARDS, base.params(), base.bboxApplied());

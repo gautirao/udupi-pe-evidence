@@ -426,6 +426,14 @@ function baseProps(overrides: Partial<PanelFlatFixture> = {}): PanelFlatFixture 
     page: 0,
     totalPages: 1,
     totalElements: 0,
+    // Issue #2015 (caller-wiring follow-up) — anon "Search this area"
+    // (VIEWPORT scope) reconciled-cards fields, threaded through the panel
+    // surface model.
+    isAnonViewport: false,
+    anonViewportListings: [],
+    anonViewportListingsLoading: false,
+    isErrorAnonViewport: false,
+    refetchAnonViewport: vi.fn(),
     setPage: vi.fn(),
     areasNavigationJourney: inertAreasNavigationJourney(),
     // Issue #2142 (correction pass) — the deleted flat interface declared these
@@ -535,6 +543,14 @@ function toModelParams(g: PanelFlatFixture): BuildPanelSurfaceModelParams {
       listingDataLoading: g.listingDataLoading,
       totalPages: g.totalPages,
       totalElements: g.totalElements,
+      // Issue #2015 (caller-wiring follow-up) — anon "Search this area"
+      // (VIEWPORT scope) reconciled-cards fields, threaded through the panel
+      // surface model.
+      isAnonViewport: g.isAnonViewport,
+      anonViewportListings: g.anonViewportListings,
+      anonViewportListingsLoading: g.anonViewportListingsLoading,
+      isErrorAnonViewport: g.isErrorAnonViewport,
+      refetchAnonViewport: g.refetchAnonViewport,
     },
     agri: {
       corridorGroups: g.corridorGroups,

@@ -167,7 +167,8 @@ public final class DiscoverFilterNormalizer {
                 f.q(),
                 listingPurpose,
                 f.excludePropertyTypes(),
-                f.areaKeys());
+                f.areaKeys(),
+                f.viewportScope());
     }
 
     /**

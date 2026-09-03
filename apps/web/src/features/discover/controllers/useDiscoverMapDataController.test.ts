@@ -430,3 +430,109 @@ describe('useDiscoverMapDataController — Issue #2016 code-review Finding 11: c
     expect(params.get('nodeKey')).toBe('n:area-1');
   });
 });
+
+describe('useDiscoverMapDataController — Issue #2015 code-review BLOCKING fix: committed VIEWPORT suppresses the live-drifting bbox param', () => {
+  // The committed VIEWPORT scope's own frozen rectangle. Matches the exact
+  // `s,w,n,e` wire format asserted in useDiscoverListings.issue2016.test.ts
+  // ('12.9,77.5,13,77.6').
+  const VIEWPORT_BOUNDS = { s: 12.9, w: 77.5, n: 13, e: 77.6 };
+  // Post-activation live mapBbox — simulates the user panning away from the
+  // committed rectangle. Deliberately disjoint from VIEWPORT_BOUNDS so a
+  // regression (bbox leaking through) would produce an observably different
+  // `bbox=` param, not one that happens to coincide with viewportScope.
+  const PANNED_MAP_BBOX: [number, number, number, number] = [13.5, 78, 13.6, 78.1];
+
+  function markersCallCount() {
+    return mockApiGet.mock.calls.filter(([url]: [string]) => url.includes('/api/discover/markers')).length;
+  }
+
+  it('a committed VIEWPORT scope omits bbox= entirely (the frozen viewportScope param is the sole spatial filter)', async () => {
+    renderHook(
+      () =>
+        useDiscoverMapDataController({
+          ...BASE_CONTROLLER_PARAMS,
+          mapBbox: VIEWPORT_BOUNDS_AS_TUPLE(VIEWPORT_BOUNDS),
+          nav: makeNav({
+            journey: 'area-first',
+            rawNodeParam: 'n:area-1',
+            node: 'n:area-1',
+            resultScope: { active: { kind: 'VIEWPORT', bounds: VIEWPORT_BOUNDS }, previous: null },
+          }),
+          effectiveSelectedArea: EFFECTIVE_SELECTED_AREA,
+          areasNavigationJourney: makeAreasNavigationJourney({ node: AREA_LEAF }),
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(findMarkersCall()).toBeDefined();
+    });
+
+    const [url] = findMarkersCall() as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+
+    // The BLOCKING bug: bbox must NOT be forwarded once VIEWPORT is committed —
+    // the frozen rectangle already reaches the backend via viewportScope.
+    expect(params.has('bbox')).toBe(false);
+    expect(params.get('viewportScope')).toBe('12.9,77.5,13,77.6');
+    // And no navigation-derived nodeKey/areaKeys leak alongside it either
+    // (Finding 11's suppression covers VIEWPORT the same as POLYGON).
+    expect(params.has('nodeKey')).toBe(false);
+    expect(params.getAll('areaKeys')).toEqual([]);
+  });
+
+  it('a post-activation pan (live mapBbox changes) does NOT trigger a new fetch/query-key change from the bbox parameter', async () => {
+    const wrapper = makeWrapper();
+    const { rerender } = renderHook(
+      (props: { mapBbox: [number, number, number, number] | null }) =>
+        useDiscoverMapDataController({
+          ...BASE_CONTROLLER_PARAMS,
+          mapBbox: props.mapBbox,
+          nav: makeNav({
+            journey: 'area-first',
+            rawNodeParam: 'n:area-1',
+            node: 'n:area-1',
+            resultScope: { active: { kind: 'VIEWPORT', bounds: VIEWPORT_BOUNDS }, previous: null },
+          }),
+          effectiveSelectedArea: EFFECTIVE_SELECTED_AREA,
+          areasNavigationJourney: makeAreasNavigationJourney({ node: AREA_LEAF }),
+        }),
+      { wrapper, initialProps: { mapBbox: VIEWPORT_BOUNDS_AS_TUPLE(VIEWPORT_BOUNDS) } },
+    );
+
+    await waitFor(() => {
+      expect(findMarkersCall()).toBeDefined();
+    });
+
+    const [urlBeforePan] = findMarkersCall() as [string, unknown];
+    const paramsBeforePan = new URLSearchParams(urlBeforePan.split('?')[1]);
+    expect(paramsBeforePan.has('bbox')).toBe(false);
+
+    const callCountBeforePan = markersCallCount();
+
+    // Simulate a pan: the live mapBbox prop drifts to a disjoint rectangle
+    // while the committed VIEWPORT scope itself is unchanged.
+    rerender({ mapBbox: PANNED_MAP_BBOX });
+
+    // Give TanStack Query a tick to fire a refetch if the bbox-derived query
+    // key had changed (it must not have — effectiveBbox stays null for any
+    // mapBbox value while VIEWPORT is committed).
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(markersCallCount()).toBe(callCountBeforePan);
+
+    // Belt-and-braces: the (still-single) markers call's params are byte-
+    // identical to the pre-pan snapshot — no bbox= appeared, no new fetch.
+    const [urlAfterPan] = findMarkersCall() as [string, unknown];
+    expect(urlAfterPan).toBe(urlBeforePan);
+  });
+});
+
+function VIEWPORT_BOUNDS_AS_TUPLE(bounds: {
+  s: number;
+  w: number;
+  n: number;
+  e: number;
+}): [number, number, number, number] {
+  return [bounds.s, bounds.w, bounds.n, bounds.e];
+}

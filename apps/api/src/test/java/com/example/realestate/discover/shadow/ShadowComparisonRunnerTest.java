@@ -246,7 +246,7 @@ class ShadowComparisonRunnerTest {
                 "udupi", null, null, null, null, null, null, null,
                 null, null, null, null,
                 null, null, null, null,
-                null, null, 0, 20, false, null, null);
+                null, null, 0, 20, false, null, null, null);
     }
 
     private static DiscoverListingsPage emptyPage() {
@@ -275,7 +275,7 @@ class ShadowComparisonRunnerTest {
                 null,     // q
                 null,     // listingPurpose
                 null,     // excludePropertyTypes
-                null);    // areaKeys
+                null, null);    // areaKeys
     }
 
     private static DiscoverMarkersResponse emptyMarkersResponse() {

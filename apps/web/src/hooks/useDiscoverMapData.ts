@@ -6,6 +6,7 @@ import { useTrendsOptions } from '@/hooks/useTrendsOptions';
 import { useDiscoverAreas, DiscoverAreasResponse, DiscoverArea } from '@/hooks/useDiscoverAreas';
 import { useDiscoverCityListings, DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { useSchoolRadiusListings, mapSchoolRadiusCard, SchoolRadiusListingItem } from '@/hooks/useSchoolRadiusListings';
+import { mapAnonViewportCard, type AnonViewportListingItem } from '@/lib/anonViewportListing';
 import { useSchoolById, SchoolResult } from '@/hooks/useSchoolSearch';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 // Issue #1953 AC12 — `import type`, NOT a value import. AreaPoint is an exported
@@ -27,6 +28,7 @@ import {
   filteredMarkerToPropertyListing,
   discoverListingToPropertyListing,
   cityListingToPropertyListing,
+  discoverListingToCityListing,
 } from '@/lib/discoverMappers';
 import type { DiscoverMarkerScope } from '@/features/discover/selectors/markerScope';
 import type { ResultScope } from '@/features/discover/state/resultScope';
@@ -386,6 +388,68 @@ export interface UseDiscoverMapDataResult {
   /** True when the school-radius endpoint reports more listings beyond this page. */
   schoolRadiusHasMore: boolean;
   areaMarkerListings: (PropertyListing & { images?: PropertyImage[] })[];
+  /**
+   * Issue #2015 — true only for an anonymous caller with a COMMITTED VIEWPORT
+   * `resultScope` (i.e. "Search this area" was triggered). Exposed so downstream marker
+   * selection (`resolveMarkerListings.ts`) can gate the anon-viewport marker branch on the
+   * exact same condition this hook uses to enable the bbox-only query, rather than
+   * re-deriving `resultScope?.kind === 'VIEWPORT' && !isAuthenticated` a second time.
+   */
+  isAnonViewport: boolean;
+  /**
+   * Issue #2015 — anonymous "Search this area" (committed VIEWPORT `resultScope`, not
+   * authenticated) reconciled listing set, sourced from the PUBLIC bbox-only mode of
+   * `GET /api/discover/cities/{city}/listings` (never the auth-only markers/listings
+   * endpoints — #1118 constraint). Empty whenever the branch isn't active (authenticated,
+   * or resultScope isn't a committed VIEWPORT). Price fields are band-only by
+   * construction (see `AnonViewportListingItem`).
+   */
+  anonViewportListings: AnonViewportListingItem[];
+  /**
+   * Issue #2015 — the SAME `anonViewportListings` array, mapped to the map layer's
+   * `PropertyListing` shape via `cityListingToPropertyListing`. Deriving markers from the
+   * identical array `anonViewportListings` is what guarantees cards and markers share the
+   * exact same listing IDs (the #2015 hard data-integrity constraint) — there is no
+   * separate marker fetch for this branch.
+   */
+  anonViewportMarkerListings: (PropertyListing & { images?: PropertyImage[] })[];
+  /** True while the anon-viewport bbox-only query is in-flight. */
+  anonViewportListingsLoading: boolean;
+  /**
+   * True once the anon-viewport query has settled with an error. Note
+   * `anonViewportListings`/`anonViewportMarkerListings` are NOT cleared when this is
+   * true (review fix 5087672619) — they keep showing the last successful "Search this
+   * area" result set so a transient failure doesn't wipe the shopper's current view.
+   * Callers should pair this flag with a Retry control (see `refetchAnonViewport`).
+   */
+  isErrorAnonViewport: boolean;
+  /**
+   * Issue #2015 review fix (5087672619) — refetches the SAME anon-viewport query (same
+   * bbox/filters) so a Retry control driven off `isErrorAnonViewport` is a real refetch,
+   * not a no-op. Mirrors `refetchAreaListings` (Issue #2353) for the AREA_SET branch.
+   */
+  refetchAnonViewport: () => void;
+  /**
+   * Issue #2015 — true only for an AUTHENTICATED caller with a COMMITTED VIEWPORT
+   * `resultScope` (i.e. "Search this area" was triggered). Mirrors `isAnonViewport`
+   * for the authenticated path — exposed so the right-panel caller can swap away from
+   * the stale AREA_SET `areaListings` without re-deriving
+   * `resultScope?.kind === 'VIEWPORT' && isAuthenticated` a second time.
+   */
+  isAuthViewport: boolean;
+  /**
+   * Issue #2015 — authenticated "Search this area" (committed VIEWPORT `resultScope`)
+   * reconciled listing set. Sourced from the SAME `discoverListingsPage` query already
+   * used for `filteredListings` (which is already resultScope-aware — see the
+   * `useDiscoverListings` call above), just remapped via `discoverListingToCityListing`
+   * so it can be rendered by `AreaSelectedPanel`'s `PropertyCard`. Empty whenever the
+   * branch isn't active (anonymous, or resultScope isn't a committed VIEWPORT).
+   */
+  authViewportListings: DiscoverCityListingItem[];
+  /** True while the authenticated-viewport listings query is in-flight. */
+  authViewportListingsLoading: boolean;
+  /** True once the authenticated-viewport listings query has settled with an error. */
+  isErrorAuthViewport: boolean;
   topLocalities: { locality: string; count: number }[];
   activeFocusBounds: [[number, number], [number, number]] | null;
   localityToAreaKey: Map<string, string>;
@@ -692,6 +756,21 @@ export function useDiscoverMapData({
     );
   }, [isAuthenticated, discoverListingsPage]);
 
+  // ── Auth VIEWPORT listings (Issue #2015) ───────────────────────────────────
+  // Active only for an AUTHENTICATED caller with a COMMITTED VIEWPORT resultScope (i.e.
+  // "Search this area" was triggered). `discoverListingsPage` is already resultScope-aware
+  // (it's passed directly to `useDiscoverListings` above), so this branch simply remaps
+  // the SAME page content via `discoverListingToCityListing` into the shape
+  // `AreaSelectedPanel`/`PropertyCard` expect — mirroring `anonViewportListings` for the
+  // authenticated path, without a second network request.
+  const isAuthViewport = isAuthenticated && resultScope?.kind === 'VIEWPORT';
+  const authViewportListings = useMemo((): DiscoverCityListingItem[] => {
+    if (!isAuthViewport) return [];
+    return (discoverListingsPage?.content ?? []).map(discoverListingToCityListing);
+  }, [isAuthViewport, discoverListingsPage]);
+  const authViewportListingsLoading = isAuthViewport && discoverListingsLoading;
+  const isErrorAuthViewport = isAuthViewport && discoverListingsError != null;
+
   const listingsWithCoords = useMemo(
     () => filteredListings.filter((l) => l.latitude && l.longitude),
     [filteredListings],
@@ -753,6 +832,86 @@ export function useDiscoverMapData({
       .map((l) => ({ ...l, lat: l.lat as number, lon: l.lon as number }));
     return withCoords.map((l) => cityListingToPropertyListing(l as DiscoverCityListingItem & { lat: number; lon: number }, now));
   }, [selectedArea, areaListings]);
+
+  // ── Anon VIEWPORT listings (Issue #2015) ───────────────────────────────────
+  // Active only for an anonymous caller with a COMMITTED VIEWPORT resultScope (i.e.
+  // "Search this area" was triggered) — never for the authenticated VIEWPORT path
+  // (useDiscoverListings/useDiscoverFilteredMarkers, gated by isAuthenticated above and
+  // unaffected by this branch) or the anon AREA_SET/POLYGON paths (schoolRadiusListings/
+  // areaListings, which this branch does not touch). Sourced exclusively from the PUBLIC
+  // bbox-only mode of GET /api/discover/cities/{city}/listings — never the auth-only
+  // /api/discover/markers or /api/discover/listings endpoints (#1118 constraint).
+  const anonViewportBbox: [number, number, number, number] | null =
+    !isAuthenticated && resultScope?.kind === 'VIEWPORT'
+      ? [resultScope.bounds.s, resultScope.bounds.w, resultScope.bounds.n, resultScope.bounds.e]
+      : null;
+  const isAnonViewport = anonViewportBbox != null;
+
+  const {
+    data: anonViewportRawData,
+    isLoading: anonViewportQueryLoading,
+    isError: isErrorAnonViewport,
+    refetch: refetchAnonViewport,
+  } = useDiscoverCityListings({
+    city,
+    // areaKeys deliberately empty — this is the bbox-only mode (#2015); the backend
+    // groups the response by each listing's own discovered area instead of a requested
+    // areaKeys list. useDiscoverCityListings.enabled requires bbox non-null when
+    // areaKeys is empty, which anonViewportBbox provides only when this branch is active.
+    areaKeys: [],
+    bbox: anonViewportBbox,
+    minPrice: discoverMinPrice,
+    maxPrice: discoverMaxPrice,
+    bedrooms: discoverBedrooms,
+    propertyType: discoverPropertyType,
+    q: debouncedSearch?.trim() || undefined,
+    listingPurpose,
+    // Always false: this branch only ever runs for an anonymous caller (see
+    // anonViewportBbox above), and forcing it here (rather than passing the outer
+    // isAuthenticated) keeps the anon (priceBand) cache bucket correct even if this
+    // hook were ever reached with isAuthenticated=true and a stale VIEWPORT resultScope
+    // (anonViewportBbox would already be null in that case, disabling the query, but
+    // this keeps the param self-consistent rather than relying solely on that guard).
+    isAuthenticated: false,
+  });
+
+  // Issue #2015 hard constraint: cards and markers for this branch are derived from the
+  // SAME flattened array, guaranteeing identical listing IDs on both. mapAnonViewportCard
+  // also enforces band-only pricing structurally (see AnonViewportListingItem).
+  //
+  // Review fix 5087672619 — a transient query error must NOT collapse the result set to
+  // empty: it would silently wipe the shopper's current "Search this area" view with no
+  // way back short of panning again. anonViewportLastGoodRef holds the last successful,
+  // mapped result and is read only on error, so a genuine (non-error) empty bbox still
+  // renders the real empty state (see I2). The ref is written as a plain statement during
+  // render — not inside the memo callback — mirroring the existing during-render ref-write
+  // convention already used in this codebase (see useZoomBand.ts's bandRef and
+  // useDiscoverUrlState.ts's liveUrlParamsRef).
+  const anonViewportLastGoodRef = useRef<AnonViewportListingItem[]>([]);
+  const anonViewportListings = useMemo((): AnonViewportListingItem[] => {
+    if (!isAnonViewport) return [];
+    if (!anonViewportRawData) {
+      return isErrorAnonViewport ? anonViewportLastGoodRef.current : [];
+    }
+    return anonViewportRawData.areas.flatMap((a) =>
+      a.listings.map((l) => mapAnonViewportCard(l, a.areaKey)),
+    );
+  }, [isAnonViewport, anonViewportRawData, isErrorAnonViewport]);
+  if (isAnonViewport && anonViewportRawData) {
+    anonViewportLastGoodRef.current = anonViewportListings;
+  }
+  const anonViewportListingsLoading = isAnonViewport && anonViewportQueryLoading;
+
+  const anonViewportMarkerListings = useMemo((): (PropertyListing & { images?: PropertyImage[] })[] => {
+    if (anonViewportListings.length === 0) return [];
+    const now = new Date().toISOString();
+    const withCoords = anonViewportListings
+      .filter((l) => (l.lat != null && l.lon != null) || (l.latitude != null && l.longitude != null))
+      .map((l) => ({ ...l, lat: l.lat ?? l.latitude, lon: l.lon ?? l.longitude }))
+      .filter((l) => l.lat != null && l.lon != null)
+      .map((l) => ({ ...l, lat: l.lat as number, lon: l.lon as number }));
+    return withCoords.map((l) => cityListingToPropertyListing(l, now));
+  }, [anonViewportListings]);
 
   // ── Derived: topLocalities from aggregate response ────────────────────────
   // Full-filtered-set aggregate — does NOT change on page navigation.
@@ -967,6 +1126,16 @@ export function useDiscoverMapData({
     schoolRadiusListingsLoading,
     schoolRadiusHasMore,
     areaMarkerListings,
+    isAnonViewport,
+    anonViewportListings,
+    anonViewportMarkerListings,
+    anonViewportListingsLoading,
+    isErrorAnonViewport,
+    refetchAnonViewport,
+    isAuthViewport,
+    authViewportListings,
+    authViewportListingsLoading,
+    isErrorAuthViewport,
     topLocalities,
     activeFocusBounds,
     localityToAreaKey,
