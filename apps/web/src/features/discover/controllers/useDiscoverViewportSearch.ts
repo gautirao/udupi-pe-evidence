@@ -28,6 +28,28 @@ export interface UseDiscoverViewportSearchParams {
   resultScope: CommittedResultScope | undefined;
   /** From nav.resultScope actions (Issue #2016) — commits a new scope to the URL. */
   commitResultScope: (scope: ResultScope, opts?: { history: 'push' | 'replace' }) => void;
+  /**
+   * From useDiscoverViewportTracker() — issue #2426 fix-cycle-2. Cancels any
+   * pending debounced `mapBbox` update and seeds it synchronously with the
+   * bounds passed in. Called from `activate()` with the exact bounds being
+   * committed, so a settle that predates the commit can't land afterward
+   * and fabricate a dirty viewport with no new user gesture. Optional so
+   * existing callers/tests that don't exercise this path stay unaffected.
+   */
+  commitBbox?: (bbox: [number, number, number, number]) => void;
+  /**
+   * From useDiscoverViewportTracker() — issue #2426 fix cycle 4. A
+   * monotonically increasing counter bumped once per genuine user camera
+   * gesture (dragstart/wheel/touchstart/dblclick/zoom-control-click/
+   * camera-keydown — see PropertyMap's BoundsWatcher doc comment for the
+   * exact set). `isDirty` requires this to have advanced past the value
+   * recorded at the last baseline reset, closing a third fabricated-dirty
+   * source `commitBbox` alone cannot: a genuine NEW settle (e.g. trailing
+   * drag inertia) landing shortly AFTER a commit, with no further real user
+   * input, must not re-dirty the viewport. Defaults to 0 (never dirty from
+   * gesture alone) if omitted, for callers/tests that don't exercise this.
+   */
+  userCameraGestureSeq?: number;
 }
 
 export interface UseDiscoverViewportSearchResult {
@@ -129,10 +151,17 @@ export function useDiscoverViewportSearch({
   cameraIntent,
   resultScope,
   commitResultScope,
+  commitBbox,
+  userCameraGestureSeq = 0,
 }: UseDiscoverViewportSearchParams): UseDiscoverViewportSearchResult {
   const referenceBboxRef = useRef<[number, number, number, number] | null>(null);
   const lastCameraSeqRef = useRef<number | null>(null);
   const lastScopeSignatureRef = useRef<string | null>(null);
+  // Issue #2426 fix cycle 4 — the userCameraGestureSeq value at the last
+  // baseline reset. isDirty additionally requires the live seq to have
+  // advanced PAST this, i.e. a genuine gesture happened since. See the
+  // gating note on `userCameraGestureSeq` in the params doc above.
+  const committedGestureSeqRef = useRef(0);
 
   // See the CameraIntent/CommittedResultScope param docs above — these two
   // derivations deliberately live here (a controller), not in the
@@ -153,6 +182,7 @@ export function useDiscoverViewportSearch({
     lastCameraSeqRef.current = cameraSeq;
     lastScopeSignatureRef.current = scopeSignature;
     referenceBboxRef.current = null;
+    committedGestureSeqRef.current = userCameraGestureSeq;
   }
 
   if (referenceBboxRef.current === null && mapBbox) {
@@ -170,16 +200,34 @@ export function useDiscoverViewportSearch({
   // after panning further from an already-committed VIEWPORT scope works.
   const isEligible = scopeKind === 'AREA_SET' || scopeKind === 'POLYGON' || scopeKind === 'VIEWPORT';
 
+  // Issue #2426 fix cycle 4 — dirty requires BOTH a bbox drift past
+  // tolerance AND a genuine user camera gesture since the last baseline
+  // reset. Without the gesture gate, a settle that lands after a commit
+  // with no further real user input (a trailing-inertia settle, or a
+  // stale debounced update `commitBbox` didn't catch) would still flip
+  // isDirty purely from bbox comparison — exactly the fabricated-dirty
+  // class this issue rules out.
   const isDirty =
-    isEligible && mapBbox !== null && referenceBboxRef.current !== null
+    isEligible &&
+    mapBbox !== null &&
+    referenceBboxRef.current !== null &&
+    userCameraGestureSeq > committedGestureSeqRef.current
       ? isViewportDirty(referenceBboxRef.current, mapBbox)
       : false;
 
   const activate = useCallback(() => {
     if (!isEligible || !mapBbox) return;
     const [s, w, n, e] = mapBbox;
+    // Issue #2426 fix-cycle-2 — cancel any pending debounced mapBbox update
+    // and re-seed it synchronously with the EXACT bounds being committed,
+    // before commitResultScope fires. Without this, a settle that predates
+    // this activation (e.g. trailing pan momentum) can still have its own
+    // debounced update in flight; if it lands after this commit, it moves
+    // mapBbox to a value that never matched what was committed, fabricating
+    // a dirty viewport with no further user gesture.
+    commitBbox?.([s, w, n, e]);
     commitResultScope({ kind: 'VIEWPORT', bounds: { s, w, n, e } }, { history: 'replace' });
-  }, [isEligible, mapBbox, commitResultScope]);
+  }, [isEligible, mapBbox, commitResultScope, commitBbox]);
 
   return { isEligible, isDirty, activate };
 }

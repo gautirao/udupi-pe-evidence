@@ -301,7 +301,7 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   // — still safely before useDiscoverMapData/useDiscoverCameraOrchestration,
   // the only two things that read its outputs.
   const viewportTrackerController = useDiscoverViewportTracker({ mobileView, city });
-  const { mapBbox } = viewportTrackerController;
+  const { mapBbox, commitBbox, userCameraGestureSeq } = viewportTrackerController;
 
   // Called here (after `city` resolves from useDiscoverPageState) — does
   // NOT wrap useAreaGroups (stays page-level; see the controller's own
@@ -383,6 +383,8 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     cameraIntent: mapDataController.cameraIntent,
     resultScope: nav.resultScope,
     commitResultScope: actions.commitResultScope,
+    commitBbox,
+    userCameraGestureSeq,
   });
 
   // controllers/useDiscoverSchoolController.ts consolidates

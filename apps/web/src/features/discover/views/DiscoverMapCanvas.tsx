@@ -38,6 +38,7 @@ import { SearchThisAreaCta } from '@/features/discover/components/map/SearchThis
 import { ActiveScopeChip } from '@/features/discover/components/map/ActiveScopeChip';
 import { AreaSetChips } from '@/features/discover/components/AreaSetChips';
 import { useAreaSetDraftContext } from '@/features/discover/state/AreaSetDraftContext';
+import { useSearchThisAreaCtaOffset } from '@/features/discover/state/useSearchThisAreaCtaOffset';
 
 /**
  * Issue #1824 Slice S11a — the map-half return-tree region (mapContainerRef
@@ -244,6 +245,8 @@ export interface DiscoverMapCanvasProps {
   schoolZoneLabels: ZoneLabelPoint[];
   setMapZoom: Dispatch<SetStateAction<number>>;
   handleBoundsChange: (bbox: [number, number, number, number]) => void;
+  /** Issue #2426 fix cycle 4 — bumps the tracker's userCameraGestureSeq on every genuine camera gesture. Passed through to PropertyMap's onUserCameraGesture. */
+  handleUserCameraGesture: () => void;
   panToArea: AreaPoint | null;
   /**
    * PR #2128 review cycle 4/final (Finding 2, issue #1823) — bottom-ONLY
@@ -433,6 +436,7 @@ export function DiscoverMapCanvas({
   schoolZoneLabels,
   setMapZoom,
   handleBoundsChange,
+  handleUserCameraGesture,
   panToArea,
   bottomOcclusionPx,
   previewOcclusionPx,
@@ -526,6 +530,11 @@ export function DiscoverMapCanvas({
     commands: areaSetDraftCommands,
     data: nearbyAreaCandidatesData,
   } = useAreaSetDraftContext();
+
+  // Issue #2426 — real-measured clearance so SearchThisAreaCta (rendered
+  // below) never overlaps DiscoverMapContextOverlay's breadcrumb or the
+  // AreaSetChips strip beneath it. See useSearchThisAreaCtaOffset's own doc.
+  const { ctaTopOffsetPx, onBreadcrumbHeightChange, chipsRowRef } = useSearchThisAreaCtaOffset(mapContainerRef);
   // Code-review fix (PR #2424) — gated on `shell.isAreaSetDraftOpen`. Without
   // this gate, `useAreaSetDraftContext()` always seeds `draftAreaKeys` from
   // the committed AREA_SET and always runs the nearby-candidate query in
@@ -726,6 +735,7 @@ export function DiscoverMapCanvas({
         isEligible={viewportSearchIsEligible}
         isDirty={viewportSearchIsDirty}
         onActivate={onActivateViewportSearch ?? (() => {})}
+        topOffsetPx={ctaTopOffsetPx}
       />
       <ActiveScopeChip discoverAreas={discoverAreas} publishCameraIntent={publishCameraIntent} />
       {error ? (
@@ -874,6 +884,7 @@ export function DiscoverMapCanvas({
           onZoomChange={setMapZoom}
           onViewportChange={urlActions.reportViewport}
           onBoundsChange={handleBoundsChange}
+          onUserCameraGesture={handleUserCameraGesture}
           panToArea={panToArea}
           bottomOcclusionPx={bottomOcclusionPx}
           previewOcclusionPx={previewOcclusionPx}
@@ -957,6 +968,7 @@ export function DiscoverMapCanvas({
         canonicalNavigationNode={areasNavigationJourney?.node ?? null}
         buildNavigationNodeHref={buildNavigationNodeHref}
         mobileListButton={mobileListButton}
+        onHeightChange={onBreadcrumbHeightChange}
       />
 
       {/* Issue #2017 — multi-area AREA_SET draft chip strip ("Selected areas" +
@@ -987,7 +999,10 @@ export function DiscoverMapCanvas({
           enough room with margin. At `lg`+ the breadcrumb never wraps in
           practice (see AreasBreadcrumbTrail's own width-budget derivation),
           so the original `top-14` is kept there, unchanged. */}
-      <div className="pointer-events-none absolute top-14 left-4 right-4 z-[999] [@media(max-width:1023px)]:top-24 lg:right-auto">
+      <div
+        ref={chipsRowRef}
+        className="pointer-events-none absolute top-14 left-4 right-4 z-[999] [@media(max-width:1023px)]:top-24 lg:right-auto"
+      >
         <div className="pointer-events-auto inline-flex max-w-full">
           <AreaSetChips />
         </div>

@@ -409,6 +409,15 @@ interface PropertyMapProps {
    */
   onBoundsChange?: (bbox: [number, number, number, number]) => void;
   /**
+   * Called on every DOM/Leaflet signal that can ONLY originate from a
+   * genuine user camera gesture (the exact clear-by set documented on
+   * BoundsWatcher above — dragstart, wheel, touchstart, dblclick, a
+   * zoom-control click, or a Leaflet camera keydown). Issue #2426 fix
+   * cycle 4 — lets the caller gate viewport dirty-state on "a real gesture
+   * happened since the last commit", independent of settle/debounce timing.
+   */
+  onUserCameraGesture?: () => void;
+  /**
    * Active journey type. Passed through to AreaMarkerLayer to drive the school-count
    * badge variant when journey='school-first' and no school is selected.
    */
@@ -850,6 +859,23 @@ function ViewportWatcher({
   return null;
 }
 
+// Matches the Leaflet zoom +/- control's own button elements — see
+// BoundsWatcher's doc comment (fix cycle 3) for why `click` is scoped to it.
+const ZOOM_CONTROL_SELECTOR = '.leaflet-control-zoom-in, .leaflet-control-zoom-out';
+
+// The keys Leaflet's own `Map.Keyboard` handler treats as camera keys (arrow
+// pan, +/-/=/_  zoom) — see BoundsWatcher's doc comment (fix cycle 3).
+const CAMERA_KEYDOWN_KEYS = new Set([
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  '+',
+  '=',
+  '-',
+  '_',
+]);
+
 /**
  * Fires onBoundsChange with the current map bbox [south, west, north, east] after
  * every moveend or zoomend. The initial mount fire is suppressed (hasMountedRef guard)
@@ -858,22 +884,197 @@ function ViewportWatcher({
  *
  * Coalescing: Leaflet fires zoomend then moveend in rapid succession on pinch/scroll
  * zoom. The caller's debounce window (≥300 ms) collapses these into a single refetch.
+ *
+ * Issue #2426 (recovered from a crash-orphaned fix parked at
+ * `parked/2426-cta-resize-veto-fix`, commit bb4cffba, then widened after live
+ * E2E evidence — see below) — `MapContainerResizeSync` (issue #2049) calls
+ * `map.invalidateSize({ pan: true, debounceMoveend: true })` whenever the
+ * container's on-screen size actually changes (a layout effect, e.g. a
+ * ResizeObserver firing after a sibling panel mounts/resizes, or the mobile
+ * Map/List overlay toggling), which schedules a debounced `moveend` carrying
+ * the recomputed bounds — NOT a genuine user pan/zoom. Unlike the imperative
+ * camera calls (fitBounds/flyTo/setView/panTo/setZoom), this resize path
+ * never bumps `cameraIntent.seq`, so `useDiscoverViewportSearch`'s
+ * dirty-baseline reset has no way to tell it apart from a real drift and can
+ * incorrectly re-trip "Search this area" with no user interaction at all.
+ *
+ * Leaflet fires its own `resize` event synchronously from `invalidateSize`
+ * exactly when this path runs, so that's the genuine signal to start
+ * suppressing with. The parked fix's original one-shot design (suppress
+ * exactly the next moveend/zoomend, then stop) held on desktop but a mobile
+ * E2E run (390x844, a much larger RELATIVE viewport-width change than
+ * desktop's) surfaced a real gap: `invalidateSize({ pan: true })` re-centers
+ * the map when the shrunk container would otherwise crop the current
+ * center out of view, and that `panBy` call fires its OWN, SEPARATE
+ * movestart/moveend cycle in addition to the resize's own — two settle
+ * events from one resize, not one. A single-shot flag only catches the
+ * first, letting the second re-dirty the viewport.
+ *
+ * Fix: suppression now stays armed across ANY NUMBER of settle events
+ * following a `resize`, and is cleared only by a signal that can ONLY come
+ * from a genuine user CAMERA gesture. The issue defines "activation" as the
+ * first MATERIAL user pan/zoom, so this must cover every real
+ * camera-changing input — but ONLY camera-changing input. Team-lead review
+ * (fix cycle 3) — an earlier version cleared on ANY `click`/`keydown`
+ * anywhere in the map container, which is too broad: a click on a marker or
+ * the background, or a keydown that isn't one of Leaflet's own camera keys,
+ * clears suppression without any camera actually moving, so a resize-origin
+ * settle still queued behind it can then escape through `onBoundsChange`
+ * uncaught. The cleared-by set is narrowed to signals that can ONLY
+ * originate from an actual camera-moving gesture:
+ *
+ *   - Leaflet's `dragstart` (real mouse/touch drag; never fired for a
+ *     programmatic pan/panBy)
+ *   - Leaflet's `boxzoomstart` (Shift+drag box zoom, enabled by default in
+ *     this repo) — a real bounds-changing gesture that fires neither
+ *     `dragstart` nor any of the other signals below (fix cycle 5: without
+ *     this, isDirty's gesture-seq gate would never advance for a genuine
+ *     box zoom, leaving the CTA wrongly hidden after one)
+ *   - a native `wheel` on the map container (scroll-wheel zoom, ahead of
+ *     Leaflet's own `zoomstart`, which does not by itself distinguish user
+ *     vs. programmatic zoom)
+ *   - a native `touchstart` on the map container, but ONLY when it's a
+ *     MULTI-finger touch (`TouchEvent.touches.length >= 2`, i.e. pinch-zoom
+ *     start) — an undifferentiated single-finger touchstart is NOT camera
+ *     intent by itself (it can be a tap on a marker/background/control,
+ *     the exact same ambiguity `click` has); a genuine one-finger pan
+ *     already fires Leaflet's own `dragstart` once the drag actually
+ *     begins, so nothing is lost by not clearing on the raw touchstart
+ *     (fix cycle 5 — an earlier version cleared on ANY touchstart, which
+ *     could let a resize-origin settle escape on mobile the same way an
+ *     unscoped click could on desktop)
+ *   - a native `click` on the map container, but ONLY when the click
+ *     target is inside the Leaflet zoom +/- control
+ *     (`.leaflet-control-zoom-in`/`-out`, part of the map container's own
+ *     DOM subtree) — a click anywhere else in the container (a marker, the
+ *     background, another control) does NOT clear
+ *   - a native `dblclick` on the map container (double-click zoom) — driven
+ *     directly rather than relying on the two `click`s the browser fires
+ *     before it, since `click` itself is now target-scoped to the zoom
+ *     control and would otherwise miss this
+ *   - a native `keydown` on the map container, but ONLY for the keys
+ *     Leaflet's `Keyboard` handler itself treats as camera keys: the four
+ *     arrow keys (pan) and `+`/`=`/`-`/`_` (zoom) — any other keydown
+ *     (Tab, Escape, typing in an unrelated focused control, etc.) does NOT
+ *     clear
+ *
+ * All of the above are DOM/Leaflet signals that can only originate from the
+ * user actually moving the camera — never from a programmatic camera call,
+ * and never from an unrelated click/keypress/single-finger-tap that happens
+ * to land inside the map container. This is still purely event-driven — no
+ * timer, no delay, no CSS hiding — so it cannot resolve based on "enough
+ * time has passed" and only ever clears on an actual camera-moving gesture.
+ *
+ * Independent of all of the above: a genuine cameraIntent-driven
+ * settle (fitBounds/flyTo/setView/panTo/setZoom) never fires Leaflet's
+ * `resize` event in the first place, so this veto never arms for one — and
+ * even in the pathological case of a resize immediately followed by a
+ * cameraIntent move before any of the signals above fires,
+ * `useDiscoverViewportSearch`'s dirty-baseline reset is keyed off
+ * `cameraIntent.seq` directly (a completely separate mechanism from this
+ * component's `onBoundsChange` forwarding), so the baseline still resets
+ * correctly either way.
+ *
+ * `onUserCameraGesture` (fix cycle 4, team-lead ruling) — a THIRD
+ * fabricated-dirty source, distinct from the resize-settle race this veto
+ * closes and the trailing-debounce race `useDiscoverViewportTracker.
+ * commitBbox` closes: a genuine NEW settle (e.g. trailing drag inertia) can
+ * still land shortly AFTER a VIEWPORT commit with no further real user
+ * input, and `commitBbox` only cancels what was ALREADY pending at the
+ * exact commit instant — it does nothing about a settle that arrives after.
+ * Rather than add a second suppression mechanism here, this fires the SAME
+ * camera-gesture classification this veto already computes (the exact
+ * `onUserGestureStart` clear-by set above) OUTWARD, so the single
+ * dirty-state owner (`useDiscoverViewportSearch`) can gate `isDirty` on
+ * "has a genuine gesture happened since the last commit", independent of
+ * bbox-settle timing. See that hook's own doc comment for the gating logic.
  */
 function BoundsWatcher({
   onBoundsChange,
+  onUserCameraGesture,
 }: {
   onBoundsChange?: (bbox: [number, number, number, number]) => void;
+  onUserCameraGesture?: () => void;
 }) {
   const map = useMap();
   // Skip the first fire on mount — the initial viewport is already captured from
   // URL params; we only want to trigger refetches on genuine user pan/zoom.
   const hasMountedRef = useRef(false);
+  const suppressSettlesRef = useRef(false);
+
+  useEffect(() => {
+    if (!onBoundsChange && !onUserCameraGesture) return;
+    const container = map.getContainer();
+    const onResize = () => {
+      suppressSettlesRef.current = true;
+    };
+    // Cleared only by a signal that can only originate from a real user
+    // camera gesture — see this component's doc comment above for the full
+    // list and why each one qualifies. Also reported outward via
+    // onUserCameraGesture so useDiscoverViewportSearch can gate isDirty on
+    // "a genuine gesture happened since the last commit" (fix cycle 4).
+    const onUserGestureStart = () => {
+      suppressSettlesRef.current = false;
+      onUserCameraGesture?.();
+    };
+    // `click` only clears when the target is the Leaflet zoom +/- control —
+    // any other click (a marker, the background, another control) must NOT
+    // clear (see doc comment above, fix cycle 3).
+    const onZoomControlClick = (evt: Event) => {
+      const target = evt.target;
+      if (target instanceof Element && target.closest(ZOOM_CONTROL_SELECTOR)) {
+        onUserGestureStart();
+      }
+    };
+    // `keydown` only clears for Leaflet's own camera keys — any other key
+    // (Tab, Escape, typing elsewhere, etc.) must NOT clear.
+    const onCameraKeydown = (evt: KeyboardEvent) => {
+      if (CAMERA_KEYDOWN_KEYS.has(evt.key)) {
+        onUserGestureStart();
+      }
+    };
+    // `touchstart` only clears for a MULTI-finger touch (pinch-zoom start) —
+    // an undifferentiated single-finger touchstart is not camera intent by
+    // itself (it can be a tap on a marker/background/control, same as
+    // `click`); a genuine one-finger pan already fires Leaflet's own
+    // `dragstart` once the drag actually begins (fix cycle 5).
+    const onMultiTouchStart = (evt: TouchEvent) => {
+      if (evt.touches.length >= 2) {
+        onUserGestureStart();
+      }
+    };
+    map.on('resize', onResize);
+    map.on('dragstart', onUserGestureStart);
+    // Leaflet's box-zoom (Shift+drag, enabled by default) fires
+    // `boxzoomstart`, never `dragstart` — without this, a real box zoom
+    // changes the bounds but the CTA stays hidden since isDirty now
+    // requires the gesture seq to have advanced (fix cycle 5).
+    map.on('boxzoomstart', onUserGestureStart);
+    container.addEventListener('wheel', onUserGestureStart, { passive: true });
+    container.addEventListener('touchstart', onMultiTouchStart, { passive: true });
+    container.addEventListener('dblclick', onUserGestureStart);
+    container.addEventListener('click', onZoomControlClick);
+    container.addEventListener('keydown', onCameraKeydown);
+    return () => {
+      map.off('resize', onResize);
+      map.off('dragstart', onUserGestureStart);
+      map.off('boxzoomstart', onUserGestureStart);
+      container.removeEventListener('wheel', onUserGestureStart);
+      container.removeEventListener('touchstart', onMultiTouchStart);
+      container.removeEventListener('dblclick', onUserGestureStart);
+      container.removeEventListener('click', onZoomControlClick);
+      container.removeEventListener('keydown', onCameraKeydown);
+    };
+  }, [map, onBoundsChange, onUserCameraGesture]);
 
   useEffect(() => {
     if (!onBoundsChange) return;
     const handler = () => {
       if (!hasMountedRef.current) {
         hasMountedRef.current = true;
+        return;
+      }
+      if (suppressSettlesRef.current) {
         return;
       }
       const b = map.getBounds();
@@ -2534,6 +2735,7 @@ export function PropertyMap({
   onZoomChange,
   onViewportChange,
   onBoundsChange,
+  onUserCameraGesture,
   panToArea,
   bottomOcclusionPx = 0,
   previewOcclusionPx = 0,
@@ -2757,7 +2959,7 @@ export function PropertyMap({
         />
         <ZoomWatcher onZoomChange={onZoomChange} />
         <ViewportWatcher onViewportChange={onViewportChange} />
-        <BoundsWatcher onBoundsChange={onBoundsChange} />
+        <BoundsWatcher onBoundsChange={onBoundsChange} onUserCameraGesture={onUserCameraGesture} />
         <AreaPanner
           panToArea={panToArea}
           bottomOcclusionPx={bottomOcclusionPx}

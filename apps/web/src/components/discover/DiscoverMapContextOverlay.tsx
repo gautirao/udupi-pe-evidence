@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useLayoutEffect, useEffect, useRef } from 'react';
 import { MapPin, GraduationCap } from 'lucide-react';
 import { DiscoverMapBreadcrumb, type DiscoverMapCrumb } from '@/components/discover/DiscoverMapBreadcrumb';
 import { AreasBreadcrumbTrail } from '@/components/discover/navigation/AreasBreadcrumbTrail';
@@ -36,6 +37,18 @@ import type { NavigationNodeResponse } from '@/features/discover/navigation/type
  * in the execution handoff). Given the SAME bounded max-width the school
  * branch already uses, rather than a new mechanism.
  */
+
+/**
+ * Issue #2426 — this overlay's own `top` offset (px), matching its root
+ * div's `top-4` Tailwind class below. Exported so a caller that needs to
+ * reserve space beneath this overlay (e.g. `SearchThisAreaCta`'s clearance
+ * hook) can derive the overlay's real bottom edge as
+ * `DISCOVER_MAP_CONTEXT_OVERLAY_TOP_OFFSET_PX + reportedHeight` instead of
+ * re-guessing it — same "plain px constant tied to a Tailwind class by
+ * comment" convention `AreaSetChips.tsx`'s `PANEL_WIDTH_PX` already uses.
+ */
+export const DISCOVER_MAP_CONTEXT_OVERLAY_TOP_OFFSET_PX = 16;
+
 export interface DiscoverMapContextOverlayProps {
   isAreaFirstCityLanding: boolean;
   showSchoolBreadcrumb: boolean;
@@ -67,6 +80,21 @@ export interface DiscoverMapContextOverlayProps {
    * open, in which case this row renders exactly as it always has.
    */
   mobileListButton?: ReactNode;
+  /**
+   * Issue #2426 — reports this overlay's real, laid-out border-box height
+   * (px) to the caller whenever it changes, so a floating top-anchored map
+   * overlay rendered as this component's sibling (`SearchThisAreaCta`) can
+   * reserve exactly enough space beneath it rather than colliding with it.
+   * Same measurement pattern `MobileListingPreviewSheet.tsx`'s
+   * `onHeightChange` already established for this codebase (Issue #2129):
+   * a synchronous `useLayoutEffect` report (covers this component's content
+   * swapping to a different branch of the same height) plus a
+   * `ResizeObserver` (covers organic reflow, e.g. the breadcrumb wrapping
+   * onto a second row at a narrower width). Measurement-only — fires no
+   * state of its own and is a no-op when omitted, so every existing
+   * caller/test fixture keeps compiling unchanged.
+   */
+  onHeightChange?: (heightPx: number) => void;
 }
 
 export function DiscoverMapContextOverlay({
@@ -80,7 +108,44 @@ export function DiscoverMapContextOverlay({
   canonicalNavigationNode = null,
   buildNavigationNodeHref,
   mobileListButton,
+  onHeightChange,
 }: DiscoverMapContextOverlayProps) {
+  // getBoundingClientRect() (not ResizeObserver's own contentRect) — the
+  // actual visual extent this overlay occupies, matching what a real
+  // hit-test/geometry measurement would read. See onHeightChange's own doc.
+  const rootRef = useRef<HTMLDivElement>(null);
+  // Runs every render (no dep array) so a content-branch swap that happens
+  // to render at the SAME height as before still gets re-verified — but
+  // only actually CALLS onHeightChange when the rounded value changed,
+  // deduped via this ref. A caller's onHeightChange typically feeds back
+  // into its own state (see useSearchThisAreaCtaOffset), so reporting an
+  // unchanged value on every render would re-trigger this render forever.
+  const lastReportedHeightRef = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (!onHeightChange) return;
+    const node = rootRef.current;
+    if (!node) return;
+    const height = Math.ceil(node.getBoundingClientRect().height);
+    if (lastReportedHeightRef.current === height) return;
+    lastReportedHeightRef.current = height;
+    onHeightChange(height);
+  });
+
+  useEffect(() => {
+    if (!onHeightChange || typeof ResizeObserver === 'undefined') return;
+    const node = rootRef.current;
+    if (!node) return;
+    const ro = new ResizeObserver(() => {
+      const height = Math.ceil(node.getBoundingClientRect().height);
+      if (lastReportedHeightRef.current === height) return;
+      lastReportedHeightRef.current = height;
+      onHeightChange(height);
+    });
+    ro.observe(node);
+    return () => ro.disconnect();
+  }, [onHeightChange]);
+
   return (
     // Issue #2089 (#2133 follow-up, PR #2141, fix cycle 2) — below the `lg`
     // split-view breakpoint (this file's siblings use the same 1024px cut,
@@ -102,7 +167,10 @@ export function DiscoverMapContextOverlay({
     // only — `mobileListButton` is always null/undefined at `lg`+ (desktop
     // always shows the map as a flex sibling, never this overlay), so
     // desktop keeps its unmodified, unbounded layout.
-    <div className="pointer-events-none absolute top-4 left-4 z-[1000] [@media(max-width:1023px)]:right-4 [@media(max-width:1023px)]:flex [@media(max-width:1023px)]:items-start [@media(max-width:1023px)]:gap-2">
+    <div
+      ref={rootRef}
+      className="pointer-events-none absolute top-4 left-4 z-[1000] [@media(max-width:1023px)]:right-4 [@media(max-width:1023px)]:flex [@media(max-width:1023px)]:items-start [@media(max-width:1023px)]:gap-2"
+    >
       <div className="pointer-events-auto min-w-0 [@media(max-width:1023px)]:flex-1">
         {canonicalNavigationNode ? (
           <AreasBreadcrumbTrail

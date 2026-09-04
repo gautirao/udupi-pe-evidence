@@ -11,6 +11,31 @@ export interface UseDiscoverViewportTrackerParams {
 export interface UseDiscoverViewportTrackerResult {
   mapBbox: [number, number, number, number] | null;
   handleBoundsChange: (bbox: [number, number, number, number]) => void;
+  /**
+   * Cancels any pending debounced `handleBoundsChange` update and seeds
+   * `mapBbox` synchronously with `bbox` instead. See issue #2426 fix-cycle-2
+   * — call this at the moment a VIEWPORT scope commits, with the exact
+   * bounds being committed, so a settle that predates the commit (already
+   * in flight when the commit happened) can never land afterward and
+   * overwrite the just-committed value with stale bounds.
+   */
+  commitBbox: (bbox: [number, number, number, number]) => void;
+  /**
+   * Monotonically increasing counter, bumped once per genuine user camera
+   * gesture (via `handleUserCameraGesture`, wired to PropertyMap's
+   * `onUserCameraGesture`). Issue #2426 fix cycle 4 — read fresh at each
+   * render (a plain ref, not state — a gesture bump must not itself force a
+   * re-render; whatever value it holds is picked up correctly the next time
+   * `mapBbox` changes and this component re-renders anyway). Lets
+   * `useDiscoverViewportSearch` gate `isDirty` on "a real gesture happened
+   * since the last commit", independent of settle/debounce timing — closes
+   * the trailing-inertia-settle gap that `commitBbox` alone cannot (it only
+   * cancels a timer already pending at the commit instant, not a genuine
+   * new settle that arrives afterward).
+   */
+  userCameraGestureSeq: number;
+  /** Bumps `userCameraGestureSeq`. Wire to PropertyMap's `onUserCameraGesture`. */
+  handleUserCameraGesture: () => void;
 }
 
 /**
@@ -34,6 +59,10 @@ export function useDiscoverViewportTracker({
 }: UseDiscoverViewportTrackerParams): UseDiscoverViewportTrackerResult {
   const [mapBbox, setMapBbox] = useState<[number, number, number, number] | null>(null);
   const bboxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const userCameraGestureSeqRef = useRef(0);
+  const handleUserCameraGesture = useCallback(() => {
+    userCameraGestureSeqRef.current += 1;
+  }, []);
 
   const handleBoundsChange = useCallback(
     (bbox: [number, number, number, number]) => {
@@ -44,6 +73,27 @@ export function useDiscoverViewportTracker({
     },
     [],
   );
+
+  // Issue #2426 fix-cycle-2 — a settle immediately preceding a VIEWPORT
+  // commit (e.g. trailing pan momentum) can still have its debounced
+  // handleBoundsChange update in flight when the commit reads the CURRENT
+  // mapBbox to commit. If that pending update later lands unchanged, no
+  // harm; but if two settles landed close together, the commit may have
+  // used an earlier settle's already-applied bbox while a later settle's
+  // update is still pending — and that pending update, landing after the
+  // commit with no further real user gesture, fabricates a dirty viewport
+  // (isDirty flips true purely from the tracker catching up, not from any
+  // new pan/zoom). Cancelling the pending timer and seeding mapBbox
+  // synchronously with the exact bounds just committed closes that gap: no
+  // stale settle can ever land after this point and diverge from what was
+  // committed.
+  const commitBbox = useCallback((bbox: [number, number, number, number]) => {
+    if (bboxTimerRef.current) {
+      clearTimeout(bboxTimerRef.current);
+      bboxTimerRef.current = null;
+    }
+    setMapBbox(bbox);
+  }, []);
 
   // Cleanup bbox timer on unmount
   useEffect(() => {
@@ -70,5 +120,11 @@ export function useDiscoverViewportTracker({
     setMapBbox(null);
   }, [city]);
 
-  return { mapBbox, handleBoundsChange };
+  return {
+    mapBbox,
+    handleBoundsChange,
+    commitBbox,
+    userCameraGestureSeq: userCameraGestureSeqRef.current,
+    handleUserCameraGesture,
+  };
 }

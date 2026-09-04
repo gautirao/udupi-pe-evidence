@@ -496,3 +496,123 @@ test.describe('@integration-ui #2015 — "Search this area" VIEWPORT scope', () 
     expect(urlParam(page, 'rvp'), 'the explicit rvp bounds must be preserved exactly').toBe(rvp);
   });
 });
+
+// Issue #2426 — its own top-level describe (own serial scope), deliberately
+// NOT nested inside the '@integration-ui #2015' describe above: that block's
+// `test.describe.configure({ mode: 'serial' })` means one early failure
+// there skips every later test in the SAME describe, which would silently
+// skip this regression test too even though it is unrelated to whatever
+// failed earlier. Uses reachCommittedRRNagarAreaSet (below), NOT this file's
+// shared reachCommittedKoramangalaAreaSet: the ephemeral local smoke fixture
+// (scripts/db/fixtures/navigation-hierarchy-fixture-seed.sql) has never
+// actually contained a Central/Koramangala node — only
+// d:southeast/d:northeast/d:southwest and their real AREA leaves (RR Nagar,
+// Vijayanagar, Nagarbhavi, Hoskote, Kannamangala - Whitefield Hoskote Road,
+// Deepanjali Nagar, Gnana Bharathi, Chandra Layout Extension, Avalahalli).
+const D_SOUTHEAST = 'd:southeast';
+const AREA_RR_NAGAR = 'a:IN|KA|Bengaluru|RR Nagar';
+const AREA_RR_NAGAR_KEY = 'IN|KA|Bengaluru|RR Nagar';
+
+async function reachCommittedRRNagarAreaSet(page: Page): Promise<void> {
+  await page.goto(`/discover?city=${CITY}&journey=area-first`);
+  await page.waitForLoadState('domcontentloaded');
+
+  const panelShell = page.getByTestId('discover-areas-journey-panel-shell');
+  await expect(panelShell, 'areas journey panel shell should render').toBeVisible({ timeout: 15_000 });
+  await declineConsentBannerIfPresent(page);
+
+  const directionCard = panelShell.getByTestId(`navigation-child-card-${D_SOUTHEAST}`);
+  await expect(directionCard, 'South-East Bangalore direction card should render').toBeVisible({ timeout: 15_000 });
+  await directionCard.click();
+  await expect(page, 'navigating into South-East Bangalore direction').toHaveURL(
+    new RegExp(`node=${encodeURIComponent(D_SOUTHEAST)}`),
+    { timeout: 10_000 },
+  );
+
+  const areaCard = panelShell.getByTestId(`navigation-child-card-${AREA_RR_NAGAR}`);
+  await expect(areaCard, 'RR Nagar area card should render').toBeVisible({ timeout: 15_000 });
+  await areaCard.click();
+
+  await expect
+    .poll(() => urlParam(page, 'rscope'), { message: 'committing RR Nagar should set rscope=areas', timeout: 10_000 })
+    .toBe('areas');
+  expect(urlParam(page, 'rareas'), 'rareas should carry the RR Nagar area key').toBe(AREA_RR_NAGAR_KEY);
+  await declineConsentBannerIfPresent(page);
+}
+
+test.describe('@integration-ui #2426 — BoundsWatcher resize-veto regression', () => {
+  test('regression: a layout resize after VIEWPORT commit must not re-show "Search this area" (#2426 re-dirty fix)', async ({ page }) => {
+    // Root cause (recovered from a crash-orphaned fix parked at
+    // parked/2426-cta-resize-veto-fix, commit bb4cffba): PropertyMap's
+    // BoundsWatcher forwards EVERY moveend/zoomend to onBoundsChange
+    // unconditionally. MapContainerResizeSync (issue #2049) calls
+    // map.invalidateSize({ debounceMoveend: true }) whenever the Leaflet
+    // container's on-screen size actually changes (a pure layout effect, via
+    // its own ResizeObserver) — scheduling exactly one debounced moveend with
+    // the recomputed bounds, with NO user pan/zoom involved. That resize path
+    // never bumps cameraIntent.seq (unlike the real camera calls), so
+    // useDiscoverViewportSearch's dirty-baseline reset had no way to
+    // distinguish it from genuine drift, and could incorrectly re-trip the
+    // CTA on an already-committed VIEWPORT scope. This drives the ACTUAL
+    // browser resize -> ResizeObserver -> invalidateSize -> moveend sequence
+    // end-to-end (not a pure-function/unit-level simulation).
+    const responses: CapturedResponse[] = [];
+    trackListingResponses(page, responses);
+
+    await reachCommittedRRNagarAreaSet(page);
+
+    const ctaButton = page.getByRole('button', { name: /search this area/i });
+    await panUntilCtaVisible(page, ctaButton);
+    await ctaButton.click();
+
+    await expect
+      .poll(() => urlParam(page, 'rscope'), { message: 'activation should commit rscope=vp', timeout: 10_000 })
+      .toBe('vp');
+    await expect(ctaButton, 'CTA must hide right after activation').not.toBeVisible({ timeout: 5_000 });
+    const rvpBeforeResize = urlParam(page, 'rvp');
+    // Let activation's own commit (URL write + any camera settle it
+    // triggers) fully finish before starting the resize sequence below —
+    // otherwise the resize's own suppression window can race a still-
+    // in-flight settle from the commit itself. Test-only synchronization,
+    // not a change to the resize-veto mechanism (which stays purely
+    // event-driven — see BoundsWatcher's own doc comment).
+    await page.waitForTimeout(500);
+
+    // Trigger a real container-size change: resizing the browser viewport
+    // reflows the surrounding layout (results panel / map split), which
+    // resizes the Leaflet container and fires its ResizeObserver ->
+    // map.invalidateSize({ debounceMoveend: true }) -> a single debounced
+    // moveend — exactly the programmatic/layout-driven sequence this fix
+    // targets. No user pan/zoom occurs.
+    responses.length = 0;
+    const originalViewport = page.viewportSize() ?? { width: 1366, height: 768 };
+    await page.setViewportSize({ width: originalViewport.width - 220, height: originalViewport.height });
+    await page.waitForTimeout(600); // ResizeObserver + invalidateSize's internal debounce settle window
+    await page.setViewportSize(originalViewport);
+    await page.waitForTimeout(600);
+
+    await expect(
+      ctaButton,
+      'a layout resize (ResizeObserver/invalidateSize) after commit must NOT re-show "Search this area" with no user pan/zoom',
+    ).not.toBeVisible({ timeout: 5_000 });
+    expect(urlParam(page, 'rscope'), 'scope must remain vp across the resize').toBe('vp');
+    expect(urlParam(page, 'rvp'), 'the committed viewport bounds must be unchanged by a layout-only resize').toBe(rvpBeforeResize);
+    // A live run surfaced a same-scope refetch here — TanStack Query's
+    // library-default `refetchOnWindowFocus` firing on the viewport resize
+    // (unrelated to BoundsWatcher/#2426; pre-existing app-wide query
+    // behaviour, not something this fix's veto is responsible for
+    // suppressing — the committed rscope=vp/rvp above already prove the
+    // scope itself never changed). What THIS fix owns is that a resize
+    // never re-DIRTIES the committed scope into an ADDITIONAL, DIFFERENT
+    // fetch cycle: at most the one same-scope refetch is tolerated, never
+    // more (which would indicate a genuine re-dirty loop).
+    expect(
+      responses.length,
+      'a layout-only resize must trigger at most one same-scope refetch (library refetchOnWindowFocus), never a re-dirty-driven refetch loop',
+    ).toBeLessThanOrEqual(1);
+
+    // A genuine subsequent user pan must still correctly re-show the CTA —
+    // proves the fix is a targeted veto, not a blanket suppression.
+    await panUntilCtaVisible(page, ctaButton);
+  });
+});

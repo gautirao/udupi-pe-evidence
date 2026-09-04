@@ -72,7 +72,7 @@ type MapCameraView = Pick<
   Pick<DiscoverMapCanvasProps, 'bottomOcclusionPx' | 'previewOcclusionPx'>;
 type MapCameraCommands = Pick<
   DiscoverMapCanvasProps,
-  'publishCameraIntent' | 'setMapZoom' | 'handleBoundsChange'
+  'publishCameraIntent' | 'setMapZoom' | 'handleBoundsChange' | 'handleUserCameraGesture'
 >;
 
 type MapLayersView = Pick<
@@ -816,7 +816,10 @@ export type BuildMapSurfaceCommandsParams = Pick<
     ReturnType<typeof useDiscoverMobilePresentationController>,
     'handlePreviewSheetHeightChange'
   >;
-  viewportTrackerController: Pick<ReturnType<typeof useDiscoverViewportTracker>, 'handleBoundsChange'>;
+  viewportTrackerController: Pick<
+    ReturnType<typeof useDiscoverViewportTracker>,
+    'handleBoundsChange' | 'handleUserCameraGesture'
+  >;
   /** Issue #2015 — commits the live viewport as a VIEWPORT result scope (AC2/AC7). */
   viewportSearchController: Pick<ReturnType<typeof useDiscoverViewportSearch>, 'activate'>;
   markerController: Pick<
@@ -861,7 +864,7 @@ export function buildMapSurfaceCommands(
     regionGuideController: { dismissRegionGuide },
     overviewNavigationController: { handleOverviewAreaClick },
     mobilePresentationController: { handlePreviewSheetHeightChange },
-    viewportTrackerController: { handleBoundsChange },
+    viewportTrackerController: { handleBoundsChange, handleUserCameraGesture },
     // Issue #2015 — commits the live viewport as a VIEWPORT result scope (AC2/AC7).
     viewportSearchController: { activate: activateViewportSearch },
     markerController: {
@@ -875,7 +878,7 @@ export function buildMapSurfaceCommands(
   } = params;
 
   return {
-    camera: { publishCameraIntent, setMapZoom, handleBoundsChange },
+    camera: { publishCameraIntent, setMapZoom, handleBoundsChange, handleUserCameraGesture },
     drawing: {
       handlePolygonDrawn,
       handlePolygonCleared,
