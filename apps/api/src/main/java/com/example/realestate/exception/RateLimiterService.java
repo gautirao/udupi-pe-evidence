@@ -18,6 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *   - Geocoding (GET /api/geocode, GET /api/geocode/reverse): 10 requests per user per minute
  *   - Listing image upload-url (POST /api/listings/{id}/images/upload-url):
  *     configurable requests per user per minute (default 30, see #1699)
+ *   - Saved search create (POST /api/saved-searches):     10 requests per user per hour (see #2019)
+ *   - Saved search update (PATCH /api/saved-searches/{id}): 20 requests per user per hour (see #2019)
  *
  * Buckets are stored in ConcurrentHashMaps and evicted hourly to reclaim memory.
  */
@@ -28,6 +30,8 @@ public class RateLimiterService {
     private final ConcurrentHashMap<String, Bucket> bookingBuckets = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Bucket> geocodingBuckets = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Bucket> imageUploadUrlBuckets = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Bucket> savedSearchCreateBuckets = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Bucket> savedSearchUpdateBuckets = new ConcurrentHashMap<>();
 
     private final int imageUploadUrlRequestsPerMinute;
 
@@ -81,11 +85,33 @@ public class RateLimiterService {
                         .build());
     }
 
+    public Bucket getSavedSearchCreateBucket(String userId) {
+        return savedSearchCreateBuckets.computeIfAbsent(userId, id ->
+                Bucket.builder()
+                        .addLimit(Bandwidth.builder()
+                                .capacity(10)
+                                .refillGreedy(10, Duration.ofHours(1))
+                                .build())
+                        .build());
+    }
+
+    public Bucket getSavedSearchUpdateBucket(String userId) {
+        return savedSearchUpdateBuckets.computeIfAbsent(userId, id ->
+                Bucket.builder()
+                        .addLimit(Bandwidth.builder()
+                                .capacity(20)
+                                .refillGreedy(20, Duration.ofHours(1))
+                                .build())
+                        .build());
+    }
+
     @Scheduled(fixedRate = 3_600_000)
     public void evictStaleBuckets() {
         paymentBuckets.clear();
         bookingBuckets.clear();
         geocodingBuckets.clear();
         imageUploadUrlBuckets.clear();
+        savedSearchCreateBuckets.clear();
+        savedSearchUpdateBuckets.clear();
     }
 }

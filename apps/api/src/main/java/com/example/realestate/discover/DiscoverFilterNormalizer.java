@@ -74,6 +74,18 @@ import java.util.stream.Collectors;
  */
 public final class DiscoverFilterNormalizer {
 
+    /**
+     * The {@link DiscoverListingPredicateBuilder.Filters} component names whose VALUES this
+     * normaliser canonicalises in {@link #normalize} — the authoritative "vocabulary-bearing
+     * filter key" contract that downstream persisted-filter consumers (saved searches, #2019)
+     * bind to. {@code DiscoverFilterNormalizerTest}/{@code SavedSearchFilterAllowlistParityTest}
+     * prove by construction that {@link #normalize} changes exactly these components and no
+     * others, so adding a normalised field here without teaching every consumer about it fails
+     * a test rather than silently drifting.
+     */
+    public static final Set<String> VOCABULARY_FILTER_KEYS =
+            Set.of("listingPurpose", "propertyTypes", "commercialSubtypes", "bedrooms", "sellerTypes");
+
     /** Mirrors {@code property_listings.listing_purpose}'s stored (lower-case) vocabulary. */
     static final Set<String> ALLOWED_LISTING_PURPOSES = Set.of("sale", "rent");
 

@@ -20,12 +20,16 @@ import org.springframework.web.server.ResponseStatusException;
  *   <li>west ≤ east (antimeridian crossing not supported in MVP)</li>
  * </ul>
  * A null or blank input returns {@code null} (param is optional; backward compatible).
+ *
+ * <p>Public so {@code com.example.realestate.savedsearch} can reuse this exact validation
+ * logic (#2019 Slice A review ruling) instead of re-implementing it — narrowest-widening
+ * reuse rather than a duplicated copy.
  */
-final class BboxParser {
+public final class BboxParser {
 
     private BboxParser() {}
 
-    static DiscoverListingPredicateBuilder.Bbox parse(String bboxParam) {
+    public static DiscoverListingPredicateBuilder.Bbox parse(String bboxParam) {
         if (bboxParam == null || bboxParam.isBlank()) return null;
         String[] parts = bboxParam.split(",", -1);
         if (parts.length != 4) {

@@ -20,8 +20,14 @@ import java.util.List;
  * param was never sent. Checking the raw param instead of the resolved list would let
  * {@code nodeKey} combine silently with {@code polygon}/{@code viewportScope} (#2016 review
  * fix-cycle-1): the two would be ANDed together instead of rejected.
+ *
+ * <p>Public so {@code com.example.realestate.savedsearch} can reuse this exact "at most one
+ * populated scope" check (#2019 Slice A review ruling) instead of re-implementing the count —
+ * narrowest-widening reuse rather than a duplicated copy. Saved-search layers its own
+ * additional discriminated-union rules (an explicit {@code resultScopeKind} requiring exactly
+ * one, not merely at most one) on top of this shared check.
  */
-final class ResultScopeExclusivity {
+public final class ResultScopeExclusivity {
 
     private ResultScopeExclusivity() {}
 
@@ -30,7 +36,7 @@ final class ResultScopeExclusivity {
      * {@code effectiveAreaKeys} (non-null and non-empty), {@code polygon} (non-null) or
      * {@code viewportScope} (non-null) is present.
      */
-    static void check(List<String> effectiveAreaKeys, List<List<Double>> polygon,
+    public static void check(List<String> effectiveAreaKeys, List<List<Double>> polygon,
             DiscoverListingPredicateBuilder.Bbox viewportScope) {
         int activeResultScopes = 0;
         if (effectiveAreaKeys != null && !effectiveAreaKeys.isEmpty()) activeResultScopes++;

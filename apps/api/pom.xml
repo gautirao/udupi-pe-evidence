@@ -510,5 +510,56 @@
                 </plugins>
             </build>
         </profile>
+        <!--
+            Activate with `mvn -f apps/api/pom.xml -Psaved-search-it verify`.
+            Runs SavedSearchServiceIT + SavedSearchPolygonPolicyIT tagged @Tag("integration")
+            via failsafe — the full Testcontainers-backed test matrix for issue #2019 Slice A
+            (saved-search core): idempotent create/fingerprint, all three result-scope kinds,
+            filter allowlist rejection, IDOR-safe ownership scoping, max-active cap enforcement,
+            pause/resume, deterministic update semantics, the DB unique-index backstop, and
+            POLYGON/VIEWPORT rejection through the real PolygonGeographicSafetyPolicy and the
+            shared BboxParser bounds. Requires Docker
+            (Testcontainers with postgis/postgis:15-3.4-alpine).
+        -->
+        <profile>
+            <id>saved-search-it</id>
+            <build>
+                <plugins>
+                    <!-- Skip surefire entirely under this profile; only failsafe runs. -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <argLine>
+                                -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar
+                                -XX:+EnableDynamicAgentLoading
+                                -Dnet.bytebuddy.experimental=true
+                            </argLine>
+                            <!-- Narrowed include: ONLY the issue #2019 Slice A saved-search ITs
+                                 (SavedSearchServiceIT + SavedSearchPolygonPolicyIT). -->
+                            <includes>
+                                <include>**/savedsearch/SavedSearch*IT.java</include>
+                            </includes>
+                            <groups>integration</groups>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 </project>
