@@ -7,7 +7,9 @@ import { useAreaSetDraftContext } from '@/features/discover/state/AreaSetDraftCo
 import { useDiscoverShell } from '@/features/discover/context/useDiscoverContext';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import { areaSetProximityLabel, type SelectedAreaGeo } from '@/features/discover/utils/areaSetProximity';
+import { useRelaxationPreviews } from '@/hooks/useRelaxationPreviews';
 import { summariseActiveFilters } from '../zeroRecoveryCopy';
+import { applyRelaxationPreview, relaxationLabel } from '../relaxationCopy';
 import type { DiscoverEmptyCause } from '../emptyStateCopy';
 
 /**
@@ -20,11 +22,19 @@ import type { DiscoverEmptyCause } from '../emptyStateCopy';
  * line, "kept exactly as it is" note), then the "Nearby areas with matches"
  * list, then the existing clear-filters action.
  *
+ * Issue #2018 (slice 2) added the "Change one filter" relaxation rows
+ * (`EPZero` L330-342), which slice 1 had deferred for want of a backend
+ * count endpoint. Every count now comes from
+ * `GET /api/discover/areas/relaxation-previews`, which computes it from the
+ * SAME predicate builder the listings query uses — so a previewed number
+ * cannot disagree with what the shopper sees after applying it. Clicking a
+ * row applies exactly ONE filter change through the panel's existing filter
+ * owner (`onApplyFilters`, threaded from `AreaSelectedPanel`'s
+ * `onFiltersChange` — the same seam the budget/bedroom/type quick chips
+ * already use), so the history semantics are identical to an existing
+ * committed filter change and the result scope is untouched.
+ *
  * DELIBERATELY NOT RENDERED HERE, and not stubbed:
- *   - filter-relaxation count previews (`EPZero` L330-342). The issue
- *     requires "deterministic count previews", which needs a backend
- *     count-preview endpoint that does not exist yet. A client-side guess
- *     would be exactly the dishonest number the issue forbids.
  *   - `Create alert` (`EPZero` L344). Blocked on #2019 / #1793; the issue
  *     forbids presenting an alert as scheduled before it is persisted, so
  *     no control that implies persistence is rendered. (`AreaSetSelectedHeader`
@@ -78,6 +88,15 @@ export interface AreaZeroResultRecoveryProps {
    * something that was never there.
    */
   cause: DiscoverEmptyCause;
+  /**
+   * Commits an explicit filter change (#2018 slice 2). Threaded from
+   * `AreaSelectedPanel`'s existing `onFiltersChange`, so a relaxation row is
+   * exactly as much of a state transition as clicking a budget quick chip:
+   * one meaningful transition, no scope change, no new URL contract.
+   * Omitted when the surface has no filter owner, in which case the
+   * relaxation rows are not rendered at all rather than rendered inert.
+   */
+  onApplyFilters?: (filters: PropertyFilters) => void;
   /** Clears the property filters. Omitted when no property filter is active. */
   onClearFilters?: () => void;
   /** Clears the within-area search. Omitted when no search is active. */
@@ -93,6 +112,7 @@ export function AreaZeroResultRecovery({
   searchQuery,
   noun,
   cause,
+  onApplyFilters,
   onClearFilters,
   onClearSearch,
 }: AreaZeroResultRecoveryProps) {
@@ -113,6 +133,17 @@ export function AreaZeroResultRecovery({
     scopeAreaKeys,
     filters,
   );
+
+  // Issue #2018 slice 2. The stale-response guard lives in the hook's query
+  // key (filters + sorted scope keys), so a reply computed for older state is
+  // cached under a different key and can never be read back here — which is
+  // also what makes it exact for `relaxationLabel` to diff a preview against
+  // the live `filters` below.
+  const { data: relaxationData } = useRelaxationPreviews(city, scopeAreaKeys, filters);
+
+  // Nothing renders until real counts arrive: an optimistic or placeholder
+  // number is precisely the dishonest preview the issue forbids.
+  const relaxations = relaxationData?.previews ?? [];
 
   // Names for the scope line, resolved from the SAME `useDiscoverAreas`
   // payload `AreaSetSelectedHeader` reads (one source for area names on this
@@ -289,6 +320,53 @@ export function AreaZeroResultRecovery({
         >
           No nearby area has matches with these filters either. Changing a filter is the honest next step.
         </p>
+      )}
+
+      {/*
+        `EPZero` L330-342 — "Change one filter", between the nearby list and the
+        actions row, exactly as the mock orders it.
+
+        Rendered only when there is a filter owner AND the server returned at
+        least one offer. A relaxation that still yields zero never reaches here:
+        the endpoint omits it rather than returning a "→ 0 listings" row that
+        demonstrably does not help.
+
+        Each row is a real <button>, so it is keyboard-reachable and announced
+        as an action, and its count reuses the mono/copper treatment the nearby
+        rows directly above already use — same block, same visual grammar, no
+        new variant. The noun is "listing(s)" to match those adjacent rows and
+        the mock, rather than the banner's "homes"/"rentals".
+      */}
+      {onApplyFilters && relaxations.length > 0 && (
+        <div data-testid="area-zero-recovery-relaxations">
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+            Change one filter
+          </p>
+          <div className="mt-2 flex flex-col gap-2">
+            {relaxations.map((preview) => (
+              <button
+                key={preview.kind}
+                type="button"
+                onClick={() => onApplyFilters(applyRelaxationPreview(filters, preview))}
+                className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
+                data-testid={`area-zero-recovery-relaxation-${preview.kind}`}
+              >
+                <span className="text-[13.5px] font-semibold text-foreground">
+                  {relaxationLabel(preview, filters, intent)}
+                </span>
+                <span
+                  className="shrink-0 font-mono text-[12.5px] font-bold text-copper"
+                  data-testid={`area-zero-recovery-relaxation-${preview.kind}-count`}
+                >
+                  {preview.resultingCount} {preview.resultingCount === 1 ? 'listing' : 'listings'}
+                </span>
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[11.5px] text-muted-foreground">
+            Each option changes one filter only. Your selected areas stay exactly as they are.
+          </p>
+        </div>
       )}
 
       {(onClearFilters || onClearSearch) && (

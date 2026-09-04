@@ -7,6 +7,7 @@
  * shopper's own filters produce, and "Add" opens the #2017 draft WITHOUT
  * committing a new result scope or pushing a history entry.
  */
+import { useState } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -26,6 +27,14 @@ vi.mock('@/hooks/useNearbyAreaCandidates', () => ({
 const mockUseDiscoverAreas = vi.hoisted(() => vi.fn());
 vi.mock('@/hooks/useDiscoverAreas', () => ({
   useDiscoverAreas: (...args: unknown[]) => mockUseDiscoverAreas(...args),
+}));
+
+// Issue #2018 slice 2. Mocked for the same reason the two hooks above are: the
+// component's contract with the endpoint is what is under test, not TanStack.
+const mockUseRelaxationPreviews = vi.hoisted(() => vi.fn());
+vi.mock('@/hooks/useRelaxationPreviews', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/hooks/useRelaxationPreviews')>()),
+  useRelaxationPreviews: (...args: unknown[]) => mockUseRelaxationPreviews(...args),
 }));
 
 const JAKKUR = 'IN|KA|Bengaluru|Jakkur';
@@ -89,6 +98,9 @@ beforeEach(() => {
     data: { city: 'bangalore', selectedAreaKeys: [JAKKUR, THANISANDRA], candidates: [candidate()] },
     isLoading: false,
   });
+  // Default: no relaxation offers, so slice 1's existing expectations are
+  // unaffected by slice 2's block.
+  mockUseRelaxationPreviews.mockReturnValue({ data: undefined, isLoading: false });
 });
 
 describe('AreaZeroResultRecovery', () => {
@@ -239,5 +251,197 @@ describe('summariseActiveFilters', () => {
 
   it('omits filters that are not set', () => {
     expect(summariseActiveFilters({}, 'buy')).toEqual(['Buy']);
+  });
+});
+
+/**
+ * Issue #2018 (slice 2) — filter-relaxation count previews.
+ *
+ * The load-bearing claims are the issue's rules again, not the markup: the
+ * previewed number is the server's real count, clicking applies exactly ONE
+ * filter change, and nothing about the committed scope moves.
+ */
+describe('AreaZeroResultRecovery — relaxation previews', () => {
+  const ACTIVE_FILTERS = { priceMax: 5_000_000, bedrooms: [3] };
+
+  function withPreviews(previews: unknown[]) {
+    mockUseRelaxationPreviews.mockReturnValue({
+      data: { city: 'bangalore', areaKeys: [JAKKUR, THANISANDRA], baselineCount: 0, previews },
+      isLoading: false,
+    });
+  }
+
+  it('asks the endpoint for the committed scope keys and the active filters', () => {
+    renderRecovery({ filters: ACTIVE_FILTERS });
+    expect(mockUseRelaxationPreviews).toHaveBeenCalledWith(
+      'bangalore',
+      [JAKKUR, THANISANDRA],
+      ACTIVE_FILTERS,
+    );
+  });
+
+  it('renders each offer with the count the SERVER returned, verbatim', () => {
+    withPreviews([
+      { kind: 'PRICE_MAX', resultingCount: 7, priceMax: 6_000_000 },
+      { kind: 'BEDROOMS', resultingCount: 11, bedrooms: [2, 3] },
+    ]);
+    renderRecovery({ filters: ACTIVE_FILTERS, onApplyFilters: vi.fn() });
+
+    const price = screen.getByTestId('area-zero-recovery-relaxation-PRICE_MAX');
+    expect(price).toHaveTextContent('Increase maximum price to ₹60 L');
+    expect(
+      screen.getByTestId('area-zero-recovery-relaxation-PRICE_MAX-count'),
+    ).toHaveTextContent('7 listings');
+
+    const beds = screen.getByTestId('area-zero-recovery-relaxation-BEDROOMS');
+    expect(beds).toHaveTextContent('Include 2 BHK');
+    expect(
+      screen.getByTestId('area-zero-recovery-relaxation-BEDROOMS-count'),
+    ).toHaveTextContent('11 listings');
+  });
+
+  it('applies EXACTLY ONE filter change, leaving every other filter untouched', async () => {
+    const user = userEvent.setup();
+    const onApplyFilters = vi.fn();
+    withPreviews([{ kind: 'PRICE_MAX', resultingCount: 7, priceMax: 6_000_000 }]);
+    renderRecovery({ filters: ACTIVE_FILTERS, onApplyFilters });
+
+    await user.click(screen.getByTestId('area-zero-recovery-relaxation-PRICE_MAX'));
+
+    expect(onApplyFilters).toHaveBeenCalledTimes(1);
+    expect(onApplyFilters).toHaveBeenCalledWith({ priceMax: 6_000_000, bedrooms: [3] });
+  });
+
+  it('clearing a filter removes it rather than sending an empty list', async () => {
+    const user = userEvent.setup();
+    const onApplyFilters = vi.fn();
+    withPreviews([{ kind: 'BEDROOMS', resultingCount: 5, bedrooms: [] }]);
+    renderRecovery({ filters: ACTIVE_FILTERS, onApplyFilters });
+
+    expect(screen.getByTestId('area-zero-recovery-relaxation-BEDROOMS')).toHaveTextContent(
+      'Accept any number of bedrooms',
+    );
+    await user.click(screen.getByTestId('area-zero-recovery-relaxation-BEDROOMS'));
+
+    // An empty array would serialize into an unsatisfiable IN list.
+    expect(onApplyFilters).toHaveBeenCalledWith({ priceMax: 5_000_000, bedrooms: undefined });
+  });
+
+  it('never renders a suggestion that would change the scope', async () => {
+    const user = userEvent.setup();
+    const onApplyFilters = vi.fn();
+    withPreviews([{ kind: 'PRICE_MAX', resultingCount: 7, priceMax: 6_000_000 }]);
+    renderRecovery({ filters: ACTIVE_FILTERS, onApplyFilters });
+
+    await user.click(screen.getByTestId('area-zero-recovery-relaxation-PRICE_MAX'));
+
+    const applied = onApplyFilters.mock.calls[0][0];
+    // The scope lives outside PropertyFilters, so the strongest available
+    // statement is that no scope-shaped key was smuggled into the patch.
+    expect(applied).not.toHaveProperty('localities');
+    expect(applied).not.toHaveProperty('polygon');
+    expect(applied.city).toBeUndefined();
+    // And the committed chips the banner names are still exactly as they were.
+    expect(screen.getByTestId('area-zero-recovery-scope-line')).toHaveTextContent(
+      'Jakkur · Thanisandra',
+    );
+  });
+
+  it('renders nothing at all while the real counts have not arrived', () => {
+    mockUseRelaxationPreviews.mockReturnValue({ data: undefined, isLoading: true });
+    renderRecovery({ filters: ACTIVE_FILTERS, onApplyFilters: vi.fn() });
+    // A placeholder count is exactly the dishonest preview the issue forbids.
+    expect(screen.queryByTestId('area-zero-recovery-relaxations')).not.toBeInTheDocument();
+  });
+
+  it('renders nothing when the server offers no relaxation that helps', () => {
+    withPreviews([]);
+    renderRecovery({ filters: ACTIVE_FILTERS, onApplyFilters: vi.fn() });
+    expect(screen.queryByTestId('area-zero-recovery-relaxations')).not.toBeInTheDocument();
+  });
+
+  it('renders no rows when the surface has no filter owner, rather than inert rows', () => {
+    withPreviews([{ kind: 'PRICE_MAX', resultingCount: 7, priceMax: 6_000_000 }]);
+    renderRecovery({ filters: ACTIVE_FILTERS, onApplyFilters: undefined });
+    expect(screen.queryByTestId('area-zero-recovery-relaxations')).not.toBeInTheDocument();
+  });
+
+  it('offers are keyboard-reachable buttons, not click-only rows', () => {
+    withPreviews([{ kind: 'PRICE_MAX', resultingCount: 7, priceMax: 6_000_000 }]);
+    renderRecovery({ filters: ACTIVE_FILTERS, onApplyFilters: vi.fn() });
+    expect(screen.getByTestId('area-zero-recovery-relaxation-PRICE_MAX').tagName).toBe('BUTTON');
+  });
+
+  it('keeps the mock\'s section order: nearby areas first, then filter changes', () => {
+    withPreviews([{ kind: 'PRICE_MAX', resultingCount: 7, priceMax: 6_000_000 }]);
+    renderRecovery({ filters: ACTIVE_FILTERS, onApplyFilters: vi.fn() });
+
+    const block = screen.getByTestId('area-zero-result-recovery');
+    const order = Array.from(
+      block.querySelectorAll('[data-testid="area-zero-recovery-nearby"], [data-testid="area-zero-recovery-relaxations"]'),
+    ).map((el) => el.getAttribute('data-testid'));
+    expect(order).toEqual(['area-zero-recovery-nearby', 'area-zero-recovery-relaxations']);
+  });
+
+  it('a stale response cannot be shown against newer filters', async () => {
+    // The guard is the query key: `filters` is part of it, so a reply computed
+    // for older filters is cached under a DIFFERENT key and is never read back
+    // as the current key's `data`. What is observable from here is the
+    // behaviour that guard produces — on a filter change the component re-asks
+    // with the new filters and stops showing the old answer, rather than
+    // leaving a superseded count on screen until a reply arrives.
+    const user = userEvent.setup();
+    const NEWER = { priceMax: 8_000_000, bedrooms: [3] };
+
+    // A real state change inside the SAME provider tree (including the router),
+    // which is what a filter change actually is.
+    function Harness() {
+      const [f, setF] = useState<Record<string, unknown>>(ACTIVE_FILTERS);
+      return (
+        <>
+          <button type="button" data-testid="change-filters" onClick={() => setF(NEWER)}>
+            change
+          </button>
+          <AreaZeroResultRecovery
+            scopeAreaKeys={[JAKKUR, THANISANDRA]}
+            fallbackScopeName="Jakkur"
+            city="bangalore"
+            filters={f}
+            intent="buy"
+            noun="homes"
+            cause="filters"
+            onApplyFilters={vi.fn()}
+            onClearFilters={vi.fn()}
+          />
+        </>
+      );
+    }
+
+    withPreviews([{ kind: 'PRICE_MAX', resultingCount: 7, priceMax: 6_000_000 }]);
+    renderWithProviders(
+      <DiscoverProvider>
+        <AreaSetDraftProvider>
+          <Harness />
+        </AreaSetDraftProvider>
+      </DiscoverProvider>,
+      { router: 'browser' },
+    );
+
+    expect(screen.getByTestId('area-zero-recovery-relaxation-PRICE_MAX-count')).toHaveTextContent(
+      '7 listings',
+    );
+
+    // The newer filter state has no answer yet.
+    mockUseRelaxationPreviews.mockReturnValue({ data: undefined, isLoading: true });
+    await user.click(screen.getByTestId('change-filters'));
+
+    expect(mockUseRelaxationPreviews).toHaveBeenLastCalledWith(
+      'bangalore',
+      [JAKKUR, THANISANDRA],
+      NEWER,
+    );
+    // The superseded 7-listing answer is gone rather than lingering under the
+    // newer filters it was never computed for.
+    expect(screen.queryByTestId('area-zero-recovery-relaxations')).not.toBeInTheDocument();
   });
 });

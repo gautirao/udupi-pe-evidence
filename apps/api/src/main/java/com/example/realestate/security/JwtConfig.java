@@ -113,6 +113,11 @@ public class JwtConfig {
                         // Public nearby-area-candidates endpoint (AREA_SET chip suggestions) — no
                         // auth required, mirrors /api/discover/areas above (#2017)
                         .requestMatchers(HttpMethod.GET, "/api/discover/areas/nearby-candidates").permitAll()
+                        // Public filter-relaxation count previews for the zero-result recovery
+                        // panel — no auth required, mirrors /api/discover/areas/nearby-candidates
+                        // above (#2018 slice 2). Read-only aggregate counts over already-public
+                        // listing data; exposes no per-listing fields.
+                        .requestMatchers(HttpMethod.GET, "/api/discover/areas/relaxation-previews").permitAll()
                         // Public area listings endpoint — no auth required (C-2)
                         .requestMatchers(HttpMethod.GET, "/api/discover/areas/*/listings").permitAll()
                         // Public city-first area listings endpoint — no auth required (#886)

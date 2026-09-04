@@ -904,6 +904,7 @@ export function AreaSelectedPanel({
                   searchQuery={searchQuery}
                   noun={intentNoun === 'rent' ? 'rentals' : 'homes'}
                   cause={copy.cause}
+                  onApplyFilters={onFiltersChange}
                   onClearFilters={onClearFilters}
                   onClearSearch={onClearSearch}
                 />
