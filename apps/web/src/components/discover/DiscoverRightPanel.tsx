@@ -986,6 +986,13 @@ export interface DiscoverRightPanelProps {
    * settled with an error.
    */
   isErrorAuthViewport?: boolean;
+  /**
+   * Issue #2018 slice 3 — re-issues the failed AUTHENTICATED viewport
+   * request. Omitted renders the error state WITHOUT a Retry button
+   * rather than a dead one, the same honesty rule `onRetryListings` and
+   * `isReadyToMoveSupported` already follow on this surface.
+   */
+  onRetryAuthViewport?: () => void;
   // ── Area-group-results panel (Issue #1597) ────────────────────────────────
   /**
    * Issue #1956 PR-6 (final cutover, Step 3) — its only production consumer
@@ -1172,6 +1179,7 @@ export function DiscoverRightPanel({
   authViewportListings = [],
   authViewportListingsLoading = false,
   isErrorAuthViewport = false,
+  onRetryAuthViewport,
   onEnterGroupResults,
   groupResultsListings = [],
   isLoadingGroupResults = false,
@@ -1737,16 +1745,27 @@ export function DiscoverRightPanel({
             areaListings={isViewportScope ? viewportListings : areaListings}
             areaResultSummaryText={isViewportScope ? undefined : areaResultSummaryText}
             isLoadingListings={isViewportScope ? viewportListingsLoading : isLoadingListings}
-            // Issue #2018 requirement A — the AREA_SET listings error, so a
-            // failed request renders the explicit request-failure state (or
-            // keeps the last good cards behind an inline retry banner)
-            // instead of the zero-result recovery, which would assert "no
-            // matching listings" about a query that never returned. A
-            // committed VIEWPORT scope keeps its own #2015 error treatment
-            // in `renderAnonViewportListings` above, so this is deliberately
-            // AREA_SET-only.
-            isListingsError={isViewportScope ? false : isListingsError}
-            onRetryListings={isViewportScope ? undefined : onRetryListings}
+            // Issue #2018 requirement A — a failed request renders the
+            // explicit request-failure state, or keeps the last good cards
+            // behind an inline retry banner, instead of the zero-result
+            // recovery, which would assert "no matching listings" about a
+            // query that never returned.
+            //
+            // Slice 3 correction: this used to hard-code `false` for EVERY
+            // viewport scope, on the reasoning that VIEWPORT keeps its own
+            // #2015 treatment. That is true only for the ANONYMOUS viewport,
+            // which `renderAnonViewportListings` above handles. The
+            // AUTHENTICATED viewport had no error path at all —
+            // `isErrorAuthViewport` was declared, defaulted and destructured
+            // in this file and then never read — so a signed-in shopper whose
+            // "Search this area" request failed saw a zero-result state
+            // asserting the map area is empty. It is not; the request failed.
+            isListingsError={
+              isAnonViewport ? false : isAuthViewport ? isErrorAuthViewport : isListingsError
+            }
+            onRetryListings={
+              isAnonViewport ? undefined : isAuthViewport ? onRetryAuthViewport : onRetryListings
+            }
             isViewportScope={isViewportScope}
             isAuthenticated={isAuthenticated}
             onBack={onBack}

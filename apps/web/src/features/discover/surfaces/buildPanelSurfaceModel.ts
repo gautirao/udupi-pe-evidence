@@ -86,6 +86,13 @@ type PageStateSlice = Pick<
   | 'city'
   | 'filters'
   | 'handleFiltersChange'
+  // Issue #2018 slice 3 — the frozen mock's POLYGON zero-result action
+  // "Adjust boundary" (ExpPanel.jsx:294 `act.drawArea`). Already on main
+  // from #2419 PR-1; it starts a NEW drawing and commits nothing, so the
+  // committed scope keeps producing results until a new polygon is drawn
+  // AND accepted. Threaded here so the recovery panel can consume it by
+  // name rather than reimplementing a second redraw path.
+  | 'handleRedrawPolygon'
   | 'handleCityChange'
   | 'handleAreaSelect'
   | 'selectedSchool'
@@ -431,6 +438,10 @@ type PanelGeographyCommands = Pick<
   | 'refetchAreaListings'
   // Issue #2015 (caller-wiring follow-up) — see MapDataSlice's own doc comment.
   | 'refetchAnonViewport'
+  // Issue #2018 slice 3 — "Adjust boundary" on the POLYGON zero-result state.
+  // Grouped with geography because it changes the searched GEOMETRY, not a
+  // filter; it starts a new drawing and commits nothing on its own.
+  | 'handleRedrawPolygon'
 >;
 
 /**
@@ -727,7 +738,7 @@ export function buildPanelSurfaceCommands(
 ): DiscoverPanelSurfaceCommands {
   const {
     pageContext: { navigate, actions },
-    pageState: { handleCityChange, handleAreaSelect, handleFiltersChange, setPage },
+    pageState: { handleCityChange, handleAreaSelect, handleFiltersChange, setPage, handleRedrawPolygon },
     navigation: { setHoveredNavigationNodeKey, setFocusedClusterMemberAreaKeys },
     journeySwitch: { handleSelectJourney, selectGroupMemberArea },
     geography: { refetchRegionScopedGroups },
@@ -763,6 +774,7 @@ export function buildPanelSurfaceCommands(
       selectGroupMemberArea,
       refetchAreaListings,
       refetchAnonViewport,
+      handleRedrawPolygon,
     },
     results: { refetchGroupResults, setPage, handleBoundedSearch },
     agri: { refetchAgriGroupListings, refetchRegionalAreaGroups },

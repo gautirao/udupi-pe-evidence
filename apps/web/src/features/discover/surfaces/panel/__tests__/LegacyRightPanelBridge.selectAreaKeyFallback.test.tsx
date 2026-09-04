@@ -201,6 +201,8 @@ function buildParams(overrides: {
       handleFiltersChange: vi.fn(),
       handleCityChange: vi.fn(),
       handleAreaSelect: overrides.handleAreaSelect ?? vi.fn(),
+      // Issue #2018 slice 3 — 'Adjust boundary' seam, now part of PageStateSlice.
+      handleRedrawPolygon: vi.fn(),
       selectedSchool: null,
       page: 0,
       setPage: vi.fn(),

@@ -229,6 +229,138 @@ describe('AreaZeroResultRecovery', () => {
   });
 });
 
+// ── Issue #2018 slice 3 — the recovery may only say what is TRUE of the
+// active scope. Before this, a committed POLYGON had no scope-aware branch
+// anywhere (both flags in useDiscoverMapData are gated on kind === 'VIEWPORT'),
+// so it fell through to the single-canonical-AREA path: the banner named an
+// AREA that was not the scope and offered nearby areas measured from it.
+describe('non-AREA result scopes', () => {
+  it('POLYGON names the drawn area, never a previously-selected area', () => {
+    renderRecovery({ scopeKind: 'POLYGON' });
+
+    expect(screen.getByTestId('area-zero-recovery-heading')).toHaveTextContent(
+      'No matching homes inside your drawn area',
+    );
+    // FUNCTIONAL_AUDIT §C2: "The zero panel no longer prints previous area
+    // names as the active scope."
+    const scopeLine = screen.getByTestId('area-zero-recovery-scope-line');
+    expect(scopeLine).toHaveTextContent('Drawn area');
+    expect(scopeLine).not.toHaveTextContent('Jakkur');
+    expect(scopeLine).not.toHaveTextContent('Thanisandra');
+  });
+
+  it('VIEWPORT names the visible map area, never a previously-selected area', () => {
+    renderRecovery({ scopeKind: 'VIEWPORT' });
+
+    expect(screen.getByTestId('area-zero-recovery-heading')).toHaveTextContent(
+      'No matching homes in the visible map area',
+    );
+    const scopeLine = screen.getByTestId('area-zero-recovery-scope-line');
+    expect(scopeLine).toHaveTextContent('Visible map area');
+    expect(scopeLine).not.toHaveTextContent('Jakkur');
+  });
+
+  it.each(['POLYGON', 'VIEWPORT'] as const)(
+    '%s offers no area-shaped nearby list, because the relationship cannot be stated truthfully',
+    (scopeKind) => {
+      // The candidate that WOULD be offered under an AREA scope.
+      mockUseNearbyAreaCandidates.mockReturnValue({
+        data: { city: 'bangalore', selectedAreaKeys: [JAKKUR], candidates: [candidate()] },
+        isLoading: false,
+      });
+
+      renderRecovery({ scopeKind });
+
+      expect(screen.queryByTestId('area-zero-recovery-nearby')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('area-zero-recovery-nearby-empty')).not.toBeInTheDocument();
+      expect(screen.queryByText('Hennur')).not.toBeInTheDocument();
+    },
+  );
+
+  it.each(['POLYGON', 'VIEWPORT'] as const)(
+    '%s does not ask the area-keyed nearby endpoint at all',
+    (scopeKind) => {
+      renderRecovery({ scopeKind });
+      // The hook disables itself on an empty city (its own documented guard),
+      // so an area-keyed request is never issued for a non-area scope.
+      expect(mockUseNearbyAreaCandidates).toHaveBeenCalledWith('', expect.anything(), expect.anything());
+    },
+  );
+
+  it.each(['POLYGON', 'VIEWPORT'] as const)(
+    '%s shows no relaxation counts, because the endpoint is area-keyed and would count the wrong geometry',
+    (scopeKind) => {
+      mockUseRelaxationPreviews.mockReturnValue({
+        data: {
+          previews: [
+            { kind: 'PRICE_MAX', matchCount: 7, priceMax: 8_000_000 },
+          ],
+        },
+      });
+
+      renderRecovery({ scopeKind, onApplyFilters: vi.fn() });
+
+      // A deterministic count of the wrong thing is worse than none.
+      expect(mockUseRelaxationPreviews).toHaveBeenCalledWith('', expect.anything(), expect.anything());
+      expect(screen.queryByTestId('area-zero-recovery-relaxations')).not.toBeInTheDocument();
+    },
+  );
+
+  it('still preserves the search and offers to clear filters under a non-AREA scope', () => {
+    renderRecovery({ scopeKind: 'POLYGON', onClearFilters: vi.fn() });
+
+    expect(screen.getByTestId('area-zero-recovery-note')).toHaveTextContent(
+      'Your search is kept exactly as it is. Nothing here widens it for you.',
+    );
+    expect(screen.getByTestId('area-zero-recovery-clear-filters')).toBeInTheDocument();
+  });
+
+  it('POLYGON offers Adjust boundary, and it commits nothing', async () => {
+    const user = userEvent.setup();
+    const onAdjustBoundary = vi.fn();
+    renderRecovery({ scopeKind: 'POLYGON', onAdjustBoundary });
+
+    const urlBefore = window.location.href;
+    const historyBefore = window.history.length;
+
+    const row = screen.getByTestId('area-zero-recovery-scope-actions');
+    expect(within(row).getByText('Change your drawn area')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('area-zero-recovery-adjust-boundary'));
+
+    // Calls the existing #2419 seam exactly once...
+    expect(onAdjustBoundary).toHaveBeenCalledTimes(1);
+    // ...and commits nothing: no scope change, no URL write, no history entry.
+    // `handleRedrawPolygon` only moves to the DRAWING phase; the committed
+    // scope keeps producing results until a new polygon is drawn AND accepted.
+    expect(window.location.href).toBe(urlBefore);
+    expect(window.history.length).toBe(historyBefore);
+  });
+
+  it('omits the Adjust boundary row entirely when no redraw seam is supplied', () => {
+    renderRecovery({ scopeKind: 'POLYGON' });
+    // A mock action with no working implementation is left out rather than
+    // rendered inert.
+    expect(screen.queryByTestId('area-zero-recovery-scope-actions')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('area-zero-recovery-adjust-boundary')).not.toBeInTheDocument();
+  });
+
+  it('does not offer Adjust boundary under VIEWPORT or AREA scopes', () => {
+    renderRecovery({ scopeKind: 'VIEWPORT', onAdjustBoundary: vi.fn() });
+    expect(screen.queryByTestId('area-zero-recovery-adjust-boundary')).not.toBeInTheDocument();
+  });
+
+  it('AREA is unchanged by the new prop (default) — the nearby list still renders', () => {
+    renderRecovery();
+    expect(screen.getByTestId('area-zero-recovery-nearby')).toBeInTheDocument();
+    expect(mockUseNearbyAreaCandidates).toHaveBeenCalledWith(
+      'bangalore',
+      [JAKKUR, THANISANDRA],
+      { priceMax: 5_000_000 },
+    );
+  });
+});
+
 describe('summariseActiveFilters', () => {
   it('always names the buy/rent intent first', () => {
     expect(summariseActiveFilters({}, 'buy')[0]).toBe('Buy');

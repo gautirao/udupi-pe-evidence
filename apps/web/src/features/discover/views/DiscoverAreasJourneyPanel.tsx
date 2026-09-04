@@ -231,6 +231,9 @@ export interface DiscoverAreasJourneyPanelProps {
    * supplied at all) keeps compiling.
    */
   mapAreaListingsRefetch?: () => void;
+  /** Issue #2018 slice 3 — `handleRedrawPolygon` seam for the POLYGON
+   *  zero-result "Adjust boundary" row. Forwarded unchanged. */
+  onRedrawPolygon?: () => void;
   /**
    * Issue #2353 (code-review fix) — the SAME query's `isFetching`.
    * `useDiscoverCityListings` uses `placeholderData: keepPreviousData`, so on
@@ -342,6 +345,7 @@ export function DiscoverAreasJourneyPanel({
   mapAreaListingsFetching,
   mapAreaListingsAreaKey,
   mapAreaListingsRefetch,
+  onRedrawPolygon,
   isAnonViewport,
   anonViewportListings,
   anonViewportListingsLoading,
@@ -595,6 +599,7 @@ export function DiscoverAreasJourneyPanel({
         mapAreaListingsFetching={mapAreaListingsFetching}
         mapAreaListingsAreaKey={mapAreaListingsAreaKey}
         mapAreaListingsRefetch={mapAreaListingsRefetch}
+        onRedrawPolygon={onRedrawPolygon}
         // Issue #2015 — the committed VIEWPORT-scope ("Search this area")
         // signals, forwarded from `AreaFirstJourneyPanel`. See
         // `AreaLeafListingsSurface`'s own doc comment for how these swap the
@@ -702,6 +707,9 @@ interface AreaLeafListingsSurfaceProps {
   mapAreaListingsAreaKey?: string | null;
   /** See `DiscoverAreasJourneyPanelProps.mapAreaListingsRefetch` — the working Retry handler. */
   mapAreaListingsRefetch?: () => void;
+  /** Issue #2018 slice 3 — `handleRedrawPolygon` seam for the POLYGON
+   *  zero-result "Adjust boundary" row. Forwarded unchanged. */
+  onRedrawPolygon?: () => void;
   /**
    * Issue #2015 — see `DiscoverAreasJourneyPanelProps.isAnonViewport`/etc.
    * the committed VIEWPORT-scope ("Search this area") listings, which take
@@ -786,6 +794,7 @@ function AreaLeafListingsSurface({
   mapAreaListingsFetching,
   mapAreaListingsAreaKey,
   mapAreaListingsRefetch,
+  onRedrawPolygon,
   isAnonViewport,
   anonViewportListings,
   anonViewportListingsLoading,
@@ -1261,6 +1270,7 @@ function AreaLeafListingsSurface({
         // full-replace state above), so the panel keeps the cards and shows
         // an inline retry banner. Passing it unconditionally rather than
         // `&& length > 0` keeps the panel the single owner of that decision.
+        onRedrawPolygon={onRedrawPolygon}
         isListingsError={isErrorAreaListingsResolved}
         onRetryListings={refetchAreaListings}
         // Issue #2015 — once a VIEWPORT scope ("Search this area") is

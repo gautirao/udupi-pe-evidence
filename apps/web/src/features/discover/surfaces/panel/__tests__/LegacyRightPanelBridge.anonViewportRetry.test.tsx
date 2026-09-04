@@ -237,6 +237,8 @@ function buildParams(refetchAnonViewport: () => void): BuildPanelSurfaceModelPar
       handleFiltersChange: vi.fn(),
       handleCityChange: vi.fn(),
       handleAreaSelect: vi.fn(),
+      // Issue #2018 slice 3 — 'Adjust boundary' seam, now part of PageStateSlice.
+      handleRedrawPolygon: vi.fn(),
       selectedSchool: null,
       page: 0,
       setPage: vi.fn(),

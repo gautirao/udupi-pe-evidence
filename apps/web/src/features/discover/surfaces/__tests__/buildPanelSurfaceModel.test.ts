@@ -44,6 +44,8 @@ function makeParams(overrides: DeepPartial<BuildPanelSurfaceModelParams> = {}): 
       city: 'bangalore',
       filters: {},
       handleFiltersChange: vi.fn(),
+      // Issue #2018 slice 3 — "Adjust boundary" seam, now part of PageStateSlice.
+      handleRedrawPolygon: vi.fn(),
       handleCityChange: vi.fn(),
       handleAreaSelect: vi.fn(),
       selectedSchool: null,

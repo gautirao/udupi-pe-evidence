@@ -94,7 +94,7 @@ export interface AreaFirstJourneyPanelCommands {
     DiscoverPanelSurfaceCommands['geography'],
     // Issue #2353 (code-review fix) — the SAME query `mapAreaListings` came
     // from, so a Retry click on the prop path is a real refetch, not a no-op.
-    'handleAreaFirstBack' | 'refetchAreaListings'
+    'handleAreaFirstBack' | 'refetchAreaListings' | 'handleRedrawPolygon'
   >;
 }
 
@@ -154,7 +154,7 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
     selectJourney,
   } = commands.navigation;
   const { handleFiltersChange } = commands.filters;
-  const { handleAreaFirstBack, refetchAreaListings } = commands.geography;
+  const { handleAreaFirstBack, refetchAreaListings, handleRedrawPolygon } = commands.geography;
   // Issue #2142 SOLID follow-up (commit 2, PLAN REVIEW correction 3) — these
   // two were `useDiscoverNav()`/`useDiscoverActions()` calls (the #1953
   // ambient-facade deviation) until this commit. Same objects, same values,
@@ -241,6 +241,9 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
         mapAreaListingsFetching={isFetchingAreaListings}
         mapAreaListingsAreaKey={selectedArea?.areaKey ?? null}
         mapAreaListingsRefetch={refetchAreaListings}
+        // Issue #2018 slice 3 — 'Adjust boundary' seam for the POLYGON
+        // zero-result row. Forwarded unchanged; commits nothing itself.
+        onRedrawPolygon={handleRedrawPolygon}
         // Issue #2015 — the committed VIEWPORT-scope ("Search this area")
         // signals, mirrored from the legacy `DiscoverRightPanel` bridge (see
         // that component's `isAnonViewport || isAuthViewport` derivation).

@@ -22,6 +22,13 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+// Issue #2018 slice 3 — AreaZeroResultRecovery (rendered by the AREA-leaf
+// zero-listing branch since slice 1) reads useAreaSetDraftContext, which
+// throws outside its provider by design. Two fixtures below mount that
+// branch, so they need the provider production already mounts above both
+// trees (pages/MapDiscovery.tsx). Pre-existing failure on main 1184a338,
+// corrected here as a test-fixture-only change.
+import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftContext';
 import type { DiscoverRightPanelProps } from '@/components/discover/DiscoverRightPanel';
 import type { DiscoverUrlState, DiscoverUrlActions } from '@/hooks/useDiscoverUrlState';
 import type {
@@ -364,6 +371,8 @@ function baseProps(overrides: Partial<PanelFlatFixture> = {}): PanelFlatFixture 
     isFetchingAreaListings: false,
     isAuthenticated: false,
     handleAreaSelect: vi.fn(),
+    // Issue #2018 slice 3 — 'Adjust boundary' seam, now part of PageStateSlice.
+    handleRedrawPolygon: vi.fn(),
     areaResultSummaryText: null,
     journeyView: JOURNEY_VIEW,
     handleAreaFirstBack: vi.fn(),
@@ -491,6 +500,8 @@ function toModelParams(g: PanelFlatFixture): BuildPanelSurfaceModelParams {
       city: g.city,
       filters: g.filters,
       handleFiltersChange: g.handleFiltersChange,
+      // Issue #2018 slice 3 — 'Adjust boundary' seam, now part of PageStateSlice.
+      handleRedrawPolygon: g.handleRedrawPolygon ?? vi.fn(),
       handleCityChange: g.handleCityChange,
       handleAreaSelect: g.handleAreaSelect,
       selectedSchool: g.selectedSchool,
@@ -1241,6 +1252,7 @@ describe('DiscoverPanelSurface — canonical Areas journey panel (default for jo
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
+          <AreaSetDraftProvider>
           <DiscoverPanelSurfaceHarness
             {...baseProps({
               resolvedPanelContent: 'area-selected',
@@ -1269,6 +1281,7 @@ describe('DiscoverPanelSurface — canonical Areas journey panel (default for jo
               }),
             })}
           />
+          </AreaSetDraftProvider>
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -1412,8 +1425,20 @@ describe('DiscoverPanelSurface — group-focus panel (Issue #2213)', () => {
   it('falls through to the canonical hierarchy panel once an area is selected within the group (selectedArea present)', () => {
     BASE_URL_STATE.journey = 'area-first';
 
+    // Issue #2018 slice 3 — this case reaches the AREA-leaf surface, whose
+    // zero-listing branch renders AreaZeroResultRecovery (slice 1). That reads
+    // useAreaSetDraftContext, which throws outside its provider by design, and
+    // the provider's own useNearbyAreaCandidates needs a QueryClient ancestor.
+    // Both are supplied HERE rather than suite-wide, so the file's deliberate
+    // "renders without a QueryClientProvider" convention (see the note above)
+    // still holds for every other case.
+    const groupFallthroughQueryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     render(
+      <QueryClientProvider client={groupFallthroughQueryClient}>
       <MemoryRouter>
+        <AreaSetDraftProvider>
         <DiscoverPanelSurfaceHarness
           {...baseProps({
             resolvedPanelContent: 'area-selected',
@@ -1444,7 +1469,9 @@ describe('DiscoverPanelSurface — group-focus panel (Issue #2213)', () => {
             }),
           })}
         />
-      </MemoryRouter>,
+        </AreaSetDraftProvider>
+      </MemoryRouter>
+      </QueryClientProvider>,
     );
 
     expect(screen.queryByTestId('area-group-focus-panel')).not.toBeInTheDocument();

@@ -172,6 +172,21 @@ interface AreaMarkerLayerProps {
    */
   areaSetCandidateKeys?: string[];
   /**
+   * Issue #2018 slice 3 — FILTER-AWARE listing count per candidate areaKey.
+   *
+   * Without this the callout fell back to `area.listingCount`, the area's raw
+   * per-area total from `useDiscoverAreas`, which ignores the shopper's active
+   * filters. The recovery panel's nearby row shows `eligibleListingCount` from
+   * the nearby contract, which does not. So under any active filter the SAME
+   * candidate showed two different numbers on map and panel, against #2018's
+   * rule: "Map and panel show the same preview counts and candidate
+   * identities."
+   *
+   * Optional. A key absent from this map falls back to `area.listingCount`
+   * exactly as before, so callers predating it are unaffected.
+   */
+  areaSetCandidateCounts?: Record<string, number>;
+  /**
    * Fired when an AREA_SET candidate callout (or its "View homes" line) is
    * activated by click or keyboard (Enter/Space). Optional; unused unless
    * areaSetCandidateKeys is also provided.
@@ -464,11 +479,21 @@ function makeAreaCard(
  * count / accent action line), built from this file's own local pill-marker
  * constants rather than the markerShellHtml/markerTokens system.
  */
-function makeAreaSetCandidateCard(area: AreaPoint, opacity: number, disabled: boolean): L.DivIcon {
+function makeAreaSetCandidateCard(
+  area: AreaPoint,
+  opacity: number,
+  disabled: boolean,
+  /**
+   * Issue #2018 slice 3 — the filter-aware count for this candidate.
+   * Undefined falls back to the area's own raw total, preserving
+   * pre-#2018 behaviour for callers that do not supply the map.
+   */
+  eligibleCount?: number,
+): L.DivIcon {
   const { text: repText, full: repFull } = truncateAreaLabel(area.areaLabel, true);
   const repLabel = escapeHtml(repText);
   const titleAttr = repFull ? ` title="${escapeHtml(repFull)}"` : '';
-  const count = area.listingCount ?? 0;
+  const count = eligibleCount ?? area.listingCount ?? 0;
   const countText = count.toLocaleString();
   const noun = count === 1 ? 'LISTING' : 'LISTINGS';
 
@@ -2122,6 +2147,7 @@ export function AreaMarkerLayer({
   onAreaClusterCameraIntent,
   onMarkersComputed,
   areaSetCandidateKeys,
+  areaSetCandidateCounts,
   onAreaSetCandidateSelect,
   areaSetAtMax = false,
 }: AreaMarkerLayerProps) {
@@ -2218,7 +2244,7 @@ export function AreaMarkerLayer({
         [markerLat, markerLon],
         {
           icon: isAreaSetCandidate
-            ? makeAreaSetCandidateCard(area, 1.0, areaSetAtMax)
+            ? makeAreaSetCandidateCard(area, 1.0, areaSetAtMax, areaSetCandidateCounts?.[area.areaKey])
             : makeAreaCard(area, 1.0, journey, selectedSchool),
         }
       );
@@ -2302,7 +2328,7 @@ export function AreaMarkerLayer({
   // macro-region compass layout — bumping it rebuilds every marker (cheap:
   // this path only ever renders a handful of navigation markers) with fresh
   // container-point projections.
-  }, [areas, map, onAreaClick, onAreaCameraIntent, focusedGroupAreas, journey, selectedSchool, enableDegradation, regionLayoutTick, areaSetCandidateKeys, onAreaSetCandidateSelect, areaSetAtMax]);
+  }, [areas, map, onAreaClick, onAreaCameraIntent, focusedGroupAreas, journey, selectedSchool, enableDegradation, regionLayoutTick, areaSetCandidateKeys, areaSetCandidateCounts, onAreaSetCandidateSelect, areaSetAtMax]);
 
   // ── Degraded path (Issue #1798 PR-B, opt-in) ───────────────────────────────
   // Tracks the current zoom so bucketing recomputes on zoom only (pan-invariant,
@@ -2422,7 +2448,7 @@ export function AreaMarkerLayer({
       const isAreaSetCandidateDisabled = isAreaSetCandidate && areaSetAtMax && !(area.isSelected ?? false);
       const marker = L.marker([area.geo_center_lat, area.geo_center_lon], {
         icon: isAreaSetCandidate
-          ? makeAreaSetCandidateCard(area, 1.0, areaSetAtMax)
+          ? makeAreaSetCandidateCard(area, 1.0, areaSetAtMax, areaSetCandidateCounts?.[area.areaKey])
           : makeAreaCard(area, 1.0, journey, selectedSchool, !isForced),
       });
       // Issue #1801 — same click contract as the legacy loop above: no direct
@@ -2583,6 +2609,7 @@ export function AreaMarkerLayer({
     hoveredAreaKey,
     searchMatchKeys,
     areaSetCandidateKeys,
+    areaSetCandidateCounts,
     onAreaSetCandidateSelect,
     areaSetAtMax,
   ]);

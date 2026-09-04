@@ -4,7 +4,6 @@ import {
   AlertCircle,
   ChevronLeft,
   Layers,
-  MapPin,
   Search,
   ShieldCheck,
   SlidersHorizontal,
@@ -23,7 +22,6 @@ import { PropertyCard } from '../PropertyCard';
 import { AreaFirstBreadcrumb } from '../AreaFirstBreadcrumb';
 import type { DiscoverJourney, DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { deriveDiscoverEmptyStateCopy } from '../emptyStateCopy';
 import { StartOverButton } from '../StartOverButton';
 import { useDiscoverActions, useDiscoverNav, useDiscoverShell } from '@/features/discover/context/useDiscoverContext';
@@ -168,6 +166,14 @@ interface AreaSelectedPanelProps {
    *
    * Defaults false, so every existing caller behaves exactly as before.
    */
+  /**
+   * Issue #2018 slice 3 — starts a NEW polygon drawing for the zero-result
+   * "Adjust boundary" action. Threaded from `useDiscoverPageState`'s
+   * `handleRedrawPolygon` (#2419 PR-1) through the panel surface model.
+   * Commits nothing on its own. Omitted renders no row rather than a dead
+   * control.
+   */
+  onRedrawPolygon?: () => void;
   isListingsError?: boolean;
   /**
    * Re-issues the failed listings request. Omitted renders the error states
@@ -213,6 +219,7 @@ export function AreaSelectedPanel({
   onCrumbGroup,
   isReadyToMoveSupported = true,
   isViewportScope = false,
+  onRedrawPolygon,
   isListingsError = false,
   onRetryListings,
 }: AreaSelectedPanelProps) {
@@ -348,6 +355,23 @@ export function AreaSelectedPanel({
   const activeScope = nav.resultScope?.active ?? null;
   const multiAreaKeys =
     activeScope?.kind === 'AREA_SET' && activeScope.areaKeys.length > 1 ? activeScope.areaKeys : null;
+
+  // Issue #2018 slice 3 — which KIND of scope owns these results, derived from
+  // the committed scope this component already reads. Purely additive: it is
+  // consumed only by the zero-result recovery, so every populated-results
+  // render path is untouched.
+  //
+  // POLYGON is read straight off `activeScope` because, unlike VIEWPORT, it
+  // has no `isPolygonScope` prop anywhere to thread — both flags in
+  // useDiscoverMapData are gated on `kind === 'VIEWPORT'`, which is exactly
+  // why a committed polygon previously fell through to the area-shaped path.
+  // `isViewportScope` stays the source of truth for VIEWPORT so this cannot
+  // disagree with the heading/sub-copy above, which already key off it.
+  const resultScopeKind: 'AREA' | 'POLYGON' | 'VIEWPORT' = isViewportScope
+    ? 'VIEWPORT'
+    : activeScope?.kind === 'POLYGON'
+      ? 'POLYGON'
+      : 'AREA';
 
   // "Edit areas" / "Add nearby areas" open the AREA_SET draft (Issue #2017;
   // desktop rework owner-directed) — `openAreaSetDraft()` is the single
@@ -887,58 +911,34 @@ export function AreaSelectedPanel({
             // it so this panel and the map badge cannot disagree about why the
             // list is empty (design §7, unchanged).
             //
-            // A committed VIEWPORT scope ("Search this area") keeps the
-            // existing EmptyState: its recovery is "expand the visible map
-            // area" / "return to previous areas", a different scope-specific
-            // stack that the mock defines separately (`EPZero` L300-310) and
-            // that a later slice owns. Offering AREA-shaped nearby suggestions
-            // there would answer a question the shopper did not ask.
-            if (!isViewportScope) {
-              return (
-                <AreaZeroResultRecovery
-                  scopeAreaKeys={multiAreaKeys ?? [selectedArea.areaKey]}
-                  fallbackScopeName={areaLabel}
-                  city={city || nav.city || DEFAULT_CITY}
-                  filters={filters}
-                  intent={intent}
-                  searchQuery={searchQuery}
-                  noun={intentNoun === 'rent' ? 'rentals' : 'homes'}
-                  cause={copy.cause}
-                  onApplyFilters={onFiltersChange}
-                  onClearFilters={onClearFilters}
-                  onClearSearch={onClearSearch}
-                />
-              );
-            }
-
-            const primaryAction =
-              copy.primaryLabel === 'Clear filters' && onClearFilters
-                ? { label: copy.primaryLabel, onClick: onClearFilters }
-                : copy.primaryLabel === 'Clear search' && onClearSearch
-                  ? { label: copy.primaryLabel, onClick: onClearSearch }
-                  : undefined;
-            const secondaryAction =
-              copy.secondaryLabel == null
-                ? undefined
-                : copy.secondaryIsClearFilters && onClearFilters
-                  ? { label: copy.secondaryLabel, onClick: onClearFilters }
-                  : copy.cause === 'filters' && onClearFilters
-                    ? { label: copy.secondaryLabel, onClick: onClearFilters } // "See all N in {scope}" == clear filters
-                    : undefined;
+            // Issue #2018 slice 3 — every scope kind now reaches the recovery
+            // stack, which says only what is true of the ACTIVE scope (see
+            // AreaZeroResultRecovery's `scopeKind` doc).
+            //
+            // Slice 1 excluded VIEWPORT here and left POLYGON unconsidered.
+            // That was a truthfulness bug for POLYGON specifically: no
+            // `isPolygonScope` equivalent exists anywhere (both flags in
+            // useDiscoverMapData are gated on `kind === 'VIEWPORT'`), so a
+            // committed polygon fell through to the single-canonical-AREA
+            // path and this banner named an AREA that is not the scope, then
+            // offered nearby areas measured from it. Both statements were
+            // false about a drawn search.
             return (
-              <div
-                className="m-4 rounded-xl border border-border bg-muted/20 px-4 py-14 shadow-sm"
-                data-testid="area-empty-state"
-                data-empty-cause={copy.cause}
-              >
-                <EmptyState
-                  icon={<MapPin className="h-8 w-8 text-muted-foreground/40" />}
-                  heading={copy.heading}
-                  description={copy.description}
-                  primaryAction={primaryAction}
-                  secondaryAction={secondaryAction}
-                />
-              </div>
+              <AreaZeroResultRecovery
+                scopeAreaKeys={multiAreaKeys ?? [selectedArea.areaKey]}
+                fallbackScopeName={areaLabel}
+                city={city || nav.city || DEFAULT_CITY}
+                filters={filters}
+                intent={intent}
+                searchQuery={searchQuery}
+                noun={intentNoun === 'rent' ? 'rentals' : 'homes'}
+                cause={copy.cause}
+                scopeKind={resultScopeKind}
+                onAdjustBoundary={onRedrawPolygon}
+                onApplyFilters={onFiltersChange}
+                onClearFilters={onClearFilters}
+                onClearSearch={onClearSearch}
+              />
             );
           })()
         ) : (

@@ -89,6 +89,21 @@ export interface AreaZeroResultRecoveryProps {
    */
   cause: DiscoverEmptyCause;
   /**
+   * Issue #2018 slice 3 — the kind of result scope these zero results belong
+   * to, so the recovery can only say things that are true about it.
+   *
+   * Before this existed the component assumed an area-shaped scope, which is
+   * a truthfulness bug for the other two kinds: a committed POLYGON has no
+   * `isViewportScope` equivalent anywhere (both flags in `useDiscoverMapData`
+   * are gated on `kind === 'VIEWPORT'`), so it fell through to the
+   * single-canonical-AREA path and this banner named an AREA that is not the
+   * scope, then offered nearby areas measured from it.
+   *
+   * 'AREA' covers a canonical AREA leaf and a committed AREA_SET — both are
+   * genuinely area-shaped, so both keep the nearby list.
+   */
+  scopeKind?: 'AREA' | 'POLYGON' | 'VIEWPORT';
+  /**
    * Commits an explicit filter change (#2018 slice 2). Threaded from
    * `AreaSelectedPanel`'s existing `onFiltersChange`, so a relaxation row is
    * exactly as much of a state transition as clicking a budget quick chip:
@@ -97,6 +112,18 @@ export interface AreaZeroResultRecoveryProps {
    * relaxation rows are not rendered at all rather than rendered inert.
    */
   onApplyFilters?: (filters: PropertyFilters) => void;
+  /**
+   * Issue #2018 slice 3 — the frozen mock's POLYGON action "Adjust boundary"
+   * (`EPZero` L294, `act.drawArea`). Consumes the EXISTING seam
+   * `handleRedrawPolygon` from `useDiscoverPageState` (#2419 PR-1) by name;
+   * nothing is reimplemented here.
+   *
+   * It starts a NEW drawing and commits nothing: the committed scope keeps
+   * producing results until a fresh polygon is drawn AND accepted, so this
+   * row writes no URL, pushes no history entry and changes no result scope.
+   * Omitted renders no row at all rather than a dead control.
+   */
+  onAdjustBoundary?: () => void;
   /** Clears the property filters. Omitted when no property filter is active. */
   onClearFilters?: () => void;
   /** Clears the within-area search. Omitted when no search is active. */
@@ -112,6 +139,8 @@ export function AreaZeroResultRecovery({
   searchQuery,
   noun,
   cause,
+  scopeKind = 'AREA',
+  onAdjustBoundary,
   onApplyFilters,
   onClearFilters,
   onClearSearch,
@@ -128,8 +157,14 @@ export function AreaZeroResultRecovery({
   // nothing". Identical `selected` keys produce an identical TanStack query
   // key, so in the AREA_SET case this shares the context's cache entry
   // instead of issuing a second request.
+  //
+  // Issue #2018 slice 3 — disabled outright for POLYGON/VIEWPORT via the
+  // hook's own documented `city.length > 0` guard, because the result is not
+  // rendered for those scopes (see the nearby block below) and firing an
+  // area-keyed request for a drawn or visible-map search asks a question the
+  // shopper did not.
   const { data: nearbyData, isLoading: nearbyLoading } = useNearbyAreaCandidates(
-    city,
+    scopeKind === 'AREA' ? city : '',
     scopeAreaKeys,
     filters,
   );
@@ -139,7 +174,22 @@ export function AreaZeroResultRecovery({
   // cached under a different key and can never be read back here — which is
   // also what makes it exact for `relaxationLabel` to diff a preview against
   // the live `filters` below.
-  const { data: relaxationData } = useRelaxationPreviews(city, scopeAreaKeys, filters);
+  //
+  // Issue #2018 slice 3 — ALSO disabled for POLYGON/VIEWPORT, and this one is
+  // a real gap rather than a tidy-up. `useRelaxationPreviews(city, areaKeys,
+  // filters)` is area-keyed: its endpoint has no polygon or bbox parameter.
+  // Under a drawn or visible-map scope the only keys available here are the
+  // previously-selected area's, so every "→ N listings" row would be a count
+  // for a DIFFERENT geometry than the one being searched. The issue demands
+  // deterministic count previews; a deterministic count of the wrong thing is
+  // worse than none, so these scopes get no relaxation rows until the
+  // endpoint becomes scope-aware. Raised with the team lead rather than
+  // silently rendering numbers that do not describe the active search.
+  const { data: relaxationData } = useRelaxationPreviews(
+    scopeKind === 'AREA' ? city : '',
+    scopeAreaKeys,
+    filters,
+  );
 
   // Nothing renders until real counts arrive: an optimistic or placeholder
   // number is precisely the dishonest preview the issue forbids.
@@ -189,22 +239,40 @@ export function AreaZeroResultRecovery({
     [filters, intent, searchQuery],
   );
 
-  // `EPZero` L285's scope-aware heading, with one addition the mock has no
-  // state for: a canonical area that is valid but genuinely holds nothing
-  // must not claim filters are hiding listings that do not exist.
+  const isAreaScope = scopeKind === 'AREA';
+
+  // `EPZero` L285's scope-aware heading. The POLYGON and VIEWPORT wordings
+  // are the mock's own, verbatim; the `empty` branch is the addition the mock
+  // has no state for (a canonical area that is valid but genuinely holds
+  // nothing must not claim filters are hiding listings that never existed).
   const heading =
-    cause === 'empty'
-      ? `${scopeAreaNames[0] ?? 'This area'} has no ${noun} listed right now`
-      : scopeAreaKeys.length > 1
-        ? `No matching ${noun} in your ${scopeAreaKeys.length} selected areas`
-        : `No matching ${noun} in ${scopeAreaNames[0] ?? 'this area'}`;
+    scopeKind === 'POLYGON'
+      ? `No matching ${noun} inside your drawn area`
+      : scopeKind === 'VIEWPORT'
+        ? `No matching ${noun} in the visible map area`
+        : cause === 'empty'
+          ? `${scopeAreaNames[0] ?? 'This area'} has no ${noun} listed right now`
+          : scopeAreaKeys.length > 1
+            ? `No matching ${noun} in your ${scopeAreaKeys.length} selected areas`
+            : `No matching ${noun} in ${scopeAreaNames[0] ?? 'this area'}`;
 
   const subCopy =
-    cause === 'empty'
+    isAreaScope && cause === 'empty'
       ? 'This is a real area with nothing listed today, not a filtered-out result. Your search is unchanged.'
       : 'Your search is kept exactly as it is. Nothing here widens it for you.';
 
-  const scopeLine = scopeAreaNames.length > 0 ? scopeAreaNames.join(' · ') : `${scopeAreaKeys.length} areas`;
+  // The scope line must name the ACTIVE scope. Naming the previously-selected
+  // areas under a drawn or visible-map search is precisely what
+  // FUNCTIONAL_AUDIT §C2 ruled out: "The zero panel no longer prints previous
+  // area names as the active scope."
+  const scopeLine =
+    scopeKind === 'POLYGON'
+      ? 'Drawn area'
+      : scopeKind === 'VIEWPORT'
+        ? 'Visible map area'
+        : scopeAreaNames.length > 0
+          ? scopeAreaNames.join(' · ')
+          : `${scopeAreaKeys.length} areas`;
 
   // Adding a candidate opens the EXISTING #2017 draft — it never commits.
   // Per the resolved mock (FUNCTIONAL_AUDIT §C2: "Add now opens a draft
@@ -263,7 +331,18 @@ export function AreaZeroResultRecovery({
         </p>
       </div>
 
-      {nearbyLoading ? (
+      {/* Issue #2018 slice 3 — the nearby list is AREA-shaped and is offered
+          only where its relationship to the active scope can be stated
+          truthfully, which is the issue's own condition ("nearby canonical-area
+          suggestions only where the relationship can be explained truthfully").
+          `areaSetProximityLabel` measures each candidate from the nearest
+          SELECTED AREA CENTRE, so under a drawn polygon or a panned viewport
+          every row would read "Adjacent to {area}" or "N km away" about an
+          area that is not the scope and may not even be inside it. Rather than
+          print a distance nobody asked about, these scopes get filter recovery
+          only — which is also what the mock does (`EPZero` L290-310 gives
+          POLYGON and VIEWPORT their own action blocks and no nearby list). */}
+      {!isAreaScope ? null : nearbyLoading ? (
         <p className="px-1 text-xs text-muted-foreground" data-testid="area-zero-recovery-nearby-loading">
           Looking for nearby areas…
         </p>
@@ -337,7 +416,14 @@ export function AreaZeroResultRecovery({
         new variant. The noun is "listing(s)" to match those adjacent rows and
         the mock, rather than the banner's "homes"/"rentals".
       */}
-      {onApplyFilters && relaxations.length > 0 && (
+      {/* Issue #2018 slice 3 — `isAreaScope` is asserted HERE as well as
+          on the query above, deliberately. Disabling the request is an
+          optimisation; this gate is the correctness rule. The endpoint is
+          area-keyed, so under a drawn or visible-map scope any row it could
+          produce would be a count for a DIFFERENT geometry than the one
+          being searched, and a confidently-wrong number is worse than no
+          row at all. */}
+      {isAreaScope && onApplyFilters && relaxations.length > 0 && (
         <div data-testid="area-zero-recovery-relaxations">
           <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
             Change one filter
@@ -365,6 +451,33 @@ export function AreaZeroResultRecovery({
           </div>
           <p className="mt-1.5 text-[11.5px] text-muted-foreground">
             Each option changes one filter only. Your selected areas stay exactly as they are.
+          </p>
+        </div>
+      )}
+
+      {/* Issue #2018 slice 3 — the mock's scope-specific action block
+          (`EPZero` L290-310). Only actions backed by a real seam are
+          rendered; a mock action with no working implementation is left out
+          rather than shipped inert, and is recorded as a named dependency in
+          the PR's evidence table instead. */}
+      {scopeKind === 'POLYGON' && onAdjustBoundary && (
+        <div data-testid="area-zero-recovery-scope-actions">
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+            Change your drawn area
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onAdjustBoundary}
+              data-testid="area-zero-recovery-adjust-boundary"
+            >
+              Adjust boundary
+            </Button>
+          </div>
+          <p className="mt-1.5 text-[11.5px] text-muted-foreground">
+            Redrawing starts a new boundary. Your current results stay until you draw and accept a
+            new one.
           </p>
         </div>
       )}

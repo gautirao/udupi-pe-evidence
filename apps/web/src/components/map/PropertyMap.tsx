@@ -242,6 +242,13 @@ interface PropertyMapProps {
    */
   areaSetCandidateKeys?: string[];
   /**
+   * Issue #2018 slice 3 — filter-aware listing count per candidate areaKey,
+   * forwarded verbatim to `AreaMarkerLayer` (see its prop of the same name
+   * for why raw `listingCount` was the wrong number). Pure pass-through:
+   * this component neither reads nor derives it.
+   */
+  areaSetCandidateCounts?: Record<string, number>;
+  /**
    * Issue #2017 — fired when an AREA_SET candidate callout (or its
    * "View homes" line) is activated by click or keyboard. Passed through to
    * AreaMarkerLayer unchanged; unused unless areaSetCandidateKeys is also
@@ -2722,6 +2729,7 @@ export function PropertyMap({
   onAreaClusterCameraIntent,
   onAreaMarkersComputed,
   areaSetCandidateKeys,
+  areaSetCandidateCounts,
   onAreaSetCandidateSelect,
   areaSetAtMax = false,
   areasNavigationJourney = null,
@@ -3077,6 +3085,7 @@ export function PropertyMap({
               onAreaClusterCameraIntent={onAreaClusterCameraIntent}
               onMarkersComputed={onAreaMarkersComputed}
               areaSetCandidateKeys={areaSetCandidateKeys}
+          areaSetCandidateCounts={areaSetCandidateCounts}
               onAreaSetCandidateSelect={onAreaSetCandidateSelect}
               areaSetAtMax={areaSetAtMax}
             />

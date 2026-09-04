@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, render } from '@testing-library/react';
+import { screen, render, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
@@ -456,6 +456,57 @@ describe('DiscoverRightPanel', () => {
     expect(screen.getByTestId('area-listings-retry-banner')).toBeInTheDocument();
     expect(screen.queryByTestId('area-listings-error')).not.toBeInTheDocument();
     expect(screen.queryByTestId('area-zero-result-recovery')).not.toBeInTheDocument();
+  });
+
+  // Issue #2018 slice 3 — the AUTHENTICATED viewport had no error path at all.
+  // `isErrorAuthViewport` was declared, defaulted and destructured in
+  // DiscoverRightPanel and then never read, and the panel hard-coded
+  // `isListingsError={false}` for every viewport scope. So a signed-in shopper
+  // whose "Search this area" request failed saw a zero-result state asserting
+  // the visible map area is empty. It is not; the request failed.
+  it('a failed AUTHENTICATED viewport request shows the request-failure state, not an empty map area', () => {
+    const area = makeArea('k1', 'Manipal', 5);
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="area-selected"
+        areas={[area]}
+        selectedArea={area}
+        isAuthViewport
+        authViewportListings={[]}
+        authViewportListingsLoading={false}
+        isErrorAuthViewport
+        onRetryAuthViewport={vi.fn()}
+        isLoadingListings={false}
+      />,
+    );
+    expect(screen.getByTestId('area-listings-error')).toBeInTheDocument();
+    expect(screen.queryByTestId('area-zero-result-recovery')).not.toBeInTheDocument();
+  });
+
+  it('a healthy AUTHENTICATED viewport with genuinely zero results still gets the recovery, not an error', () => {
+    const area = makeArea('k1', 'Manipal', 5);
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="area-selected"
+        areas={[area]}
+        selectedArea={area}
+        isAuthViewport
+        authViewportListings={[]}
+        authViewportListingsLoading={false}
+        isLoadingListings={false}
+      />,
+    );
+    expect(screen.queryByTestId('area-listings-error')).not.toBeInTheDocument();
+    const recovery = screen.getByTestId('area-zero-result-recovery');
+    // And it names the VIEWPORT, never the previously-selected area.
+    expect(screen.getByTestId('area-zero-recovery-heading')).toHaveTextContent(
+      'No matching homes in the visible map area',
+    );
+    expect(within(recovery).getByTestId('area-zero-recovery-scope-line')).toHaveTextContent(
+      'Visible map area',
+    );
   });
 
   it('renders listing cards with price and locality', () => {

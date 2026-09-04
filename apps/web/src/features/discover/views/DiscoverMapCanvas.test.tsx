@@ -22,6 +22,43 @@ import type {
 import type { SchoolsByAreaResponse } from '@/hooks/useSchoolsByArea';
 import type { DiscoverBadgeResult } from '@/features/discover/presentation/discoverBadge';
 
+// Issue #2018 slice 3 — the nearby contract is mocked here so the map/panel
+// count-parity test has KNOWN filter-aware counts to assert against. The
+// provider under test (AreaSetDraftProvider) calls this hook for real
+// otherwise, which in this suite resolves to an empty candidate list and
+// could not distinguish "counts threaded correctly" from "no counts at all".
+export const NEARBY_CANDIDATES = [
+  {
+    areaKey: 'IN|KA|Bengaluru|Hennur',
+    name: 'Hennur',
+    geoCenterLat: 13.04,
+    geoCenterLon: 77.63,
+    // Deliberately DIFFERENT from any area's raw listingCount fixture, so a
+    // regression that falls back to `area.listingCount` fails loudly here.
+    eligibleListingCount: 3,
+    schoolCount: 2,
+  },
+  {
+    areaKey: 'IN|KA|Bengaluru|Kempapura',
+    name: 'Kempapura',
+    geoCenterLat: 13.06,
+    geoCenterLon: 77.61,
+    eligibleListingCount: 8,
+    schoolCount: 1,
+  },
+];
+
+vi.mock('@/hooks/useNearbyAreaCandidates', () => ({
+  useNearbyAreaCandidates: () => ({
+    data: {
+      city: 'bangalore',
+      selectedAreaKeys: [],
+      candidates: NEARBY_CANDIDATES,
+    },
+    isLoading: false,
+  }),
+}));
+
 vi.mock('@/components/map/PropertyMap', () => ({
   // Issue #1956 PR 2 (Slice 3, pass 4, AC3.9) — captures the two hover-sync
   // props as data attributes so a test can prove DiscoverMapCanvas actually
@@ -50,6 +87,10 @@ vi.mock('@/components/map/PropertyMap', () => ({
     // AREA_SET candidate-callout props are neutralised whenever the draft
     // editor is closed (isAreaSetDraftOpen: false), not just left as-is.
     areaSetCandidateKeys?: string[];
+    // Issue #2018 slice 3 — captured so a test can prove the map card is
+    // given the SAME filter-aware count the recovery panel's nearby row
+    // shows, rather than the area's filter-blind lifetime total.
+    areaSetCandidateCounts?: Record<string, number>;
     onAreaSetCandidateSelect?: (areaKey: string) => void;
     areaSetAtMax?: boolean;
   }) => (
@@ -70,6 +111,7 @@ vi.mock('@/components/map/PropertyMap', () => ({
           : props.agriDestinationMarkers.map((l) => l.id).join(',')
       }
       data-area-set-candidate-keys={(props.areaSetCandidateKeys ?? []).join(',')}
+      data-area-set-candidate-counts={JSON.stringify(props.areaSetCandidateCounts ?? null)}
       data-has-area-set-candidate-select={String(typeof props.onAreaSetCandidateSelect === 'function')}
       data-area-set-at-max={String(props.areaSetAtMax ?? false)}
       onClick={() => props.onSelectAgriDestination?.('IN|KA|Udupi|Brahmavar')}
@@ -678,6 +720,48 @@ describe('DiscoverMapCanvas — Issue #2017 code-review fix: AREA_SET candidate-
       expect.arrayContaining(['IN|KA|Bengaluru|Hebbal', 'IN|KA|Bengaluru|Jakkur']),
     );
     expect(map).toHaveAttribute('data-has-area-set-candidate-select', 'true');
+  });
+
+  // ── Issue #2018 slice 3 — map/panel count parity ──────────────────────────
+  // The issue's rule is "Map and panel show the same preview counts and
+  // candidate identities". Only the KEYS used to cross to the map, so the
+  // candidate callout fell back to `area.listingCount` — the area's raw
+  // lifetime total from useDiscoverAreas, which ignores the shopper's active
+  // filters — while the recovery panel's nearby row rendered the filter-aware
+  // `eligibleListingCount`. Under any active filter the same candidate showed
+  // two different numbers on the two surfaces.
+  it('editor OPEN: PropertyMap gets the FILTER-AWARE candidate counts, not the areas raw totals', () => {
+    mockUseDiscoverShell.mockReturnValue({ ...defaultShellMock(), isAreaSetDraftOpen: true });
+    BASE_NAV.resultScope = COMMITTED_AREA_SET_NAV_OVERRIDE;
+
+    renderCanvas(<DiscoverMapCanvas {...baseProps()} />);
+
+    const map = screen.getByTestId('property-map-mock');
+    const raw = map.getAttribute('data-area-set-candidate-counts');
+    expect(raw).not.toBe('null');
+
+    const counts = JSON.parse(raw as string) as Record<string, number>;
+    // Every entry must come from the nearby contract's eligibleListingCount,
+    // which is the exact value the panel's nearby row renders. Both surfaces
+    // read one AreaSetDraftContext, so this is a single-source assertion
+    // rather than two numbers that happen to agree today.
+    for (const candidate of NEARBY_CANDIDATES) {
+      expect(counts[candidate.areaKey]).toBe(candidate.eligibleListingCount);
+    }
+  });
+
+  it('editor CLOSED: no candidate counts are published at all', () => {
+    mockUseDiscoverShell.mockReturnValue({ ...defaultShellMock(), isAreaSetDraftOpen: false });
+    BASE_NAV.resultScope = COMMITTED_AREA_SET_NAV_OVERRIDE;
+
+    renderCanvas(<DiscoverMapCanvas {...baseProps()} />);
+
+    // Same gate as the keys: candidate mode only exists while the draft is
+    // open, so nothing candidate-shaped leaks into the ordinary marker path.
+    expect(screen.getByTestId('property-map-mock')).toHaveAttribute(
+      'data-area-set-candidate-counts',
+      'null',
+    );
   });
 
   it('close/cancel (isAreaSetDraftOpen flips true -> false on rerender): candidate mode is fully restored to the normal marker path, not left active', () => {

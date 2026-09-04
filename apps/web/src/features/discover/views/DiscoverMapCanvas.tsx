@@ -557,6 +557,29 @@ export function DiscoverMapCanvas({
         ]),
       )
     : [];
+  // Issue #2018 slice 3 — the FILTER-AWARE count for each candidate, taken
+  // from the very same `nearbyAreaCandidatesData` the recovery panel's nearby
+  // rows render. Previously only the KEYS crossed to the map, so the callout
+  // fell back to `area.listingCount` (the raw per-area total from
+  // useDiscoverAreas, filter-blind) while the panel showed
+  // `eligibleListingCount`. Under any active filter the same candidate
+  // therefore showed two different numbers on the two surfaces, which #2018
+  // forbids: "Map and panel show the same preview counts and candidate
+  // identities."
+  //
+  // Derived from one source rather than recomputed, so the two cannot drift.
+  // Draft MEMBERS are intentionally absent from this map: they are committed
+  // selections rather than suggestions, the nearby endpoint excludes them by
+  // construction, and their card keeps its existing area-total semantics.
+  const areaSetCandidateCounts = shell.isAreaSetDraftOpen
+    ? Object.fromEntries(
+        (nearbyAreaCandidatesData?.candidates ?? []).map((candidate) => [
+          candidate.areaKey,
+          candidate.eligibleListingCount,
+        ]),
+      )
+    : undefined;
+
   const handleAreaSetCandidateSelect = shell.isAreaSetDraftOpen
     ? (areaKey: string) => {
         areaSetDraftCommands.add(areaKey);
@@ -861,6 +884,7 @@ export function DiscoverMapCanvas({
           // DiscoverMapCanvasProps for callers/tests that still supply them,
           // but are no longer used as the map's source of truth.
           areaSetCandidateKeys={computedAreaSetCandidateKeys}
+          areaSetCandidateCounts={areaSetCandidateCounts}
           onAreaSetCandidateSelect={handleAreaSetCandidateSelect}
           // Issue #2017 (max-3 visual parity, PR #2424) — same
           // `atLimit` source of truth AreaSetChips.tsx uses for its own
