@@ -3,21 +3,13 @@ import { ChevronDown, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { formatPrice } from '@/lib/formatters';
+import { getPropertyTypeLabel } from '@/lib/propertyTypeConfig';
 import type { DiscoverUrlFilters } from '@/hooks/useDiscoverUrlState';
 import { Chip, type ChipSpec } from './chips/Chip';
 
 // Issue #1817 — full chip taxonomy per design §3. Scope objects (city, macro-region,
 // area group, area, school) are NEVER chips (AC2) — they live exclusively in the
 // breadcrumb/header band. This component renders ONLY clearable filter + search state.
-
-const PROPERTY_TYPE_LABELS: Record<string, string> = {
-  apartment: 'Apartment',
-  villa: 'Villa',
-  land: 'Plot / Land',
-  commercial: 'Commercial',
-  house: 'House',
-  plot: 'Plot / Land',
-};
 
 const SELLER_LABELS: Record<string, string> = {
   owner: 'Owner',
@@ -52,8 +44,15 @@ function formatFilterDate(isoDate: string): string {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' });
 }
 
+/**
+ * Issue #2430 — resolves through the shared label authority instead of a local
+ * map. The old map covered six values and fell back to the RAW enum, so a
+ * `commercial_building` filter chip read "commercial_building". The shared owner
+ * has a human label for every property type (and for the `plot` filter alias),
+ * so the raw-token fallback is gone.
+ */
 function humanizePropertyType(raw: string): string {
-  return PROPERTY_TYPE_LABELS[raw.toLowerCase()] ?? raw;
+  return getPropertyTypeLabel(raw);
 }
 
 /** Truncate the search chip label to ~24 chars per design §3/§4. */

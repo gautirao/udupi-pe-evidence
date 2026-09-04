@@ -1,0 +1,52 @@
+[
+  {
+    "viewport": "1366x768",
+    "view": "city-root",
+    "commercialStrings": [],
+    "leaked": [],
+    "saysOther": false,
+    "consoleErrors": 0,
+    "cardPill": null,
+    "popover": null
+  },
+  {
+    "viewport": "1366x768",
+    "view": "area-leaf",
+    "commercialStrings": [
+      "Commercial"
+    ],
+    "leaked": [
+      "Commercial_building",
+      "Residential_plot"
+    ],
+    "saysOther": true,
+    "consoleErrors": 0,
+    "cardPill": "₹0–25L | Commercial_building | Ready to move Office Space for sale in Kukkikatte, Udupi | Kukkikatte | 0 | 350 sq ft | 1 floors | For Sale | 1 week ago | View details",
+    "popover": "2/2 | ₹0–25L | Ready to move Office Space for sale in Kukkikatte, Udupi | COMM. BUILDING | Kukkikatte | Show in list | View details"
+  },
+  {
+    "viewport": "390x844",
+    "view": "city-root",
+    "commercialStrings": [],
+    "leaked": [],
+    "saysOther": false,
+    "consoleErrors": 0,
+    "cardPill": null,
+    "popover": null
+  },
+  {
+    "viewport": "390x844",
+    "view": "area-leaf",
+    "commercialStrings": [
+      "Commercial"
+    ],
+    "leaked": [
+      "Commercial_building",
+      "Residential_plot"
+    ],
+    "saysOther": false,
+    "consoleErrors": 0,
+    "cardPill": "₹0–25L | Commercial_building | Ready to move Office Space for sale in Kukkikatte, Udupi | Kukkikatte | 0 | 350 sq ft | 1 floors | For Sale | 1 week ago | View details",
+    "popover": "NO_MARKER_RENDERED"
+  }
+]

@@ -695,7 +695,7 @@ describe('PropertyCard', () => {
         isAuthenticated: true,
         onNavigate: vi.fn(),
       });
-      // The type pill label 'Apartment' is rendered by capitalize(listing.propertyType).
+      // The type pill label 'Apartment' comes from getPropertyTypeLabel (Issue #2430).
       const typeLabel = screen.getByText('Apartment');
       expect(typeLabel).toBeInTheDocument();
       const pill = typeLabel.closest('span');
@@ -764,9 +764,12 @@ describe('PropertyCard', () => {
           onNavigate: vi.fn(),
         }),
       ).not.toThrow();
-      // Label renders as capitalize('agricultural_land') = 'Agricultural_land'
-      // The dot pill still renders; no crash from unknown type lookup
+      // Issue #2430 — the label used to render as capitalize('agricultural_land')
+      // = 'Agricultural_land', a raw database token on a buyer-facing card. It
+      // now resolves through the shared label authority.
       expect(screen.getByTestId('listing-card')).toBeInTheDocument();
+      expect(screen.getByText('Agricultural Land')).toBeInTheDocument();
+      expect(screen.queryByText('Agricultural_land')).not.toBeInTheDocument();
     });
 
     // Agri-first: trustBadge is typically null → no trust badge regardless of round-3 colours

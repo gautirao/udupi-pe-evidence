@@ -33,19 +33,8 @@ import { Building2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatPrice } from '@/lib/formatters';
 import { TRUST_BADGES } from '@/components/discover/PropertyCard';
+import { getPropertyTypeLabel } from '@/lib/propertyTypeConfig';
 import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
-
-const PROPERTY_TYPE_LABELS: Record<string, string> = {
-  land: 'Land',
-  house: 'House',
-  apartment: 'Apartment',
-  commercial: 'Commercial',
-  commercial_building: 'Comm. Building',
-  warehouse: 'Warehouse',
-  commercial_land: 'Comm. Land',
-  agricultural_land: 'Agri Land',
-  other: 'Other',
-};
 
 export interface MobileListingPreviewSheetProps {
   preview: SelectedListingPreview;
@@ -90,8 +79,16 @@ export function MobileListingPreviewSheet({
   onViewDetails,
   onHeightChange,
 }: MobileListingPreviewSheetProps) {
+  // Issue #2430 — was a byte-identical private copy of MarkerPopoverCard's
+  // label map, so the two preview surfaces had to be kept in sync by hand, and
+  // both disagreed with the result card behind them ('Comm. Building' vs the
+  // card's raw 'Commercial_building'). Its `?? preview.propertyType` fallback
+  // also leaked the raw enum for the types the map omitted — residential_plot
+  // being the one with real listings today. Both previews now read the one
+  // shared authority, which has a human label for every property type and
+  // never falls through to a database token.
   const typeLabel = preview.propertyType
-    ? (PROPERTY_TYPE_LABELS[preview.propertyType] ?? preview.propertyType)
+    ? getPropertyTypeLabel(preview.propertyType)
     : 'Property';
 
   // getBoundingClientRect() (not ResizeObserver's own contentRect) is used

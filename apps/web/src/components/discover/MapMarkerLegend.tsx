@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { PROPERTY_TYPE_VISUAL_MAP, GLYPH_SVG_PATHS, getPropertyTypeVisual } from '@/lib/propertyTypeConfig';
+import { GLYPH_SVG_PATHS, getPropertyTypeVisual } from '@/lib/propertyTypeConfig';
 import type { PropertyTypeGlyph } from '@/lib/propertyTypeConfig';
 
 /**
@@ -39,7 +39,11 @@ export function MapMarkerLegend({ listings }: MapMarkerLegendProps) {
     for (const [type, count] of countMap) {
       if (count === 0) continue;
       const visual = getPropertyTypeVisual(type);
-      result.push({ type, label: visual.label, colour: visual.colour, glyph: visual.glyph, count });
+      // Issue #2430 — the legend is a COUNT context, so it renders the plural
+      // form of the shared label authority ("Apartments 12"). Same owner as the
+      // card/popover singular label, so a Commercial row can no longer read
+      // 'Other' here while the card next to it says something else.
+      result.push({ type, label: visual.pluralLabel, colour: visual.colour, glyph: visual.glyph, count });
     }
     return result;
   }, [listings]);

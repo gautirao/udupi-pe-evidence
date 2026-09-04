@@ -10,7 +10,7 @@ import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { useSavedListingIds, useSaveListing, useUnsaveListing } from '@/hooks/useSavedListings';
 import { useAuthModal } from '@/contexts/AuthModalContext';
 import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
-import { getPropertyTypeVisual } from '@/lib/propertyTypeConfig';
+import { getPropertyTypeVisual, getPropertyTypeLabel } from '@/lib/propertyTypeConfig';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -212,11 +212,19 @@ export function PropertyCard({
     staleTime: 60_000,
   });
 
-  const fallbackTitle = listing.propertyType
-    ? `${capitalize(listing.propertyType)} ${purposeLabel(listing.listingPurpose)}`
+  // Issue #2430 — the type pill and the title fallback both resolve through the
+  // shared label authority. They previously used capitalize(), which uppercases
+  // ONE character of the raw enum and so rendered 'commercial_building' as
+  // "Commercial_building" — a raw database token on a buyer-facing card.
+  // getPropertyTypeLabel also normalises case and never returns 'Other' for a
+  // Commercial type. `typeLabel` stays null (not '') for an absent property
+  // type so the pill's existing truthiness gate is unchanged.
+  const typeLabel = listing.propertyType ? getPropertyTypeLabel(listing.propertyType) : null;
+
+  const fallbackTitle = typeLabel
+    ? `${typeLabel} ${purposeLabel(listing.listingPurpose)}`
     : purposeLabel(listing.listingPurpose) || 'Property';
 
-  const typeLabel = listing.propertyType ? capitalize(listing.propertyType) : null;
   const purpose = listing.listingPurpose ? purposeLabel(listing.listingPurpose) : null;
   const locationText = buildLocationText(listing.locality, areaLabel);
 

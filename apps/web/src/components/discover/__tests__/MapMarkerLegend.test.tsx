@@ -56,9 +56,30 @@ describe('MapMarkerLegend', () => {
     expect(counts).toContain('1');
   });
 
-  it('uses the grey "Other" label for an unknown type', () => {
+  it('uses the neutral grey fallback label for an unknown type', () => {
+    // Issue #2430 — was 'Other'. The legend renders the shared label
+    // authority's PLURAL form, whose neutral last resort is 'Properties'.
     render(<MapMarkerLegend listings={makeListings(['some_unknown_type'])} />);
-    expect(screen.getByText('Other')).toBeInTheDocument();
+    expect(screen.getByText('Properties')).toBeInTheDocument();
+    expect(screen.queryByText('Other')).not.toBeInTheDocument();
+  });
+
+  it('never labels a Commercial row "Other" (Issue #2430)', () => {
+    render(
+      <MapMarkerLegend
+        listings={makeListings([
+          'commercial',
+          'commercial_building',
+          'warehouse',
+          'commercial_land',
+        ])}
+      />,
+    );
+    expect(screen.queryByText('Other')).not.toBeInTheDocument();
+    expect(screen.getByText('Commercial')).toBeInTheDocument();
+    expect(screen.getByText('Commercial buildings')).toBeInTheDocument();
+    expect(screen.getByText('Warehouses / godowns')).toBeInTheDocument();
+    expect(screen.getByText('Commercial land')).toBeInTheDocument();
   });
 
   it('renders with the correct aria-label', () => {

@@ -21,19 +21,8 @@ import { useEffect, useLayoutEffect, useRef, useCallback, useState } from 'react
 import { Building2, ChevronLeft, ChevronRight, List, MapPin, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatPrice } from '@/lib/formatters';
+import { getPropertyTypeLabel } from '@/lib/propertyTypeConfig';
 import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
-
-const PROPERTY_TYPE_LABELS: Record<string, string> = {
-  land: 'Land',
-  house: 'House',
-  apartment: 'Apartment',
-  commercial: 'Commercial',
-  commercial_building: 'Comm. Building',
-  warehouse: 'Warehouse',
-  commercial_land: 'Comm. Land',
-  agricultural_land: 'Agri Land',
-  other: 'Other',
-};
 
 /**
  * MODEL A stepper wiring (Issue #1810 Stage 2A, user-ratified — see
@@ -177,7 +166,13 @@ export function MarkerPopoverCard({
       : { position: 'absolute', left: EDGE_PAD, top: EDGE_PAD, width: POPOVER_W, zIndex: 1100 };
 
   const imageUrl = listing.images?.[0]?.url ?? null;
-  const typeLabel = PROPERTY_TYPE_LABELS[listing.property_type] ?? 'Property';
+  // Issue #2430 — this component used to keep its OWN label map, which said
+  // 'Comm. Building'/'Comm. Land' while the result card behind it said
+  // 'Commercial_building'. Both now resolve through the one shared authority,
+  // so the popover and the card can never disagree about the same listing.
+  // The neutral 'Property' fallback for an unrecognised type is preserved —
+  // it is the label the shared owner's fallback entry carries.
+  const typeLabel = getPropertyTypeLabel(listing.property_type);
   const hasPrice = listing.price != null && listing.price > 0;
   const priceText = hasPrice && listing.price != null
     ? formatPrice(listing.price, listing.price_unit)
