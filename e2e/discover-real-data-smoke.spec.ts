@@ -2,8 +2,6 @@
  * Discover real-data smoke — Issue #1264.
  *
  * Validates 4 cross-layer journeys against the LIVE backend (no page.route() mocks).
- * Seed data from scripts/seed-discover-listings.mjs must be present before running:
- *   12 LIVE [E2E] listings across Manipal / Malpe / Kaup (4 each).
  *
  * Journeys:
  *   J1  area-first anon       — click area marker → listing cards appear, no 401/403
@@ -11,16 +9,50 @@
  *   J3  school-first auth     — authenticated school-radius → cards OR property markers appear
  *   J4  keyword contextual    — q=apartment filters results; clearing q restores them
  *
- * Run locally (full project, no stubs):
- *   bash scripts/run-e2e-local.sh --project=full e2e/discover-real-data-smoke.spec.ts
+ * ---------------------------------------------------------------------------
+ * Issue #2427 — WHY THIS FILE TARGETS BANGALORE, NOT UDUPI (owner ruling, Option 2)
+ *
+ * These four journeys previously pinned Udupi node identities (`d:n`,
+ * `a:IN|KA|Udupi|Brahmavar`, `a:IN|KA|Udupi|Manipal`) and a Manipal school. They
+ * only ever passed because the gate ran against the shared hosted database. PR
+ * #2423 (2026-09-02) isolated the gate onto an ephemeral fixture Postgres, and
+ * that fixture has NO Udupi canonical hierarchy at all — `discover-smoke-seed.sql`
+ * seeds zero rows into `city_regions`, `navigation_nodes` and
+ * `city_launch_revision` — so Udupi renders the LEGACY area list, city-root
+ * camera-sync never writes a zoom into the URL, and J1 could not pass by any
+ * amount of retrying. J2-J4 were masked behind it by `mode: 'serial'` below.
+ *
+ * Seeding a canonical Udupi hierarchy was measured and deliberately NOT chosen:
+ * promoting even a narrow `d:n` + Brahmavar revision flips ~6 Udupi spec files
+ * and ~15 unmocked assertion sites from legacy to canonical rendering, none of
+ * them in the `smoke` project (docs/pr-evidence/issue-2427/option-1-blast-radius.md).
+ * That is a suite-wide behavioural decision, not a fixture repair, and it is
+ * tracked separately — see the follow-up issue referenced from #2427.
+ *
+ * NOTHING IN J1-J4 IS UDUPI-SPECIFIC. Every contract they prove is city-agnostic
+ * (canonical `node=` ownership, legacy `areaKey=` absence, anonymous 401/403
+ * protection, school-radius endpoint invocation, keyword narrowing/restoration),
+ * so retargeting onto the canonical Bangalore branch the fixture already contains
+ * preserves all of them. What changes is only data identity. The cost, recorded
+ * honestly: the `smoke` project no longer carries real-backend Discover coverage
+ * for Udupi, the product's home city. That coverage was already dead rather than
+ * merely at risk, but the follow-up issue exists so the gap stays visible.
+ *
+ * Run locally (smoke project, real local backend + ephemeral fixture DB):
+ *   bash scripts/run-e2e-local.sh --project=smoke e2e/discover-real-data-smoke.spec.ts
  *
  * Prerequisites:
  *   - PLAYWRIGHT_BASE_URL pointing at a running frontend
- *   - Seed data present (run scripts/seed-discover-listings.mjs first)
+ *   - BACKEND_BASE_URL pointing at the backend serving that frontend's data
+ *     (scripts/run-e2e-local.sh exports both from .env.e2e / .env.e2e.local)
+ *   - The fixture seeds applied by scripts/db/restore-test-fixture.sh — in
+ *     particular navigation-hierarchy-fixture-seed.sql (the nodes),
+ *     navigation-hierarchy-fixture-listings-seed.sql (the RR Nagar listings) and
+ *     navigation-hierarchy-schools-agri-fixture-seed.sql (the RR Nagar school)
  *   - PLAYWRIGHT_BROKER_EMAIL + PLAYWRIGHT_BROKER_PASSWORD set for J3 (else J3 skips)
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -34,30 +66,81 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKEND =
   process.env.BACKEND_BASE_URL ?? 'https://udupi-property-explorer.onrender.com';
 
-const MANIPAL_AREA_KEY = 'IN|KA|Udupi|Manipal';
+/** City slug every journey below runs against — see the #2427 note in the file header. */
+const CITY = 'bangalore';
+
+/**
+ * AREA leaf all four journeys use. It is the only fixture AREA that carries
+ * everything they need at once: two LIVE residential listings, a school, and a
+ * canonical Direction parent.
+ */
+const RR_NAGAR_AREA_KEY = 'IN|KA|Bengaluru|RR Nagar';
 
 // ---------------------------------------------------------------------------
-// Canonical Discover navigation nodes (Udupi) — real, backend-confirmed shape.
+// Canonical Discover navigation nodes (Bangalore) — real fixture shape.
 //
 // The legacy `?areaKey=` deep-link param has been deliberately ignored by the
 // area-first journey since #2117: the canonical AREA state is `?node=a:<areaKey>`.
-// These node keys are the live values returned by
-//   GET /api/discover/cities/udupi/navigation/{node}/counts
-// (root -> d:n -> a:IN|KA|Udupi|Brahmavar; root -> d:e -> a:IN|KA|Udupi|Manipal).
+// Both node keys below are seeded by
+// scripts/db/fixtures/navigation-hierarchy-fixture-seed.sql (RR Nagar at :124,
+// a depth-1 AREA leaf under `d:southeast`) and are already exercised as a real
+// root -> Direction -> AREA path by e2e/canonical/discover-area-first.canonical.ts
+// (:98-131) and e2e/discover/issue-1823-camera-fit-policy.spec.ts.
 // ---------------------------------------------------------------------------
 
-/** Direction destination reached from the Udupi city root after one map zoom-in. */
-const UDUPI_NORTH_DIRECTION_NODE = 'd:n';
+/** Direction destination reached from the Bangalore city root. */
+const SOUTHEAST_DIRECTION_NODE = 'd:southeast';
 /**
- * AREA child of `d:n`. Both of `d:n`'s AREA children carry real listings
- * (Brahmavar 9, NorthMidTest 2), but Brahmavar is pinned by identity rather
- * than discovered via `.first()`: `[data-testid="area-single-marker"]` DOM order
- * does not track on-screen order for a Leaflet map, so a positional pick could
- * silently drift onto a different area and weaken what this journey proves.
+ * AREA child of `d:southeast`, pinned by identity rather than discovered via
+ * `.first()`: `[data-testid="area-single-marker"]` DOM order does not track
+ * on-screen order for a Leaflet map, so a positional pick could silently drift
+ * onto a sibling area (Vijayanagar or Nagarbhavi) and weaken what this journey
+ * proves.
  */
-const BRAHMAVAR_AREA_NODE = 'a:IN|KA|Udupi|Brahmavar';
-/** AREA child of `d:e` — the seeded Manipal area J4 filters with `q=apartment`. */
-const MANIPAL_AREA_NODE = `a:${MANIPAL_AREA_KEY}`;
+const RR_NAGAR_AREA_NODE = `a:${RR_NAGAR_AREA_KEY}`;
+
+/**
+ * The exact fixture school J2/J3 use, pinned by name.
+ *
+ * `GET /api/public/schools/by-area` returns every school within 2 km of the AREA
+ * CENTROID rather than only those whose `area_key` matches (SchoolController#byArea),
+ * so taking element [0] would let an unrelated Bangalore school drift in — and the
+ * radius derived below is only valid for THIS school's coordinates.
+ * navigation-hierarchy-schools-agri-fixture-seed.sql:76-78 seeds it, and :123-126
+ * asserts at seed time that the V80 trigger resolves it to RR Nagar.
+ */
+const RR_NAGAR_SCHOOL_NAME = '[E2E] RR Nagar Fixture Public School';
+
+/**
+ * School radius for J2/J3, DERIVED from the fixture's real coordinates rather
+ * than inherited or guessed.
+ *
+ * The school sits at 12.9314733, 77.5290964. RR Nagar's two LIVE listings:
+ *   - `[E2E] RR Nagar Fixture Apartment` at 12.9314733, 77.5290964 — identical
+ *     coordinates, so 0.000 km away.
+ *   - `[E2E] RR Nagar Fixture House Two` at 12.9314733, 77.5318614 — same
+ *     latitude, delta-longitude 0.0027650 deg. One degree of longitude at this
+ *     latitude is 111.320 * cos(12.9314733 deg) = 108.497 km, so the offset is
+ *     0.0027650 * 108.497 = 0.300 km. (Independently corroborated by that seed's
+ *     own "+300m EAST" note.)
+ * 2 km therefore reaches both with a ~6.7x margin, while still excluding the
+ * nearest listings in neighbouring AREAs (Deepanjali Nagar ~2.3 km, Nagarbhavi
+ * ~2.4 km) — so a passing assertion is genuinely about RR Nagar.
+ */
+const SCHOOL_RADIUS_KM = 2;
+
+/**
+ * J4's keyword, DERIVED from the fixture's own listing text.
+ *
+ * `q` is forwarded server-side to `/api/discover/cities/{city}/listings` and
+ * becomes `pl.search_vector @@ websearch_to_tsquery('english', ?)`
+ * (DiscoverListingPredicateBuilder). V18__add_listing_fts_vector.sql defines
+ * `search_vector` over title + locality + description. Of RR Nagar's LIVE
+ * listings only `[E2E] RR Nagar Fixture Apartment` contains this token — the
+ * others are `... House Two` and the two `... Agri Parcel` rows — so the keyword
+ * provably narrows the AREA's result set rather than matching everything.
+ */
+const KEYWORD = 'apartment';
 
 function urlParam(page: Page, name: string): string | null {
   return new URL(page.url()).searchParams.get(name);
@@ -113,12 +196,12 @@ async function declineConsentBannerIfPresent(page: Page): Promise<void> {
  * is genuinely the topmost element there, and throw if no such point exists —
  * so a control that really is unreachable fails loudly instead of silently.
  */
-async function clickMapZoomIn(page: Page): Promise<void> {
-  const btn = page.locator('.leaflet-control-zoom-in');
-  await expect(btn, 'the Discover map zoom control must be available').toBeVisible({ timeout: 10_000 });
+async function clickMapZoomControl(page: Page, direction: 'in' | 'out'): Promise<void> {
+  const btn = page.locator(`.leaflet-control-zoom-${direction}`);
+  await expect(btn, `the Discover map "zoom ${direction}" control must be available`).toBeVisible({ timeout: 10_000 });
   const box = await btn.boundingBox();
   if (!box) {
-    throw new Error('leaflet zoom-in control has no bounding box');
+    throw new Error(`leaflet zoom-${direction} control has no bounding box`);
   }
   const candidates: Array<[number, number]> = [
     [box.x + box.width / 2, box.y + box.height / 2],
@@ -128,8 +211,9 @@ async function clickMapZoomIn(page: Page): Promise<void> {
   ];
   for (const [x, y] of candidates) {
     const reachable = await page.evaluate(
-      ([px, py]) => Boolean((document.elementFromPoint(px, py) as Element | null)?.closest('.leaflet-control-zoom-in')),
-      [x, y] as [number, number],
+      ([px, py, sel]) =>
+        Boolean((document.elementFromPoint(px as number, py as number) as Element | null)?.closest(sel as string)),
+      [x, y, `.leaflet-control-zoom-${direction}`] as [number, number, string],
     );
     if (!reachable) continue;
     await page.mouse.move(x, y);
@@ -137,50 +221,164 @@ async function clickMapZoomIn(page: Page): Promise<void> {
     await page.mouse.up();
     return;
   }
-  throw new Error('leaflet zoom-in control is fully obscured by a floating overlay');
+  throw new Error(`leaflet zoom-${direction} control is fully obscured by a floating overlay`);
+}
+
+async function clickMapZoomIn(page: Page): Promise<void> {
+  await clickMapZoomControl(page, 'in');
 }
 
 /**
- * Drive the map's own "Zoom in" (+) control until `nodeKey` de-clusters into its
- * own marker, then assert it really rendered.
+ * Is this marker actually clickable — rendered AND inside the visible viewport?
  *
- * The zoom at which a given marker breaks out of its visual cluster depends on
- * the viewport, so the number of clicks is discovered rather than hard-coded —
- * but every step still waits on deterministic app state (the URL zoom advancing,
- * the marker existing), never on a sleep, and the loop ends in a hard visibility
- * assertion so a marker that never appears fails loudly instead of being skipped.
+ * Leaflet keeps markers in the DOM while they are panned outside the visible map
+ * pane, and Playwright's `toBeVisible()` is satisfied by any element with a
+ * non-empty box and no hiding CSS. So an off-screen marker passes every check
+ * this file used to make before clicking, and `page.mouse.move()` to its
+ * out-of-viewport coordinates then lands on nothing at all — a click into the
+ * void that looks, from the assertion's point of view, exactly like a broken app.
  */
-async function zoomUntilMarkerVisible(
+async function markerHittable(page: Page, locator: Locator): Promise<boolean> {
+  if ((await locator.count()) === 0) return false;
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error('page has no viewport size');
+  const box = await locator.first().boundingBox();
+  if (!box) return false;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  return cx >= 0 && cy >= 0 && cx <= viewport.width && cy <= viewport.height;
+}
+
+/**
+ * The visual cluster currently swallowing `nodeKey`, if any.
+ *
+ * `AreaVisualClusterLayer` names a cluster after its members, e.g.
+ * `visual-cluster:d:central|d:southeast|d:southwest`, so a substring match on the
+ * member key identifies the cluster that must be broken open to reach it. The
+ * keys are unambiguous under substring matching: `d:southeast` does not occur
+ * inside `d:southwest`, and AREA keys are fully qualified
+ * (`a:IN|KA|Bengaluru|RR Nagar`).
+ */
+function clusterContaining(page: Page, nodeKey: string): Locator {
+  // Direction members appear under their own key (`d:southeast`), but AREA
+  // members appear as RAW area keys with the `a:` prefix stripped — measured:
+  // `visual-cluster:IN|KA|Bengaluru|Nagarbhavi|IN|KA|Bengaluru|RR Nagar|IN|KA|Bengaluru|Vijayanagar`.
+  // Matching on the unprefixed form covers both.
+  const member = nodeKey.replace(/^a:/, '');
+  return page.locator(
+    `[data-testid="area-visual-cluster-marker"][data-node-key*="${member}"]`,
+  );
+}
+
+/**
+ * The cluster-focus panel entry for `nodeKey`, the app's own disambiguation
+ * surface for markers that cannot be separated by zooming.
+ */
+function clusterFocusMember(page: Page, nodeKey: string): Locator {
+  return page.locator(`[data-testid="areas-cluster-focus-member-${nodeKey}"]`);
+}
+
+/**
+ * Walk the real supported anonymous click path until `nodeKey` is activated (#2427).
+ *
+ * Bangalore is a DENSE city root, and the fixture is deliberately dense too, so
+ * neither hop of this journey is a bare marker click. Both shapes were measured
+ * against the running fixture rather than assumed:
+ *
+ *  - City root (zoom 12): only `d:northeast` stands alone. The southern three
+ *    collapse into `visual-cluster:d:central|d:southeast|d:southwest`. Clicking
+ *    that cluster is the app's break-out interaction — it zooms one level, which
+ *    promotes `d:central` and leaves `visual-cluster:d:southeast|d:southwest` —
+ *    so reaching a clustered Direction means clicking clusters, not zooming.
+ *  - Inside `d:southeast`: all three AREA leaves sit in ONE cluster
+ *    (`visual-cluster:IN|KA|Bengaluru|Nagarbhavi|...|RR Nagar|...|Vijayanagar`)
+ *    that no zoom level separates — by design. navigation-hierarchy-fixture-seed.sql
+ *    places those markers within ~10-15m of each other precisely so the clusterer
+ *    merges them at any zoom. Clicking the cluster opens the `areas-cluster-focus-panel`,
+ *    whose per-member rows (`areas-cluster-focus-member-a:<areaKey>`) are how a real
+ *    user picks one coincident area. That panel IS the marker-activation surface here.
+ *
+ * So this helper tries, in order: activate the target's own marker; activate its
+ * cluster-focus row if a panel is open; break open the cluster holding it; and
+ * only then fall back to zooming in. Every step waits on real app state — the URL
+ * camera advancing, an element existing — never a sleep, and it ends in a hard
+ * assertion so a target that never becomes reachable fails loudly instead of
+ * being skipped or clicked into the void.
+ *
+ * Net effect on coverage: the journey exercises MORE of the product than the
+ * Udupi original did, since the dense-root break-out and the coincident-marker
+ * disambiguation panel are both now on the path.
+ */
+async function activateMapNode(
   page: Page,
   testId: string,
   nodeKey: string,
-  maxZoomIns = 8,
+  maxSteps = 10,
 ): Promise<void> {
-  const marker = page.locator(`[data-testid="${testId}"][data-node-key="${nodeKey}"]`);
-  for (let i = 0; i < maxZoomIns; i += 1) {
-    if ((await marker.count()) > 0) break;
-    const before = urlZoom(page);
+  const target = page.locator(`[data-testid="${testId}"][data-node-key="${nodeKey}"]`);
+  const focusRow = clusterFocusMember(page, nodeKey);
+
+  // Let the marker layer render before concluding anything about the camera:
+  // otherwise the first iteration acts on a map that simply has not painted yet.
+  await page
+    .locator(
+      '[data-testid="area-destination-marker"], [data-testid="area-single-marker"], [data-testid="area-visual-cluster-marker"]',
+    )
+    .first()
+    .waitFor({ state: 'attached', timeout: 15_000 })
+    .catch(() => {
+      // Non-fatal: the loop below is the recovery, and its closing assertion
+      // still fails loudly if nothing ever renders.
+    });
+
+  for (let i = 0; i < maxSteps; i += 1) {
+    if (await markerHittable(page, target)) {
+      await clickLocatorCentre(page, target.first());
+      return;
+    }
+    if (await markerHittable(page, focusRow)) {
+      await clickLocatorCentre(page, focusRow.first());
+      return;
+    }
+
+    const cluster = clusterContaining(page, nodeKey);
+    if (await markerHittable(page, cluster)) {
+      const urlBefore = page.url();
+      await clickLocatorCentre(page, cluster.first());
+      // A cluster click either moves the camera or opens the focus panel; both
+      // are visible in the URL (`clusterFocus=`), so wait on real state rather
+      // than assuming the click took effect.
+      await expect
+        .poll(() => page.url(), {
+          message: `clicking the visual cluster holding ${nodeKey} must change the app's URL state`,
+          timeout: 10_000,
+        })
+        .not.toBe(urlBefore);
+      continue;
+    }
+
+    const zoomBefore = urlZoom(page);
     await clickMapZoomIn(page);
     await expect
       .poll(() => urlZoom(page), {
-        message: `the map "Zoom in" control must advance the URL zoom past ${before}`,
+        message: `the map "Zoom in" control must advance the URL zoom past ${zoomBefore}`,
         timeout: 10_000,
       })
-      .toBeGreaterThan(before);
+      .toBeGreaterThan(zoomBefore);
   }
-  await expect(marker, `map marker ${testId}/${nodeKey} must render after zooming in`).toBeVisible({
-    timeout: 15_000,
-  });
+
+  expect(
+    await markerHittable(page, target) || (await markerHittable(page, focusRow)),
+    `${nodeKey} must become activatable — as its own ${testId}, or as a row in the ` +
+      'cluster-focus panel — before this journey can continue',
+  ).toBe(true);
 }
 
-async function clickMapMarker(page: Page, testId: string, nodeKey: string): Promise<void> {
-  const marker = page.locator(`[data-testid="${testId}"][data-node-key="${nodeKey}"]`);
-  await expect(marker, `map marker ${testId}/${nodeKey} must render before it can be clicked`).toBeVisible({
-    timeout: 15_000,
-  });
-  const box = await marker.boundingBox();
+/** Real synthetic mouse click at a locator's own bounding-box centre. */
+async function clickLocatorCentre(page: Page, locator: Locator): Promise<void> {
+  const box = await locator.boundingBox();
   if (!box) {
-    throw new Error(`map marker ${testId}/${nodeKey} has no bounding box`);
+    throw new Error('locator has no bounding box');
   }
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
@@ -199,6 +397,18 @@ interface SchoolData {
 
 let schoolData: SchoolData = { schoolId: null, schoolLat: null, schoolLon: null };
 
+/**
+ * Why the prefetch failure is reported rather than swallowed (#2427).
+ *
+ * This used to degrade into `test.skip(schoolData.schoolId === null)`, which was
+ * right when the suite ran against a shared hosted database whose seed might be
+ * stale. It is wrong now: the school is seeded into the isolated fixture and
+ * asserted present AT SEED TIME, so a missing school means the fixture or the
+ * endpoint is broken — precisely the failure a smoke gate exists to catch. A
+ * silent skip would report green while proving nothing.
+ */
+let schoolPrefetchFailure: string | null = null;
+
 // ---------------------------------------------------------------------------
 // J2/J3 school pre-fetch (beforeAll — runs once for the describe block)
 // ---------------------------------------------------------------------------
@@ -210,32 +420,65 @@ test.describe('Discover real-data smoke', () => {
   test.describe.configure({ mode: 'serial' });
 
   test.beforeAll(async () => {
+    // `size` is deliberately larger than 1: by-area returns every school within
+    // 2 km of the AREA centroid, so the fixture school is not guaranteed to be
+    // first and must be selected by name (see RR_NAGAR_SCHOOL_NAME).
+    const url =
+      `${BACKEND}/api/public/schools/by-area` +
+      `?areaKey=${encodeURIComponent(RR_NAGAR_AREA_KEY)}&page=0&size=50`;
     try {
-      const url =
-        `${BACKEND}/api/public/schools/by-area` +
-        `?areaKey=${encodeURIComponent(MANIPAL_AREA_KEY)}&page=0&size=1`;
       const res = await fetch(url);
       if (!res.ok) {
-        console.log(`[discover-real-data-smoke] school prefetch returned ${res.status} — J2/J3 will skip`);
+        schoolPrefetchFailure = `GET ${url} returned ${res.status}`;
         return;
       }
       // Response shape: bare array [{ id, name, latitude, longitude, ... }, ...]
-      const data = await res.json() as Array<{ id: string; latitude: number; longitude: number }>;
-      const first = data?.[0];
-      if (first?.id && first.latitude != null && first.longitude != null) {
-        schoolData = {
-          schoolId: first.id,
-          schoolLat: first.latitude,
-          schoolLon: first.longitude,
-        };
-        console.log(`[discover-real-data-smoke] School prefetch OK: id=${first.id} lat=${first.latitude} lon=${first.longitude}`);
-      } else {
-        console.log('[discover-real-data-smoke] School prefetch: no schools found near Manipal — J2/J3 will skip');
+      const data = (await res.json()) as Array<{
+        id: string;
+        name: string;
+        latitude: number;
+        longitude: number;
+      }>;
+      const school = data?.find((s) => s?.name === RR_NAGAR_SCHOOL_NAME);
+      if (!school) {
+        schoolPrefetchFailure =
+          `the fixture school "${RR_NAGAR_SCHOOL_NAME}" was not among the ` +
+          `${data?.length ?? 0} school(s) returned for ${RR_NAGAR_AREA_KEY} ` +
+          `(names: ${(data ?? []).map((s) => s?.name).join(', ') || 'none'})`;
+        return;
       }
+      if (school.latitude == null || school.longitude == null) {
+        schoolPrefetchFailure = `the fixture school "${RR_NAGAR_SCHOOL_NAME}" has null coordinates`;
+        return;
+      }
+      schoolData = {
+        schoolId: school.id,
+        schoolLat: school.latitude,
+        schoolLon: school.longitude,
+      };
+      console.log(
+        `[discover-real-data-smoke] School prefetch OK: id=${school.id} lat=${school.latitude} lon=${school.longitude}`,
+      );
     } catch (err) {
-      console.log(`[discover-real-data-smoke] School prefetch threw: ${String(err)} — J2/J3 will skip`);
+      schoolPrefetchFailure = `GET ${url} threw: ${String(err)}`;
     }
   });
+
+  /**
+   * Shared J2/J3 precondition. Fails loudly with the prefetch's own diagnostic
+   * rather than skipping — see schoolPrefetchFailure's note above.
+   */
+  function assertSchoolFixturePresent(journey: string): string {
+    expect(
+      schoolPrefetchFailure,
+      `${journey}: the RR Nagar fixture school must be resolvable before this journey can run`,
+    ).toBeNull();
+    expect(
+      schoolData.schoolId,
+      `${journey}: school prefetch must have resolved an id for "${RR_NAGAR_SCHOOL_NAME}"`,
+    ).not.toBeNull();
+    return schoolData.schoolId as string;
+  }
 
   // -------------------------------------------------------------------------
   // J1 — area-first anon
@@ -254,9 +497,11 @@ test.describe('Discover real-data smoke', () => {
     // load: area-first has deliberately ignored the legacy `areaKey=` param since
     // #2117, so the deep link left the journey at the city root with no cards.
 
-    // Step 0 — city root. Every area is collapsed into one visual cluster here,
-    // so there is no AREA/Direction marker to click yet.
-    await page.goto('/discover?city=udupi');
+    // Step 0 — city root. `revealMapNode` below discovers, per hop, whether the
+    // target needs a visual cluster broken open or simply a zoom-in, rather than
+    // assuming a fixed sequence — so this works whether the root renders its
+    // Direction destinations individually or collapses them into a cluster.
+    await page.goto(`/discover?city=${CITY}`);
     await page.waitForLoadState('domcontentloaded');
 
     await expect(
@@ -275,23 +520,31 @@ test.describe('Discover real-data smoke', () => {
     // The consent dialog overlays the zoom control — dismiss it before driving the map.
     await declineConsentBannerIfPresent(page);
 
-    // Step 1 — zooming in breaks the single city cluster into Direction destinations.
-    // Markers must be waited for after EVERY camera change.
-    // Step 2 — activate the North direction destination.
-    await zoomUntilMarkerVisible(page, 'area-destination-marker', UDUPI_NORTH_DIRECTION_NODE);
-    await clickMapMarker(page, 'area-destination-marker', UDUPI_NORTH_DIRECTION_NODE);
-    await expect(page, 'J1: activating a Direction marker must write its canonical node to the URL').toHaveURL(
-      new RegExp(`node=${encodeURIComponent(UDUPI_NORTH_DIRECTION_NODE)}`),
-      { timeout: 10_000 },
-    );
+    // Step 1/2 — zoom until the South-East Direction destination is its own
+    // marker, then activate it. Markers must be waited for after EVERY camera
+    // change.
+    await activateMapNode(page, 'area-destination-marker', SOUTHEAST_DIRECTION_NODE);
+    // Assert the DECODED `node` param equals the canonical key exactly, rather
+    // than regex-matching the raw URL. The raw form is not a stable contract —
+    // the app form-encodes a space as `+` while `encodeURIComponent` produces
+    // `%20`, so a raw-string match on an AREA key containing a space (`RR Nagar`)
+    // fails for a purely representational reason. Exact equality on the parsed
+    // value is also strictly stronger than the substring regex it replaces.
+    await expect
+      .poll(() => urlParam(page, 'node'), {
+        message: 'J1: activating a Direction marker must write its canonical node to the URL',
+        timeout: 10_000,
+      })
+      .toBe(SOUTHEAST_DIRECTION_NODE);
 
     // Step 3 — activate a real AREA marker inside that direction.
-    await zoomUntilMarkerVisible(page, 'area-single-marker', BRAHMAVAR_AREA_NODE);
-    await clickMapMarker(page, 'area-single-marker', BRAHMAVAR_AREA_NODE);
-    await expect(page, 'J1: activating an AREA marker must write its canonical node to the URL').toHaveURL(
-      new RegExp(`node=${encodeURIComponent(BRAHMAVAR_AREA_NODE)}`),
-      { timeout: 10_000 },
-    );
+    await activateMapNode(page, 'area-single-marker', RR_NAGAR_AREA_NODE);
+    await expect
+      .poll(() => urlParam(page, 'node'), {
+        message: 'J1: activating an AREA marker must write its canonical node to the URL',
+        timeout: 10_000,
+      })
+      .toBe(RR_NAGAR_AREA_NODE);
 
     // The canonical AREA state is `node=a:…`; the legacy `areaKey=` param must
     // never be what carries this state.
@@ -306,7 +559,7 @@ test.describe('Discover real-data smoke', () => {
     const cardCount = await page.locator('[data-testid="listing-card"]').count();
     expect(
       cardCount,
-      'J1: at least 1 real listing card expected after activating the Brahmavar AREA marker',
+      'J1: at least 1 real listing card expected after activating the RR Nagar AREA marker',
     ).toBeGreaterThanOrEqual(1);
 
     // No auth errors — anon path must use public endpoints only
@@ -318,9 +571,7 @@ test.describe('Discover real-data smoke', () => {
   // -------------------------------------------------------------------------
 
   test('J2 — school-radius anon: school URL params trigger school-radius endpoint and render cards', async ({ page }) => {
-    test.skip(schoolData.schoolId === null, 'No school data near Manipal — J2 skipped');
-
-    const { schoolId } = schoolData;
+    const schoolId = assertSchoolFixturePresent('J2');
 
     // Collect auth errors
     const authErrors: number[] = [];
@@ -334,7 +585,10 @@ test.describe('Discover real-data smoke', () => {
       { timeout: 20_000 },
     );
 
-    await page.goto(`/discover?city=udupi&schoolId=${encodeURIComponent(schoolId!)}&radiusKm=2&journey=school-first`);
+    await page.goto(
+      `/discover?city=${CITY}&schoolId=${encodeURIComponent(schoolId)}` +
+        `&radiusKm=${SCHOOL_RADIUS_KM}&journey=school-first`,
+    );
 
     // Wait for either a listing card or the right panel to become stable
     await page.waitForSelector('[data-testid="discover-right-panel"]', { timeout: 15_000 });
@@ -385,10 +639,11 @@ test.describe('Discover real-data smoke', () => {
     });
 
     test('J3 — authenticated school-radius: listing cards or property markers appear', async ({ page }) => {
+      // The credential skip is genuinely environmental and stays. The school-data
+      // skip does not — see schoolPrefetchFailure.
       test.skip(!hasBrokerCreds, 'PLAYWRIGHT_BROKER_EMAIL / PLAYWRIGHT_BROKER_PASSWORD not set — J3 skipped');
-      test.skip(schoolData.schoolId === null, 'No school data near Manipal — J3 skipped');
 
-      const { schoolId } = schoolData;
+      const schoolId = assertSchoolFixturePresent('J3');
 
       // If storageState didn't have real credentials, perform login
       if (!brokerAuthHasContent) {
@@ -411,7 +666,10 @@ test.describe('Discover real-data smoke', () => {
         { timeout: 20_000 },
       );
 
-      await page.goto(`/discover?city=udupi&schoolId=${encodeURIComponent(schoolId!)}&radiusKm=2&journey=school-first`);
+      await page.goto(
+        `/discover?city=${CITY}&schoolId=${encodeURIComponent(schoolId)}` +
+          `&radiusKm=${SCHOOL_RADIUS_KM}&journey=school-first`,
+      );
 
       // Wait for the right panel
       await page.waitForSelector('[data-testid="discover-right-panel"]', { timeout: 20_000 });
@@ -440,28 +698,41 @@ test.describe('Discover real-data smoke', () => {
   // J4 — keyword contextual search
   // -------------------------------------------------------------------------
 
-  test('J4 — keyword search: q=apartment filters results; clearing q restores them', async ({ page }) => {
+  test(`J4 — keyword search: q=${KEYWORD} filters results; clearing q restores them`, async ({ page }) => {
     // Collect auth errors
     const authErrors: number[] = [];
     page.on('response', (r) => {
       if (r.status() === 401 || r.status() === 403) authErrors.push(r.status());
     });
 
-    // Step 1: Navigate to the Manipal AREA without keyword filter.
+    // Step 1: Navigate to the RR Nagar AREA without keyword filter.
     // Canonical AREA state is `node=a:<areaKey>`; the legacy `areaKey=` param this
     // test used to send has been ignored by area-first since #2117, so the page
     // never left the city root and no listing card ever rendered. That failure was
     // masked until now by `test.describe.configure({ mode: 'serial' })` above,
     // which stopped this test from ever being reported independently of J1.
-    await page.goto(`/discover?city=udupi&node=${encodeURIComponent(MANIPAL_AREA_NODE)}`);
+    await page.goto(`/discover?city=${CITY}&node=${encodeURIComponent(RR_NAGAR_AREA_NODE)}`);
     await page.waitForSelector('[data-testid="listing-card"]', { timeout: 15_000 });
 
     const baselineCount = await page.locator('[data-testid="listing-card"]').count();
-    test.skip(baselineCount < 2, 'J4: Seed not present or stale — requires >= 2 Manipal listings; run scripts/seed-discover-listings.mjs first');
+    // #2427: this was `test.skip(baselineCount < 2, ...)`. RR Nagar carries EXACTLY
+    // two LIVE fixture listings, so the old guard sat directly on its own threshold:
+    // one listing fewer and J4 would have silently skipped instead of failing. The
+    // fixture asserts the same >= 2 at seed time
+    // (navigation-hierarchy-fixture-listings-seed.sql:200-203), so a shortfall here
+    // can only mean a broken fixture — which must fail loudly, not vanish. The skip
+    // was not required by the test architecture; it dates from running against a
+    // shared hosted database whose seed could legitimately be stale.
+    expect(
+      baselineCount,
+      'J4: fixture precondition — RR Nagar must expose >= 2 LIVE listing cards before filtering ' +
+        '(seeded by navigation-hierarchy-fixture-listings-seed.sql)',
+    ).toBeGreaterThanOrEqual(2);
 
-    // Step 2: Apply keyword filter (seed has 2 apartment listings in Manipal)
+    // Step 2: Apply the keyword filter. Exactly one RR Nagar listing carries this
+    // token in its FTS vector — see KEYWORD's derivation above.
     await page.goto(
-      `/discover?city=udupi&node=${encodeURIComponent(MANIPAL_AREA_NODE)}&q=apartment`,
+      `/discover?city=${CITY}&node=${encodeURIComponent(RR_NAGAR_AREA_NODE)}&q=${encodeURIComponent(KEYWORD)}`,
     );
 
     // Wait for the network to settle after q param fires a new API call
@@ -472,14 +743,22 @@ test.describe('Discover real-data smoke', () => {
     });
 
     const filteredCount = await page.locator('[data-testid="listing-card"]').count();
-    expect(filteredCount, 'J4: filtered results must include at least 1 apartment listing').toBeGreaterThanOrEqual(1);
     expect(
       filteredCount,
-      'J4: filtering must not inflate result count beyond baseline',
-    ).toBeLessThanOrEqual(baselineCount);
+      `J4: filtered results must include at least 1 "${KEYWORD}" listing`,
+    ).toBeGreaterThanOrEqual(1);
+    // #2427: this was `toBeLessThanOrEqual(baselineCount)`, which equality satisfies —
+    // a `q` that filtered NOTHING passed it. RR Nagar's LIVE set contains exactly one
+    // listing matching this keyword and at least one that cannot ("... House Two",
+    // plus the two agri parcels), so strict narrowing is deterministic here and is
+    // what "keyword filtering works" actually means.
+    expect(
+      filteredCount,
+      'J4: filtering must genuinely narrow the result set, not merely avoid inflating it',
+    ).toBeLessThan(baselineCount);
 
     // Step 3: Clear the keyword filter — navigate back without q param
-    await page.goto(`/discover?city=udupi&node=${encodeURIComponent(MANIPAL_AREA_NODE)}`);
+    await page.goto(`/discover?city=${CITY}&node=${encodeURIComponent(RR_NAGAR_AREA_NODE)}`);
     await page.waitForSelector('[data-testid="listing-card"]', { timeout: 15_000 });
     await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
 

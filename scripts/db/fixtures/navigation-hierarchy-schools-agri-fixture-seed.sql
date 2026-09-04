@@ -78,7 +78,30 @@ VALUES
    12.9314733, 77.5290964, 'RR Nagar, Bengaluru', 'Bengaluru', 'E2E-FIXTURE', 'Karnataka'),
   ('f1713003-0000-0000-0000-000000000002',
    '[E2E] Vijayanagar Fixture Public School', 'CBSE',
-   12.9687771, 77.5298306, 'Vijayanagar, Bengaluru', 'Bengaluru', 'E2E-FIXTURE', 'Karnataka')
+   12.9687771, 77.5298306, 'Vijayanagar, Bengaluru', 'Bengaluru', 'E2E-FIXTURE', 'Karnataka'),
+  -- #2427: 4 schools inside Koramangala, for the d:central branch added to
+  -- navigation-hierarchy-fixture-seed.sql. e2e/discover-schools-canonical-2124.spec.ts documents
+  -- the real hosted shape it was written against as "Koramangala schoolCount=4" alongside a
+  -- schoolCount=0 BTM Layout sibling, so 4 is the real count, not a round number chosen here.
+  --
+  -- Coordinates sit tightly around Koramangala's real centre (12.9352, 77.6245 --
+  -- V71__cities_and_areas.sql:68) with +/-0.001 offsets. That keeps all four inside Koramangala's
+  -- real bbox (12.9200-12.9500, 77.6000-77.6500) and, critically, well clear of BTM Layout's
+  -- (12.909752-12.924726, 77.606606-77.618837), whose box overlaps Koramangala's south-west corner.
+  -- BTM Layout must resolve to ZERO schools for the #2124 "review gap 2" test to mean anything, so
+  -- the separation is deliberate and is asserted below rather than assumed.
+  ('f1713003-0000-0000-0000-000000000003',
+   '[E2E] Koramangala Fixture Public School', 'State Board',
+   12.9352, 77.6245, 'Koramangala, Bengaluru', 'Bengaluru', 'E2E-FIXTURE', 'Karnataka'),
+  ('f1713003-0000-0000-0000-000000000004',
+   '[E2E] Koramangala Fixture CBSE School', 'CBSE',
+   12.9362, 77.6255, 'Koramangala, Bengaluru', 'Bengaluru', 'E2E-FIXTURE', 'Karnataka'),
+  ('f1713003-0000-0000-0000-000000000005',
+   '[E2E] Koramangala Fixture ICSE School', 'ICSE',
+   12.9342, 77.6235, 'Koramangala, Bengaluru', 'Bengaluru', 'E2E-FIXTURE', 'Karnataka'),
+  ('f1713003-0000-0000-0000-000000000006',
+   '[E2E] Koramangala Fixture International School', 'CBSE',
+   12.9345, 77.6252, 'Koramangala, Bengaluru', 'Bengaluru', 'E2E-FIXTURE', 'Karnataka')
 ON CONFLICT (id) DO NOTHING;
 
 -- Query-back validation: the V80 trigger must have resolved area_key to the expected AREA leaves.
@@ -89,6 +112,8 @@ DO $$
 DECLARE
   v_rr_nagar_area_key TEXT;
   v_vijayanagar_area_key TEXT;
+  v_koramangala_schools INTEGER;
+  v_btm_schools INTEGER;
 BEGIN
   SELECT area_key INTO v_rr_nagar_area_key FROM public.schools
     WHERE id = 'f1713003-0000-0000-0000-000000000001';
@@ -105,8 +130,29 @@ BEGIN
       '''IN|KA|Bengaluru|Vijayanagar'' via the V80 trigger, got %', v_vijayanagar_area_key;
   END IF;
 
-  RAISE NOTICE 'navigation-hierarchy-schools-agri-fixture-seed: schools resolved area_key % / %',
-    v_rr_nagar_area_key, v_vijayanagar_area_key;
+  -- #2427: the Koramangala/BTM Layout pair the #2124 specs depend on. Both halves are asserted,
+  -- because the zero half is the one that can silently rot: if a future geometry change pulled one
+  -- of these four schools into BTM Layout's overlapping box, "review gap 2" would still PASS while
+  -- no longer testing a zero-school AREA at all. That is exactly the vacuous pass this file's
+  -- fixture_geometry_vacuous_pass_risk guardrail exists to catch at seed time.
+  SELECT COUNT(*) INTO v_koramangala_schools FROM public.schools
+    WHERE area_key = 'IN|KA|Bengaluru|Koramangala' AND source = 'E2E-FIXTURE';
+  SELECT COUNT(*) INTO v_btm_schools FROM public.schools
+    WHERE area_key = 'IN|KA|Bengaluru|BTM Layout';
+
+  IF v_koramangala_schools IS DISTINCT FROM 4 THEN
+    RAISE EXCEPTION 'Seed assertion failed: expected exactly 4 E2E fixture schools to resolve to '
+      '''IN|KA|Bengaluru|Koramangala'' via the V80 trigger, got %', v_koramangala_schools;
+  END IF;
+
+  IF v_btm_schools IS DISTINCT FROM 0 THEN
+    RAISE EXCEPTION 'Seed assertion failed: expected ZERO schools in ''IN|KA|Bengaluru|BTM Layout'' '
+      '(the #2124 review-gap-2 zero-school AREA), got %', v_btm_schools;
+  END IF;
+
+  RAISE NOTICE 'navigation-hierarchy-schools-agri-fixture-seed: schools resolved area_key % / %; '
+    'Koramangala=% schools, BTM Layout=% schools',
+    v_rr_nagar_area_key, v_vijayanagar_area_key, v_koramangala_schools, v_btm_schools;
 END $$;
 
 -- ─────────────────────────────────────────────────────────────────────────────────────────────────

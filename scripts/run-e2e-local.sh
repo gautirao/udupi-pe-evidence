@@ -13,6 +13,8 @@ ENV_FILE="$WORKTREE_ROOT/.env.e2e"
 ENV_LOCAL_FILE="$WORKTREE_ROOT/.env.e2e.local"
 # shellcheck source=./dev/lib/port-ownership.sh
 source "$SCRIPT_DIR/dev/lib/port-ownership.sh"
+# shellcheck source=./dev/lib/e2e-identity-seed.sh
+source "$SCRIPT_DIR/dev/lib/e2e-identity-seed.sh"
 
 if [ ! -f "$ENV_FILE" ]; then
   echo "ERROR: .env.e2e not found at project root."
@@ -177,6 +179,42 @@ if ! PGPASSWORD="$E2E_DB_PASSWORD" psql -h localhost -p "$E2E_DB_PORT" -U postgr
   exit 1
 fi
 echo "[e2e] Local E2E DB fixture ready (localhost:${E2E_DB_PORT})."
+
+# ---------------------------------------------------------------------------
+# Seed the fixture's identities (#2427)
+#
+# The fixture restored above carries a public.user_roles row only for a
+# synthetic seeded broker, never for the live Supabase accounts this suite
+# logs in as. Without this, every authenticated request to the backend started
+# below returns
+#   403 {"error":"Requires broker, dealer, user, or admin role"}
+# even with a perfectly valid hosted-Supabase JWT. See
+# scripts/dev/lib/e2e-identity-seed.sh for the full mechanism.
+#
+# Concretely, this is what broke the pre-push gate: e2e/global-setup.ts's
+# POST /api/listings 403'd, no fixture listing was ever created, and all seven
+# broker-dashboard-v2 / broker-listing-quality specs failed downstream of it.
+#
+# All three are BEST-EFFORT, deliberately. .env.e2e may legitimately hold
+# placeholder credentials (the *@example.com warning above covers that case),
+# and those setups are expected to degrade into auth-dependent tests skipping
+# themselves — not into the whole gate refusing to start. Each failure prints
+# a warning naming the consequence.
+#
+# Runs AFTER the safety gate, so it can only ever write to the container this
+# script just started.
+# ---------------------------------------------------------------------------
+export E2E_SEED_PG_HOST=localhost
+export E2E_SEED_PG_PORT="$E2E_DB_PORT"
+export E2E_SEED_PG_PASSWORD="$E2E_DB_PASSWORD"
+
+echo "[e2e] Seeding fixture identities (admin / broker / smoke-user)..."
+e2e_seed_identity admin "${ADMIN_EMAIL:-}" "${ADMIN_PASSWORD:-}" admin best-effort || true
+e2e_seed_identity broker \
+  "${BROKER_EMAIL:-${DEALER_EMAIL:-}}" \
+  "${BROKER_PASSWORD:-${DEALER_PASSWORD:-}}" \
+  broker best-effort || true
+e2e_seed_identity smoke-user "${SMOKE_USER_EMAIL:-}" "${SMOKE_USER_PASSWORD:-}" user best-effort || true
 
 # The backend still needs SUPABASE_PROJECT_REF/AI_API_KEY for hosted JWT
 # validation even though the DB_* values below bypass apps/api/.env entirely —

@@ -1,0 +1,472 @@
+
+> udupi-property-explorer@0.0.0 test:e2e:local
+> bash scripts/run-e2e-local.sh
+
+[e2e] Using this worktree's port override: /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/.env.e2e.local
+e2e target: http://localhost:5188
+backend:    http://localhost:8098
+
+[e2e] backend port 8098 is held by this worktree's own process (pid 38716) — stopping to restart with latest code.
+[e2e] backend port 8098 confirmed free.
+[e2e] Starting ephemeral local Postgres/PostGIS fixture (pg-e2e-issue-2427-e2e-fixture-reliability--60397 on port 36686)...
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+==> V0.1 stderr (tolerated):
+psql:/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/apps/api/src/main/resources/db/migration/V0.1__auth_rls_policies.sql:119: ERROR:  publication "supabase_realtime" does not exist
+==> Found 132 Flyway migration file(s) in /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/apps/api/src/main/resources/db/migration
+==> Removing existing test-fixture container (if any)...
+==> Starting PostGIS container (postgis/postgis:15-3.4) on port 36686...
+78cce66526fd370f70a1a2d4aa250a3b5b446bd6131cf3aa7b1344fd11344b58
+==> Waiting for Postgres to become ready...
+ ?column? 
+----------
+        1
+(1 row)
+
+==> Postgres is ready.
+==> PostGIS version: 3.4.3
+==> Applying Flyway migrations (image: flyway/flyway:10.20.1)...
+==> Creating Supabase-compatible roles (anon, authenticated, service_role)...
+==> Applying V0 (initial schema) via psql...
+==> Applying V0.1 (auth RLS policies — any errors will be shown below)...
+A more recent version of Flyway is available. Find out more about Flyway 13.5.0 at https://rd.gt/3rXiSlV
+
+Flyway OSS Edition 10.20.1 by Redgate
+
+See release notes here: https://rd.gt/416ObMi
+Database: jdbc:postgresql://host.docker.internal:36686/postgres (PostgreSQL 15.8)
+Schema history table "public"."flyway_schema_history" does not exist yet
+Successfully validated 132 migrations (execution time 00:00.065s)
+Creating Schema History table "public"."flyway_schema_history" with baseline ...
+Successfully baselined schema with version: 0.1
+Current version of schema "public": 0.1
+Migrating schema "public" to version "1 - add processing started at to raw posts"
+Migrating schema "public" to version "2 - create area price weekly"
+Migrating schema "public" to version "3 - add normalized area fields"
+Migrating schema "public" to version "4 - create area stats latest"
+Migrating schema "public" to version "5 - add repost count to property listings"
+Migrating schema "public" to version "6 - add area key to property listings"
+Migrating schema "public" to version "7 - add dealer role and listing status"
+Migrating schema "public" to version "8 - add dealer listing columns"
+Migrating schema "public" to version "9 - create listing images notifications saved areas"
+Migrating schema "public" to version "10 - update rls for mvp roles"
+Migrating schema "public" to version "11 - add missing listing columns"
+Migrating schema "public" to version "12 - add listing images unique constraint"
+Migrating schema "public" to version "13 - add hot query indexes"
+WARNING: DB: relation "idx_property_listings_area_key" already exists, skipping (SQL State: 42P07 - Error Code: 0)
+WARNING: DB: relation "idx_raw_posts_unprocessed" already exists, skipping (SQL State: 42P07 - Error Code: 0)
+WARNING: DB: relation "idx_property_listings_dedupe_hash" already exists, skipping (SQL State: 42P07 - Error Code: 0)
+Migrating schema "public" to version "14 - add phone to profiles"
+Migrating schema "public" to version "15 - create viewing requests"
+Migrating schema "public" to version "16 - add insights access"
+Migrating schema "public" to version "17 - booking index improvements"
+Migrating schema "public" to version "18 - add listing fts vector"
+Migrating schema "public" to version "19 - create admin audit log"
+Migrating schema "public" to version "20 - add alerts enabled to saved areas"
+Migrating schema "public" to version "21 - add property type to rollup tables"
+Migrating schema "public" to version "22 - add price threshold to saved areas"
+Migrating schema "public" to version "23 - add bedrooms to rollup tables"
+Migrating schema "public" to version "24 - create geocode cache"
+WARNING: DB: relation "geocode_cache" already exists, skipping (SQL State: 42P07 - Error Code: 0)
+Migrating schema "public" to version "25 - create listing pois"
+Migrating schema "public" to version "26 - add video url to listings"
+Migrating schema "public" to version "27 - update rls delete policy for rejected"
+Migrating schema "public" to version "28 - extend poi source constraint"
+Migrating schema "public" to version "29 - add listing number"
+Migrating schema "public" to version "30 - add rera number"
+Migrating schema "public" to version "31 - add commercial property types"
+Migrating schema "public" to version "32 - add commercial and rent columns"
+Migrating schema "public" to version "33 - add seller type"
+Migrating schema "public" to version "34 - extend rls for owner role"
+Migrating schema "public" to version "35 - soft delete listings"
+Migrating schema "public" to version "36 - proximity duplicate candidates"
+Migrating schema "public" to version "37 - fix duplicate candidates status casing"
+Migrating schema "public" to version "38 - listing transparency fields"
+Migrating schema "public" to version "39 - price change log paise columns"
+Migrating schema "public" to version "40 - rera possession fields"
+Migrating schema "public" to version "41 - rename dealer to broker expand"
+Migrating schema "public" to version "42 - rename dealer to broker schema"
+Migrating schema "public" to version "43 - create listing status history"
+Migrating schema "public" to version "44 - add last approved snapshot"
+Migrating schema "public" to version "45 - add cancellation reason to viewing requests"
+Migrating schema "public" to version "46 - add trust tier and ranking score"
+Migrating schema "public" to version "47 - create listing verification dimension"
+Migrating schema "public" to version "48 - create authority evidence"
+Migrating schema "public" to version "49 - create listing complaint"
+WARNING: DB: identifier "Authenticated users can file a complaint against a listing they do not own" will be truncated to "Authenticated users can file a complaint against a listing they" (SQL State: 42622 - Error Code: 0)
+Migrating schema "public" to version "50 - add trust columns to profiles"
+Migrating schema "public" to version "51 - create photo hash blocklist"
+Migrating schema "public" to version "52 - add verification asset url"
+Migrating schema "public" to version "53 - add otp lockout columns"
+Migrating schema "public" to version "54 - add location verify rate limit"
+Migrating schema "public" to version "55 - add rejection reason to dimension"
+Migrating schema "public" to version "56 - migrate commercial to granular types"
+Migrating schema "public" to version "57 - add spatial index"
+Migrating schema "public" to version "58 - create schools table"
+Migrating schema "public" to version "59 - expand broker update rls policy"
+Migrating schema "public" to version "60 - convert status enum to varchar"
+Migrating schema "public" to version "61 - convert property type enum to varchar"
+Migrating schema "public" to version "62 - add trust ranking sort index"
+Migrating schema "public" to version "63 - add owner self auth evidence type"
+Migrating schema "public" to version "64 - create identity evidence table"
+Migrating schema "public" to version "66 - extend schools for udise import"
+Migrating schema "public" to version "67 - extend schools add metadata columns"
+Migrating schema "public" to version "68 - add coordinate provenance to schools"
+Migrating schema "public" to version "69 - add prominence tier to schools"
+Migrating schema "public" to version "70 - add area overview stats"
+Migrating schema "public" to version "71 - cities and areas"
+Migrating schema "public" to version "72 - area bbox city slug"
+Migrating schema "public" to version "73 - postgis geog"
+WARNING: DB: extension "postgis" already exists, skipping (SQL State: 42710 - Error Code: 0)
+Migrating schema "public" to version "74 - idx listing area key status created"
+Migrating schema "public" to version "75 - idx schools geog"
+Migrating schema "public" to version "76 - idx schools geog gist"
+Migrating schema "public" to version "77 - area groups schema"
+Migrating schema "public" to version "78 - seed area groups"
+Migrating schema "public" to version "79 - add school area key"
+DB: District 'Udupi': 20 schools, 20 assigned
+DB: Total: 20 schools, 20 assigned
+Migrating schema "public" to version "80 - school area key trigger"
+DB: trigger "trg_school_area_key" for relation "schools" does not exist, skipping
+Migrating schema "public" to version "81 - listing search outbox"
+Migrating schema "public" to version "82 - listing search outbox error column"
+Migrating schema "public" to version "83 - listing search outbox retry"
+Migrating schema "public" to version "84 - add agricultural land fields"
+Migrating schema "public" to version "85 - add listing boundary"
+Migrating schema "public" to version "86 - expand property type constraint agricultural land"
+Migrating schema "public" to version "87 - regional classification schema"
+Migrating schema "public" to version "88 - city regional direction labels"
+Migrating schema "public" to version "89 - add agri structured fields"
+Migrating schema "public" to version "90 - idx property listings agri live"
+Migrating schema "public" to version "91 - normalize agri field values"
+Migrating schema "public" to version "92 - listing quality foundation"
+Migrating schema "public" to version "93 - discover event"
+Migrating schema "public" to version "94 - area intelligence snapshot"
+Migrating schema "public" to version "95 - broker market focus"
+Migrating schema "public" to version "96 - area demand signal"
+Migrating schema "public" to version "97 - broker demand gap state"
+Migrating schema "public" to version "98 - area groups description"
+Migrating schema "public" to version "99 - seed udupi area groups description"
+Migrating schema "public" to version "100 - add area slug to areas"
+Migrating schema "public" to version "101 - restore udupi area groups seed"
+Migrating schema "public" to version "102 - typed listing schema expand and backfill"
+DB: constraint "chk_listing_listing_family" of relation "property_listings" does not exist, skipping
+Migrating schema "public" to version "103 - residential listing fields expand"
+Migrating schema "public" to version "104 - commercial typed write columns"
+WARNING: DB: relation "listing_suitable_uses" already exists, skipping (SQL State: 42P07 - Error Code: 0)
+WARNING: DB: relation "idx_listing_suitable_uses_listing" already exists, skipping (SQL State: 42P07 - Error Code: 0)
+Migrating schema "public" to version "105 - idx property listings purpose live"
+Migrating schema "public" to version "106 - seed bangalore macro region mapping"
+Migrating schema "public" to version "107 - create saved listings"
+Migrating schema "public" to version "108 - fix mukkidipeta north emerging bounds"
+Migrating schema "public" to version "109 - correct bengaluru school area keys"
+DB: V109 udise_code=APIFY-BAN-JAYA-01 : school not present in this environment; no-op.
+DB: V109 udise_code=APIFY-BAN-JAYA-05 : school not present in this environment; no-op.
+DB: V109 udise_code=APIFY-BAN-HEBB-01 : school not present in this environment; no-op.
+DB: V109 udise_code=APIFY-BAN-MARA-04 : school not present in this environment; no-op.
+DB: V109 udise_code=APIFY-BAN-MARA-06 : school not present in this environment; no-op.
+Migrating schema "public" to version "110 - school discover area coverage"
+DB: trigger "trg_sync_school_discover_area_coverage" for relation "public.schools" does not exist, skipping
+DB: trigger "trg_sync_school_discover_area_coverage_insert" for relation "public.schools" does not exist, skipping
+DB: trigger "trg_sync_school_discover_area_coverage_update" for relation "public.schools" does not exist, skipping
+Migrating schema "public" to version "111 - extend school district normalisation"
+Migrating schema "public" to version "112 - resolve thirteen ambiguous school attributions"
+DB: V112 STEP A udise_code=APIFY-BAN-INDI-01 : school not present in this environment; no-op.
+DB: V112 STEP A udise_code=APIFY-BAN-SARJ-01 : school not present in this environment; no-op.
+DB: V112 STEP B: 0 contained coverage row(s) inserted from live-geometry containment (rows already existing as primary/contained for the same school+area are skipped by ON CONFLICT DO NOTHING).
+Migrating schema "public" to version "113 - city region geometry foundation"
+Migrating schema "public" to version "114 - add last confirmed at"
+Migrating schema "public" to version "115 - area onboarding foundation"
+Migrating schema "public" to version "116 - area onboarding apply"
+Migrating schema "public" to version "117 - listing area resolution"
+Migrating schema "public" to version "118 - city launch revision and sandbox"
+Migrating schema "public" tpsql:/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/scripts/db/fixtures/discover-smoke-seed.sql:46: NOTICE:  extension "postgis" already exists, skipping
+psql:/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/scripts/db/fixtures/discover-smoke-seed.sql:543: NOTICE:  Seed assertions passed: 12 LIVE [E2E] listings, 4 Manipal, 2 apt, 7 Manipal schools
+psql:/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/scripts/db/fixtures/navigation-hierarchy-fixture-seed.sql:515: NOTICE:  navigation-hierarchy-fixture-seed assertions passed: d:southeast has 3 AREA children, northeast Local Destination cluster has 2 AREA children, full-depth AREA leaf at depth=2, d:southwest has 4 AREA children (including zero-listing Avalahalli), central Local Destination cluster has 2 AREA children at depth 2, root DIRECTION orders [1,2,3,4]
+psql:/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/scripts/db/fixtures/navigation-active-revision-fixture-seed.sql:87: NOTICE:  navigation-active-revision-fixture-seed assertion passed: Bangalore (city_id=1) has PROMOTED city_launch_revision id=1
+psql:/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/scripts/db/fixtures/navigation-hierarchy-fixture-listings-seed.sql:225: NOTICE:  navigation-hierarchy-fixture-listings-seed assertions passed: 4 LIVE listings across d:southeast AREA leaves (2 of which are RR Nagar), 2 LIVE listings across d:northeast Local Destination AREA leaves, 3 LIVE listings across d:southwest AREA leaves, 0 for zero-listing Avalahalli
+psql:/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/scripts/db/fixtures/navigation-hierarchy-fixture-rent-listings-seed.sql:111: WARNING:  navigation-hierarchy-fixture-rent-listings-seed: expected RR Nagar to already carry 1 LIVE sale listing from navigation-hierarchy-fixture-listings-seed.sql, found 2 — run that seed first, or the Buy/Rent count-divergence assertions in e2e/discover/issue-2083-nav-counts-purpose-badge.spec.ts will not hold as documented
+psql:/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/scripts/db/fixtures/navigation-hierarchy-fixture-rent-listings-seed.sql:111: NOTICE:  navigation-hierarchy-fixture-rent-listings-seed assertions passed: RR Nagar has 2 LIVE rent listings (sale sibling count for reference: 2)
+psql:/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/scripts/db/fixtures/navigation-hierarchy-schools-agri-fixture-seed.sql:156: NOTICE:  navigation-hierarchy-schools-agri-fixture-seed: schools resolved area_key IN|KA|Bengaluru|RR Nagar / IN|KA|Bengaluru|Vijayanagar; Koramangala=4 schools, BTM Layout=0 schools
+psql:/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/scripts/db/fixtures/navigation-hierarchy-schools-agri-fixture-seed.sql:273: NOTICE:  navigation-hierarchy-schools-agri-fixture-seed assertions passed: 2 agri_destination_classification rows for Bangalore, 2 LIVE agri listings for RR Nagar
+o version "119 - enforce area group region key disjointness"
+DB: trigger "trg_area_groups_region_key_disjoint" for relation "public.area_groups" does not exist, skipping
+DB: trigger "trg_city_regions_area_group_disjoint" for relation "public.city_regions" does not exist, skipping
+Migrating schema "public" to version "120 - add city launch validation checks"
+Migrating schema "public" to version "121 - navigation nodes and sandbox"
+DB: trigger "trg_navigation_nodes_area_leaf" for relation "public.navigation_nodes" does not exist, skipping
+DB: trigger "trg_sandbox_navigation_nodes_area_leaf" for relation "public.sandbox_navigation_nodes" does not exist, skipping
+Migrating schema "public" to version "122 - navigation overrides"
+Migrating schema "public" to version "123 - navigation direction node type"
+Migrating schema "public" to version "124 - navigation bearing"
+Migrating schema "public" to version "125 - agri destination classification"
+Migrating schema "public" to version "126 - add agri conversion status"
+Migrating schema "public" to version "127 - seed manipal and subordinate locality aliases"
+Migrating schema "public" to version "128 - revoke browser contact column grants"
+DB: function public.admin_find_contact_duplicate_candidates(text,pg_catalog.int4) does not exist, skipping
+Migrating schema "public" to version "129 - deactivate mukkidipeta outlier"
+Migrating schema "public" to version "130 - city launch revision cloned from"
+Migrating schema "public" to version "131 - canonical boundary geometry"
+WARNING: DB: extension "postgis" already exists, skipping (SQL State: 42710 - Error Code: 0)
+Successfully applied 130 migrations to schema "public", now at version v131 (execution time 00:02.057s)
+==> Flyway migration complete.
+INSERT 0 1
+==> V65 Java migration record backfilled in flyway_schema_history.
+==> Flyway: 132 rows in flyway_schema_history (expected exactly 132).
+==> PostGIS version (post-migrate): 3.4 USE_GEOS=1 USE_PROJ=1 USE_STATS=1
+==> geog column confirmed on property_listings.
+==> Loading synthetic E2E seed data from /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/scripts/db/fixtures/discover-smoke-seed.sql...
+BEGIN
+CREATE EXTENSION
+INSERT 0 0
+INSERT 0 0
+DO
+INSERT 0 1
+UPDATE 0
+INSERT 0 12
+UPDATE 3
+UPDATE 3
+UPDATE 4
+INSERT 0 3
+DELETE 0
+INSERT 0 26
+INSERT 0 1
+INSERT 0 9
+UPDATE 1
+INSERT 0 2
+DO
+COMMIT
+==> Seed load complete.
+==> Loading Bangalore navigation-hierarchy fixture from /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/scripts/db/fixtures/navigation-hierarchy-fixture-seed.sql...
+BEGIN
+DO
+INSERT 0 1
+INSERT 0 3
+INSERT 0 1
+INSERT 0 1
+INSERT 0 2
+INSERT 0 1
+INSERT 0 4
+INSERT 0 1
+INSERT 0 1
+INSERT 0 2
+DO
+COMMIT
+==> Promoting Bangalore's navigation revision from /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/scripts/db/fixtures/navigation-active-revision-fixture-seed.sql...
+BEGIN
+DO
+INSERT 0 1
+DO
+COMMIT
+==> Loading Bangalore navigation-hierarchy listings from /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/scripts/db/fixtures/navigation-hierarchy-fixture-listings-seed.sql...
+BEGIN
+DO
+INSERT 0 9
+DO
+COMMIT
+==> Bangalore navigation-hierarchy fixture load complete.
+==> Bangalore navigation_nodes count: 17.
+==> Bangalore PROMOTED city_launch_revision count: 1.
+==> Loading Bangalore navigation-hierarchy rent listings from /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/scripts/db/fixtures/navigation-hierarchy-fixture-rent-listings-seed.sql...
+BEGIN
+DO
+INSERT 0 2
+DO
+COMMIT
+==> Loading Bangalore schools + agri-destination fixture from /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/scripts/db/fixtures/navigation-hierarchy-schools-agri-fixture-seed.sql...
+BEGIN
+DO
+INSERT 0 6
+DO
+DO
+INSERT 0 2
+INSERT 0 2
+DO
+COMMIT
+==> Bangalore rent-listings + schools/agri fixture load complete.
+==> Bangalore RR Nagar rent listing count: 2.
+==> Bangalore agri_destination_classification count: 2.
+==> Running row-count validation...
+--- cities ---
+ city_count 
+------------
+          4
+(1 row)
+
+--- areas (Udupi city) ---
+ udupi_area_count 
+------------------
+               12
+(1 row)
+
+--- schools with area_key (Manipal) ---
+ manipal_school_count 
+----------------------
+                    7
+(1 row)
+
+--- LIVE [E2E] listings ---
+ live_e2e_count 
+----------------
+             25
+(1 row)
+
+--- LIVE [E2E] Manipal apartment listings ---
+ manipal_apartment_count 
+-------------------------
+                       2
+(1 row)
+
+--- geog centroid sample (Manipal listings) ---
+         point          
+------------------------
+ POINT(74.7895 13.3545)
+ POINT(74.7852 13.3498)
+(2 rows)
+
+
+==> Fixture ready.
+
+    Container : pg-e2e-issue-2427-e2e-fixture-reliability--60397
+    Port      : 36686
+
+[e2e] Local E2E DB fixture ready (localhost:36686).
+[e2e] Seeding fixture identities (admin / broker / smoke-user)...
+>>> Logging in to Supabase Auth as admin (best-effort)...
+BEGIN
+INSERT 0 1
+INSERT 0 1
+COMMIT
+>>> Local admin identity seeded (auth.users + user_roles 'admin').
+>>> Logging in to Supabase Auth as broker (best-effort)...
+BEGIN
+INSERT 0 1
+INSERT 0 1
+COMMIT
+>>> Local broker identity seeded (auth.users + user_roles 'broker').
+>>> Logging in to Supabase Auth as smoke-user (best-effort)...
+BEGIN
+INSERT 0 1
+INSERT 0 1
+COMMIT
+>>> Local smoke-user identity seeded (auth.users + user_roles 'user').
+[e2e] Starting backend...
+[e2e] Starting frontend...
+[e2e] Waiting for backend on http://localhost:8098...
+[e2e] Backend ready.
+[e2e] Waiting for frontend on http://localhost:5188...
+[e2e] Frontend ready.
+
+[global-setup] Saved storageState for broker: /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/e2e/fixtures/broker-auth.json
+[global-setup] Saved storageState for admin: /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/e2e/fixtures/admin-auth.json
+[global-setup] Saved storageState for user: /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/e2e/fixtures/user-auth.json
+[global-setup] Created DRAFT listing: 5b209c7a-1890-4268-a4c6-480d62ec904a
+[global-setup] Set addressConfirmed=true
+[global-setup] Registered 3/3 stub images
+[global-setup] Submitted listing for review (PENDING_REVIEW)
+[global-setup] Listing 5b209c7a-1890-4268-a4c6-480d62ec904a approved — status: LIVE
+[global-setup] Wrote /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/e2e/.test-listing-id (5b209c7a-1890-4268-a4c6-480d62ec904a, LIVE)
+
+Running 31 tests using 2 workers
+
+  ✓   1 [smoke] › e2e/admin-smoke.spec.ts:33:3 › @smoke admin-authenticated › A1 — admin can access /admin/listings/pending (Pending Approval queue) (817ms)
+  ✓   2 [smoke] › e2e/broker-dashboard-v2.spec.ts:36:3 › @broker-dashboard-v2 broker dashboard v2 smoke › BD1 — broker sees 5 summary cards on /broker/dashboard (892ms)
+  ✓   3 [smoke] › e2e/admin-smoke.spec.ts:56:3 › @smoke admin-authenticated › A2 — admin can access /admin/localities (Locality Normalizer) (720ms)
+  ✓   4 [smoke] › e2e/broker-dashboard-v2.spec.ts:57:3 › @broker-dashboard-v2 broker dashboard v2 smoke › BD2 — "Start here today" and "Broker workspaces" sections are present (747ms)
+  ✓   5 [smoke] › e2e/admin-smoke.spec.ts:76:3 › @smoke admin-authenticated › A3 — admin can access /admin/listings (all listings view) (502ms)
+  ✓   6 [smoke] › e2e/broker-dashboard-v2.spec.ts:77:3 › @broker-dashboard-v2 broker dashboard v2 smoke › BD3 — no live anchor to /broker/listing-quality; "Details coming soon" is shown (778ms)
+  ✓   7 [smoke] › e2e/admin-smoke.spec.ts:98:1 › A4 — unauthenticated user is redirected from /admin/listings/pending to /auth (546ms)
+  ✓   8 [smoke] › e2e/broker-dashboard-v2.spec.ts:93:3 › @broker-dashboard-v2 broker dashboard v2 smoke › BD4 — clicking Drafts workspace card navigates to /broker/listings?status=DRAFT (647ms)
+  ✓   9 [smoke] › e2e/broker-listing-quality.spec.ts:30:1 › LQ1 — unauthenticated user cannot access /broker/listing-quality (543ms)
+  ✓  10 [smoke] › e2e/broker-smoke.spec.ts:33:3 › @smoke broker-authenticated › D1 — broker can access /broker/dashboard (622ms)
+  ✓  11 [smoke] › e2e/broker-listing-quality.spec.ts:51:3 › @smoke broker-listing-quality › LQ2 — broker can open /broker/listing-quality and summary cards render (704ms)
+  ✓  12 [smoke] › e2e/broker-smoke.spec.ts:57:3 › @smoke broker-authenticated › D2 — broker can access /broker/listings (2.2s)
+  ✓  13 [smoke] › e2e/broker-listing-quality.spec.ts:83:3 › @smoke broker-listing-quality › LQ3 — selecting a listing row opens the fix-plan panel (2.3s)
+  ✓  14 [smoke] › e2e/broker-smoke.spec.ts:74:3 › @smoke broker-authenticated › D3 — broker can access /broker/bookings (614ms)
+  ✓  15 [smoke] › e2e/broker-listing-quality.spec.ts:119:3 › @smoke broker-listing-quality › LQ4 — fix-plan edit CTA links to /broker/listings/{id}/edit (824ms)
+  ✓  16 [smoke] › e2e/broker-smoke.spec.ts:100:1 › D4 — unauthenticated user cannot access /broker/dashboard (523ms)
+[discover-real-data-smoke] School prefetch OK: id=70f3cad4-0a8c-43c3-b4d5-6ab49898c1b3 lat=13.337 lon=74.795
+  ✓  17 [smoke] › e2e/broker-listing-quality.spec.ts:159:3 › @smoke broker-listing-quality › LQ5 — not-scored listing never shows score "0" (honest empty state) (1.1s)
+  ✘  18 [smoke] › e2e/discover-real-data-smoke.spec.ts:244:3 › Discover real-data smoke › J1 — area-first anon: click through to a real AREA marker loads listing cards without auth errors (15.7s)
+  -  20 [smoke] › e2e/discover-real-data-smoke.spec.ts:320:3 › Discover real-data smoke › J2 — school-radius anon: school URL params trigger school-radius endpoint and render cards
+  -  21 [smoke] › e2e/discover-real-data-smoke.spec.ts:387:5 › Discover real-data smoke › J3 — school-first auth › J3 — authenticated school-radius: listing cards or property markers appear
+  -  22 [smoke] › e2e/discover-real-data-smoke.spec.ts:443:3 › Discover real-data smoke › J4 — keyword search: q=apartment filters results; clearing q restores them
+  ✘  19 [smoke] › e2e/discover-schools-canonical-2124.spec.ts:74:3 › Schools Canonical Navigation › @smoke J5 — school-first: real zone/area/school navigation, radius 3→5→10, refresh + back/forward restore (15.7s)
+  ✓  23 [smoke] › e2e/quick-smoke.spec.ts:69:1 › Q1 — app loads without blank screen or JS error banner (1.3s)
+  ✓  24 [smoke] › e2e/discover-schools-canonical-2124.spec.ts:262:3 › Schools Canonical Navigation › @smoke #2124 review gap 2 — a zero-school canonical AREA stays visible in the hierarchy with an honest zero state, never dropped/reparented (903ms)
+  ✓  25 [smoke] › e2e/quick-smoke.spec.ts:87:1 › Q2 — /broker/listings/new redirects to /auth when not logged in (576ms)
+  ✓  26 [smoke] › e2e/quick-smoke.spec.ts:98:1 › Q3 — login with valid credentials succeeds (1.5s)
+  ✓  27 [smoke] › e2e/quick-smoke.spec.ts:128:1 › Q4 — no CORS errors navigating through Home and Insights (1.6s)
+  ✓  28 [smoke] › e2e/quick-smoke.spec.ts:164:1 › Q5 — unauthenticated ingestion POST returns 401 or 403 (749ms)
+  ✓  29 [smoke] › e2e/quick-smoke.spec.ts:195:1 › Q6 — logged-out: role-specific nav links are not present (542ms)
+  -  30 [smoke] › e2e/quick-smoke.spec.ts:222:3 › @smoke Q7 — user-authenticated › Q7 — duplicate booking request is rejected
+  ✓  31 [smoke] › e2e/quick-smoke.spec.ts:295:1 › N3 — unknown route renders 404 Not Found page (1.5s)
+[global-teardown] Admin deleted listing 5b209c7a-1890-4268-a4c6-480d62ec904a (status 204)
+[global-teardown] Removed /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/e2e/.test-listing-id
+
+
+  1) [smoke] › e2e/discover-real-data-smoke.spec.ts:244:3 › Discover real-data smoke › J1 — area-first anon: click through to a real AREA marker loads listing cards without auth errors 
+
+    Error: J1: city-root camera-sync must settle a zoom into the URL
+
+    J1: city-root camera-sync must settle a zoom into the URL
+
+    expect(received).toBeGreaterThanOrEqual(expected)
+
+    Expected: >= 1
+    Received:    0
+
+    Call Log:
+    - Timeout 15000ms exceeded while waiting on the predicate
+
+      271 |         timeout: 15_000,
+      272 |       })
+    > 273 |       .toBeGreaterThanOrEqual(1);
+          |        ^
+      274 |
+      275 |     // The consent dialog overlays the zoom control — dismiss it before driving the map.
+      276 |     await declineConsentBannerIfPresent(page);
+        at /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/e2e/discover-real-data-smoke.spec.ts:273:8
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/discover-real-data-smoke-D-56873-g-cards-without-auth-errors-smoke/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/discover-real-data-smoke-D-56873-g-cards-without-auth-errors-smoke/error-context.md
+
+  2) [smoke] › e2e/discover-schools-canonical-2124.spec.ts:74:3 › Schools Canonical Navigation › @smoke J5 — school-first: real zone/area/school navigation, radius 3→5→10, refresh + back/forward restore 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('discover-schools-journey-panel-shell').getByTestId('navigation-child-card-c:central:in-ka-bengaluru-btm-layout-in-ka-bengaluru-koramangala')
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 15000ms
+      - waiting for getByTestId('discover-schools-journey-panel-shell').getByTestId('navigation-child-card-c:central:in-ka-bengaluru-btm-layout-in-ka-bengaluru-koramangala')
+
+
+       96 |     // Step 2b: Click a canonical CLUSTER child (BTM Layout / Koramangala)
+       97 |     const clusterCard = canonicalPanelShell.getByTestId(`navigation-child-card-${C_CENTRAL}`);
+    >  98 |     await expect(clusterCard).toBeVisible({ timeout: 15_000 });
+          |                               ^
+       99 |     await page.waitForTimeout(1000); await clusterCard.click();
+      100 |     await expect(page).toHaveURL(new RegExp(`node=${encodeURIComponent(C_CENTRAL)}`), { timeout: 8_000 });
+      101 |
+        at /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2427-e2e-fixture-reliability/e2e/discover-schools-canonical-2124.spec.ts:98:31
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/discover-schools-canonical-952b0-efresh-back-forward-restore-smoke/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/discover-schools-canonical-952b0-efresh-back-forward-restore-smoke/error-context.md
+
+  2 failed
+    [smoke] › e2e/discover-real-data-smoke.spec.ts:244:3 › Discover real-data smoke › J1 — area-first anon: click through to a real AREA marker loads listing cards without auth errors 
+    [smoke] › e2e/discover-schools-canonical-2124.spec.ts:74:3 › Schools Canonical Navigation › @smoke J5 — school-first: real zone/area/school navigation, radius 3→5→10, refresh + back/forward restore 
+  1 skipped
+  3 did not run
+  25 passed (42.6s)
+scripts/run-e2e-local.sh: line 109: 61032 Terminated: 15          "$SCRIPT_DIR/../apps/api/run-local.sh" > "$BACKEND_LOG" 2>&1
+EXIT_CODE=1
