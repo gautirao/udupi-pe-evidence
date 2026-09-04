@@ -1,8 +1,10 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useDiscoverMapData } from '@/hooks/useDiscoverMapData';
 import { AREA_LAYER_MAX_ZOOM, shouldShowMarkers } from '@/lib/map/zoomPolicy';
 import { useDiscoverSource } from '@/features/discover/state/DiscoverDataSourceContext';
+import { useDiscoverShell } from '@/features/discover/context/useDiscoverContext';
 import { resolveDiscoverMarkerScope } from '@/features/discover/selectors/markerScope';
+import { computeAreaSetCameraTarget } from '@/features/discover/selectors/areaSetCameraBounds';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
@@ -269,6 +271,87 @@ export function useDiscoverMapDataController({
     // Issue #2016 — see the `resultScope` const's doc above.
     resultScope,
   });
+
+  // Issue #2017 (Step 7) — when a MULTI-area (N>1) AREA_SET scope is
+  // committed (via AreaSetChips.tsx's "Search these areas" CTA, or already
+  // present on a deep-linked/refreshed URL), publish ONE recenter camera
+  // intent framing the union of the committed areas' bounds.
+  //
+  // Lives here rather than on AreaSetChips.tsx (or a new prop threaded down
+  // to it) because this controller already has both the committed
+  // `resultScope` and `mapData.discoverAreasData`/`publishRecenterCameraIntent`
+  // in scope — no new coupling between the chip component and the camera
+  // system is needed.
+  //
+  // Strictly N>1: a single-area AREA_SET commit already has its own,
+  // untouched camera-intent flow via selectArea()/publishCameraIntent, and
+  // must stay byte-for-byte identical to today's behaviour (the #2017
+  // no-regression requirement) — this effect must never fire alongside it.
+  //
+  // Gated on the committed areaKeys' SIGNATURE (not object identity, which
+  // is fresh every render) — mirrors useAreaSetDraft.ts's lastSeedSignature
+  // pattern. The ref is only advanced once a target is actually computed and
+  // published, so if discoverAreasData hasn't loaded yet on a cold multi-area
+  // deep link, the effect retries on the next render once the areas arrive.
+  const committedAreaSetKeys = resultScope?.kind === 'AREA_SET' ? resultScope.areaKeys : [];
+  const committedAreaSetSignature = committedAreaSetKeys.join(' ');
+  const lastAreaSetCameraSignature = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (committedAreaSetKeys.length <= 1) return;
+    if (committedAreaSetSignature === lastAreaSetCameraSignature.current) return;
+    const target = computeAreaSetCameraTarget(
+      committedAreaSetKeys,
+      mapData.discoverAreasData?.areas ?? [],
+    );
+    if (!target) return;
+    lastAreaSetCameraSignature.current = committedAreaSetSignature;
+    mapData.publishRecenterCameraIntent(target.bounds, target.center, 'overview');
+    // committedAreaSetKeys is derived fresh from committedAreaSetSignature
+    // every render; only the signature (plus the data needed to resolve it)
+    // should gate this effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [committedAreaSetSignature, mapData.discoverAreasData, mapData.publishRecenterCameraIntent]);
+
+  // Issue #2017 (Fit all / focus-one, MUST-HAVE confirmed by the owner as
+  // part of #2017's approved design contract — see DiscoverShellContextValue's
+  // AreaSetCameraActions doc) — registers the two user-triggered, camera-only
+  // actions for a committed AREA_SET into DiscoverShellContext, via the SAME
+  // `computeAreaSetCameraTarget` + `publishRecenterCameraIntent` machinery
+  // the auto-fit-on-commit effect above already uses.
+  //
+  // Deliberately does NOT touch `resultScope`/`rareas` or call any
+  // DiscoverActionsContext action — both are camera intent only, so the
+  // committed multi-area result set (and its `rareas` URL param) is
+  // untouched by either call, exactly the requirement.
+  //
+  // `focusAreaSetMember` reuses `computeAreaSetCameraTarget` with a
+  // single-element areaKeys array rather than a bespoke single-area path —
+  // that helper already has the correct bbox/centre-fallback null-safety
+  // for one area (see its own doc), so this is the same union logic
+  // degenerately applied to N=1. Framed as `'leaf'` (not `'overview'`),
+  // matching `publishRecenterCameraIntent`'s documented framing convention
+  // for a single resolved area.
+  const shell = useDiscoverShell();
+  useEffect(() => {
+    shell.registerAreaSetCameraActions({
+      fitAreaSet: () => {
+        const keys = resultScope?.kind === 'AREA_SET' ? resultScope.areaKeys : [];
+        if (keys.length <= 1) return;
+        const target = computeAreaSetCameraTarget(keys, mapData.discoverAreasData?.areas ?? []);
+        if (!target) return;
+        mapData.publishRecenterCameraIntent(target.bounds, target.center, 'overview');
+      },
+      focusAreaSetMember: (areaKey: string) => {
+        const keys = resultScope?.kind === 'AREA_SET' ? resultScope.areaKeys : [];
+        if (!keys.includes(areaKey)) return;
+        const target = computeAreaSetCameraTarget([areaKey], mapData.discoverAreasData?.areas ?? []);
+        if (!target) return;
+        mapData.publishRecenterCameraIntent(target.bounds, target.center, 'leaf');
+      },
+    });
+    return () => shell.registerAreaSetCameraActions(null);
+  }, [shell, resultScope, mapData.discoverAreasData, mapData.publishRecenterCameraIntent]);
 
   // isLoading depends on both hooks and useAuth — must be computed here (Rule 1).
   const isLoading =

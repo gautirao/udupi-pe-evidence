@@ -113,6 +113,10 @@ function makeUrlActions(overrides: Partial<DiscoverUrlActions> = {}): DiscoverUr
     setSchoolJourney: vi.fn(),
     // Issue #2016 — result-scope commit.
     commitResultScope: vi.fn(),
+    // Issue #1943 — singleton auto-advance REPLACE variant of goToNode.
+    goToNodeReplacingCurrent: vi.fn(),
+    // Issue #2017 — multi-area AREA_SET commit.
+    commitAreaSet: vi.fn(),
     ...overrides,
   };
 }

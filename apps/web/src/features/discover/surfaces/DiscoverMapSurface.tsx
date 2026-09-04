@@ -76,6 +76,12 @@ export function DiscoverMapSurface({ view, commands, mapContainerRef }: Discover
         />
       )}
       {shouldMount && (
+        // Issue #2017 (owner-directed desktop rework) — AreaSetDraftProvider
+        // moved UP to MapDiscovery.tsx (the common ancestor of this map tree
+        // AND the panel tree, where AreaSetDraftPanel now also consumes this
+        // same context on desktop) so both trees share ONE draft/nearby-
+        // candidate instance instead of two independent, desynchronized
+        // copies. See MapDiscovery.tsx's own comment for the full rationale.
         <Suspense fallback={<MapSkeleton />}>
           <LazyDiscoverMapCanvas {...canvasProps} />
         </Suspense>

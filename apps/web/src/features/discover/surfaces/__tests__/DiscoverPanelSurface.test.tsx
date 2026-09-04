@@ -154,6 +154,10 @@ const { BASE_URL_STATE, URL_ACTIONS } = vi.hoisted(() => {
     setSchoolJourney: vi.fn(),
     // Issue #2016 — result-scope commit.
     commitResultScope: vi.fn(),
+    // Issue #1943 — singleton auto-advance REPLACE variant of goToNode.
+    goToNodeReplacingCurrent: vi.fn(),
+    // Issue #2017 — multi-area AREA_SET commit.
+    commitAreaSet: vi.fn(),
   };
 
   return { BASE_URL_STATE: urlState, URL_ACTIONS: urlActions };
@@ -170,6 +174,12 @@ vi.mock('@/features/discover/context/useDiscoverContext', () => ({
     isMobileShell: false,
     mobileView: 'LIST',
     setMobileView: vi.fn(),
+    isAreaSetDraftOpen: false,
+    openAreaSetDraft: vi.fn(),
+    closeAreaSetDraft: vi.fn(),
+    fitAreaSet: vi.fn(),
+    focusAreaSetMember: vi.fn(),
+    registerAreaSetCameraActions: vi.fn(),
   }),
 }));
 

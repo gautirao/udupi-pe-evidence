@@ -8,7 +8,7 @@ import {
 } from '@/features/discover/context/useDiscoverContext';
 import { useDiscoverAreas, type DiscoverArea } from '@/hooks/useDiscoverAreas';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
-import { CITY_CONFIG } from '@/lib/localityUtils';
+import { CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
 import { useDiscoverAreaNavigationPathResolver } from '@/features/discover/navigation/useDiscoverAreaNavigationPath';
 import { useToast } from '@/hooks/use-toast';
 import { useDiscoverSource } from '@/features/discover/state/DiscoverDataSourceContext';
@@ -462,7 +462,10 @@ export interface DiscoverControlBarProps {
 export function DiscoverControlBar({ mobileMapTrigger }: DiscoverControlBarProps = {}) {
   const nav = useDiscoverNav();
   const actions = useDiscoverActions();
-  const { data } = useDiscoverAreas(nav.city);
+  // Node-only URL (no `city=` param) leaves nav.city === '', which would
+  // silently disable this fetch — fall back to the established
+  // `nav.city || DEFAULT_CITY` idiom.
+  const { data } = useDiscoverAreas(nav.city || DEFAULT_CITY);
   const areas = data?.areas ?? [];
   const { toast } = useToast();
   // Issue #1956 PR 6 ([rulings.option_a_search_convergence_2026_08_03]) — the

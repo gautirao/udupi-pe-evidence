@@ -204,8 +204,9 @@ test.describe('@integration-ui Issue #1483 — area-first Level-2 drill-down', (
       { timeout: 5_000 },
     );
 
-    // Level-3 area-selected panel: add-school-cta is a reliable marker unique to AreaSelectedPanel
-    await expect(page.getByTestId('add-school-cta')).toBeVisible({ timeout: 8_000 });
+    // Level-3 area-selected panel: area-set-schools-tile (Issue #2017 —
+    // formerly add-school-cta) is a reliable marker unique to AreaSelectedPanel
+    await expect(page.getByTestId('area-set-schools-tile')).toBeVisible({ timeout: 8_000 });
 
     // Level-2 container must be gone
     await expect(page.getByTestId('area-group-level2')).not.toBeAttached();
@@ -229,7 +230,7 @@ test.describe('@integration-ui Issue #1483 — area-first Level-2 drill-down', (
     // Go to Level 3
     await page.getByTestId(`browse-all-area-${AREA_KEY_MANIPAL}`).click();
     await expect(page).toHaveURL(new RegExp(`areaKey=`), { timeout: 5_000 });
-    await expect(page.getByTestId('add-school-cta')).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByTestId('area-set-schools-tile')).toBeVisible({ timeout: 8_000 });
 
     // Browser Back
     await page.goBack();

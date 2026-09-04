@@ -57,7 +57,7 @@ export function useDiscoverPageContext() {
   // viewport tracker's clear-on-leave-MAP effect. Build step 4 —
   // isMobileShell/setMobileView drive the mobile List<->Map full-screen
   // overlay shell.
-  const { mobileView, isMobileShell, setMobileView } = useDiscoverShell();
+  const { mobileView, isMobileShell, setMobileView, isAreaSetDraftOpen } = useDiscoverShell();
   const mobileMapOpen = isMobileShell && mobileView === 'MAP';
   // A stable command, so the page shell's trigger prop does not get a fresh
   // identity every render. Presentation-only: mobileView is plain component
@@ -144,6 +144,12 @@ export function useDiscoverPageContext() {
     mobileView,
     isMobileShell,
     setMobileView,
+    // Issue #2017 (owner-directed desktop rework) — threaded through the same
+    // page-context facade as isMobileShell/mobileView above, down to
+    // DiscoverRightPanel's `isAreaSetDraftOpen` prop (see that prop's own
+    // doc for why it's prop-threaded rather than read via a bare
+    // `useDiscoverShell()` call at the DiscoverRightPanel leaf).
+    isAreaSetDraftOpen,
     mobileMapOpen,
     openMobileMap,
     mapContainerRef,

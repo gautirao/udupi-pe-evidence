@@ -236,6 +236,29 @@ interface PropertyMapProps {
   /** Fired after each area-marker bucketing recompute with (shown, total). */
   onAreaMarkersComputed?: (shownCount: number, totalCount: number) => void;
   /**
+   * Issue #2017 — area keys currently in the multi-area AREA_SET draft
+   * selection. Passed through to AreaMarkerLayer unchanged; absent/empty
+   * means no AREA_SET candidate callouts render.
+   */
+  areaSetCandidateKeys?: string[];
+  /**
+   * Issue #2017 — fired when an AREA_SET candidate callout (or its
+   * "View homes" line) is activated by click or keyboard. Passed through to
+   * AreaMarkerLayer unchanged; unused unless areaSetCandidateKeys is also
+   * provided.
+   */
+  onAreaSetCandidateSelect?: (areaKey: string) => void;
+  /**
+   * Issue #2017 (max-3 visual parity, PR #2424) — true when the AREA_SET
+   * draft is at its cap (`useAreaSetDraft`'s `atLimit` — the single source of
+   * truth also consumed by `AreaSetChips.tsx`'s own candidate-button disabled
+   * styling). Passed through to AreaMarkerLayer unchanged; drives a muted,
+   * non-interactive visual + click/keyboard no-op on not-yet-selected
+   * candidate map pins once the cap is reached. Optional/defaults to false so
+   * every existing caller/test fixture keeps behaving identically.
+   */
+  areaSetAtMax?: boolean;
+  /**
    * Issue #1956 PR 2 (Slice 3, map half) — the ONE `useAreasNavigationJourney`
    * result MapDiscovery resolved (node/levelKind/children/selectNode), threaded
    * through UNCHANGED so the map's Direction destinations and the right
@@ -2497,6 +2520,9 @@ export function PropertyMap({
   onAreaClusterClick,
   onAreaClusterCameraIntent,
   onAreaMarkersComputed,
+  areaSetCandidateKeys,
+  onAreaSetCandidateSelect,
+  areaSetAtMax = false,
   areasNavigationJourney = null,
   hoveredNavigationNodeKey = null,
   onNavigationNodeHoverChange,
@@ -2848,6 +2874,9 @@ export function PropertyMap({
               onAreaClusterClick={onAreaClusterClick}
               onAreaClusterCameraIntent={onAreaClusterCameraIntent}
               onMarkersComputed={onAreaMarkersComputed}
+              areaSetCandidateKeys={areaSetCandidateKeys}
+              onAreaSetCandidateSelect={onAreaSetCandidateSelect}
+              areaSetAtMax={areaSetAtMax}
             />
           )
         )}

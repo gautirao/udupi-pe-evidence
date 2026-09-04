@@ -110,6 +110,9 @@ public class JwtConfig {
                         //
                         // Public discover areas endpoint — no auth required (B-4)
                         .requestMatchers(HttpMethod.GET, "/api/discover/areas").permitAll()
+                        // Public nearby-area-candidates endpoint (AREA_SET chip suggestions) — no
+                        // auth required, mirrors /api/discover/areas above (#2017)
+                        .requestMatchers(HttpMethod.GET, "/api/discover/areas/nearby-candidates").permitAll()
                         // Public area listings endpoint — no auth required (C-2)
                         .requestMatchers(HttpMethod.GET, "/api/discover/areas/*/listings").permitAll()
                         // Public city-first area listings endpoint — no auth required (#886)

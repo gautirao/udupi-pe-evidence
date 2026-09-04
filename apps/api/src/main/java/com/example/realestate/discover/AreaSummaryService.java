@@ -233,8 +233,13 @@ public class AreaSummaryService {
      * <p>Kept as a correlated SCALAR subquery (not a {@code LEFT JOIN + GROUP BY}) so an area
      * with zero schools yields {@code 0}, never {@code NULL} — {@link AreaSummary#schoolCount}
      * is a primitive {@code long} and this shape removes the NULL-vs-0 hazard by construction.
+     *
+     * <p>Package-private (not {@code private}) so {@link NearbyAreaCandidatesService} (#2017) can
+     * reuse it verbatim for its own per-area school count, rather than maintaining a second copy
+     * that could silently drift from this one. Requires the correlated outer query to alias the
+     * {@code areas} table as {@code a}, exactly as both queries in this class do.
      */
-    private static final String SCHOOL_COUNT_SUBQUERY = """
+    static final String SCHOOL_COUNT_SUBQUERY = """
             (SELECT COUNT(*)
              FROM school_discover_area_coverage c
              WHERE c.curated_area_key = a.area_key

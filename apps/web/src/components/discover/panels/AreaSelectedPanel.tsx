@@ -25,6 +25,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { EmptyState } from '@/components/ui/EmptyState';
 import { deriveDiscoverEmptyStateCopy } from '../emptyStateCopy';
 import { StartOverButton } from '../StartOverButton';
+import { useDiscoverActions, useDiscoverNav, useDiscoverShell } from '@/features/discover/context/useDiscoverContext';
+import { AreaSetSelectedHeader, AreaSetTwoTileRow } from './AreaSetSelectedExtras';
+import { DEFAULT_CITY } from '@/lib/localityUtils';
 
 // Quick filter options (hardcoded MVP). 'All' is a virtual chip that clears the
 // property-type selection — it is not a property_type value.
@@ -303,6 +306,39 @@ export function AreaSelectedPanel({
   const resolvedCityLabel = cityLabel ?? city ?? '';
   const count = areaListings?.length ?? 0;
 
+  // Issue #2017 — plural committed-header/two-tile-row for a multi-area
+  // AREA_SET result scope. `nav.resultScope?.active` is the confirmed real
+  // access pattern for the #2016 committed scope (see useDiscoverMapDataController,
+  // AreaSetDraftContext, DiscoverMapCanvas for the same idiom). A single-area
+  // AREA_SET commit (or no AREA_SET commit at all) leaves `multiAreaKeys` null
+  // and this file's existing single-area JSX renders completely unchanged.
+  const nav = useDiscoverNav();
+  const actions = useDiscoverActions();
+  const shell = useDiscoverShell();
+  const activeScope = nav.resultScope?.active ?? null;
+  const multiAreaKeys =
+    activeScope?.kind === 'AREA_SET' && activeScope.areaKeys.length > 1 ? activeScope.areaKeys : null;
+
+  // "Edit areas" / "Add nearby areas" open the AREA_SET draft (Issue #2017;
+  // desktop rework owner-directed) — `openAreaSetDraft()` is the single
+  // cross-tree open signal both surfaces read: on mobile it drives
+  // AreaSetChips's map-anchored popover (paired with `setMobileView('MAP')`
+  // to reveal the map surface first); on desktop DiscoverRightPanel reads
+  // the same flag directly to swap this panel for AreaSetDraftPanel in
+  // place — `setMobileView('MAP')` is a no-op there since desktop already
+  // shows map and panel together.
+  const handleEditAreas = useCallback(() => {
+    shell.setMobileView('MAP');
+    shell.openAreaSetDraft();
+  }, [shell]);
+  const handleClearAreas = useCallback(() => {
+    actions.commitResultScope(null);
+  }, [actions]);
+  const handleAddNearbyAreas = useCallback(() => {
+    shell.setMobileView('MAP');
+    shell.openAreaSetDraft();
+  }, [shell]);
+
   return (
     <div className="area-panel-container flex flex-1 flex-col overflow-y-auto">
       {/* Breadcrumb — sticky, area-first hierarchy: Home › City › Group › Area (Issue #1606) */}
@@ -398,32 +434,78 @@ export function AreaSelectedPanel({
             "for sale"/"for rent" would silently understate the true total.
             Labelled "shown" instead — true regardless of whether the area
             has more matches than the fetch limit. */}
-        <div className="flex items-end justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-              {isViewportScope ? 'Result scope — Search this area' : 'Result scope — Selected area'}
-            </p>
-            <h1 className="mt-0.5 font-['Fraunces',_ui-serif,_Georgia,_serif] text-[1.625rem] font-semibold leading-[1.15] tracking-[-0.02em] text-foreground">
-              {isViewportScope ? 'Properties in this area' : `Properties in ${areaLabel}`}
-            </h1>
-          </div>
-          {!isLoadingListings && (
-            <div className="shrink-0 text-right" data-testid="area-header-count">
-              <p className="font-mono text-2xl font-semibold leading-none tabular-nums text-foreground">
-                {count}
-              </p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                {intentNoun === 'rent' ? 'shown for rent' : 'shown for sale'}
-              </p>
+        {multiAreaKeys ? (
+          <AreaSetSelectedHeader
+            areaKeys={multiAreaKeys}
+            // Issue #2017 — fall back to the authoritative `nav.city` slug
+            // (already read above for `activeScope`/`multiAreaKeys`) when the
+            // caller omits the `city` prop entirely. `DiscoverAreasJourneyPanel`'s
+            // `AreaLeafListingsSurface` (the default AREA-leaf render path — the
+            // component this panel most commonly mounts under) passes
+            // `cityLabel` but not `city`, which otherwise silently collapsed to
+            // `''` here and sat below `useDiscoverAreas`'s `enabled: city.length
+            // > 0` guard inside AreaSetSelectedHeader — the areas query never
+            // fired, so the plural header always rendered its generic
+            // "N areas" fallback instead of resolved names/counts, even once
+            // listings had loaded. `nav.city` is the same city slug every
+            // caller (this one included) already derives `cityLabel` from via
+            // `CITY_CONFIG[nav.city]`, so this cannot diverge from what the
+            // panel is actually displaying. Explicit `city` props (e.g.
+            // NodeListingsSurface's `city={nav.city}`) still take precedence.
+            //
+            // Uses `||` (not `??`) and falls back through to DEFAULT_CITY, matching
+            // the established `nav.city || DEFAULT_CITY` idiom used everywhere else
+            // in Discover (see useDiscoverPageComposition.ts,
+            // useDiscoverAreaGroupsController.ts, useDiscoverJourneySwitchController.ts,
+            // useDiscoverNavigationController.ts). At a plain `/discover` URL with no
+            // `?city=` param, `nav.city` itself is `''` (documented in
+            // useDiscoverAgriController.ts and CityLaunchPreview.test.tsx) — a `??`
+            // fallback never catches that empty string, so it silently reached
+            // `useDiscoverAreas('')` and sat below its `enabled: city.length > 0`
+            // guard, same failure mode as the missing-prop case above.
+            city={city || nav.city || DEFAULT_CITY}
+            count={count}
+            intentNoun={intentNoun}
+            isLoadingListings={isLoadingListings}
+            onEditAreas={handleEditAreas}
+            onClearAreas={handleClearAreas}
+            // Issue #2017 (Fit all / focus-one) — camera-only actions
+            // registered by useDiscoverMapDataController; see
+            // DiscoverShellContextValue's AreaSetCameraActions doc. Neither
+            // call touches `resultScope`/`rareas`.
+            onFitAll={shell.fitAreaSet}
+            onFocusArea={shell.focusAreaSetMember}
+          />
+        ) : (
+          <>
+            <div className="flex items-end justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                  {isViewportScope ? 'Result scope — Search this area' : 'Result scope — Selected area'}
+                </p>
+                <h1 className="mt-0.5 font-['Fraunces',_ui-serif,_Georgia,_serif] text-[1.625rem] font-semibold leading-[1.15] tracking-[-0.02em] text-foreground">
+                  {isViewportScope ? 'Properties in this area' : `Properties in ${areaLabel}`}
+                </h1>
+              </div>
+              {!isLoadingListings && (
+                <div className="shrink-0 text-right" data-testid="area-header-count">
+                  <p className="font-mono text-2xl font-semibold leading-none tabular-nums text-foreground">
+                    {count}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {intentNoun === 'rent' ? 'shown for rent' : 'shown for sale'}
+                  </p>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-        {/* R-C — sub-copy: 15px, 1.55 line-height, --text-body colour. */}
-        <p className="mt-1.5 text-[15px] leading-[1.55] text-[hsl(var(--text-body))]">
-          {isViewportScope
-            ? 'Explore verified listings in this map area, with map context and area-first filters.'
-            : `Explore verified listings around ${areaLabel}, with map context and area-first filters.`}
-        </p>
+            {/* R-C — sub-copy: 15px, 1.55 line-height, --text-body colour. */}
+            <p className="mt-1.5 text-[15px] leading-[1.55] text-[hsl(var(--text-body))]">
+              {isViewportScope
+                ? 'Explore verified listings in this map area, with map context and area-first filters.'
+                : `Explore verified listings around ${areaLabel}, with map context and area-first filters.`}
+            </p>
+          </>
+        )}
 
         {/* Controls card — REMOVED (product-owner ruling, #1953 follow-up).
             City was already removed from this card in build step 6, leaving
@@ -457,22 +539,53 @@ export function AreaSelectedPanel({
           filter box below into its own full-width card, positioned directly
           under the header (before search/filters). A single modest button
           row (icon + label + "Optional" hint) — not a hero/image block — so
-          it never competes with the listing list for visual weight. */}
-      {onAddSchool && (
-        <div className="border-b border-border px-4 py-3">
-          <button
-            type="button"
-            onClick={handleAddSchool}
-            data-testid="add-school-cta"
-            className="flex w-full items-center gap-3 rounded-xl border border-plum/20 bg-plum-tint p-3 text-left shadow-sm transition-colors hover:border-plum/50"
-          >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-plum text-plum-foreground">
-              <Plus className="h-4 w-4" aria-hidden="true" />
-            </span>
-            <span className="flex-1 text-sm font-semibold text-foreground">Add a school in this area</span>
-            <span className="shrink-0 text-xs text-muted-foreground">Optional</span>
-          </button>
-        </div>
+          it never competes with the listing list for visual weight.
+
+          Issue #2017 (release-blocking fix) — the mock's own state machine
+          (Experience.jsx: `single = scopeKind === "AREA_SET" && committed.length
+          === 1`, `v.areaActions = single`) gates the two-tile "Schools in X /
+          Add nearby areas" row on exactly ONE committed area, not on an
+          already-committed multi-area set. The previous `multiAreaKeys ?
+          <AreaSetTwoTileRow/> : <plain CTA/>` gate here was inverted relative
+          to that: it only showed the two-tile row (and therefore the "Add
+          nearby areas" entry point) once a 2-3 area AREA_SET was ALREADY
+          committed — the single-Area state a shopper actually starts from
+          had no path in at all (confirmed live: JP Nagar single-Area select
+          showed only "Add a school in this area"). The committed multi-area
+          state's own action surface is the ghost-button row already rendered
+          inside `AreaSetSelectedHeader` above (Edit areas / Clear selected
+          areas / Draw search area / Create alert) — matching the mock's
+          `EPScopeBar` AREA_SET row — so nothing else is needed there.
+
+          VIEWPORT scope (`isViewportScope`, Issue #2015) is deliberately
+          excluded from the two-tile swap: "Add nearby areas" extends an
+          AREA_SET chip selection, which is not what a viewport-bounds
+          "Search this area" result represents. VIEWPORT keeps the original
+          plain "Add a school" CTA unchanged — out of this fix's investigated
+          scope (see PR #2424 STATE MAP/VISUAL CONTRACT comment). */}
+      {multiAreaKeys ? null : !isViewportScope ? (
+        <AreaSetTwoTileRow
+          primaryAreaName={selectedArea.areaLabel}
+          onAddSchool={onAddSchool ? handleAddSchool : undefined}
+          onAddNearbyAreas={handleAddNearbyAreas}
+        />
+      ) : (
+        onAddSchool && (
+          <div className="border-b border-border px-4 py-3">
+            <button
+              type="button"
+              onClick={handleAddSchool}
+              data-testid="add-school-cta"
+              className="flex w-full items-center gap-3 rounded-xl border border-plum/20 bg-plum-tint p-3 text-left shadow-sm transition-colors hover:border-plum/50"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-plum text-plum-foreground">
+                <Plus className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <span className="flex-1 text-sm font-semibold text-foreground">Add a school in this area</span>
+              <span className="shrink-0 text-xs text-muted-foreground">Optional</span>
+            </button>
+          </div>
+        )
       )}
 
       {/* Search — moved ABOVE the quick-filter card (Issue #2084 AC8: heading

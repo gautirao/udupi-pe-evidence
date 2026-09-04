@@ -15,7 +15,7 @@
  * `api.get` REAL, so the actual request URL is exercised end-to-end.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 
@@ -26,6 +26,7 @@ const mockTrendsOptions = vi.hoisted(() => vi.fn());
 const mockSchoolRadiusListings = vi.hoisted(() => vi.fn());
 const mockSchoolById = vi.hoisted(() => vi.fn());
 const mockApiGet = vi.hoisted(() => vi.fn());
+const mockRegisterAreaSetCameraActions = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/useDiscoverListings', () => ({
   useDiscoverListings: mockDiscoverListings,
@@ -49,6 +50,25 @@ vi.mock('@/lib/api', () => ({
       this.status = status;
     }
   },
+}));
+
+// Issue #2017 (Fit all / focus-one) — this controller now also registers its
+// AreaSetCameraActions into DiscoverShellContext via useDiscoverShell(). This
+// suite renders the controller standalone (no <DiscoverProvider> above it —
+// see makeWrapper below, QueryClientProvider only), so useDiscoverShell must
+// be mocked or the real hook throws "must be used within a <DiscoverProvider>".
+vi.mock('@/features/discover/context/useDiscoverContext', () => ({
+  useDiscoverShell: () => ({
+    mobileView: 'LIST',
+    setMobileView: vi.fn(),
+    isMobileShell: false,
+    isAreaSetDraftOpen: false,
+    openAreaSetDraft: vi.fn(),
+    closeAreaSetDraft: vi.fn(),
+    fitAreaSet: vi.fn(),
+    focusAreaSetMember: vi.fn(),
+    registerAreaSetCameraActions: mockRegisterAreaSetCameraActions,
+  }),
 }));
 
 // Import AFTER mocks — useDiscoverFilteredMarkers/useDiscoverCityListings/
@@ -536,3 +556,177 @@ function VIEWPORT_BOUNDS_AS_TUPLE(bounds: {
 }): [number, number, number, number] {
   return [bounds.s, bounds.w, bounds.n, bounds.e];
 }
+
+// Issue #2017 (Fit all / focus-one, MUST-HAVE confirmed by the owner) — a
+// real, NON-CONTIGUOUS 2-3 area committed AREA_SET (Hebbal / JP Nagar /
+// Whitefield: three real Bangalore areas with disjoint, widely-separated
+// bounding boxes — none adjacent or overlapping), proving:
+//   (a) focus-one leaves the combined committed result set fully intact —
+//       this controller receives `nav`/`resultScope` as a read-only prop and
+//       has no action/setter capable of mutating it at all, so "does not
+//       touch rareas" is a structural guarantee, not just an assertion; the
+//       registered `focusAreaSetMember` closure only ever calls
+//       `publishRecenterCameraIntent` — verified below by asserting the
+//       controller's own `nav`/resultScope-derived identity is untouched
+//       AND that the resulting camera intent frames ONLY the one area.
+//   (b) "Fit all" (`fitAreaSet`) restores the union framing afterward —
+//       called AFTER focus-one has already moved the camera to a single
+//       area, proving it recomputes the union fresh rather than replaying a
+//       stale target.
+describe('useDiscoverMapDataController — Issue #2017 (Fit all / focus-one) camera actions for a committed non-contiguous AREA_SET', () => {
+  const HEBBAL = {
+    areaKey: 'IN|KA|Bengaluru|Hebbal',
+    name: 'Hebbal',
+    geoCenterLat: 13.05,
+    geoCenterLon: 77.59,
+    minLat: 13.04,
+    minLon: 77.58,
+    maxLat: 13.06,
+    maxLon: 77.6,
+    listingCount: 10,
+    schoolCount: 2,
+  };
+  const JP_NAGAR = {
+    areaKey: 'IN|KA|Bengaluru|JP Nagar',
+    name: 'JP Nagar',
+    geoCenterLat: 12.9,
+    geoCenterLon: 77.58,
+    minLat: 12.89,
+    minLon: 77.57,
+    maxLat: 12.91,
+    maxLon: 77.59,
+    listingCount: 8,
+    schoolCount: 3,
+  };
+  const WHITEFIELD = {
+    areaKey: 'IN|KA|Bengaluru|Whitefield',
+    name: 'Whitefield',
+    geoCenterLat: 12.97,
+    geoCenterLon: 77.75,
+    minLat: 12.96,
+    minLon: 77.74,
+    maxLat: 12.98,
+    maxLon: 77.76,
+    listingCount: 12,
+    schoolCount: 4,
+  };
+  const NON_CONTIGUOUS_AREAS = [HEBBAL, JP_NAGAR, WHITEFIELD];
+  const NON_CONTIGUOUS_AREA_KEYS = NON_CONTIGUOUS_AREAS.map((a) => a.areaKey);
+
+  function setupNonContiguousAreasMock() {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url.includes('/api/discover/markers')) return Promise.resolve(MARKERS_RESPONSE);
+      if (url.includes('/listings')) return Promise.resolve({ city: 'bangalore', limitPerArea: 5, areas: [] });
+      return Promise.resolve({ city: 'bangalore', areas: NON_CONTIGUOUS_AREAS });
+    });
+  }
+
+  function renderWithCommittedAreaSet() {
+    const nav = makeNav({
+      journey: 'area-first',
+      resultScope: { active: { kind: 'AREA_SET', areaKeys: NON_CONTIGUOUS_AREA_KEYS }, previous: null },
+    });
+    const hook = renderHook(
+      () =>
+        useDiscoverMapDataController({
+          ...BASE_CONTROLLER_PARAMS,
+          nav,
+          effectiveSelectedArea: null,
+          areasNavigationJourney: makeAreasNavigationJourney(),
+        }),
+      { wrapper: makeWrapper() },
+    );
+    return { nav, ...hook };
+  }
+
+  function latestRegisteredActions() {
+    const call = mockRegisterAreaSetCameraActions.mock.calls.at(-1);
+    expect(call?.[0]).toBeTruthy();
+    return call![0] as { fitAreaSet: () => void; focusAreaSetMember: (areaKey: string) => void };
+  }
+
+  beforeEach(setupNonContiguousAreasMock);
+
+  it('focus-one (JP Nagar) frames the camera on that area alone, and never mutates the committed AREA_SET / rareas', async () => {
+    const { result, nav } = renderWithCommittedAreaSet();
+
+    // The auto-fit-on-commit effect publishes the UNION intent first — wait
+    // for the areas to load and that initial framing to land.
+    await waitFor(() => {
+      expect(result.current.discoverAreasData?.areas.length).toBe(3);
+      expect(result.current.cameraIntent?.framing).toBe('overview');
+    });
+
+    const actions = latestRegisteredActions();
+
+    act(() => {
+      actions.focusAreaSetMember(JP_NAGAR.areaKey);
+    });
+
+    await waitFor(() => {
+      expect(result.current.cameraIntent?.framing).toBe('leaf');
+    });
+
+    // Frames JP Nagar's OWN bounds/centre — not the 3-area union.
+    expect(result.current.cameraIntent?.bounds).toEqual([
+      [JP_NAGAR.minLat, JP_NAGAR.minLon],
+      [JP_NAGAR.maxLat, JP_NAGAR.maxLon],
+    ]);
+    expect(result.current.cameraIntent?.center).toEqual([JP_NAGAR.geoCenterLat, JP_NAGAR.geoCenterLon]);
+
+    // Structural guarantee, verified: this controller receives `nav` as a
+    // read-only prop and exposes no action capable of writing to it — the
+    // SAME nav object instance passed in is still the one in scope, and the
+    // committed AREA_SET it carries is unchanged (all 3 areas, in order).
+    expect(nav.resultScope?.active).toEqual({
+      kind: 'AREA_SET',
+      areaKeys: NON_CONTIGUOUS_AREA_KEYS,
+    });
+  });
+
+  it('"Fit all" (fitAreaSet), called after a prior focus-one, recomputes and restores the fresh union framing across all 3 non-contiguous areas', async () => {
+    const { result } = renderWithCommittedAreaSet();
+
+    await waitFor(() => {
+      expect(result.current.discoverAreasData?.areas.length).toBe(3);
+      expect(result.current.cameraIntent?.framing).toBe('overview');
+    });
+
+    const actions = latestRegisteredActions();
+
+    // Move the camera to a single area first, exactly the state "Fit all"
+    // must recover from.
+    act(() => {
+      actions.focusAreaSetMember(HEBBAL.areaKey);
+    });
+    await waitFor(() => {
+      expect(result.current.cameraIntent?.center).toEqual([HEBBAL.geoCenterLat, HEBBAL.geoCenterLon]);
+    });
+
+    act(() => {
+      actions.fitAreaSet();
+    });
+
+    await waitFor(() => {
+      expect(result.current.cameraIntent?.framing).toBe('overview');
+    });
+
+    // Union bounds across Hebbal + JP Nagar + Whitefield (min/max of each
+    // area's own bbox — see the fixtures above).
+    expect(result.current.cameraIntent?.bounds).toEqual([
+      [JP_NAGAR.minLat, JP_NAGAR.minLon],
+      [HEBBAL.maxLat, WHITEFIELD.maxLon],
+    ]);
+    // `publishRecenterCameraIntent` -> `resolveCameraFraming` recomputes
+    // `center` as the UNION BBOX'S OWN midpoint whenever a non-degenerate
+    // bbox is present (see useDiscoverMapData.ts's `centroidOfBbox`) —
+    // it does not just pass through `computeAreaSetCameraTarget`'s
+    // mean-of-centres `center` field verbatim. Midpoint of the union bbox
+    // asserted above: south/north from JP Nagar/Hebbal, west/east from
+    // JP Nagar/Whitefield.
+    expect(result.current.cameraIntent?.center).toEqual([
+      (JP_NAGAR.minLat + HEBBAL.maxLat) / 2,
+      (JP_NAGAR.minLon + WHITEFIELD.maxLon) / 2,
+    ]);
+  });
+});

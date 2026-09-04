@@ -19,6 +19,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createRef } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { UseInfiniteQueryResult, InfiniteData } from '@tanstack/react-query';
 import type {
   DiscoverJourneyTransitionsView,
@@ -26,7 +27,7 @@ import type {
 } from '@/features/discover/state/useDiscoverJourneyTransitions';
 import type { SchoolsByAreaResponse } from '@/hooks/useSchoolsByArea';
 import type { DiscoverBadgeResult } from '@/features/discover/presentation/discoverBadge';
-import type { DiscoverShellContextValue } from '@/features/discover/context/types';
+import type { DiscoverShellContextValue, DiscoverNavContextValue } from '@/features/discover/context/types';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 
 // Vitest 3 takes a SINGLE function-type argument. The Vitest-1 two-argument form
@@ -38,8 +39,35 @@ import type { UseAreasNavigationJourneyResult } from '@/features/discover/naviga
 // been flagged. Correct typing restores that check.
 const useDiscoverShellMock = vi.fn<() => DiscoverShellContextValue>();
 
+// Issue #2017 (test scaffolding fix) — DiscoverMapSurface now wraps the
+// (mocked-out) DiscoverMapCanvas in <AreaSetDraftProvider> internally (see
+// DiscoverMapSurface.tsx), and AreaSetDraftProvider calls useDiscoverNav()
+// directly, so this mock of the facade module must also export it. Minimal
+// valid shape — only `city`, `filters`, and `resultScope` are read by
+// AreaSetDraftProvider/useAreaSetDraft — built via vi.hoisted() to avoid the
+// TDZ inside the (hoisted) vi.mock() factory below, mirroring
+// DiscoverMapCanvas.test.tsx's BASE_NAV pattern.
+const BASE_NAV = vi.hoisted(
+  () =>
+    ({
+      city: 'bangalore',
+      areaKey: null,
+      filters: {},
+      schoolId: null,
+      radiusKm: null,
+      q: '',
+      journey: null,
+      groupId: null,
+      selectedGroup: null,
+      intent: 'buy',
+      scope: null,
+      resultScope: null,
+    }) as unknown as DiscoverNavContextValue,
+);
+
 vi.mock('@/features/discover/context/useDiscoverContext', () => ({
   useDiscoverShell: () => useDiscoverShellMock(),
+  useDiscoverNav: () => BASE_NAV,
 }));
 
 vi.mock('../../views/DiscoverMapCanvas', () => ({
@@ -336,14 +364,23 @@ function baseProps(
   });
 }
 
+// Issue #2017 (test scaffolding fix) — DiscoverMapSurface wraps its mounted
+// canvas in <AreaSetDraftProvider> internally, whose useNearbyAreaCandidates
+// call needs a QueryClient ancestor. Same
+// `new QueryClient({ defaultOptions: { queries: { retry: false } } })` +
+// QueryClientProvider convention used elsewhere in this codebase's test
+// suites (e.g. DiscoverMapCanvas.test.tsx, ListingEditorDrawer.test.tsx).
 function renderSurface(
   overrides: Record<string, unknown> = {},
 ) {
   const props = baseProps(overrides);
   const view = buildMapSurfaceModel(props);
   const commands = buildMapSurfaceCommands(props);
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <DiscoverMapSurface view={view} commands={commands} mapContainerRef={(props as { mapContainerRef: React.RefObject<HTMLDivElement> }).mapContainerRef} />,
+    <QueryClientProvider client={queryClient}>
+      <DiscoverMapSurface view={view} commands={commands} mapContainerRef={(props as { mapContainerRef: React.RefObject<HTMLDivElement> }).mapContainerRef} />
+    </QueryClientProvider>,
   );
 }
 
@@ -352,6 +389,12 @@ function mockShell(overrides: Partial<DiscoverShellContextValue> = {}): void {
     mobileView: 'LIST',
     setMobileView: vi.fn(),
     isMobileShell: false,
+    isAreaSetDraftOpen: false,
+    openAreaSetDraft: vi.fn(),
+    closeAreaSetDraft: vi.fn(),
+    fitAreaSet: vi.fn(),
+    focusAreaSetMember: vi.fn(),
+    registerAreaSetCameraActions: vi.fn(),
     ...overrides,
   });
 }

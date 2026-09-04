@@ -31,7 +31,8 @@ import { deriveAreaPointFromNode } from '@/features/discover/navigation/nodeArea
 import { ROOT_NODE_KEY } from '@/features/discover/navigation/types';
 import type { NavigationNodeResponse } from '@/features/discover/navigation/types';
 import { useAuth } from '@/contexts/AuthContext';
-import { useDiscoverActions, useDiscoverNav } from '@/features/discover/context/useDiscoverContext';
+import { useDiscoverActions, useDiscoverNav, useDiscoverShell } from '@/features/discover/context/useDiscoverContext';
+import { AreaSetDraftPanel } from '@/features/discover/components/AreaSetDraftPanel';
 import { useDiscoverCityListings } from '@/hooks/useDiscoverCityListings';
 import { useDiscoverListings } from '@/hooks/useDiscoverListings';
 import { useDiscoverSearchState } from '@/features/discover/state/useDiscoverSearchState';
@@ -813,6 +814,13 @@ function AreaLeafListingsSurface({
   const isAuthenticated = !authLoading && user !== null;
   const nav = useDiscoverNav();
   const actions = useDiscoverActions();
+  // Issue #2017 (owner-directed desktop rework) — this is the REAL area-first
+  // production render site for the canonical AREA leaf (AreaSelectedPanel
+  // below), reached directly (not through the legacy DiscoverRightPanel
+  // bridge — see this component's own module doc). On desktop, an open
+  // AREA_SET draft renders IN-PANEL (AreaSetDraftPanel) here too — see
+  // DiscoverShellContextValue.isAreaSetDraftOpen's doc.
+  const { isMobileShell, isAreaSetDraftOpen } = useDiscoverShell();
   const intentListingPurpose = nav.intent === 'rent' ? 'rent' : 'sale';
   const { searchQuery, debouncedSearch, handleSearchChange } = useDiscoverSearchState({
     urlQ: nav.q,
@@ -1209,6 +1217,9 @@ function AreaLeafListingsSurface({
         historyAdjacencyLog={historyAdjacencyLog}
         className="mb-3 shrink-0"
       />
+      {!isMobileShell && isAreaSetDraftOpen ? (
+        <AreaSetDraftPanel />
+      ) : (
       <AreaSelectedPanel
         selectedArea={areaPoint}
         // FIX CYCLE 2 (opus review, nit) — was omitted, so AreaSelectedPanel's
@@ -1298,6 +1309,7 @@ function AreaLeafListingsSurface({
         // prop omitted, relying on AreaSelectedPanel's own `= true` default,
         // same as `NodeListingsSurface`'s "Browse all" surface.
       />
+      )}
     </div>
   );
 }

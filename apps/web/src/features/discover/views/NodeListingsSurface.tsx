@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { useDiscoverNav, useDiscoverActions } from '@/features/discover/context/useDiscoverContext';
+import { useDiscoverNav, useDiscoverActions, useDiscoverShell } from '@/features/discover/context/useDiscoverContext';
+import { AreaSetDraftPanel } from '@/features/discover/components/AreaSetDraftPanel';
 import { useDiscoverSearchState } from '@/features/discover/state/useDiscoverSearchState';
 import { useDiscoverListings, type DiscoverListingItem } from '@/hooks/useDiscoverListings';
 import { useDiscoverCityListings } from '@/hooks/useDiscoverCityListings';
@@ -43,6 +44,13 @@ export function NodeListingsSurface({
   const isAuthenticated = !authLoading && user !== null;
   const nav = useDiscoverNav();
   const actions = useDiscoverActions();
+  // Issue #2017 (owner-directed desktop rework) — this is the REAL area-first
+  // production render site for the AREA-leaf entry point (AreaSelectedPanel
+  // below), not DiscoverRightPanel.tsx's legacy switch-case (which only
+  // handles non-area-first journeys via LegacyRightPanelBridge). On desktop,
+  // an open AREA_SET draft renders IN-PANEL (AreaSetDraftPanel) here too —
+  // see DiscoverShellContextValue.isAreaSetDraftOpen's doc.
+  const { isMobileShell, isAreaSetDraftOpen } = useDiscoverShell();
   const intentListingPurpose = nav.intent === 'rent' ? 'rent' : 'sale';
   const { searchQuery, debouncedSearch, handleSearchChange } = useDiscoverSearchState({
     urlQ: nav.q,
@@ -302,8 +310,21 @@ export function NodeListingsSurface({
         <ChevronLeft className="mr-1 h-4 w-4" aria-hidden="true" />
         Back to {node.displayLabel}
       </button>
+      {!isMobileShell && isAreaSetDraftOpen ? (
+        <AreaSetDraftPanel />
+      ) : (
+      <>
       <AreaSelectedPanel
         selectedArea={syntheticAreaPoint}
+        // Issue #2017 — the multi-area AREA_SET header's `useDiscoverAreas(city)`
+        // call (inside AreaSetSelectedHeader) needs the raw city slug, not just
+        // the display label below. Without this, `city` fell back to '' at the
+        // panel's own `city={city ?? ''}` default, which is below
+        // useDiscoverAreas's `enabled: city.length > 0` guard — the query never
+        // fired, so the header always rendered its generic-count fallback
+        // instead of resolved area names/counts, even once real listings had
+        // loaded.
+        city={nav.city}
         cityLabel={CITY_CONFIG[nav.city]?.label ?? nav.city}
         regionName={regionName}
         groupName={groupName}
@@ -373,6 +394,8 @@ export function NodeListingsSurface({
           </Button>
         </div>
       ) : null}
+      </>
+      )}
     </div>
   );
 }

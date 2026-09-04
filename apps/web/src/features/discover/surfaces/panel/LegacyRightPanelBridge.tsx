@@ -138,7 +138,7 @@ export function LegacyRightPanelBridge({ view, commands }: LegacyRightPanelBridg
   // Issue #1956 PR-6 (final cutover, Step 3) — `mobileView`'s only production
   // consumer (AreaGroupsLandingPanel's scroll-preserving hook) is deleted;
   // still forwarded unchanged to DiscoverRightPanel below.
-  const { nav: urlState, isMobileShell, mobileView } = view.pageContext;
+  const { nav: urlState, isMobileShell, mobileView, isAreaSetDraftOpen } = view.pageContext;
   const { actions: urlActions } = commands.pageContext;
   const isMobileMapOpen = isMobileShell && mobileView === 'MAP';
   const cityLabel = CITY_CONFIG[city]?.label ?? city;
@@ -190,6 +190,9 @@ export function LegacyRightPanelBridge({ view, commands }: LegacyRightPanelBridg
       // breakpoint split) correct in jsdom too, where media queries do not
       // evaluate.
       isMobileShell={isMobileShell}
+      // Issue #2017 (owner-directed desktop rework) — see
+      // DiscoverRightPanelProps.isAreaSetDraftOpen's own doc.
+      isAreaSetDraftOpen={isAreaSetDraftOpen}
       selectedMarkerListing={selectedMarkerListing}
       onClearAgriSelection={clearSelectedMarkerListing}
       city={city}

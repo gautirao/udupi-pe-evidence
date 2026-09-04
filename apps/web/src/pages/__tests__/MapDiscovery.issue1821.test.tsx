@@ -123,7 +123,17 @@ vi.mock('@/features/discover/context/useDiscoverContext', () => ({
   // (mobileView only, for the RH4 bboxTimerRef clear-on-leave-MAP effect).
   // This suite doesn't exercise the mobile shell, so a static desktop/LIST
   // stub is sufficient.
-  useDiscoverShell: () => ({ mobileView: 'LIST', setMobileView: vi.fn(), isMobileShell: false }),
+  useDiscoverShell: () => ({
+    mobileView: 'LIST',
+    setMobileView: vi.fn(),
+    isMobileShell: false,
+    isAreaSetDraftOpen: false,
+    openAreaSetDraft: vi.fn(),
+    closeAreaSetDraft: vi.fn(),
+    fitAreaSet: vi.fn(),
+    focusAreaSetMember: vi.fn(),
+    registerAreaSetCameraActions: vi.fn(),
+  }),
 }));
 
 vi.mock('@/hooks/useAreaGroups', () => ({

@@ -3,6 +3,11 @@ import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { escapeHtml } from '@/lib/security';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
+// Issue #2017 (max-3 visual parity, PR #2424) — the single source-of-truth
+// cap constant, same one useAreaSetDraft.ts derives `atLimit` from. Used
+// here only for the disabled-candidate card's aria-label copy ("Maximum of
+// N areas reached") so the number can never drift from the real cap.
+import { AREA_SET_MAX_AREAS } from '@/features/discover/state/useAreaSetDraft';
 import {
   computeAreaMarkers,
   computeClusterChipPlacements,
@@ -158,6 +163,32 @@ interface AreaMarkerLayerProps {
    * the parent can render the "Showing X of N areas on the map" panel note.
    */
   onMarkersComputed?: (shownCount: number, totalCount: number) => void;
+  /**
+   * Issue #2017 — areaKeys that should render as the actionable AREA_SET
+   * candidate callout (name / listing count / "View homes ›") instead of
+   * their normal marker. Used while the multi-area draft panel is open, for
+   * both current draft members and nearby-suggestion candidates. Optional;
+   * when omitted, every area renders exactly as before.
+   */
+  areaSetCandidateKeys?: string[];
+  /**
+   * Fired when an AREA_SET candidate callout (or its "View homes" line) is
+   * activated by click or keyboard (Enter/Space). Optional; unused unless
+   * areaSetCandidateKeys is also provided.
+   */
+  onAreaSetCandidateSelect?: (areaKey: string) => void;
+  /**
+   * Issue #2017 (max-3 visual parity, PR #2424) — true when the AREA_SET
+   * draft is at its cap (same `atLimit` source of truth `AreaSetChips.tsx`
+   * uses for its own candidate-button disabled styling — see
+   * `useAreaSetDraft.ts`). When true, every AREA_SET candidate callout that
+   * is NOT already selected/committed (`area.isSelected`) renders a muted,
+   * non-interactive variant and no-ops on click/Enter/Space. Already-selected
+   * candidate cards are never dimmed and stay fully interactive. Optional;
+   * defaults to false (no visual change) so every existing caller/test
+   * fixture keeps compiling/behaving identically.
+   */
+  areaSetAtMax?: boolean;
 }
 
 /** Area-cluster payload surfaced to onAreaClusterClick — original AreaPoints, not the lossy RankableArea projection. */
@@ -419,6 +450,75 @@ function makeAreaCard(
 
   return L.divIcon({
     className: 'area-marker',
+    html,
+    iconSize: undefined,
+    iconAnchor: [0, 0],
+  });
+}
+
+/**
+ * Issue #2017 — actionable AREA_SET candidate callout, used for both current
+ * multi-area draft members and nearby-suggestion candidates while the
+ * multi-area draft panel is open. Dark rounded card mirroring the visual
+ * composition of makeDestinationCard/makeSingleAreaChildCard (name / hero
+ * count / accent action line), built from this file's own local pill-marker
+ * constants rather than the markerShellHtml/markerTokens system.
+ */
+function makeAreaSetCandidateCard(area: AreaPoint, opacity: number, disabled: boolean): L.DivIcon {
+  const { text: repText, full: repFull } = truncateAreaLabel(area.areaLabel, true);
+  const repLabel = escapeHtml(repText);
+  const titleAttr = repFull ? ` title="${escapeHtml(repFull)}"` : '';
+  const count = area.listingCount ?? 0;
+  const countText = count.toLocaleString();
+  const noun = count === 1 ? 'LISTING' : 'LISTINGS';
+
+  // Issue #2017 (repo-owner feedback on PR #2424) — this callout renders
+  // both an already-committed draft member and a nearby, not-yet-added
+  // suggestion (see docstring above), but previously used one undifferentiated
+  // dark card for both. `area.isSelected` (already present on AreaPoint, no
+  // new prop wiring) now drives two visual variants matching the panel's
+  // navy/copper language: a solid copper "committed" card for draft members,
+  // and a lighter outlined/muted paper card for candidates.
+  const isCommitted = area.isSelected ?? false;
+  // Issue #2017 (max-3 visual parity, PR #2424) — `disabled` (driven by the
+  // shared `atLimit` source of truth, see AreaMarkerLayerProps.areaSetAtMax)
+  // ONLY ever mutes a not-yet-selected candidate; an already-committed card
+  // must never be dimmed or made non-interactive by the cap.
+  const isMaxDisabled = disabled && !isCommitted;
+  const ariaLabel = escapeHtml(
+    isMaxDisabled
+      ? `${area.areaLabel}, ${countText} ${count === 1 ? 'listing' : 'listings'}. Maximum of ${AREA_SET_MAX_AREAS} areas reached.`
+      : `${area.areaLabel}, ${countText} ${count === 1 ? 'listing' : 'listings'}. View homes.`,
+  );
+  const cardBg = isCommitted ? C_COPPER : isMaxDisabled ? C_STONE_400 : C_PAPER;
+  const cardBorder = isCommitted
+    ? `1px solid ${C_COPPER_HOVER}`
+    : isMaxDisabled
+      ? `1px solid ${C_GREY_400}`
+      : `1px solid ${C_COPPER}`;
+  const pinColor = isCommitted ? C_PAPER : isMaxDisabled ? C_GREY_400 : C_COPPER;
+  const labelColor = isCommitted ? C_PAPER : isMaxDisabled ? C_MUTED : C_NAVY;
+  const countColor = isCommitted ? 'rgba(255,255,255,0.78)' : C_MUTED;
+  const footerBg = isCommitted ? C_NAVY : isMaxDisabled ? C_GREY_400 : C_COPPER_TINT;
+  const footerColor = isCommitted ? C_PAPER : isMaxDisabled ? C_PAPER : C_COPPER;
+  const footerLabel = isMaxDisabled ? 'Max reached' : 'View homes <span style="font-size:13px;line-height:1;">&#8250;</span>';
+  const checkBadge = isCommitted
+    ? `<span aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:13px;height:13px;border-radius:50%;background:${C_NAVY};margin-right:1px;"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="${C_PAPER}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span>`
+    : '';
+
+  const html = `<div data-testid="area-set-candidate-marker" data-area-set-committed="${isCommitted}" data-area-set-max-disabled="${isMaxDisabled}" tabindex="0" role="button" aria-label="${ariaLabel}" aria-pressed="${isCommitted}" aria-disabled="${isMaxDisabled}" style="transform:translate(-50%,-118%);font-family:inherit;opacity:${isMaxDisabled ? 0.6 : opacity};pointer-events:auto;cursor:${isMaxDisabled ? 'default' : 'pointer'};">
+    <div class="area-set-candidate-card"${titleAttr} style="display:flex;flex-direction:column;min-width:118px;max-width:176px;border-radius:12px;overflow:hidden;background:${cardBg};box-shadow:${PILL_SHADOW};border:${cardBorder};">
+      <div style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:9px 11px 8px;">
+        <span style="display:flex;align-items:center;gap:6px;max-width:100%;">${checkBadge}${pinSvg(pinColor)}<span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;line-height:1.25;color:${labelColor};display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${repLabel}</span></span>
+        <span style="font-family:${MONO};font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:${countColor};">${countText} ${noun}</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:4px;padding:6px 11px;background:${footerBg};font-size:11.5px;font-weight:700;color:${footerColor};">${footerLabel}</div>
+    </div>
+    <div style="width:8px;height:8px;background:${footerBg};transform:rotate(45deg);margin:-5px auto 0;box-shadow:${PILL_SHADOW};"></div>
+  </div>`;
+
+  return L.divIcon({
+    className: 'area-set-candidate-marker',
     html,
     iconSize: undefined,
     iconAnchor: [0, 0],
@@ -2021,6 +2121,9 @@ export function AreaMarkerLayer({
   onAreaClusterClick,
   onAreaClusterCameraIntent,
   onMarkersComputed,
+  areaSetCandidateKeys,
+  onAreaSetCandidateSelect,
+  areaSetAtMax = false,
 }: AreaMarkerLayerProps) {
   const map = useMap();
 
@@ -2101,9 +2204,23 @@ export function AreaMarkerLayer({
           })()
         : ([area.geo_center_lat, area.geo_center_lon] as const);
 
+      // Issue #2017 — while the multi-area AREA_SET draft panel is open, a
+      // caller-designated subset of areas (current draft members + nearby
+      // suggestions) render as the actionable candidate callout instead of
+      // their normal marker.
+      const isAreaSetCandidate = areaSetCandidateKeys?.includes(area.areaKey) ?? false;
+      // Issue #2017 (max-3 visual parity, PR #2424) — the cap only mutes a
+      // NOT-yet-selected candidate; a candidate that is already a committed
+      // draft member (area.isSelected) keeps its normal interactive state.
+      const isAreaSetCandidateDisabled = isAreaSetCandidate && areaSetAtMax && !(area.isSelected ?? false);
+
       const marker = L.marker(
         [markerLat, markerLon],
-        { icon: makeAreaCard(area, 1.0, journey, selectedSchool) }
+        {
+          icon: isAreaSetCandidate
+            ? makeAreaSetCandidateCard(area, 1.0, areaSetAtMax)
+            : makeAreaCard(area, 1.0, journey, selectedSchool),
+        }
       );
 
       // Issue #1801 — this handler no longer touches the map camera directly.
@@ -2116,6 +2233,13 @@ export function AreaMarkerLayer({
       // MapController (PropertyMap.tsx) is the sole component that calls
       // map.fitBounds/flyTo/setView for area navigation.
       marker.on('click', () => {
+        if (isAreaSetCandidate) {
+          // Issue #2017 (max-3 visual parity, PR #2424) — a disabled
+          // (at-cap, not-yet-selected) candidate card no-ops on click.
+          if (isAreaSetCandidateDisabled) return;
+          onAreaSetCandidateSelect?.(area.areaKey);
+          return;
+        }
         onAreaClick?.(area);
         onAreaCameraIntent?.(area);
       });
@@ -2150,6 +2274,22 @@ export function AreaMarkerLayer({
           }
         });
       }
+
+      // AREA_SET candidate callouts carry the same tabindex/role="button"
+      // keyboard-operable contract — bridge Enter/Space into the marker's own
+      // 'click' handler here too, matching the macro-region/group pattern above.
+      if (isAreaSetCandidate) {
+        const el = marker.getElement()?.querySelector<HTMLElement>('[data-testid="area-set-candidate-marker"]');
+        el?.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            // Issue #2017 (max-3 visual parity, PR #2424) — a disabled
+            // (at-cap, not-yet-selected) candidate card no-ops on Enter/Space too.
+            if (isAreaSetCandidateDisabled) return;
+            el.click();
+          }
+        });
+      }
     }
 
     return () => {
@@ -2162,7 +2302,7 @@ export function AreaMarkerLayer({
   // macro-region compass layout — bumping it rebuilds every marker (cheap:
   // this path only ever renders a handful of navigation markers) with fresh
   // container-point projections.
-  }, [areas, map, onAreaClick, onAreaCameraIntent, focusedGroupAreas, journey, selectedSchool, enableDegradation, regionLayoutTick]);
+  }, [areas, map, onAreaClick, onAreaCameraIntent, focusedGroupAreas, journey, selectedSchool, enableDegradation, regionLayoutTick, areaSetCandidateKeys, onAreaSetCandidateSelect, areaSetAtMax]);
 
   // ── Degraded path (Issue #1798 PR-B, opt-in) ───────────────────────────────
   // Tracks the current zoom so bucketing recomputes on zoom only (pan-invariant,
@@ -2275,13 +2415,27 @@ export function AreaMarkerLayer({
         area.areaKey === selectedAreaKey ||
         area.areaKey === hoveredAreaKey ||
         (searchMatchKeys?.includes(area.areaKey) ?? false);
+      // Issue #2017 — same candidate-callout override as the legacy loop above.
+      const isAreaSetCandidate = areaSetCandidateKeys?.includes(area.areaKey) ?? false;
+      // Issue #2017 (max-3 visual parity, PR #2424) — same disabled-derivation
+      // as the legacy loop above: only mutes a not-yet-selected candidate.
+      const isAreaSetCandidateDisabled = isAreaSetCandidate && areaSetAtMax && !(area.isSelected ?? false);
       const marker = L.marker([area.geo_center_lat, area.geo_center_lon], {
-        icon: makeAreaCard(area, 1.0, journey, selectedSchool, !isForced),
+        icon: isAreaSetCandidate
+          ? makeAreaSetCandidateCard(area, 1.0, areaSetAtMax)
+          : makeAreaCard(area, 1.0, journey, selectedSchool, !isForced),
       });
       // Issue #1801 — same click contract as the legacy loop above: no direct
       // camera call here. onAreaCameraIntent publishes the optimistic intent;
       // MapController is the sole camera owner.
       marker.on('click', () => {
+        if (isAreaSetCandidate) {
+          // Issue #2017 (max-3 visual parity, PR #2424) — no-op on a
+          // disabled (at-cap, not-yet-selected) candidate card.
+          if (isAreaSetCandidateDisabled) return;
+          onAreaSetCandidateSelect?.(area.areaKey);
+          return;
+        }
         onAreaClick?.(area);
         onAreaCameraIntent?.(area);
       });
@@ -2296,6 +2450,21 @@ export function AreaMarkerLayer({
         el?.addEventListener('keydown', (e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
+            el.click();
+          }
+        });
+      }
+
+      // Same Enter/Space→click keyboard bridge as the legacy loop's AREA_SET
+      // candidate branch.
+      if (isAreaSetCandidate) {
+        const el = marker.getElement()?.querySelector<HTMLElement>('[data-testid="area-set-candidate-marker"]');
+        el?.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            // Issue #2017 (max-3 visual parity, PR #2424) — no-op on a
+            // disabled (at-cap, not-yet-selected) candidate card.
+            if (isAreaSetCandidateDisabled) return;
             el.click();
           }
         });
@@ -2413,6 +2582,9 @@ export function AreaMarkerLayer({
     selectedAreaKey,
     hoveredAreaKey,
     searchMatchKeys,
+    areaSetCandidateKeys,
+    onAreaSetCandidateSelect,
+    areaSetAtMax,
   ]);
 
   return null;

@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import type { ReactNode, RefObject, Dispatch, SetStateAction } from 'react';
-import { useDiscoverActions, useDiscoverNav, useDiscoverViewport } from '@/features/discover/context/useDiscoverContext';
+import { useDiscoverActions, useDiscoverNav, useDiscoverShell, useDiscoverViewport } from '@/features/discover/context/useDiscoverContext';
 import { PropertyMap, type PropertyListingWithImages } from '@/components/map/PropertyMap';
 import { Card } from '@/components/ui/card';
 import { DiscoverMapStatusHints } from '@/components/discover/DiscoverMapStatusHints';
@@ -36,6 +36,8 @@ import type { UseAreasNavigationJourneyResult } from '@/features/discover/naviga
 import { ReplaceResultScopeDialog } from '@/features/discover/components/ReplaceResultScopeDialog';
 import { SearchThisAreaCta } from '@/features/discover/components/map/SearchThisAreaCta';
 import { ActiveScopeChip } from '@/features/discover/components/map/ActiveScopeChip';
+import { AreaSetChips } from '@/features/discover/components/AreaSetChips';
+import { useAreaSetDraftContext } from '@/features/discover/state/AreaSetDraftContext';
 
 /**
  * Issue #1824 Slice S11a — the map-half return-tree region (mapContainerRef
@@ -220,6 +222,25 @@ export interface DiscoverMapCanvasProps {
    * unused whenever `areasNavigationJourney.node` is null.
    */
   buildNavigationNodeHref?: (nodeKey: string) => string | null;
+  /**
+   * Issue #2017 — multi-area AREA_SET draft/nearby-candidate callout pins.
+   * Threaded straight to `PropertyMap`'s prop of the same name (which
+   * forwards to `AreaMarkerLayer`'s `makeAreaSetCandidateCard()` pin
+   * renderer). Optional/defaults to unused (no candidate pins, current
+   * legacy area-pin rendering unchanged) so every existing test fixture and
+   * caller that predates this prop keeps compiling/behaving identically.
+   * The real page composition call site is expected to supply the union of
+   * the AREA_SET draft's current member areaKeys and the nearby-suggestion
+   * candidate areaKeys while the draft picker (`AreaSetChips.tsx`) is
+   * active.
+   */
+  areaSetCandidateKeys?: string[];
+  /**
+   * Issue #2017 — companion click/activate handler for
+   * `areaSetCandidateKeys` above. Threaded straight to `PropertyMap`'s prop
+   * of the same name. Optional for the same reason as `areaSetCandidateKeys`.
+   */
+  onAreaSetCandidateSelect?: (areaKey: string) => void;
   schoolZoneLabels: ZoneLabelPoint[];
   setMapZoom: Dispatch<SetStateAction<number>>;
   handleBoundsChange: (bbox: [number, number, number, number]) => void;
@@ -407,6 +428,8 @@ export function DiscoverMapCanvas({
   onAreaVisualClusterCameraIntent,
   autoAdvanceSelectNode,
   buildNavigationNodeHref,
+  areaSetCandidateKeys,
+  onAreaSetCandidateSelect,
   schoolZoneLabels,
   setMapZoom,
   handleBoundsChange,
@@ -486,6 +509,50 @@ export function DiscoverMapCanvas({
   const nav = useDiscoverNav();
   const viewport = useDiscoverViewport();
   const urlActions = useDiscoverActions();
+  const shell = useDiscoverShell();
+
+  // Issue #2017 — read the SAME shared AREA_SET draft/nearby-candidate state
+  // AreaSetChips (rendered below) drives, via the context extracted for
+  // exactly this purpose (see AreaSetDraftContext.tsx's header doc). Derives
+  // the deduped union of current draft member areaKeys + nearby-suggestion
+  // candidate areaKeys for the map's candidate-callout pins, and a select
+  // handler that adds the clicked candidate to the draft — mirroring
+  // AreaSetChips.tsx's own "add candidate" onClick (commands.add(areaKey);
+  // backend already excludes already-selected areas from candidates, so no
+  // extra atLimit/duplicate guard is needed here beyond what commands.add()
+  // already no-ops on internally).
+  const {
+    view: areaSetDraftView,
+    commands: areaSetDraftCommands,
+    data: nearbyAreaCandidatesData,
+  } = useAreaSetDraftContext();
+  // Code-review fix (PR #2424) — gated on `shell.isAreaSetDraftOpen`. Without
+  // this gate, `useAreaSetDraftContext()` always seeds `draftAreaKeys` from
+  // the committed AREA_SET and always runs the nearby-candidate query in
+  // live mode, so the three props below were previously always non-empty
+  // even with the draft editor CLOSED — AreaMarkerLayer treats any matching
+  // key as an AREA_SET candidate callout and hijacks the ordinary marker
+  // click path into `onAreaSetCandidateSelect`, which can silently mutate
+  // the in-memory draft while the editor is closed (never committed, but a
+  // surprising side effect a shopper never asked for). This candidate-callout
+  // mode is only ever meant to be active "while the multi-area draft panel
+  // is open" (see AreaSetChips.tsx/AreaSetDraftPanel.tsx) — enforcing that
+  // here, at the single place these three props reach PropertyMap, is the
+  // actual gate; `[]`/`undefined`/`false` fall AreaMarkerLayer straight back
+  // onto its normal marker-click path with zero further changes needed there.
+  const computedAreaSetCandidateKeys = shell.isAreaSetDraftOpen
+    ? Array.from(
+        new Set([
+          ...areaSetDraftView.draftAreaKeys,
+          ...(nearbyAreaCandidatesData?.candidates?.map((candidate) => candidate.areaKey) ?? []),
+        ]),
+      )
+    : [];
+  const handleAreaSetCandidateSelect = shell.isAreaSetDraftOpen
+    ? (areaKey: string) => {
+        areaSetDraftCommands.add(areaKey);
+      }
+    : undefined;
 
   // Issue #2016 — human-readable label for J3.3's confirmation body (the
   // scope about to be REPLACED, i.e. still the committed one while the
@@ -773,6 +840,27 @@ export function DiscoverMapCanvas({
           onAreaClusterCameraIntent={publishClusterCameraIntent}
           onAreaClusterClick={handleAreaClusterClick}
           onAreaMarkersComputed={handleAreaMarkersComputed}
+          // Issue #2017 — multi-area AREA_SET draft/nearby-candidate callout
+          // pins. See this component's props of the same name for the
+          // union-of-draft-member-and-candidate-keys contract. Sourced from
+          // the shared AreaSetDraftContext (see the computed locals above)
+          // rather than the incoming props — DiscoverMapCanvas now reads the
+          // draft/candidate state directly instead of relying on a caller to
+          // compute and pass it. The `areaSetCandidateKeys`/
+          // `onAreaSetCandidateSelect` props remain on
+          // DiscoverMapCanvasProps for callers/tests that still supply them,
+          // but are no longer used as the map's source of truth.
+          areaSetCandidateKeys={computedAreaSetCandidateKeys}
+          onAreaSetCandidateSelect={handleAreaSetCandidateSelect}
+          // Issue #2017 (max-3 visual parity, PR #2424) — same
+          // `atLimit` source of truth AreaSetChips.tsx uses for its own
+          // candidate-button disabled styling, read from the shared
+          // AreaSetDraftContext above. Drives the muted/disabled visual +
+          // no-op click/keyboard on not-yet-selected candidate map pins.
+          // Gated on `shell.isAreaSetDraftOpen` — see `computedAreaSetCandidateKeys`'s
+          // doc above; `false` here is part of the same "editor closed ->
+          // no AREA_SET candidate-mode signal reaches the map at all" fix.
+          areaSetAtMax={shell.isAreaSetDraftOpen && areaSetDraftView.atLimit}
           areasNavigationJourney={areasNavigationJourney}
           hoveredNavigationNodeKey={hoveredNavigationNodeKey}
           onNavigationNodeHoverChange={onNavigationNodeHoverChange}
@@ -870,6 +958,40 @@ export function DiscoverMapCanvas({
         buildNavigationNodeHref={buildNavigationNodeHref}
         mobileListButton={mobileListButton}
       />
+
+      {/* Issue #2017 — multi-area AREA_SET draft chip strip ("Selected areas" +
+          "Add area" + "Search these areas" CTA). Mounted the same way
+          <ExploreMapPanel /> is just below: a zero-prop, self-contained-via-
+          context component (reads useDiscoverNav()/useDiscoverActions()/
+          useDiscoverAreas() directly — see AreaSetChips.tsx's own doc), so it
+          does not extend DiscoverMapCanvasProps or thread through the page.
+          Positioned directly beneath the top-left context overlay above (same
+          left inset, next stacking row down) and renders null internally
+          only when the draft has zero areas (no-scope / non-AREA_SET
+          committed state). A single committed AREA_SET area still seeds one
+          chip via useAreaSetDraft, so the strip is visible from the very
+          first committed area onward — this is the "add more areas" entry
+          point, not a multi-area-only affordance. */}
+      {/* Issue #2017 mobile fix cycle — `top-14` (56px) was tuned assuming
+          the DiscoverMapContextOverlay breadcrumb above renders as a SINGLE
+          line. Below the `lg` split-view breakpoint (DiscoverMapContextOverlay
+          itself switches to its mobile-overlay row layout at this same
+          `1023px` cut — see that component's own docstring), the breadcrumb
+          can legitimately wrap onto its second row (DiscoverMapBreadcrumb.tsx
+          explicitly caps trails at up to two rows — see `maxTwoRowsClass`
+          there), growing its real rendered height past the ~52px a
+          single-line breadcrumb occupies. The worst case across every
+          breadcrumb branch this overlay can render (map-group-breadcrumb,
+          non-compact, default `py-2` padding) is `top-4`(16) + border(2) +
+          `py-2`(16) + `max-h-[44px]` = 78px, so `top-24`(96px) reserves
+          enough room with margin. At `lg`+ the breadcrumb never wraps in
+          practice (see AreasBreadcrumbTrail's own width-budget derivation),
+          so the original `top-14` is kept there, unchanged. */}
+      <div className="pointer-events-none absolute top-14 left-4 right-4 z-[999] [@media(max-width:1023px)]:top-24 lg:right-auto">
+        <div className="pointer-events-auto inline-flex max-w-full">
+          <AreaSetChips />
+        </div>
+      </div>
 
       {/* Discover map marker redesign — "EXPLORE THE MAP" guidance card, shown
           only at the bare city landing (5 macro-region bubbles: no scope and

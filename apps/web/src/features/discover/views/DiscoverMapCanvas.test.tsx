@@ -5,13 +5,14 @@
  * badge-fork import-guard (this module must never import formatDiscoverBadgeCopy /
  * deriveSchoolRadiusPillNoun / hasActiveAnonPropertyFilter — those stay page-owned).
  */
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRef } from 'react';
+import { createRef, type ReactElement } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { UseInfiniteQueryResult, InfiniteData } from '@tanstack/react-query';
 import type { DiscoverUrlState, DiscoverUrlActions } from '@/hooks/useDiscoverUrlState';
 import type {
@@ -45,6 +46,12 @@ vi.mock('@/components/map/PropertyMap', () => ({
     // destination-marker click and prove DiscoverMapCanvas wires it to
     // urlActions.setLocality (drill-down), not a generic listing callback.
     onSelectAgriDestination?: (areaKey: string) => void;
+    // Code-review fix (PR #2424) — captured so a test can prove these three
+    // AREA_SET candidate-callout props are neutralised whenever the draft
+    // editor is closed (isAreaSetDraftOpen: false), not just left as-is.
+    areaSetCandidateKeys?: string[];
+    onAreaSetCandidateSelect?: (areaKey: string) => void;
+    areaSetAtMax?: boolean;
   }) => (
     <div
       data-testid="property-map-mock"
@@ -62,8 +69,19 @@ vi.mock('@/components/map/PropertyMap', () => ({
           ? 'null'
           : props.agriDestinationMarkers.map((l) => l.id).join(',')
       }
+      data-area-set-candidate-keys={(props.areaSetCandidateKeys ?? []).join(',')}
+      data-has-area-set-candidate-select={String(typeof props.onAreaSetCandidateSelect === 'function')}
+      data-area-set-at-max={String(props.areaSetAtMax ?? false)}
       onClick={() => props.onSelectAgriDestination?.('IN|KA|Udupi|Brahmavar')}
-    />
+    >
+      <button
+        type="button"
+        data-testid="property-map-mock-candidate-select"
+        onClick={() => props.onAreaSetCandidateSelect?.('IN|KA|Bengaluru|Nagawara')}
+      >
+        simulate candidate click
+      </button>
+    </div>
   ),
 }));
 
@@ -144,13 +162,22 @@ const { BASE_URL_STATE, BASE_NAV, URL_ACTIONS } = vi.hoisted(() => {
   return { BASE_URL_STATE: urlState, BASE_NAV: nav, URL_ACTIONS: urlActions };
 });
 
+// Code-review fix (PR #2424) — DiscoverMapCanvas now also calls
+// useDiscoverShell() to gate the AREA_SET candidate-callout props on
+// isAreaSetDraftOpen. Hoisted `vi.fn()` (not a static factory literal) so
+// individual tests can flip `isAreaSetDraftOpen` via `mockReturnValue`
+// without redefining the whole vi.mock() factory.
+const mockUseDiscoverShell = vi.hoisted(() => vi.fn());
+
 vi.mock('@/features/discover/context/useDiscoverContext', () => ({
   useDiscoverNav: () => BASE_NAV,
   useDiscoverViewport: () => BASE_URL_STATE.viewport,
   useDiscoverActions: () => URL_ACTIONS,
+  useDiscoverShell: mockUseDiscoverShell,
 }));
 
 import { DiscoverMapCanvas, type DiscoverMapCanvasProps } from './DiscoverMapCanvas';
+import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftContext';
 
 const JOURNEY_VIEW: DiscoverJourneyTransitionsView = {
   startOverTick: 0,
@@ -305,10 +332,58 @@ function baseProps(overrides: Partial<DiscoverMapCanvasProps> = {}): DiscoverMap
   };
 }
 
+// Issue #2017 — AreaSetChips (mounted inside DiscoverMapCanvas's JSX, see its
+// own header doc) is a deliberately self-contained component that calls
+// useDiscoverAreas() directly rather than receiving areas as a prop, so this
+// suite's render tree needs an ancestor QueryClientProvider — the SAME
+// `new QueryClient({ defaultOptions: { queries: { retry: false } } })` +
+// QueryClientProvider pattern already used across this codebase's test
+// suites (e.g. ListingEditorDrawer.test.tsx, AreaGuide.test.tsx) for any
+// component tree with a react-query hook in it. This is test-infrastructure
+// only — DiscoverMapCanvas itself still receives everything else as props.
+//
+// Issue #2017 (test scaffolding fix) — DiscoverMapCanvas now also calls
+// useAreaSetDraftContext() directly (see its header doc / AreaSetDraftContext.tsx),
+// so every render needs an ancestor <AreaSetDraftProvider> too, nested inside the
+// QueryClientProvider above (AreaSetDraftProvider's own useNearbyAreaCandidates
+// call needs the QueryClient ancestor). AreaSetDraftProvider reads useDiscoverNav()
+// internally, which this file already mocks via BASE_NAV above.
+function renderCanvas(ui: ReactElement) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <AreaSetDraftProvider>{ui}</AreaSetDraftProvider>
+    </QueryClientProvider>,
+  );
+}
+
+// Default shell mock — `isAreaSetDraftOpen: false` matches every existing
+// test in this file (none of them open the AREA_SET draft editor), and is
+// also the state the code-review fix below specifically depends on: the
+// candidate-callout props reaching PropertyMap must be neutralised whenever
+// this is false. Individual tests override via `mockUseDiscoverShell.mockReturnValue(...)`.
+function defaultShellMock() {
+  return {
+    mobileView: 'LIST' as const,
+    setMobileView: vi.fn(),
+    isMobileShell: false,
+    isAreaSetDraftOpen: false,
+    openAreaSetDraft: vi.fn(),
+    closeAreaSetDraft: vi.fn(),
+    fitAreaSet: vi.fn(),
+    focusAreaSetMember: vi.fn(),
+    registerAreaSetCameraActions: vi.fn(),
+  };
+}
+
+beforeEach(() => {
+  mockUseDiscoverShell.mockReturnValue(defaultShellMock());
+});
+
 describe('DiscoverMapCanvas', () => {
   it('renders PropertyMap and attaches mapContainerRef to the root div', () => {
     const ref = createRef<HTMLDivElement>();
-    const { container } = render(<DiscoverMapCanvas {...baseProps({ mapContainerRef: ref })} />);
+    const { container } = renderCanvas(<DiscoverMapCanvas {...baseProps({ mapContainerRef: ref })} />);
     expect(screen.getByTestId('property-map-mock')).toBeInTheDocument();
     // The root element DiscoverMapCanvas returns must be the div carrying mapContainerRef —
     // verifies no extra wrapper node was introduced around the moved JSX (AC1/DOM parity).
@@ -316,7 +391,7 @@ describe('DiscoverMapCanvas', () => {
   });
 
   it('count_display_defect/AC3.9 (pass 4) — forwards hoveredNavigationNodeKey to PropertyMap unchanged, never re-derived', () => {
-    render(<DiscoverMapCanvas {...baseProps({ hoveredNavigationNodeKey: 'd:n' })} />);
+    renderCanvas(<DiscoverMapCanvas {...baseProps({ hoveredNavigationNodeKey: 'd:n' })} />);
     expect(screen.getByTestId('property-map-mock')).toHaveAttribute(
       'data-hovered-navigation-node-key',
       'd:n',
@@ -325,7 +400,7 @@ describe('DiscoverMapCanvas', () => {
 
   it('REQUIRED CHANGE 6 (review fix, AC4.4/AC4.5) — forwards onAreaVisualClusterCameraIntent to PropertyMap as a real function, not silently dropped', () => {
     const onAreaVisualClusterCameraIntent = vi.fn();
-    render(<DiscoverMapCanvas {...baseProps({ onAreaVisualClusterCameraIntent })} />);
+    renderCanvas(<DiscoverMapCanvas {...baseProps({ onAreaVisualClusterCameraIntent })} />);
     expect(screen.getByTestId('property-map-mock')).toHaveAttribute(
       'data-has-area-visual-cluster-camera-intent',
       'true',
@@ -343,7 +418,7 @@ describe('DiscoverMapCanvas', () => {
       const agriDestinationMarkers = [
         { id: 'IN|KA|Udupi|Brahmavar', areaKey: 'IN|KA|Udupi|Brahmavar', latitude: 13.4, longitude: 74.8, propertyType: 'agricultural_land' },
       ];
-      render(
+      renderCanvas(
         <DiscoverMapCanvas
           {...baseProps({
             selectedRegion: 'N',
@@ -369,7 +444,7 @@ describe('DiscoverMapCanvas', () => {
       const agriDestinationMarkers = [
         { id: 'IN|KA|Udupi|Brahmavar', areaKey: 'IN|KA|Udupi|Brahmavar', latitude: 13.4, longitude: 74.8, propertyType: 'agricultural_land' },
       ];
-      render(
+      renderCanvas(
         <DiscoverMapCanvas
           {...baseProps({
             selectedRegion: 'N',
@@ -386,7 +461,7 @@ describe('DiscoverMapCanvas', () => {
     });
 
     it('no region/maxKm selected (Level-1 landing) resolves both props to null — no markers, no regression', () => {
-      render(
+      renderCanvas(
         <DiscoverMapCanvas
           {...baseProps({
             selectedRegion: null,
@@ -410,7 +485,7 @@ describe('DiscoverMapCanvas', () => {
       const agriDestinationMarkers = [
         { id: 'IN|KA|Udupi|Brahmavar', areaKey: 'IN|KA|Udupi|Brahmavar', latitude: 13.4, longitude: 74.8, propertyType: 'agricultural_land' },
       ];
-      render(
+      renderCanvas(
         <DiscoverMapCanvas
           {...baseProps({
             selectedRegion: 'N',
@@ -428,7 +503,7 @@ describe('DiscoverMapCanvas', () => {
   });
 
   it('shows the error card instead of PropertyMap when error is set', () => {
-    render(<DiscoverMapCanvas {...baseProps({ error: new Error('boom') })} />);
+    renderCanvas(<DiscoverMapCanvas {...baseProps({ error: new Error('boom') })} />);
     expect(screen.queryByTestId('property-map-mock')).not.toBeInTheDocument();
     expect(screen.getByText('Failed to load listings')).toBeInTheDocument();
   });
@@ -441,7 +516,7 @@ describe('DiscoverMapCanvas', () => {
   // two tests now assert that reality (never present, in ANY panel state),
   // rather than being deleted.
   it('never renders a CitySelect/combobox, in a drill-down state (ownership moved to DiscoverControlBar)', () => {
-    render(
+    renderCanvas(
       <DiscoverMapCanvas
         {...baseProps({
           resolvedPanelContent: 'area-groups-landing',
@@ -454,12 +529,12 @@ describe('DiscoverMapCanvas', () => {
   });
 
   it('never renders a CitySelect/combobox on the guided-entry public landing either', () => {
-    render(<DiscoverMapCanvas {...baseProps({ resolvedPanelContent: 'guided-entry' })} />);
+    renderCanvas(<DiscoverMapCanvas {...baseProps({ resolvedPanelContent: 'guided-entry' })} />);
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
 
   it('renders the DiscoverMapCountBadge public-landing summary pill when cityTotal > 0', () => {
-    render(
+    renderCanvas(
       <DiscoverMapCanvas
         {...baseProps({ resolvedPanelContent: 'guided-entry', cityTotal: 42 })}
       />,
@@ -478,7 +553,7 @@ describe('DiscoverMapCanvas', () => {
   // scope already has real, correctly-filtered markers, and the prompt would
   // be a lie in that state.
   it('suppresses the anon "select an area / sign in" guidance when isBoundedBrowseState is true, even with selectedArea: null', () => {
-    render(
+    renderCanvas(
       <MemoryRouter>
         <DiscoverMapCanvas
           {...baseProps({
@@ -497,7 +572,7 @@ describe('DiscoverMapCanvas', () => {
   });
 
   it('never renders the marker popover when isMarkerPopoverEligible is false, even with a pixel position', () => {
-    render(
+    renderCanvas(
       <DiscoverMapCanvas
         {...baseProps({
           isMarkerPopoverEligible: false,
@@ -538,5 +613,93 @@ describe('DiscoverMapCanvas', () => {
     // Belt-and-suspenders: the helper identifiers themselves must never appear as a
     // named import binding (only inside comments, which this file legitimately has).
     expect(importLines).not.toMatch(/formatDiscoverBadgeCopy|deriveSchoolRadiusPillNoun|hasActiveAnonPropertyFilter/);
+  });
+});
+
+// Code-review fix (PR #2424) — AREA_SET candidate-marker mode used to stay
+// ACTIVE ON THE MAP even with the draft editor CLOSED: `computedAreaSetCandidateKeys`
+// always seeded from the committed AREA_SET (useAreaSetDraft always re-seeds
+// draftAreaKeys from the committed scope) and always ran the nearby-candidate
+// query live, with no gate on `shell.isAreaSetDraftOpen` — so
+// `areaSetCandidateKeys`/`onAreaSetCandidateSelect`/`areaSetAtMax` reached
+// PropertyMap (and therefore AreaMarkerLayer, which hijacks any matching
+// marker's click into `onAreaSetCandidateSelect` — see AreaMarkerLayer.tsx's
+// `isAreaSetCandidate = areaSetCandidateKeys?.includes(area.areaKey)`) at ALL
+// times, not just while the editor was open. This proves the fix: editor
+// closed -> normal marker path (no candidate keys/handler/max-state reach the
+// map, regardless of what's committed); editor open -> real candidate keys +
+// a real select handler reach the map; closing again restores the normal
+// path and the select handler is gone, so a stray click can no longer mutate
+// the draft.
+describe('DiscoverMapCanvas — Issue #2017 code-review fix: AREA_SET candidate-callout mode gated on isAreaSetDraftOpen', () => {
+  const COMMITTED_AREA_SET_NAV_OVERRIDE = {
+    active: {
+      kind: 'AREA_SET' as const,
+      areaKeys: ['IN|KA|Bengaluru|Hebbal', 'IN|KA|Bengaluru|Jakkur'],
+    },
+    previous: null,
+  };
+
+  afterEach(() => {
+    // BASE_NAV is a shared hoisted fixture read by every test in this file —
+    // restore it after any test here that mutates resultScope (same
+    // established pattern as the agri describe block's own afterEach above).
+    BASE_NAV.resultScope = undefined;
+  });
+
+  it('editor CLOSED (isAreaSetDraftOpen: false): PropertyMap gets NO candidate keys, NO select handler, and atMax=false — even with a committed multi-area AREA_SET', () => {
+    mockUseDiscoverShell.mockReturnValue({ ...defaultShellMock(), isAreaSetDraftOpen: false });
+    BASE_NAV.resultScope = COMMITTED_AREA_SET_NAV_OVERRIDE;
+
+    renderCanvas(<DiscoverMapCanvas {...baseProps()} />);
+
+    const map = screen.getByTestId('property-map-mock');
+    expect(map).toHaveAttribute('data-area-set-candidate-keys', '');
+    expect(map).toHaveAttribute('data-has-area-set-candidate-select', 'false');
+    expect(map).toHaveAttribute('data-area-set-at-max', 'false');
+
+    // Belt-and-braces: a click through where the candidate-select handler
+    // would have fired is a genuine no-op — no crash, no hidden mutation.
+    // (onAreaSetCandidateSelect is undefined; the mock's onClick optional-chains.)
+    fireEvent.click(screen.getByTestId('property-map-mock-candidate-select'));
+  });
+
+  it('editor OPEN (isAreaSetDraftOpen: true): PropertyMap DOES get the committed AREA_SET keys as candidates, plus a real select handler', () => {
+    mockUseDiscoverShell.mockReturnValue({ ...defaultShellMock(), isAreaSetDraftOpen: true });
+    BASE_NAV.resultScope = COMMITTED_AREA_SET_NAV_OVERRIDE;
+
+    renderCanvas(<DiscoverMapCanvas {...baseProps()} />);
+
+    const map = screen.getByTestId('property-map-mock');
+    // The draft seeds from the committed AREA_SET (useAreaSetDraft's seeding
+    // effect) — both committed areaKeys are present as candidate keys.
+    const candidateKeys = map.getAttribute('data-area-set-candidate-keys')?.split(',') ?? [];
+    expect(candidateKeys).toEqual(
+      expect.arrayContaining(['IN|KA|Bengaluru|Hebbal', 'IN|KA|Bengaluru|Jakkur']),
+    );
+    expect(map).toHaveAttribute('data-has-area-set-candidate-select', 'true');
+  });
+
+  it('close/cancel (isAreaSetDraftOpen flips true -> false on rerender): candidate mode is fully restored to the normal marker path, not left active', () => {
+    mockUseDiscoverShell.mockReturnValue({ ...defaultShellMock(), isAreaSetDraftOpen: true });
+    BASE_NAV.resultScope = COMMITTED_AREA_SET_NAV_OVERRIDE;
+
+    const { rerender } = renderCanvas(<DiscoverMapCanvas {...baseProps()} />);
+    expect(screen.getByTestId('property-map-mock')).toHaveAttribute('data-has-area-set-candidate-select', 'true');
+
+    // Simulate Cancel/close: isAreaSetDraftOpen flips back to false.
+    mockUseDiscoverShell.mockReturnValue({ ...defaultShellMock(), isAreaSetDraftOpen: false });
+    rerender(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <AreaSetDraftProvider>
+          <DiscoverMapCanvas {...baseProps()} />
+        </AreaSetDraftProvider>
+      </QueryClientProvider>,
+    );
+
+    const map = screen.getByTestId('property-map-mock');
+    expect(map).toHaveAttribute('data-area-set-candidate-keys', '');
+    expect(map).toHaveAttribute('data-has-area-set-candidate-select', 'false');
+    expect(map).toHaveAttribute('data-area-set-at-max', 'false');
   });
 });

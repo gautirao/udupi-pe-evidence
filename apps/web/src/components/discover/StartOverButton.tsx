@@ -79,7 +79,10 @@ export function StartOverButton({
   }
 
   return (
-    <Popover open={confirmOpen} onOpenChange={setConfirmOpen}>
+    <Popover
+      open={confirmOpen}
+      onOpenChange={setConfirmOpen}
+    >
       <PopoverTrigger asChild>
         <Button
           variant="ghost"

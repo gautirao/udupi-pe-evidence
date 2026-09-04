@@ -60,6 +60,24 @@ vi.mock('@/features/discover/context/useDiscoverContext', () => ({
     setSearchQuery: vi.fn(),
     enterSchoolPicking: vi.fn(),
   }),
+  // Issue #2017 (owner-directed desktop rework) — NodeListingsSurface now
+  // reads isMobileShell/isAreaSetDraftOpen directly off useDiscoverShell to
+  // decide whether to swap AreaSelectedPanel for the in-panel AREA_SET draft
+  // view. This suite's own subject (canonical nodeKey listing fetch/paging)
+  // is unrelated to that draft flow, so isAreaSetDraftOpen stays false —
+  // every existing assertion here should keep exercising AreaSelectedPanel
+  // exactly as before.
+  useDiscoverShell: () => ({
+    mobileView: 'LIST',
+    setMobileView: vi.fn(),
+    isMobileShell: false,
+    isAreaSetDraftOpen: false,
+    openAreaSetDraft: vi.fn(),
+    closeAreaSetDraft: vi.fn(),
+    fitAreaSet: vi.fn(),
+    focusAreaSetMember: vi.fn(),
+    registerAreaSetCameraActions: vi.fn(),
+  }),
 }));
 
 // Stub the heavy AreaSelectedPanel so it doesn't need its own deps tree.

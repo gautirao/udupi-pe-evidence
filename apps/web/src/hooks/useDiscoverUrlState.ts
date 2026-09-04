@@ -641,6 +641,17 @@ export interface DiscoverUrlActions {
    * (Return to Area, selecting AREA_SET/POLYGON) must keep the default PUSH.
    */
   commitResultScope: (scope: ResultScope, opts?: { history: 'push' | 'replace' }) => void;
+  /**
+   * Issue #2017 — commit a multi-area AREA_SET selection (the "commit search"
+   * action finalizing a draft chip set into URL/history). Sets `areaKey` to
+   * `primaryAreaKey` (by architecture decision: the FIRST key in the committed
+   * set, insertion order of the draft at commit time) and folds the
+   * `{kind:'AREA_SET', areaKeys}` result-scope commit into the SAME
+   * setUrlParams write (one history PUSH, mirroring selectArea's atomic-fold
+   * pattern — see #2016 code-review Finding 5). For a single-key commit this
+   * is byte-for-byte identical to selectArea's AREA_SET commit today.
+   */
+  commitAreaSet: (areaKeys: string[], opts: { primaryAreaKey: string }) => void;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────

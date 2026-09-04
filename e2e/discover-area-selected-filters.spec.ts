@@ -19,10 +19,13 @@ test.describe('@integration-ui Discover: Area-Selected Panel + Quick Filters', (
     expect(await page.locator('[data-testid="quick-chip-3-bhk"]').isVisible()).toBeTruthy();
   });
 
-  test('displays add school CTA', async ({ page }) => {
-    const cta = page.locator('[data-testid="add-school-cta"]');
+  // Issue #2017 (release-blocking fix) — the standalone "Add a school in this
+  // area" CTA was replaced by the two-tile "Schools in X / Add nearby areas"
+  // row (AreaSetTwoTileRow), matching the design mock's single-Area landing.
+  test('displays schools tile', async ({ page }) => {
+    const cta = page.locator('[data-testid="area-set-schools-tile"]');
     expect(await cta.isVisible()).toBeTruthy();
-    await expect(cta).toContainText('Add a school in this area');
+    await expect(cta).toContainText('Schools in Manipal');
   });
 
   test('toggles property type chip and filters listings', async ({ page }) => {
@@ -139,7 +142,7 @@ test.describe('@integration-ui Discover: Area-Selected Panel + Quick Filters', (
   // (schoolPicking=1) WITHOUT flipping the journey to school-first.
   test('add school CTA enters school-picking sub-step (journey stays area-first)', async ({ page }) => {
     // Click add school CTA
-    const cta = page.locator('[data-testid="add-school-cta"]');
+    const cta = page.locator('[data-testid="area-set-schools-tile"]');
     await cta.click();
 
     // URL should now have schoolPicking=1, keep journey=area-first, and preserve areaKey
@@ -159,7 +162,7 @@ test.describe('@integration-ui Discover: Area-Selected Panel + Quick Filters', (
     expect(url).toContain('type=apartment');
 
     // Click add school CTA
-    await page.locator('[data-testid="add-school-cta"]').click();
+    await page.locator('[data-testid="area-set-schools-tile"]').click();
     await page.waitForURL(/schoolPicking=1/, { timeout: 5_000 });
 
     // Property filters should still be in URL; journey remains area-first
@@ -264,11 +267,11 @@ test.describe('@integration-ui Add a school in this area — reversibility (Issu
     await page.goto(AREA_FIRST_URL);
     await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
     // Confirm we start in the area-selected panel.
-    await expect(page.locator('[data-testid="add-school-cta"]')).toBeVisible();
+    await expect(page.locator('[data-testid="area-set-schools-tile"]')).toBeVisible();
   });
 
   test('T1: CTA enters schoolPicking sub-step without flipping journey', async ({ page }) => {
-    await page.locator('[data-testid="add-school-cta"]').click();
+    await page.locator('[data-testid="area-set-schools-tile"]').click();
 
     await page.waitForURL(/schoolPicking=1/, { timeout: 5_000 });
     const url = page.url();
@@ -282,7 +285,7 @@ test.describe('@integration-ui Add a school in this area — reversibility (Issu
   });
 
   test('T2: in-app Back returns to area-selected, dropping schoolPicking', async ({ page }) => {
-    await page.locator('[data-testid="add-school-cta"]').click();
+    await page.locator('[data-testid="area-set-schools-tile"]').click();
     await page.waitForURL(/schoolPicking=1/, { timeout: 5_000 });
     await expect(schoolsInAreaMarker(page)).toBeVisible();
 
@@ -296,11 +299,11 @@ test.describe('@integration-ui Add a school in this area — reversibility (Issu
     expect(url).not.toContain('schoolPicking');
 
     // Back in the area-selected panel: the CTA is visible again.
-    await expect(page.locator('[data-testid="add-school-cta"]')).toBeVisible();
+    await expect(page.locator('[data-testid="area-set-schools-tile"]')).toBeVisible();
   });
 
   test('T3: browser Back returns to area-selected (journey not school-first)', async ({ page }) => {
-    await page.locator('[data-testid="add-school-cta"]').click();
+    await page.locator('[data-testid="area-set-schools-tile"]').click();
     await page.waitForURL(/schoolPicking=1/, { timeout: 5_000 });
     await expect(schoolsInAreaMarker(page)).toBeVisible();
 
@@ -314,14 +317,14 @@ test.describe('@integration-ui Add a school in this area — reversibility (Issu
     expect(url).not.toContain('journey=school-first');
 
     // Back in the area-selected panel.
-    await expect(page.locator('[data-testid="add-school-cta"]')).toBeVisible();
+    await expect(page.locator('[data-testid="area-set-schools-tile"]')).toBeVisible();
   });
 
   // Issue #1157 Option (i) — the area-first sub-step reuses the same schools query as
   // school-first (so the list is non-empty) and selecting a school routes to
   // area-school-combined WITHOUT flipping the journey.
   test('T4: school-picking sub-step shows the area schools (>0 cards)', async ({ page }) => {
-    await page.locator('[data-testid="add-school-cta"]').click();
+    await page.locator('[data-testid="area-set-schools-tile"]').click();
     await page.waitForURL(/schoolPicking=1/, { timeout: 5_000 });
     await expect(schoolsInAreaMarker(page)).toBeVisible();
 
@@ -332,7 +335,7 @@ test.describe('@integration-ui Add a school in this area — reversibility (Issu
   });
 
   test('T5: selecting a school → schoolId set, journey stays area-first, combined panel', async ({ page }) => {
-    await page.locator('[data-testid="add-school-cta"]').click();
+    await page.locator('[data-testid="area-set-schools-tile"]').click();
     await page.waitForURL(/schoolPicking=1/, { timeout: 5_000 });
 
     const firstCard = page.locator('[data-testid="school-card"]').first();
@@ -369,7 +372,7 @@ test.describe('@integration-ui Add a school in this area — reversibility (Issu
   // DEFECT A — the area-first school-picking sub-step must show school MARKERS on the
   // map (not just cards). Marker count must agree with the rendered card count.
   test('T7 (AC6): school-picking sub-step shows school markers on the map (count matches cards)', async ({ page }) => {
-    await page.locator('[data-testid="add-school-cta"]').click();
+    await page.locator('[data-testid="area-set-schools-tile"]').click();
     await page.waitForURL(/schoolPicking=1/, { timeout: 5_000 });
     await expect(schoolsInAreaMarker(page)).toBeVisible();
 
@@ -389,7 +392,7 @@ test.describe('@integration-ui Add a school in this area — reversibility (Issu
 
   // AC7 — after selecting a school the selected pin (school-marker) + radius circle render.
   test('AC7: selecting a school renders the selected pin and the radius circle', async ({ page }) => {
-    await page.locator('[data-testid="add-school-cta"]').click();
+    await page.locator('[data-testid="area-set-schools-tile"]').click();
     await page.waitForURL(/schoolPicking=1/, { timeout: 5_000 });
 
     const firstCard = page.locator('[data-testid="school-card"]').first();
@@ -409,7 +412,7 @@ test.describe('@integration-ui Add a school in this area — reversibility (Issu
   // stays area-first, areaKey is intact, the radius circle unmounts, and the area's
   // school markers reappear.
   test('T8 (AC8): Back from selected school returns to schools-in-area, circle gone, markers back', async ({ page }) => {
-    await page.locator('[data-testid="add-school-cta"]').click();
+    await page.locator('[data-testid="area-set-schools-tile"]').click();
     await page.waitForURL(/schoolPicking=1/, { timeout: 5_000 });
 
     const firstCard = page.locator('[data-testid="school-card"]').first();
@@ -530,15 +533,17 @@ test.describe('@integration-ui Issue #2124 — canonical Area (node=) schoolPick
     expect(nodeParam(page)).toBe(AREA_RR_NAGAR);
   });
 
-  // Req #1 — CTA renders at a canonical AREA leaf.
-  test('C1: "Add a school in this area" CTA renders at the canonical AREA leaf', async ({ page }) => {
-    await expect(page.getByTestId('add-school-cta')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('add-school-cta')).toContainText('Add a school in this area');
+  // Req #1 — schools tile renders at a canonical AREA leaf (Issue #2017 —
+  // formerly a standalone "Add a school in this area" CTA, now the two-tile
+  // row's schools tile, labelled "Schools in {area}").
+  test('C1: schools tile renders at the canonical AREA leaf', async ({ page }) => {
+    await expect(page.getByTestId('area-set-schools-tile')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('area-set-schools-tile')).toContainText('Schools in RR Nagar');
   });
 
   // Req #2 — click writes schoolPicking=1, journey stays area-first, node unchanged.
   test('C2: CTA click writes schoolPicking=1 without flipping journey or changing node', async ({ page }) => {
-    await page.getByTestId('add-school-cta').click();
+    await page.getByTestId('area-set-schools-tile').click();
 
     await expect.poll(() => new URL(page.url()).searchParams.get('schoolPicking')).toBe('1');
     const url = page.url();
@@ -552,7 +557,7 @@ test.describe('@integration-ui Issue #2124 — canonical Area (node=) schoolPick
   test('C3/C4: schoolPicking sub-step renders the schools-in-area panel with real school cards', async ({
     page,
   }) => {
-    await page.getByTestId('add-school-cta').click();
+    await page.getByTestId('area-set-schools-tile').click();
     await expect.poll(() => new URL(page.url()).searchParams.get('schoolPicking')).toBe('1');
 
     // Real DOM content, not just the URL: the canonical schools-in-area wrapper
@@ -570,7 +575,7 @@ test.describe('@integration-ui Issue #2124 — canonical Area (node=) schoolPick
   // Req #5 — selecting a school writes schoolId, retains the same canonical
   // node/areaKey context, and mounts the combined area+school panel.
   test('C5: selecting a school writes schoolId and retains the canonical node context', async ({ page }) => {
-    await page.getByTestId('add-school-cta').click();
+    await page.getByTestId('area-set-schools-tile').click();
     await expect.poll(() => new URL(page.url()).searchParams.get('schoolPicking')).toBe('1');
 
     const firstCard = page.getByTestId('school-card').first();
@@ -598,7 +603,7 @@ test.describe('@integration-ui Issue #2124 — canonical Area (node=) schoolPick
   test('C6: in-app Back from the combined panel restores schools-in-area, then the AREA leaf', async ({
     page,
   }) => {
-    await page.getByTestId('add-school-cta').click();
+    await page.getByTestId('area-set-schools-tile').click();
     await expect.poll(() => new URL(page.url()).searchParams.get('schoolPicking')).toBe('1');
 
     const firstCard = page.getByTestId('school-card').first();
@@ -620,12 +625,12 @@ test.describe('@integration-ui Issue #2124 — canonical Area (node=) schoolPick
     await expect.poll(() => new URL(page.url()).searchParams.get('schoolPicking')).toBeNull();
     expect(nodeParam(page)).toBe(AREA_RR_NAGAR);
     await expect(page.getByTestId('areas-journey-panel-listings')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('add-school-cta')).toBeVisible();
+    await expect(page.getByTestId('area-set-schools-tile')).toBeVisible();
   });
 
   // Req #7 — native browser Back restores the same canonical AREA state.
   test('C7: browser Back restores the same canonical AREA state', async ({ page }) => {
-    await page.getByTestId('add-school-cta').click();
+    await page.getByTestId('area-set-schools-tile').click();
     await expect.poll(() => new URL(page.url()).searchParams.get('schoolPicking')).toBe('1');
     await expect(page.getByTestId('areas-journey-panel-schools-in-area')).toBeVisible({ timeout: 15_000 });
 
@@ -638,7 +643,7 @@ test.describe('@integration-ui Issue #2124 — canonical Area (node=) schoolPick
     expect(url).not.toContain('journey=school-first');
     expect(nodeParam(page)).toBe(AREA_RR_NAGAR);
     await expect(page.getByTestId('areas-journey-panel-listings')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('add-school-cta')).toBeVisible();
+    await expect(page.getByTestId('area-set-schools-tile')).toBeVisible();
   });
 
   // Req #8 — a fresh page load/refresh with node= + schoolPicking=1 already in
@@ -677,7 +682,7 @@ test.describe('@integration-ui Issue #2124 — canonical Area (node=) schoolPick
     expect(nodeParam(page)).toBe(AREA_RR_NAGAR);
     await expect(page.getByTestId('areas-journey-panel-listings')).toBeVisible({ timeout: 15_000 });
 
-    const addSchoolCta = page.getByTestId('add-school-cta');
+    const addSchoolCta = page.getByTestId('area-set-schools-tile');
     await expect(addSchoolCta).toBeVisible({ timeout: 15_000 });
     await addSchoolCta.click();
 

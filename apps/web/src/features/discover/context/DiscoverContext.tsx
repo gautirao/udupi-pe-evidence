@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -13,6 +14,7 @@ import { useDiscoverUrlState, type DiscoverUrlActions } from '@/hooks/useDiscove
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useDiscoverSource } from '@/features/discover/state/DiscoverDataSourceContext';
 import type {
+  AreaSetCameraActions,
   DiscoverActionsContextValue,
   DiscoverNavContextValue,
   DiscoverShellContextValue,
@@ -99,6 +101,15 @@ const ACTION_KEYS = [
   'setIntent',
   'setSchoolJourney',
   'goToNode',
+  // #1943 pre-existing gap fix (discovered while root-causing #2017's
+  // commitAreaSet ActionKeysExhaustive failure) — this key predates #2017
+  // entirely and is unrelated to this PR's scope. It was already missing
+  // from the exhaustive list before this PR touched the file; the build-time
+  // guard just never caught it because `tsc -p tsconfig.app.json --noEmit`
+  // (the actual project typecheck script) wasn't the command being run to
+  // verify prior fixes to this same array. Same class of gap as the #2203
+  // `enterSchoolsJourneyAtArea` entry below.
+  'goToNodeReplacingCurrent',
   'goToAncestorNode',
   'clearNode',
   'enterAreasJourney',
@@ -120,6 +131,10 @@ const ACTION_KEYS = [
   // receives) would silently be undefined at runtime even though TypeScript
   // reports it as present — buildStableActions only forwards keys listed here.
   'commitResultScope',
+  // Issue #2017 — multi-area AREA_SET commit. Same requirement as
+  // commitResultScope above: omitting it here fails ActionKeysExhaustive AND
+  // leaves `actions.commitAreaSet` silently undefined at runtime.
+  'commitAreaSet',
 ] as const satisfies readonly (keyof DiscoverUrlActions)[];
 
 // A deliberately-omitted (or renamed/added) DiscoverUrlActions key makes this
@@ -250,9 +265,63 @@ export function DiscoverProvider({ children }: DiscoverProviderProps) {
     wasMobileShellRef.current = isMobileShell;
   }, [isMobileShell]);
 
+  // Issue #2017 — see DiscoverShellContextValue.isAreaSetDraftOpen's doc.
+  // Persistent (not one-shot) so both the mobile map-anchored popover
+  // (AreaSetChips) and the desktop in-panel draft view (AreaSetDraftPanel,
+  // owner-directed rework) can read the SAME open/closed level regardless of
+  // mount order — a level-triggered boolean is naturally race-free for the
+  // "caller opens before the consumer mounts" case the old one-shot
+  // pending/consume pair existed to work around.
+  const [isAreaSetDraftOpen, setIsAreaSetDraftOpen] = useState(false);
+  const openAreaSetDraft = useCallback(() => {
+    setIsAreaSetDraftOpen(true);
+  }, []);
+  const closeAreaSetDraft = useCallback(() => {
+    setIsAreaSetDraftOpen(false);
+  }, []);
+
+  // Issue #2017 (Fit all / focus-one) — same ref-indirection idiom as
+  // `actionsRef`/`buildStableActions` above: `useDiscoverMapDataController`
+  // is a DESCENDANT of this provider (it needs `nav`, itself sourced from
+  // here), so it cannot hand its camera actions to this provider via a
+  // prop — it registers them into this ref instead, and every consumer of
+  // `shell.fitAreaSet`/`focusAreaSetMember` gets a stable function whose
+  // identity never changes across renders, delegating to whatever is
+  // currently registered (or safely no-op-ing before registration/after
+  // unmount).
+  const cameraActionsRef = useRef<AreaSetCameraActions | null>(null);
+  const fitAreaSet = useCallback(() => {
+    cameraActionsRef.current?.fitAreaSet();
+  }, []);
+  const focusAreaSetMember = useCallback((areaKey: string) => {
+    cameraActionsRef.current?.focusAreaSetMember(areaKey);
+  }, []);
+  const registerAreaSetCameraActions = useCallback((actions: AreaSetCameraActions | null) => {
+    cameraActionsRef.current = actions;
+  }, []);
+
   const shell = useMemo<DiscoverShellContextValue>(
-    () => ({ mobileView, setMobileView, isMobileShell }),
-    [mobileView, isMobileShell],
+    () => ({
+      mobileView,
+      setMobileView,
+      isMobileShell,
+      isAreaSetDraftOpen,
+      openAreaSetDraft,
+      closeAreaSetDraft,
+      fitAreaSet,
+      focusAreaSetMember,
+      registerAreaSetCameraActions,
+    }),
+    [
+      mobileView,
+      isMobileShell,
+      isAreaSetDraftOpen,
+      openAreaSetDraft,
+      closeAreaSetDraft,
+      fitAreaSet,
+      focusAreaSetMember,
+      registerAreaSetCameraActions,
+    ],
   );
 
   return (

@@ -204,7 +204,7 @@ describe('Issue #1798 — area-first / school-first Hebbal school-lookup consist
 
     renderAt(AREA_FIRST_URL);
 
-    const addSchoolButton = await screen.findByTestId('add-school-cta');
+    const addSchoolButton = await screen.findByTestId('area-set-schools-tile');
     await userEvent.setup().click(addSchoolButton);
 
     await expectHebbalSchoolsVisible();
@@ -227,7 +227,7 @@ describe('Issue #1798 — area-first / school-first Hebbal school-lookup consist
 
     renderAt(AREA_FIRST_URL_EXPLICIT);
 
-    const addSchoolButton = await screen.findByTestId('add-school-cta');
+    const addSchoolButton = await screen.findByTestId('area-set-schools-tile');
     await userEvent.setup().click(addSchoolButton);
 
     await expectHebbalSchoolsVisible();
@@ -240,7 +240,7 @@ describe('Issue #1798 — area-first / school-first Hebbal school-lookup consist
 
     renderAt(EMPTY_AREA_URL);
 
-    const addSchoolButton = await screen.findByTestId('add-school-cta');
+    const addSchoolButton = await screen.findByTestId('area-set-schools-tile');
     await userEvent.setup().click(addSchoolButton);
 
     await waitFor(() => {

@@ -49,6 +49,7 @@ import { formatMemberAreaSummary, buildAreaNameIndex } from '@/utils/areaNameSum
 import { prettifyZoneSlug } from '@/components/discover/SchoolRadiusMapOverlay';
 import { PropertyCard } from './PropertyCard';
 import type { AnonViewportListingItem } from '@/lib/anonViewportListing';
+import { AreaSetDraftPanel } from '@/features/discover/components/AreaSetDraftPanel';
 
 // ─── CorridorLandingPanel — corridor-first two-level UX (Issue #1429) ─────────
 
@@ -614,6 +615,18 @@ export interface DiscoverRightPanelProps {
    * that don't care about the control bar.
    */
   isMobileShell?: boolean;
+  /**
+   * Issue #2017 (owner-directed desktop rework) — the same cross-tree
+   * `isAreaSetDraftOpen` level AreaSetChips's mobile popover reads (see
+   * DiscoverShellContextValue's doc). Threaded as a prop, mirroring
+   * `isMobileShell` above, for the same reason: this component's many
+   * isolated DiscoverRightPanel.*.test.tsx callers don't provision the
+   * Discover shell context, so reading it via a hook here would break them.
+   * Defaults to `false` (never show the desktop in-panel draft view) so
+   * every existing caller/test is unaffected; the real production caller
+   * (LegacyRightPanelBridge.tsx) always passes the live value.
+   */
+  isAreaSetDraftOpen?: boolean;
   /** Called when the user selects a group from the landing panel. Still used by the school-first zone panels. */
   onSelectGroup?: (groupId: string) => void;
   /**
@@ -1050,6 +1063,7 @@ export function DiscoverRightPanel({
   scopeNamespaces,
   isMobileMapOpen = false,
   isMobileShell = true,
+  isAreaSetDraftOpen = false,
   onSelectGroup,
   groupId = null,
   onClearGroup,
@@ -1676,6 +1690,16 @@ export function DiscoverRightPanel({
             return isLoadingAreas ? renderAreaHydrating() : renderAreaNotFound(urlAreaKey);
           }
           return <GuidedEntryPanel {...guidedEntryProps} />;
+        }
+        // Issue #2017 (owner-directed desktop rework, PR #2424) — on
+        // desktop, an open AREA_SET draft renders IN-PANEL (matching the
+        // design mock's right-panel structure) instead of AreaSelectedPanel.
+        // Mobile keeps AreaSetChips's map-anchored popover (see that
+        // component's own doc for why: map and panel are the same
+        // single-column surface there, so a popover reads correctly) — this
+        // branch is desktop-only by design.
+        if (!isMobileShell && isAreaSetDraftOpen) {
+          return <AreaSetDraftPanel />;
         }
         const activeGroup = areaGroups.find((g) => g.id === groupId);
         const regionName =

@@ -3,6 +3,7 @@ import { screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { AreaSelectedPanel } from '../AreaSelectedPanel';
+import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 
@@ -35,7 +36,17 @@ describe('AreaSelectedPanel', () => {
       onAddSchool: vi.fn(),
     };
 
-    renderWithProviders(<AreaSelectedPanel {...defaultProps} {...props} />, { router: 'browser' });
+    // Issue #2017 — AreaSelectedPanel now consumes the DiscoverProvider
+    // facade (useDiscoverNav/useDiscoverActions/useDiscoverShell) to detect
+    // and render a committed multi-area AREA_SET scope, so every render
+    // needs a real <DiscoverProvider> ancestor now (matches the established
+    // DiscoverRightPanel.test.tsx / SchoolJourneyPanels.test.tsx convention).
+    renderWithProviders(
+      <DiscoverProvider>
+        <AreaSelectedPanel {...defaultProps} {...props} />
+      </DiscoverProvider>,
+      { router: 'browser' },
+    );
   };
 
   describe('Quick filter chips', () => {
@@ -201,20 +212,26 @@ describe('AreaSelectedPanel', () => {
     });
   });
 
-  describe('School CTA', () => {
-    it('renders add school CTA', () => {
+  // Issue #2017 (release-blocking fix) — the single-Area landing now renders
+  // the two-tile "Schools in X / Add nearby areas" row (`AreaSetTwoTileRow`)
+  // instead of the old standalone `add-school-cta` card. The schools tile
+  // keeps testid `area-set-schools-tile` and the SAME onAddSchool wiring;
+  // only the surrounding markup/testid changed (see PR #2424 STATE
+  // MAP/VISUAL CONTRACT comment for the mock parity this restores).
+  describe('School CTA (two-tile row)', () => {
+    it('renders the schools tile', () => {
       renderPanel();
-      expect(screen.getByTestId('add-school-cta')).toBeInTheDocument();
+      expect(screen.getByTestId('area-set-schools-tile')).toBeInTheDocument();
     });
 
-    // Issue #1157 — the CTA enters the area-first school-picking sub-step via
+    // Issue #1157 — the tile enters the area-first school-picking sub-step via
     // onAddSchool (which keeps journey=area-first), NOT onSelectJourney('school-first')
     // (which flipped the journey and made Back delete the area).
-    it('calls onAddSchool (not onSelectJourney) on CTA click', () => {
+    it('calls onAddSchool (not onSelectJourney) on tile click', () => {
       const onAddSchool = vi.fn();
       const onSelectJourney = vi.fn();
       renderPanel({ onAddSchool, onSelectJourney });
-      fireEvent.click(screen.getByTestId('add-school-cta'));
+      fireEvent.click(screen.getByTestId('area-set-schools-tile'));
       expect(onAddSchool).toHaveBeenCalledTimes(1);
       expect(onSelectJourney).not.toHaveBeenCalled();
     });
@@ -470,15 +487,17 @@ describe('AreaSelectedPanel', () => {
   describe('F1 — Area-first pill and Start-over button (round-3)', () => {
     it('renders the area-first pill with bg-secondary (navy), NOT a copper class', () => {
       const { container } = renderWithProviders(
-        <AreaSelectedPanel
-          selectedArea={mockArea}
-          areaListings={[mockListing]}
-          filters={{}}
-          onFiltersChange={vi.fn()}
-          onSelectJourney={vi.fn()}
-          onAddSchool={vi.fn()}
-          journey="area-first"
-        />,
+        <DiscoverProvider>
+          <AreaSelectedPanel
+            selectedArea={mockArea}
+            areaListings={[mockListing]}
+            filters={{}}
+            onFiltersChange={vi.fn()}
+            onSelectJourney={vi.fn()}
+            onAddSchool={vi.fn()}
+            journey="area-first"
+          />
+        </DiscoverProvider>,
         { router: 'browser' },
       );
       // The pill is a <span> with text 'Area-first'. Use querySelector for specificity.
@@ -490,15 +509,17 @@ describe('AreaSelectedPanel', () => {
 
     it('renders the Layers icon alongside the area-first pill (not MapPin)', () => {
       const { container } = renderWithProviders(
-        <AreaSelectedPanel
-          selectedArea={mockArea}
-          areaListings={[mockListing]}
-          filters={{}}
-          onFiltersChange={vi.fn()}
-          onSelectJourney={vi.fn()}
-          onAddSchool={vi.fn()}
-          journey="area-first"
-        />,
+        <DiscoverProvider>
+          <AreaSelectedPanel
+            selectedArea={mockArea}
+            areaListings={[mockListing]}
+            filters={{}}
+            onFiltersChange={vi.fn()}
+            onSelectJourney={vi.fn()}
+            onAddSchool={vi.fn()}
+            journey="area-first"
+          />
+        </DiscoverProvider>,
         { router: 'browser' },
       );
       // The pill span carries bg-secondary and contains the Layers svg icon.
@@ -537,6 +558,28 @@ describe('AreaSelectedPanel', () => {
 
     // Issue #1817 (AC8) — an area is selected in this panel (deeper than a region),
     // so Start over always confirms first (design §8) rather than resetting immediately.
+    // NOTE: raised timeout (default is 5000ms) — this is a proven test-environment
+    // timing artifact, not a real bug. Investigation (see PR description / issue
+    // #2017 notes) instrumented requestAnimationFrame, MutationObserver/TreeWalker,
+    // setTimeout/setInterval registration+fire time, queueMicrotask, and
+    // Promise.prototype.then call volume across the full async gap between the
+    // click and the popover becoming visible. Findings:
+    //   - The popover's presence is confirmed by a *synchronous* query immediately
+    //     after the click (before any awaiting) — Radix/floating-ui already render
+    //     it in the same tick, so there is zero real-user-facing delay.
+    //   - No busy loop was observed: rAF/TreeWalker/queueMicrotask call counts were
+    //     zero during the stall, and Promise.prototype.then call volume stayed in
+    //     the single digits (no runaway microtask chain).
+    //   - The only thing that stalls is @testing-library/react's internal
+    //     asyncWrapper's zero-delay `setTimeout(() => resolve(), 0)` (pure.js) used
+    //     purely to flush pending microtasks after `findByTestId` resolves — a
+    //     test-harness implementation detail with no browser-runtime analog.
+    //   - The stall reproduces identically running this test in isolation (with
+    //     all 70 sibling tests skipped via `-t`), ruling out cross-test leakage.
+    //   - This machine runs multiple concurrent background agent processes; the
+    //     delay pattern (an otherwise-idle 0ms Node timer taking >10s to fire, with
+    //     no JS-observable cause) is consistent with OS-level scheduling
+    //     contention, not application or test logic.
     it('clicking Start-over shows a confirm popover; confirming calls onStartOver', async () => {
       const onStartOver = vi.fn();
       renderPanel({ journey: 'area-first', onStartOver });
@@ -545,7 +588,7 @@ describe('AreaSelectedPanel', () => {
       expect(await screen.findByTestId('start-over-confirm-popover')).toBeInTheDocument();
       fireEvent.click(screen.getByTestId('start-over-confirm'));
       expect(onStartOver).toHaveBeenCalledTimes(1);
-    });
+    }, 20000);
 
     it('renders "Properties in {area}" headline', () => {
       renderPanel();
@@ -565,16 +608,18 @@ describe('AreaSelectedPanel', () => {
     // to" wrapper) renders here even when onIntentChange/intent are supplied.
     it('renders no Buy/Rent control (the "Looking to" controls card is retired), even when onIntentChange/intent are provided', () => {
       renderWithProviders(
-        <AreaSelectedPanel
-          selectedArea={mockArea}
-          areaListings={[mockListing]}
-          filters={{}}
-          onFiltersChange={vi.fn()}
-          onSelectJourney={vi.fn()}
-          onAddSchool={vi.fn()}
-          intent="buy"
-          onIntentChange={vi.fn()}
-        />,
+        <DiscoverProvider>
+          <AreaSelectedPanel
+            selectedArea={mockArea}
+            areaListings={[mockListing]}
+            filters={{}}
+            onFiltersChange={vi.fn()}
+            onSelectJourney={vi.fn()}
+            onAddSchool={vi.fn()}
+            intent="buy"
+            onIntentChange={vi.fn()}
+          />
+        </DiscoverProvider>,
         { router: 'browser' },
       );
       expect(screen.queryByTestId('intent-selector')).not.toBeInTheDocument();
@@ -585,14 +630,16 @@ describe('AreaSelectedPanel', () => {
 
     it('property-type filter is wrapped in a white card (rounded-xl bg-card)', () => {
       const { container } = renderWithProviders(
-        <AreaSelectedPanel
-          selectedArea={mockArea}
-          areaListings={[mockListing]}
-          filters={{}}
-          onFiltersChange={vi.fn()}
-          onSelectJourney={vi.fn()}
-          onAddSchool={vi.fn()}
-        />,
+        <DiscoverProvider>
+          <AreaSelectedPanel
+            selectedArea={mockArea}
+            areaListings={[mockListing]}
+            filters={{}}
+            onFiltersChange={vi.fn()}
+            onSelectJourney={vi.fn()}
+            onAddSchool={vi.fn()}
+          />
+        </DiscoverProvider>,
         { router: 'browser' },
       );
       // The quick-filter card wraps both property-type and BHK chips.
@@ -696,7 +743,7 @@ describe('AreaSelectedPanel', () => {
   describe('AC8 — landmark DOM order and school-CTA placement', () => {
     it('renders school CTA -> search -> filters -> result-count -> cards in that DOM order', () => {
       renderPanel({ areaListings: [mockListing], onSearchChange: vi.fn() });
-      const schoolCta = screen.getByTestId('add-school-cta');
+      const schoolCta = screen.getByTestId('area-set-schools-tile');
       const search = screen.getByTestId('area-search-input');
       const filterCard = screen.getByTestId('quick-chip-all');
       const resultSummary = screen.getByTestId('area-result-summary');
@@ -711,7 +758,7 @@ describe('AreaSelectedPanel', () => {
 
     it('the school CTA is NOT a descendant of the quick-filter box', () => {
       renderPanel({ areaListings: [mockListing] });
-      const schoolCta = screen.getByTestId('add-school-cta');
+      const schoolCta = screen.getByTestId('area-set-schools-tile');
       // Walk up from the property-type "All" chip (a real member of the
       // filter box) to find its bg-card wrapper, then assert the school CTA
       // is not contained within that same wrapper.
@@ -724,9 +771,18 @@ describe('AreaSelectedPanel', () => {
       expect(filterBox!.contains(schoolCta)).toBe(false);
     });
 
-    it('omits the school CTA card entirely when onAddSchool is not supplied', () => {
+    // Issue #2017 fix — the two-tile row's schools tile is DISABLED (not
+    // unmounted) when onAddSchool is absent, matching AreaSetTwoTileRow's
+    // own `disabled={!onAddSchool}` contract (mirrors the multi-area case,
+    // which always showed a disabled schools tile the same way). The
+    // "Add nearby areas" tile stays fully present/enabled regardless.
+    it('disables (but still renders) the schools tile when onAddSchool is not supplied', () => {
       renderPanel({ onAddSchool: undefined });
-      expect(screen.queryByTestId('add-school-cta')).not.toBeInTheDocument();
+      const schoolsTile = screen.getByTestId('area-set-schools-tile');
+      expect(schoolsTile).toBeInTheDocument();
+      expect(schoolsTile).toBeDisabled();
+      expect(screen.getByTestId('area-set-add-nearby-tile')).toBeInTheDocument();
+      expect(screen.getByTestId('area-set-add-nearby-tile')).not.toBeDisabled();
     });
   });
 

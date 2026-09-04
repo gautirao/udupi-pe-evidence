@@ -38,6 +38,7 @@ type AreaActions = Pick<
   | 'clearGroupResults'
   | 'setJourney'
   | 'startOver'
+  | 'commitAreaSet'
 >;
 
 export function useAreaUrlDomain(ctx: UrlDomainCtx): UrlDomainModule<AreaState, AreaActions> {
@@ -279,6 +280,36 @@ export function useAreaUrlDomain(ctx: UrlDomainCtx): UrlDomainModule<AreaState, 
     [setUrlParams],
   );
 
+  // Issue #2017 — commit a multi-area AREA_SET selection (the "commit search"
+  // action finalizing a draft chip set into URL/history). Mirrors selectArea's
+  // atomic-fold pattern exactly: areaKey + the rscope/rareas payload land in
+  // ONE setUrlParams call / one history entry, never two racing writes.
+  //
+  // areaKey is set to `primaryAreaKey` — by #2017's architecture decision, this
+  // is the FIRST key in the committed set (draft insertion order at commit
+  // time). areaKey remains the single-area panel/camera anchor for any UI not
+  // yet multi-area-aware; `rareas` (via applyResultScopeCommit) carries the
+  // full committed set and is authoritative for querying/filtering.
+  //
+  // For a single-key commit (areaKeys.length === 1, primaryAreaKey === that
+  // key), this produces a byte-for-byte identical URL write to selectArea's
+  // AREA_SET commit today — satisfying the no-regression acceptance criterion
+  // by construction.
+  const commitAreaSet = useCallback(
+    (areaKeys: string[], { primaryAreaKey }: { primaryAreaKey: string }) => {
+      setUrlParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('areaKey', primaryAreaKey);
+          applyResultScopeCommit(next, { kind: 'AREA_SET', areaKeys });
+          return next;
+        },
+        { replace: false }, // PUSH — deliberate "commit search" navigation
+      );
+    },
+    [setUrlParams],
+  );
+
   const deselectArea = useCallback((resultScope?: ResultScope) => {
     // Cancel any pending viewport debounce so it cannot re-write stale lat/lon/zoom
     // back into the URL after we clear them below (race: user was panning just before
@@ -456,6 +487,7 @@ export function useAreaUrlDomain(ctx: UrlDomainCtx): UrlDomainModule<AreaState, 
       clearGroupResults,
       setJourney,
       startOver,
+      commitAreaSet,
     },
   };
 }

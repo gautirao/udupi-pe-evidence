@@ -672,6 +672,21 @@ export function useDiscoverMapData({
     ? filters.propertyTypes[0]
     : undefined;
 
+  // Issue #2017 (owner manual-test fix) — a committed multi-area AREA_SET
+  // scope must broaden the area-listings fetch to every committed areaKey,
+  // not just `selectedArea.areaKey`. Previously this always fetched (and
+  // `areaListings` below always derived) only the single selected area, so
+  // "Show listings" after adding nearby areas silently kept showing the
+  // pre-commit single-area result set. Mirrors the VIEWPORT
+  // (`resultScope?.kind === 'VIEWPORT'`) resultScope-awareness already used
+  // elsewhere in this hook (see isAuthViewport below).
+  const activeAreaListingKeys = useMemo(() => {
+    if (resultScope?.kind === 'AREA_SET' && resultScope.areaKeys.length > 0) {
+      return resultScope.areaKeys;
+    }
+    return selectedArea ? [selectedArea.areaKey] : [];
+  }, [resultScope, selectedArea]);
+
   const {
     data: cityListingsData,
     isLoading: isLoadingAreaListings,
@@ -697,7 +712,7 @@ export function useDiscoverMapData({
     isFetching: isFetchingAreaListings,
   } = useDiscoverCityListings({
     city,
-    areaKeys: selectedArea ? [selectedArea.areaKey] : [],
+    areaKeys: activeAreaListingKeys,
     limitPerArea: 50, // Issue #1122: raised from 5; backend clamps at 20 server-side (effective ceiling = 20)
     minPrice: discoverMinPrice,
     maxPrice: discoverMaxPrice,
@@ -795,9 +810,17 @@ export function useDiscoverMapData({
   }, [discoverAreasData]);
 
   // ── Derived: area listings ────────────────────────────────────────────────
+  // Issue #2017 (owner manual-test fix) — aggregate across every committed
+  // AREA_SET areaKey (activeAreaListingKeys), not just `selectedArea.areaKey`.
+  // For the non-AREA_SET case activeAreaListingKeys is exactly
+  // `[selectedArea.areaKey]`, so this is byte-for-byte the old single-area
+  // behavior by construction.
   const areaListings = useMemo(
-    () => cityListingsData?.areas.find((a) => a.areaKey === selectedArea?.areaKey)?.listings ?? [],
-    [cityListingsData, selectedArea],
+    () =>
+      activeAreaListingKeys.flatMap(
+        (key) => cityListingsData?.areas.find((a) => a.areaKey === key)?.listings ?? [],
+      ),
+    [cityListingsData, activeAreaListingKeys],
   );
 
   // ── Derived: anon school-radius listings (Issue #1261) ─────────────────────
