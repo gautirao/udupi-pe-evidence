@@ -44,6 +44,10 @@ export function LegacyRightPanelBridge({ view, commands }: LegacyRightPanelBridg
     selectedArea,
     areaListings,
     isLoadingAreaListings,
+    // Issue #2018 requirement A — error state for the area-listings query, so
+    // this bridge can tell a failed request apart from a genuinely empty area
+    // (mirrors `isErrorAnonViewport` below, and #2353's own precedent).
+    isErrorAreaListings,
     areaResultSummaryText,
     areasLoading,
     discoverAreasForPanel,
@@ -85,6 +89,9 @@ export function LegacyRightPanelBridge({ view, commands }: LegacyRightPanelBridg
     // Issue #2015 (caller-wiring follow-up) — pairs with `isErrorAnonViewport`
     // above to power the anon-viewport Retry-on-error control.
     refetchAnonViewport,
+    // Issue #2018 requirement A — pairs with `isErrorAreaListings` above so
+    // the area-listings error state offers a working Retry, not a dead one.
+    refetchAreaListings,
   } = commands.geography;
   const {
     groupResultsListings,
@@ -203,6 +210,16 @@ export function LegacyRightPanelBridge({ view, commands }: LegacyRightPanelBridg
       selectedArea={selectedArea}
       areaListings={areaListings}
       isLoadingListings={isLoadingAreaListings}
+      // Issue #2018 requirement A — this bridge previously forwarded only the
+      // loading flag, so a failed listings request settled to
+      // `areaListings: []` and rendered as though the market were empty. With
+      // #2018's zero-result recovery in place that became actively false: the
+      // recovery states "no matching listings in {scope}" and offers nearby
+      // areas that "have matches" — claims about a query that never returned.
+      // Both signals already existed on the surface model (#2353 threaded them
+      // for AreaFirstJourneyPanel); this call site simply stopped dropping them.
+      isListingsError={isErrorAreaListings}
+      onRetryListings={refetchAreaListings}
       isAuthenticated={isAuthenticated}
       onAreaSelect={handleAreaSelect}
       // Issue #1817 (code-review follow-up) — precomputed via the shared

@@ -10,6 +10,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { AuthModalProvider } from '@/contexts/AuthModalContext';
 import { DiscoverRightPanel } from '../DiscoverRightPanel';
 import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
+import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftContext';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { AnonViewportListingItem } from '@/lib/anonViewportListing';
@@ -53,8 +54,18 @@ const baseProps = {
 // the DiscoverProvider facade instead of calling useDiscoverUrlState() directly,
 // so every render needs a real DiscoverProvider ancestor (inside the Router
 // renderWithProviders already mounts).
+// Issue #2018 — AreaSelectedPanel's zero-result branch now renders
+// AreaZeroResultRecovery, which reads the shared #2017 AREA_SET draft via
+// useAreaSetDraftContext (it throws outside its provider by design).
+// Production mounts that provider above both the map and panel trees
+// (pages/MapDiscovery.tsx), so the test tree mirrors production here rather
+// than the component degrading silently when the provider is missing.
 const renderPanel = (ui: React.ReactElement) =>
-  renderWithProviders(<DiscoverProvider>{ui}</DiscoverProvider>);
+  renderWithProviders(
+    <DiscoverProvider>
+      <AreaSetDraftProvider>{ui}</AreaSetDraftProvider>
+    </DiscoverProvider>,
+  );
 
 describe('DiscoverRightPanel', () => {
   it('renders the panel with data-testid', () => {
@@ -390,9 +401,61 @@ describe('DiscoverRightPanel', () => {
         isLoadingListings={false}
       />,
     );
-    // Issue #1817 (AC7) — genuinely-empty cause now routes through the shared
-    // cause-based copy ("No listings here yet"), replacing the old intent-only wording.
-    expect(screen.getByText('No listings here yet')).toBeInTheDocument();
+    // Issue #2018 — the AREA zero-result branch now routes through the
+    // recovery stack. The genuinely-empty cause is preserved (still owned by
+    // deriveDiscoverEmptyStateCopy) and is asserted via data-empty-cause;
+    // the copy confirms the area is valid rather than blaming filters.
+    const recovery = screen.getByTestId('area-zero-result-recovery');
+    expect(recovery).toHaveAttribute('data-empty-cause', 'empty');
+    expect(screen.getByTestId('area-zero-recovery-heading')).toHaveTextContent(
+      'Manipal has no homes listed right now',
+    );
+  });
+
+  // Issue #2018 requirement A — the legacy bridge path previously forwarded
+  // only the loading flag, so a failed listings request arrived here
+  // indistinguishable from an empty area and rendered as "no listings here".
+  // With the zero-result recovery in place that became actively false, since
+  // the recovery asserts "no matching listings in {scope}" and offers nearby
+  // areas that "have matches" about a query that never returned.
+  it('a failed listings request renders the request-failure state, not the zero-result recovery', () => {
+    const area = makeArea('k1', 'Manipal', 5);
+    const onRetryListings = vi.fn();
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="area-selected"
+        areas={[area]}
+        selectedArea={area}
+        areaListings={[]}
+        isLoadingListings={false}
+        isListingsError
+        onRetryListings={onRetryListings}
+      />,
+    );
+    expect(screen.getByTestId('area-listings-error')).toBeInTheDocument();
+    expect(screen.queryByTestId('area-zero-result-recovery')).not.toBeInTheDocument();
+
+    userEvent.click(screen.getByTestId('area-listings-error-retry'));
+  });
+
+  it('a failed refresh on the legacy bridge keeps the last good cards behind a retry banner', () => {
+    const area = makeArea('k1', 'Manipal', 5);
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="area-selected"
+        areas={[area]}
+        selectedArea={area}
+        areaListings={[{ id: 'l1', pricePaise: 500000 * 100, locality: 'Manipal' } as DiscoverCityListingItem]}
+        isLoadingListings={false}
+        isListingsError
+        onRetryListings={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('area-listings-retry-banner')).toBeInTheDocument();
+    expect(screen.queryByTestId('area-listings-error')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('area-zero-result-recovery')).not.toBeInTheDocument();
   });
 
   it('renders listing cards with price and locality', () => {
@@ -848,7 +911,9 @@ describe('DiscoverRightPanel — 4-level residential hierarchy (Issue #1745)', (
             <MemoryRouter>
               <AuthProvider>
                 <AuthModalProvider>
-                  <DiscoverProvider>{ui}</DiscoverProvider>
+                  <DiscoverProvider>
+                    <AreaSetDraftProvider>{ui}</AreaSetDraftProvider>
+                  </DiscoverProvider>
                 </AuthModalProvider>
               </AuthProvider>
             </MemoryRouter>
@@ -996,7 +1061,9 @@ describe('DiscoverRightPanel — anon viewport error + retry (Issue #2015, revie
           <MemoryRouter>
             <AuthProvider>
               <AuthModalProvider>
-                <DiscoverProvider>{ui}</DiscoverProvider>
+                <DiscoverProvider>
+                  <AreaSetDraftProvider>{ui}</AreaSetDraftProvider>
+                </DiscoverProvider>
               </AuthModalProvider>
             </AuthProvider>
           </MemoryRouter>

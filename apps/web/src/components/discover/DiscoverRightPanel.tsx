@@ -549,6 +549,18 @@ export interface DiscoverRightPanelProps {
    * lightweight default (used by callers/tests that don't wire the full selector).
    */
   areaResultSummaryText?: string | null;
+  /**
+   * Issue #2018 requirement A — true when the AREA_SET listings request
+   * FAILED, as opposed to succeeding with zero rows. Forwarded to
+   * `AreaSelectedPanel`, which owns the two-branch error treatment (see its
+   * `isListingsError` doc). Before this, a failed request reached this panel
+   * indistinguishable from an empty one and rendered as "no listings here" —
+   * the exact error-vs-empty conflation #2018 and #1793's SR-024 forbid.
+   * Defaults false, so callers that do not wire it behave as before.
+   */
+  isListingsError?: boolean;
+  /** Re-issues the failed AREA_SET listings request. */
+  onRetryListings?: () => void;
   onBack?: () => void;
   onStartOver: () => void;
   onSelectJourney: (journey: DiscoverJourney) => void;
@@ -1042,6 +1054,8 @@ export function DiscoverRightPanel({
   areaResultSummaryText,
   areaListings = [],
   isLoadingListings,
+  isListingsError = false,
+  onRetryListings,
   isAuthenticated = false,
   onBack,
   onStartOver,
@@ -1723,6 +1737,16 @@ export function DiscoverRightPanel({
             areaListings={isViewportScope ? viewportListings : areaListings}
             areaResultSummaryText={isViewportScope ? undefined : areaResultSummaryText}
             isLoadingListings={isViewportScope ? viewportListingsLoading : isLoadingListings}
+            // Issue #2018 requirement A — the AREA_SET listings error, so a
+            // failed request renders the explicit request-failure state (or
+            // keeps the last good cards behind an inline retry banner)
+            // instead of the zero-result recovery, which would assert "no
+            // matching listings" about a query that never returned. A
+            // committed VIEWPORT scope keeps its own #2015 error treatment
+            // in `renderAnonViewportListings` above, so this is deliberately
+            // AREA_SET-only.
+            isListingsError={isViewportScope ? false : isListingsError}
+            onRetryListings={isViewportScope ? undefined : onRetryListings}
             isViewportScope={isViewportScope}
             isAuthenticated={isAuthenticated}
             onBack={onBack}

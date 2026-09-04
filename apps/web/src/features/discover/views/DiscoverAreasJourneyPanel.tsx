@@ -1068,7 +1068,21 @@ function AreaLeafListingsSurface({
   // `journey.isError` above (AlertCircle icon + message + Retry button) —
   // reused verbatim here rather than inventing a second error presentation,
   // with its own testid/copy/refetch target for this query.
-  if (isErrorAreaListingsResolved) {
+  // Issue #2018 requirement A — this full-replace treatment is now reserved
+  // for a FIRST-LOAD failure, i.e. one with no last-good result set to
+  // preserve. `useDiscoverCityListings` uses `placeholderData:
+  // keepPreviousData`, so a refetch failure on an already-loaded area
+  // commonly leaves a perfectly good previous set that this branch used to
+  // discard — contradicting the issue's rule that a failed request must
+  // render "a retryable error state with the last successful results
+  // preserved where available". When results ARE retained, execution falls
+  // through to AreaSelectedPanel below, which keeps the cards and shows an
+  // inline retry banner (`isListingsError`/`onRetryListings`).
+  //
+  // The no-results case below is otherwise unchanged, deliberately: it is
+  // still the surface that owns the error, still wrapped in the same
+  // HierarchyBackButton, and still ordered ahead of the schools branches.
+  if (isErrorAreaListingsResolved && areaListingsForPanel.length === 0) {
     return (
       <div className="p-4" data-testid="areas-journey-panel-listings">
         <HierarchyBackButton
@@ -1242,6 +1256,13 @@ function AreaLeafListingsSurface({
         onCrumbGroup={onCrumbGroup}
         areaListings={areaListingsForPanel}
         isLoadingListings={isLoadingAreaListingsResolved}
+        // Issue #2018 requirement A — reaching this call site with an error
+        // set means results WERE retained (the no-results case returned the
+        // full-replace state above), so the panel keeps the cards and shows
+        // an inline retry banner. Passing it unconditionally rather than
+        // `&& length > 0` keeps the panel the single owner of that decision.
+        isListingsError={isErrorAreaListingsResolved}
+        onRetryListings={refetchAreaListings}
         // Issue #2015 — once a VIEWPORT scope ("Search this area") is
         // committed, `areaListingsForPanel`/`isLoadingAreaListingsResolved`
         // above already carry the VIEWPORT-scoped data (see

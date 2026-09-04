@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
+  AlertCircle,
   ChevronLeft,
   Layers,
   MapPin,
@@ -27,6 +28,7 @@ import { deriveDiscoverEmptyStateCopy } from '../emptyStateCopy';
 import { StartOverButton } from '../StartOverButton';
 import { useDiscoverActions, useDiscoverNav, useDiscoverShell } from '@/features/discover/context/useDiscoverContext';
 import { AreaSetSelectedHeader, AreaSetTwoTileRow } from './AreaSetSelectedExtras';
+import { AreaZeroResultRecovery } from './AreaZeroResultRecovery';
 import { DEFAULT_CITY } from '@/lib/localityUtils';
 
 // Quick filter options (hardcoded MVP). 'All' is a virtual chip that clears the
@@ -147,6 +149,32 @@ interface AreaSelectedPanelProps {
    * false so every existing AREA_SET caller/test is unaffected.
    */
   isViewportScope?: boolean;
+  /**
+   * Issue #2018 requirement A ("error is not empty") — true when the listings
+   * request this panel is rendering FAILED (5xx/timeout/network), as opposed
+   * to succeeding with zero rows.
+   *
+   * The distinction is load-bearing, not cosmetic: the zero-result recovery
+   * state states "no matching listings in {scope}" as a fact about the
+   * marketplace and offers nearby areas that "have matches" — claims this
+   * panel cannot make about a query that never came back. So when this is
+   * true the panel renders an error treatment instead:
+   *   - with no results to fall back on -> the explicit request-failure state
+   *     + Retry (`area-listings-error`);
+   *   - with a retained last-good set (`useDiscoverCityListings` uses
+   *     `keepPreviousData`, so a refetch failure commonly leaves one) -> the
+   *     cards stay and an inline banner + Retry appears above them
+   *     (`area-listings-retry-banner`).
+   *
+   * Defaults false, so every existing caller behaves exactly as before.
+   */
+  isListingsError?: boolean;
+  /**
+   * Re-issues the failed listings request. Omitted renders the error states
+   * without a Retry button rather than a dead one — the same honesty rule
+   * `isReadyToMoveSupported` follows above.
+   */
+  onRetryListings?: () => void;
 }
 
 export function AreaSelectedPanel({
@@ -185,6 +213,8 @@ export function AreaSelectedPanel({
   onCrumbGroup,
   isReadyToMoveSupported = true,
   isViewportScope = false,
+  isListingsError = false,
+  onRetryListings,
 }: AreaSelectedPanelProps) {
   const navigate = useNavigate();
   const areaLabel = selectedArea.areaLabel;
@@ -798,6 +828,37 @@ export function AreaSelectedPanel({
               </div>
             ))}
           </div>
+        ) : isListingsError && (!areaListings || areaListings.length === 0) ? (
+          // Issue #2018 requirement A — "error is not empty". A settled request
+          // failure with nothing to fall back on gets the explicit
+          // request-failure state, NEVER the zero-result recovery below: that
+          // recovery asserts "no matching listings in {scope}" as a fact about
+          // the marketplace, and this request never successfully asked it.
+          //
+          // Copy follows the frozen mock's own error state (ExpPanel.jsx
+          // L566-572): name it a request failure and say the search is
+          // untouched. Structure mirrors the #2015 anon-viewport first-load
+          // failure branch in DiscoverRightPanel.tsx.
+          <div
+            className="m-4 flex flex-col items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-12 text-center"
+            data-testid="area-listings-error"
+          >
+            <AlertCircle className="h-8 w-8 text-destructive" aria-hidden="true" />
+            <h2 className="text-base font-semibold text-foreground">We could not load these results</h2>
+            <p className="max-w-sm text-sm text-muted-foreground">
+              This is a request failure, not an empty market. Your scope and filters are unchanged.
+            </p>
+            {onRetryListings && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onRetryListings}
+                data-testid="area-listings-error-retry"
+              >
+                Retry
+              </Button>
+            )}
+          </div>
         ) : !areaListings || areaListings.length === 0 ? (
           (() => {
             // Issue #1817 (AC7) — cause-routed empty state, sourced from the SAME
@@ -816,6 +877,39 @@ export function AreaSelectedPanel({
             });
             const onClearFilters = hasPropertyFilters ? handleClearPropertyFilters : undefined;
             const onClearSearch = searchQuery && onSearchChange ? () => onSearchChange('') : undefined;
+
+            // Issue #2018 (slice 1) — an AREA / AREA_SET zero result is not a
+            // dead end: it gets the mock's `EPZero` recovery stack (scope +
+            // filter summary, "kept exactly as it is", and nearby areas that
+            // DO have matches under the same filters) instead of the generic
+            // cause-routed EmptyState. `deriveDiscoverEmptyStateCopy` above is
+            // still the single owner of the CAUSE — the recovery banner reads
+            // it so this panel and the map badge cannot disagree about why the
+            // list is empty (design §7, unchanged).
+            //
+            // A committed VIEWPORT scope ("Search this area") keeps the
+            // existing EmptyState: its recovery is "expand the visible map
+            // area" / "return to previous areas", a different scope-specific
+            // stack that the mock defines separately (`EPZero` L300-310) and
+            // that a later slice owns. Offering AREA-shaped nearby suggestions
+            // there would answer a question the shopper did not ask.
+            if (!isViewportScope) {
+              return (
+                <AreaZeroResultRecovery
+                  scopeAreaKeys={multiAreaKeys ?? [selectedArea.areaKey]}
+                  fallbackScopeName={areaLabel}
+                  city={city || nav.city || DEFAULT_CITY}
+                  filters={filters}
+                  intent={intent}
+                  searchQuery={searchQuery}
+                  noun={intentNoun === 'rent' ? 'rentals' : 'homes'}
+                  cause={copy.cause}
+                  onClearFilters={onClearFilters}
+                  onClearSearch={onClearSearch}
+                />
+              );
+            }
+
             const primaryAction =
               copy.primaryLabel === 'Clear filters' && onClearFilters
                 ? { label: copy.primaryLabel, onClick: onClearFilters }
@@ -848,6 +942,34 @@ export function AreaSelectedPanel({
           })()
         ) : (
           <>
+            {isListingsError && (
+              // Issue #2018 requirement A — a transient failure AFTER a
+              // successful load keeps the last good result set on screen
+              // (the issue: "the last successful results preserved where
+              // available") and surfaces the error as an inline banner
+              // instead of wiping the cards. Same two-branch shape and same
+              // copy register as the #2015 anon-viewport retry banner in
+              // DiscoverRightPanel.tsx — one error treatment, two surfaces.
+              <div
+                className="mx-4 mt-4 flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3"
+                data-testid="area-listings-retry-banner"
+                aria-live="polite"
+              >
+                <p className="text-sm text-muted-foreground">
+                  Couldn&apos;t refresh these results. Showing the last ones we loaded.
+                </p>
+                {onRetryListings && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onRetryListings}
+                    data-testid="area-listings-retry-banner-btn"
+                  >
+                    Retry
+                  </Button>
+                )}
+              </div>
+            )}
             {/* Intent-aware verified result summary (Issue #1494 / #1606) */}
             {/* a4 — warm evergreen-tint/60 strip instead of near-invisible bg-muted/20 */}
             <div className="flex items-center gap-1.5 border-b border-border bg-evergreen-tint/60 px-4 py-2.5" data-testid="area-result-summary">

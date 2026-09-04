@@ -9,6 +9,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { renderWithProviders } from '@/test/renderWithProviders';
+import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftContext';
 import { DiscoverRightPanel } from '../DiscoverRightPanel';
 import { derivePanelContent } from '@/utils/discoverPanelState';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
@@ -130,6 +131,21 @@ vi.mock('@/features/discover/context/useDiscoverContext', () => ({
     filters: {},
   }),
   useDiscoverViewport: () => null,
+  // Issue #2018 — AreaZeroResultRecovery reads the shell to open the #2017
+  // AREA_SET draft when a nearby-area "Add" is pressed. Only the members it
+  // actually touches are stubbed; the draft-open path itself is asserted in
+  // AreaZeroResultRecovery's own suite against the real provider.
+  useDiscoverShell: () => ({
+    mobileView: 'LIST' as const,
+    setMobileView: vi.fn(),
+    isMobileShell: false,
+    isAreaSetDraftOpen: false,
+    openAreaSetDraft: vi.fn(),
+    closeAreaSetDraft: vi.fn(),
+    fitAreaSet: vi.fn(),
+    focusAreaSetMember: vi.fn(),
+    registerAreaSetCameraActions: vi.fn(),
+  }),
   useDiscoverActions: () => ({
     selectArea: vi.fn(),
     deselectArea: vi.fn(),
@@ -215,7 +231,14 @@ const baseProps = {
 // Issue #1745 Batch A scope-change fix — GuidedEntryPanel now calls useDiscoverSummary
 // (a useQuery hook), so every render in this file needs a QueryClientProvider ancestor.
 // Matches the shared renderWithProviders() convention (fresh QueryClient per render).
-const renderPanel = (ui: React.ReactElement) => renderWithProviders(ui);
+// Issue #2018 — AreaSelectedPanel's zero-result branch renders
+// AreaZeroResultRecovery, which reads the shared #2017 AREA_SET draft via
+// useAreaSetDraftContext (throws outside its provider by design). The
+// provider itself only reads `city`/`filters`/`resultScope` off the already-
+// mocked useDiscoverNav above, so wrapping here mirrors production
+// (pages/MapDiscovery.tsx) without loosening this suite's mocking strategy.
+const renderPanel = (ui: React.ReactElement) =>
+  renderWithProviders(<AreaSetDraftProvider>{ui}</AreaSetDraftProvider>);
 
 describe('DiscoverRightPanel — state machine routing', () => {
   it('panelContent="guided-entry" renders GuidedEntryPanel with journey cards', () => {
@@ -583,9 +606,13 @@ describe('DiscoverRightPanel — area-selected content parity', () => {
         isLoadingListings={false}
       />,
     );
-    // Issue #1817 (AC7) — genuinely-empty cause now routes through the shared
-    // cause-based copy ("No listings here yet"), replacing the old intent-only wording.
-    expect(screen.getByText('No listings here yet')).toBeInTheDocument();
+    // Issue #2018 — the AREA zero-result branch now routes through the
+    // recovery stack; the genuinely-empty cause itself is unchanged and
+    // still asserted, via data-empty-cause.
+    expect(screen.getByTestId('area-zero-result-recovery')).toHaveAttribute(
+      'data-empty-cause',
+      'empty',
+    );
   });
 
   it('renders PropertyCard list with correct price', () => {

@@ -32,6 +32,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DiscoverAreasJourneyPanel } from '../../views/DiscoverAreasJourneyPanel';
 import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
+import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftContext';
 import type { UseAreasNavigationJourneyResult } from '../useAreasNavigationJourney';
 import type { NavigationNodeResponse } from '../types';
 import type { DiscoverCityListingItem, DiscoverCityListingsParams } from '@/hooks/useDiscoverCityListings';
@@ -146,15 +147,22 @@ function renderPanel(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[url]}>
         <DiscoverProvider>
-          <DiscoverAreasJourneyPanel
-            journey={makeJourney({
-              node,
-              nodeCount: { listingCount: 1, schoolCount: 0, matchingAreaCount: null },
-              children: [],
-            })}
-            buildNodeHref={NOOP_BUILD_HREF}
-            {...extraProps}
-          />
+          {/* Issue #2018 — the AREA-leaf zero-listing branch renders
+              AreaZeroResultRecovery, which reads the shared #2017 AREA_SET
+              draft via useAreaSetDraftContext (throws outside its provider by
+              design). Production mounts it above both trees in
+              pages/MapDiscovery.tsx. */}
+          <AreaSetDraftProvider>
+            <DiscoverAreasJourneyPanel
+              journey={makeJourney({
+                node,
+                nodeCount: { listingCount: 1, schoolCount: 0, matchingAreaCount: null },
+                children: [],
+              })}
+              buildNodeHref={NOOP_BUILD_HREF}
+              {...extraProps}
+            />
+          </AreaSetDraftProvider>
         </DiscoverProvider>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -284,7 +292,9 @@ describe('DiscoverAreasJourneyPanel — AREA-leaf listings surface (Issue #1956 
     renderPanel(makeAreaLeafNode());
 
     expect(screen.getByTestId('areas-journey-panel-listings')).toBeInTheDocument();
-    expect(screen.getByTestId('area-empty-state')).toBeInTheDocument();
+    // Issue #2018 — AreaSelectedPanel's own listing-empty state is now the
+    // zero-result recovery stack; the testid moved, the invariant did not.
+    expect(screen.getByTestId('area-zero-result-recovery')).toBeInTheDocument();
     expect(screen.queryByTestId('areas-journey-panel-empty')).not.toBeInTheDocument();
     expect(screen.queryByText(/no matches with current filters/i)).not.toBeInTheDocument();
   });
@@ -401,7 +411,7 @@ describe('DiscoverAreasJourneyPanel — AREA-leaf listings surface (Issue #1956 
 
       expect(mockUseDiscoverCityListings).toHaveBeenCalledWith(expect.objectContaining({ city: 'bangalore' }));
       expect(screen.getByTestId('property-card-listing-1')).toBeInTheDocument();
-      expect(screen.queryByTestId('area-empty-state')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('area-zero-result-recovery')).not.toBeInTheDocument();
     });
 
     it('explicit city=bangalore renders identically to the omitted-city fallback (parity)', () => {
@@ -412,7 +422,7 @@ describe('DiscoverAreasJourneyPanel — AREA-leaf listings surface (Issue #1956 
 
       expect(mockUseDiscoverCityListings).toHaveBeenCalledWith(expect.objectContaining({ city: 'bangalore' }));
       expect(screen.getByTestId('property-card-listing-1')).toBeInTheDocument();
-      expect(screen.queryByTestId('area-empty-state')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('area-zero-result-recovery')).not.toBeInTheDocument();
     });
 
     it('a genuinely empty AREA still renders the honest empty state — the fallback must not mask real emptiness', () => {
@@ -428,7 +438,9 @@ describe('DiscoverAreasJourneyPanel — AREA-leaf listings surface (Issue #1956 
 
       renderPanel(makeAreaLeafNode(), '/discover?city=bangalore&journey=area-first&intent=buy');
 
-      expect(screen.getByTestId('area-empty-state')).toBeInTheDocument();
+      // Issue #2018 — AreaSelectedPanel's own listing-empty state is now the
+    // zero-result recovery stack; the testid moved, the invariant did not.
+    expect(screen.getByTestId('area-zero-result-recovery')).toBeInTheDocument();
       expect(screen.queryByTestId('property-card-listing-1')).not.toBeInTheDocument();
     });
   });
@@ -539,6 +551,56 @@ describe('DiscoverAreasJourneyPanel — AREA-leaf duplicate-fetch dedup (Issue #
     await user.click(retryButton);
 
     expect(mapAreaListingsRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  // ── Issue #2018 requirement A — last-good retention on the canonical owner ──
+  it('a failed refresh with results already loaded keeps the cards and shows an inline retry banner', async () => {
+    // `useDiscoverCityListings` uses `placeholderData: keepPreviousData`, so a
+    // REFETCH failure on an already-loaded area commonly leaves a perfectly
+    // good previous result set. Before #2018 this branch full-replaced
+    // unconditionally and discarded it, contradicting the issue's rule that a
+    // failed request must render "a retryable error state with the last
+    // successful results preserved where available".
+    mockUseAuth.mockReturnValue({ user: null, isLoading: false });
+    mockUseDiscoverCityListings.mockClear();
+    mockUseDiscoverCityListings.mockReturnValue({ data: undefined, isLoading: false });
+    const mapAreaListingsRefetch = vi.fn();
+    const user = userEvent.setup();
+
+    renderPanel(makeAreaLeafNode(), undefined, {
+      mapAreaListings: [makeListing()],
+      mapAreaListingsAreaKey: 'IN|KA|Bangalore|Manipal',
+      mapAreaListingsError: true,
+      mapAreaListingsRefetch,
+    });
+
+    // The last good result survives the failure...
+    expect(screen.getByTestId('property-card-listing-1')).toBeInTheDocument();
+    // ...behind an inline banner, not the full-replace error state...
+    expect(screen.getByTestId('area-listings-retry-banner')).toBeInTheDocument();
+    expect(screen.queryByTestId('areas-journey-panel-listings-error')).not.toBeInTheDocument();
+    // ...and never the zero-result recovery, which would assert "no matching
+    // listings" about a request that failed.
+    expect(screen.queryByTestId('area-zero-result-recovery')).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId('area-listings-retry-banner-btn'));
+    expect(mapAreaListingsRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('a first-load failure (nothing retained) still full-replaces with the explicit error state', () => {
+    mockUseAuth.mockReturnValue({ user: null, isLoading: false });
+    mockUseDiscoverCityListings.mockClear();
+    mockUseDiscoverCityListings.mockReturnValue({ data: undefined, isLoading: false });
+
+    renderPanel(makeAreaLeafNode(), undefined, {
+      mapAreaListings: [],
+      mapAreaListingsAreaKey: 'IN|KA|Bangalore|Manipal',
+      mapAreaListingsError: true,
+      mapAreaListingsRefetch: vi.fn(),
+    });
+
+    expect(screen.getByTestId('areas-journey-panel-listings-error')).toBeInTheDocument();
+    expect(screen.queryByTestId('area-zero-result-recovery')).not.toBeInTheDocument();
   });
 
   it('mapAreaListingsFetching surfaces AreaSelectedPanel\'s keepPreviousData refresh-in-flight indicator, not settled stale cards (code-review fix)', () => {

@@ -4,6 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { AreaSelectedPanel } from '../AreaSelectedPanel';
 import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
+import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftContext';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 
@@ -41,9 +42,18 @@ describe('AreaSelectedPanel', () => {
     // and render a committed multi-area AREA_SET scope, so every render
     // needs a real <DiscoverProvider> ancestor now (matches the established
     // DiscoverRightPanel.test.tsx / SchoolJourneyPanels.test.tsx convention).
+    // Issue #2018 — the zero-result branch now renders
+    // AreaZeroResultRecovery, which reads the shared #2017 AREA_SET draft
+    // (useAreaSetDraftContext) to offer "Add" on a nearby-area suggestion.
+    // That accessor THROWS outside its provider by design, so the provider
+    // is wired here rather than papered over with an optional accessor that
+    // would silently degrade in production too. Production mounts it above
+    // both the map and panel trees (pages/MapDiscovery.tsx).
     renderWithProviders(
       <DiscoverProvider>
-        <AreaSelectedPanel {...defaultProps} {...props} />
+        <AreaSetDraftProvider>
+          <AreaSelectedPanel {...defaultProps} {...props} />
+        </AreaSetDraftProvider>
       </DiscoverProvider>,
       { router: 'browser' },
     );
@@ -243,15 +253,24 @@ describe('AreaSelectedPanel', () => {
   // (area-empty-state / data-empty-cause). Kept here, updated in place, so the
   // "clears/preserves other filters" behavioural assertions are not lost.
   describe('Empty state', () => {
-    it('shows no listings message when empty without filters', () => {
+    // Issue #2018 — the AREA/AREA_SET zero-result branch now renders the
+    // recovery stack instead of the generic EmptyState, so the headings
+    // below moved. The CAUSE routing itself is unchanged and still owned by
+    // deriveDiscoverEmptyStateCopy (covered by emptyStateCopy.test.ts).
+    it('names the area honestly when it is genuinely empty (no filters, no search)', () => {
       renderPanel({ areaListings: [] });
-      expect(screen.getByText('No listings here yet')).toBeInTheDocument();
+      expect(screen.getByTestId('area-zero-recovery-heading')).toHaveTextContent(
+        'Test Area has no homes listed right now',
+      );
+      // Nothing to clear, so no clear action is offered.
       expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
     });
 
     it('shows filtered message with clear button when filters active and no listings', () => {
       renderPanel({ areaListings: [], filters: { propertyTypes: ['apartment'] } });
-      expect(screen.getByText('No homes match these filters')).toBeInTheDocument();
+      expect(screen.getByTestId('area-zero-recovery-heading')).toHaveTextContent(
+        'No matching homes in Test Area',
+      );
       expect(screen.getByRole('button', { name: 'Clear filters' })).toBeInTheDocument();
     });
 
@@ -371,10 +390,15 @@ describe('AreaSelectedPanel', () => {
     // shared cause-based copy ("No listings here yet"), replacing the old intent-only
     // "No properties for {sale|rent} in this area yet" wording. Cause routing itself
     // (filters/search/both) is covered in the "AC7 — empty-state cause routing" block.
-    it('shows "No listings here yet" for the genuinely-empty cause (no filters/search)', () => {
+    it('routes the genuinely-empty cause through the recovery stack (no filters/search)', () => {
       renderPanel({ areaListings: [] });
-      expect(screen.getByTestId('area-empty-state')).toHaveAttribute('data-empty-cause', 'empty');
-      expect(screen.getByText('No listings here yet')).toBeInTheDocument();
+      expect(screen.getByTestId('area-zero-result-recovery')).toHaveAttribute(
+        'data-empty-cause',
+        'empty',
+      );
+      expect(screen.getByTestId('area-zero-recovery-heading')).toHaveTextContent(
+        'Test Area has no homes listed right now',
+      );
     });
   });
 
@@ -424,9 +448,11 @@ describe('AreaSelectedPanel', () => {
         filters: { propertyTypes: ['apartment'] },
         onFiltersChange,
       });
-      const empty = screen.getByTestId('area-empty-state');
+      const empty = screen.getByTestId('area-zero-result-recovery');
       expect(empty).toHaveAttribute('data-empty-cause', 'filters');
-      expect(within(empty).getByText('No homes match these filters')).toBeInTheDocument();
+      expect(within(empty).getByTestId('area-zero-recovery-heading')).toHaveTextContent(
+        'No matching homes in Test Area',
+      );
       const clearBtn = within(empty).getByRole('button', { name: 'Clear filters' });
       fireEvent.click(clearBtn);
       expect(onFiltersChange).toHaveBeenCalledWith(
@@ -441,9 +467,14 @@ describe('AreaSelectedPanel', () => {
         searchQuery: 'corner plot',
         onSearchChange,
       });
-      const empty = screen.getByTestId('area-empty-state');
+      const empty = screen.getByTestId('area-zero-result-recovery');
       expect(empty).toHaveAttribute('data-empty-cause', 'search');
-      expect(within(empty).getByText('No results for "corner plot"')).toBeInTheDocument();
+      // Issue #2018 — the search term is preserved and named back to the
+      // shopper on the scope/filter line, so the state says exactly what was
+      // searched rather than dropping it.
+      expect(within(empty).getByTestId('area-zero-recovery-scope-line')).toHaveTextContent(
+        'corner plot',
+      );
       // Scoped to the empty-state block — the search input's own × (data-testid
       // area-search-clear) also carries aria-label "Clear search" and would otherwise
       // make this query ambiguous.
@@ -461,9 +492,11 @@ describe('AreaSelectedPanel', () => {
         onFiltersChange,
         onSearchChange,
       });
-      const empty = screen.getByTestId('area-empty-state');
+      const empty = screen.getByTestId('area-zero-result-recovery');
       expect(empty).toHaveAttribute('data-empty-cause', 'both');
-      expect(within(empty).getByText('No homes match your search and filters')).toBeInTheDocument();
+      expect(within(empty).getByTestId('area-zero-recovery-heading')).toHaveTextContent(
+        'No matching homes in Test Area',
+      );
       expect(within(empty).getByRole('button', { name: 'Clear search' })).toBeInTheDocument();
       expect(within(empty).getByRole('button', { name: 'Clear filters' })).toBeInTheDocument();
       fireEvent.click(within(empty).getByRole('button', { name: 'Clear search' }));
@@ -472,13 +505,83 @@ describe('AreaSelectedPanel', () => {
       expect(onFiltersChange).toHaveBeenCalled();
     });
 
-    it('genuinely empty (N=0, no filters/search): "No listings here yet", no filter/search action offered', () => {
+    it('genuinely empty (N=0, no filters/search): area confirmed valid, no filter/search action offered', () => {
       renderPanel({ areaListings: [] });
-      const empty = screen.getByTestId('area-empty-state');
+      const empty = screen.getByTestId('area-zero-result-recovery');
       expect(empty).toHaveAttribute('data-empty-cause', 'empty');
-      expect(within(empty).getByText('No listings here yet')).toBeInTheDocument();
+      // Issue #2018 "zero-content canonical areas" — the state must confirm
+      // the area is valid and say nothing is listed today, never imply that
+      // filters are hiding listings that do not exist.
+      expect(within(empty).getByTestId('area-zero-recovery-heading')).toHaveTextContent(
+        'Test Area has no homes listed right now',
+      );
+      expect(within(empty).getByTestId('area-zero-recovery-note')).toHaveTextContent(
+        'not a filtered-out result',
+      );
       expect(within(empty).queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
       expect(within(empty).queryByRole('button', { name: 'Clear search' })).not.toBeInTheDocument();
+    });
+  });
+
+  // ── Issue #2018 requirement A — error is not empty ────────────────────────
+  // A failed listings request must never reach the zero-result recovery: that
+  // state asserts "no matching listings in {scope}" as a fact about the
+  // marketplace, and a request that never returned cannot support it.
+  describe('Issue #2018 — a failed request is not an empty market', () => {
+    it('first-load failure renders the request-failure state, never the zero-result recovery', () => {
+      renderPanel({ areaListings: [], isListingsError: true, onRetryListings: vi.fn() });
+
+      const error = screen.getByTestId('area-listings-error');
+      expect(within(error).getByText('We could not load these results')).toBeInTheDocument();
+      expect(
+        within(error).getByText(/This is a request failure, not an empty market/),
+      ).toBeInTheDocument();
+      // The load-bearing assertion: the recovery UI is unreachable here.
+      expect(screen.queryByTestId('area-zero-result-recovery')).not.toBeInTheDocument();
+    });
+
+    it('Retry on a first-load failure re-issues the failed request', () => {
+      const onRetryListings = vi.fn();
+      renderPanel({ areaListings: [], isListingsError: true, onRetryListings });
+
+      fireEvent.click(screen.getByTestId('area-listings-error-retry'));
+      expect(onRetryListings).toHaveBeenCalledTimes(1);
+    });
+
+    it('omits Retry rather than rendering a dead button when no refetch is wired', () => {
+      renderPanel({ areaListings: [], isListingsError: true });
+      expect(screen.getByTestId('area-listings-error')).toBeInTheDocument();
+      expect(screen.queryByTestId('area-listings-error-retry')).not.toBeInTheDocument();
+    });
+
+    it('a failure AFTER a good load keeps the last results and shows an inline retry banner', () => {
+      const onRetryListings = vi.fn();
+      renderPanel({ areaListings: [mockListing], isListingsError: true, onRetryListings });
+
+      // The issue's rule: "the last successful results preserved where available".
+      expect(screen.getByText('Test Listing')).toBeInTheDocument();
+      expect(screen.getByTestId('area-listings-retry-banner')).toHaveTextContent(
+        "Couldn't refresh these results",
+      );
+      // Not the full-replace state, and not the recovery either.
+      expect(screen.queryByTestId('area-listings-error')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('area-zero-result-recovery')).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId('area-listings-retry-banner-btn'));
+      expect(onRetryListings).toHaveBeenCalledTimes(1);
+    });
+
+    it('a genuine zero with no error still gets the recovery, not an error state', () => {
+      renderPanel({ areaListings: [], filters: { propertyTypes: ['apartment'] } });
+      expect(screen.getByTestId('area-zero-result-recovery')).toBeInTheDocument();
+      expect(screen.queryByTestId('area-listings-error')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('area-listings-retry-banner')).not.toBeInTheDocument();
+    });
+
+    it('loading still wins over the error branch (no flash of failure mid-refetch)', () => {
+      renderPanel({ areaListings: [], isListingsError: true, isLoadingListings: true });
+      expect(screen.getAllByTestId('listing-skeleton').length).toBeGreaterThan(0);
+      expect(screen.queryByTestId('area-listings-error')).not.toBeInTheDocument();
     });
   });
 
