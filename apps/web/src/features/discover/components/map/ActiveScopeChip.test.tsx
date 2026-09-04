@@ -49,12 +49,23 @@ function renderChip(resultScope: CommittedResultScope | undefined, publishCamera
   return { container, publishCameraIntent };
 }
 
+const DRAWN_AREA: [number, number][] = [
+  [12.92, 77.6],
+  [12.95, 77.6],
+  [12.95, 77.63],
+];
+
 describe('ActiveScopeChip', () => {
-  it('renders nothing when the active scope is not VIEWPORT', () => {
+  it('renders nothing when the active scope is AREA_SET', () => {
     const { container } = renderChip({
       active: { kind: 'AREA_SET', areaKeys: ['koramangala'] },
       previous: null,
     });
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('renders nothing when there is no committed scope at all', () => {
+    const { container } = renderChip({ active: null, previous: null });
     expect(container).toBeEmptyDOMElement();
   });
 
@@ -118,5 +129,79 @@ describe('ActiveScopeChip', () => {
       [12.92, 77.6],
       [12.98, 77.65],
     ]);
+  });
+});
+
+/**
+ * Issue #2419 (PR-1) — the committed-POLYGON branch. Before this issue a
+ * committed POLYGON rendered no chip here at all.
+ */
+describe('ActiveScopeChip — committed POLYGON scope', () => {
+  it('names the scope "Drawn area", matching the design kit vocabulary', () => {
+    renderChip({ active: { kind: 'POLYGON', coordinates: DRAWN_AREA }, previous: null });
+
+    expect(screen.getByTestId('active-scope-chip-polygon')).toHaveTextContent('Drawn area');
+    // Not the retired MapStatsBar wording, which called the same state
+    // something different in a second place.
+    expect(screen.queryByText(/area search/i)).not.toBeInTheDocument();
+  });
+
+  it('offers "Return to <previous areas>" for a POLYGON that replaced an AREA_SET', () => {
+    renderChip({
+      active: { kind: 'POLYGON', coordinates: DRAWN_AREA },
+      previous: { kind: 'AREA_SET', areaKeys: ['koramangala', 'indiranagar'] },
+    });
+
+    expect(
+      screen.getByRole('button', { name: /return to koramangala, indiranagar/i }),
+    ).toBeInTheDocument();
+  });
+
+  // #2016: the prior scope is restored BY NAME from `previous`, never
+  // re-derived from wherever the camera happens to be.
+  it('restores the previous AREA_SET by name and re-fits the camera to it', async () => {
+    const user = userEvent.setup();
+    const { publishCameraIntent } = renderChip({
+      active: { kind: 'POLYGON', coordinates: DRAWN_AREA },
+      previous: { kind: 'AREA_SET', areaKeys: ['koramangala'] },
+    });
+
+    await user.click(screen.getByRole('button', { name: /return to koramangala/i }));
+
+    expect(mockCommitResultScope).toHaveBeenCalledTimes(1);
+    expect(mockCommitResultScope).toHaveBeenCalledWith({
+      kind: 'AREA_SET',
+      areaKeys: ['koramangala'],
+    });
+    expect(publishCameraIntent).toHaveBeenCalledWith(KORAMANGALA);
+  });
+
+  // A first-ever polygon has nothing to go back to. Offering "Return" there
+  // would be a control that cannot do anything.
+  it('omits the return action when the polygon replaced nothing', () => {
+    renderChip({ active: { kind: 'POLYGON', coordinates: DRAWN_AREA }, previous: null });
+
+    expect(screen.getByTestId('active-scope-chip-polygon')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /return/i })).not.toBeInTheDocument();
+  });
+
+  // PR-1 deliberately ships no Redraw: nothing can enter draw mode yet.
+  it('does not offer a Redraw or Edit boundary action in PR-1', () => {
+    renderChip({
+      active: { kind: 'POLYGON', coordinates: DRAWN_AREA },
+      previous: { kind: 'AREA_SET', areaKeys: ['koramangala'] },
+    });
+
+    expect(screen.queryByRole('button', { name: /redraw|edit boundary/i })).not.toBeInTheDocument();
+  });
+
+  it('keeps the VIEWPORT chip on its own testid and wording', () => {
+    renderChip({
+      active: { kind: 'VIEWPORT', bounds: { s: 12.9, w: 77.6, n: 13.0, e: 77.7 } },
+      previous: null,
+    });
+
+    expect(screen.getByTestId('active-scope-chip-viewport')).toHaveTextContent('Visible map area');
+    expect(screen.queryByTestId('active-scope-chip-polygon')).not.toBeInTheDocument();
   });
 });

@@ -10,10 +10,44 @@ import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import { DiscoverUrlState, DiscoverUrlActions } from '@/hooks/useDiscoverUrlState';
 import { resolveEffectiveCity } from '@/features/discover/selectors/effectiveDiscoverContext';
 import type { CommittedResultScope } from '@/features/discover/state/resultScope';
+import {
+  IDLE_POLYGON_DRAFT,
+  resolvePolygonDraftPhase,
+  type PolygonDraftBlock,
+  type PolygonDraftPhase,
+  type PolygonDraftState,
+} from '@/features/discover/state/polygonDraftPhase';
+import type { PolygonRejection } from '@/features/discover/state/polygonRejection';
+import { validatePolygonScope } from '@/features/discover/state/validatePolygonScope';
 
 export interface UseDiscoverPageStateParams {
   urlState: DiscoverUrlState;
   urlActions: DiscoverUrlActions;
+  /**
+   * Issue #2419 (PR-1) — whether the shopper is signed in, threaded from the
+   * page composition (which already reads it) rather than pulled from
+   * `useAuth()` here: this hook renders in several test fixtures with no
+   * AuthProvider, and a context dependency would break them for no benefit.
+   *
+   * Optional, and only an explicit `false` blocks a POLYGON commit, so an
+   * unwired caller can never silently lock out a signed-in shopper. The real
+   * composition call site always supplies it.
+   *
+   * WHY OPTIONAL IS SAFE, when an optional security-ish parameter is normally
+   * a smell: this gate is an honesty and UX improvement layered ON TOP of a
+   * defence that does not depend on it. A caller that omits the value falls
+   * through to the pre-commit probe, which is itself fail-closed — the
+   * listings endpoint is authenticated, so an anonymous request returns 401,
+   * `validatePolygonScope` reports `unverified`, and nothing is committed.
+   * There is no fail-open path. The worst an unwired caller can do is make
+   * one pointless request and then say "we couldn't check this search area"
+   * instead of the more useful "this needs an account".
+   *
+   * The wiring is still guarded mechanically, because losing it degrades a
+   * message rather than announcing itself — see
+   * features/discover/composition/__tests__/authThreading.guard.test.ts.
+   */
+  isAuthenticated?: boolean;
 }
 
 export interface UseDiscoverPageStateResult {
@@ -85,11 +119,47 @@ export interface UseDiscoverPageStateResult {
   handleConfirmReplaceScope: () => void;
   /** J3.3 secondary action ("Keep selected areas") — discards the draft; the prior committed scope is untouched. */
   handleCancelReplaceScope: () => void;
+
+  // Issue #2419 (PR-1) — explicit polygon draft phase.
+  /**
+   * The single, explicit phase the polygon UI renders from:
+   * IDLE | DRAWING | REVIEWING | INVALID | COMMITTED. `draftPolygon` and
+   * `isReplaceScopeConfirmOpen` above are now DERIVED projections of this
+   * value, kept on the result so existing consumers (DiscoverMapCanvas's
+   * ReplaceResultScopeDialog wiring) compile and behave unchanged.
+   */
+  polygonDraftPhase: PolygonDraftPhase;
+  /**
+   * Why the current INVALID draft was not committed — a #2420 policy verdict
+   * or an unobtainable one — or null in every other phase.
+   */
+  polygonDraftBlock: PolygonDraftBlock | null;
+  /**
+   * The #2420 verdict specifically, or null in every other phase AND whenever
+   * the draft was merely unverifiable. Narrower than `polygonDraftBlock` on
+   * purpose: a consumer rendering "draw a smaller area" must never be handed
+   * a block that only means "we could not check".
+   */
+  polygonRejection: PolygonRejection | null;
+  /** Discards a blocked draft and returns to IDLE. The committed scope is never touched. */
+  handleDismissPolygonRejection: () => void;
+  /**
+   * Re-runs validation for a draft that could not be checked. No-op unless the
+   * block is a RETRYABLE `unverified` one — a policy rejection needs a
+   * different shape, and a 401 needs a signed-in shopper.
+   */
+  handleRetryPolygonValidation: () => void;
+  /**
+   * "Redraw" — discards any draft and moves to DRAWING. PR-1 defines the
+   * transition; the map-side chrome that acts on DRAWING is wired by PR-2.
+   */
+  handleRedrawPolygon: () => void;
 }
 
 export function useDiscoverPageState({
   urlState,
   urlActions,
+  isAuthenticated,
 }: UseDiscoverPageStateParams): UseDiscoverPageStateResult {
   const [filters, setFilters] = useState<PropertyFilters>(() => {
     const f = urlState.filters;
@@ -335,10 +405,40 @@ export function useDiscoverPageState({
   // stats bar, filter-clear affordance) keep working unchanged — only the
   // SOURCE of that value moves from ad-hoc draw state to the canonical
   // ResultScope, per the approved plan.
-  const [draftPolygon, setDraftPolygon] = useState<[number, number][] | null>(null);
-  const [isReplaceScopeConfirmOpen, setIsReplaceScopeConfirmOpen] = useState(false);
+  // Issue #2419 (PR-1) — the two ad-hoc booleans this replaced
+  // (`draftPolygon != null`, `isReplaceScopeConfirmOpen`) could not express
+  // "the draft was rejected" at all, and could represent nonsense states such
+  // as "confirmation open with no draft". Both are still EXPOSED below, as
+  // derived projections, so no consumer had to change.
+  const [polygonDraft, setPolygonDraft] = useState<PolygonDraftState>(IDLE_POLYGON_DRAFT);
+  // Monotonic id for the in-flight #2420 probe. A shopper who finishes a
+  // second polygon while the first is still being validated must not have the
+  // FIRST probe's verdict applied to the SECOND draft — each probe records the
+  // id it was started with and discards its own result if a newer draft has
+  // since superseded it.
+  const polygonProbeSeqRef = useRef(0);
 
   const resultScope: CommittedResultScope = urlState.resultScope ?? { active: null, previous: null };
+
+  /**
+   * The CURRENT committed scope, readable from an async continuation.
+   *
+   * NOT a second copy of ResultScope — it is re-pointed at the URL-derived
+   * value on every render and is never written by anything else, so the URL
+   * remains the single owner (#2016). It exists only because the #2420 probe
+   * is asynchronous: `handlePolygonDrawn`'s continuation would otherwise
+   * decide "replace or commit directly?" from the scope as it stood when the
+   * shopper finished drawing, which can be seconds stale.
+   *
+   * PR review at head aa5ab9e8 named the two failures that causes. If the
+   * scope was null at draw time and a Back/Forward or restore brings an
+   * AREA_SET back before the probe resolves, the stale-null branch commits
+   * POLYGON directly and skips #2016's replacement confirmation entirely. In
+   * the mirror case, a scope cleared mid-probe leaves the stale non-null
+   * branch opening a replace dialog for a scope that no longer exists.
+   */
+  const committedScopeRef = useRef(resultScope.active);
+  committedScopeRef.current = resultScope.active;
 
   // Keep the DERIVED filters.polygon in sync with the committed resultScope
   // (URL restore on refresh, Back/Forward, and confirm/replace commits all
@@ -375,25 +475,100 @@ export function useDiscoverPageState({
       // completion, with the finished shape — there is no separate
       // intermediate "still drawing" callback today, so completion is
       // treated as J3.2's "Use this boundary".
-      setDraftPolygon(polygon);
-      if (resultScope.active != null) {
-        // A scope (AREA_SET or another POLYGON) is already committed —
-        // surface the J3.3 replace-confirmation instead of committing
-        // immediately. Filters/URL are untouched until the user confirms.
-        setIsReplaceScopeConfirmOpen(true);
-      } else {
-        // Nothing committed yet — going from "nothing" to POLYGON is not a
-        // replacement, so commit directly without confirmation.
-        urlActions.commitResultScope({ kind: 'POLYGON', coordinates: polygon });
-        setDraftPolygon(null);
+      //
+      // Issue #2419 (PR-1) — the completed draft is now validated against
+      // #2420 BEFORE anything is committed. Nothing here writes to the URL,
+      // history or PropertyFilters: see validatePolygonScope.ts for why a
+      // commit-then-roll-back ordering could not satisfy #2419's "an invalid
+      // draft creates no committed result-scope history entry".
+      // Issue #2419 (PR-1) — anonymous shoppers are refused HERE, before any
+      // request is made. Drawn-area search is a signed-in capability: the
+      // anonymous results path (`useDiscoverCityListings`) never sends
+      // `polygon`, so an anonymous commit would show a "Drawn area" chip over
+      // results that were never scoped to the drawn area.
+      //
+      // The ordering is load-bearing. Probing first would send a request for a
+      // capability this shopper cannot use, and its 401 would be classified as
+      // a transport failure — reporting "we couldn't check this area" when the
+      // real answer is "this needs an account". Only an explicit `false`
+      // blocks, so a caller with no auth signal is unaffected.
+      if (isAuthenticated === false) {
+        polygonProbeSeqRef.current++;
+        setPolygonDraft({ status: 'INVALID', polygon, block: { kind: 'signed_in_required' } });
+        return;
       }
+
+      const seq = ++polygonProbeSeqRef.current;
+      setPolygonDraft({
+        status: 'REVIEWING',
+        polygon,
+        isValidating: true,
+        awaitingReplaceConfirm: false,
+      });
+
+      void validatePolygonScope(city, polygon).then((validation) => {
+        // A newer draft superseded this one while the probe was in flight —
+        // its verdict is about a shape the shopper has already replaced.
+        if (polygonProbeSeqRef.current !== seq) return;
+
+        if (validation.outcome === 'rejected') {
+          // The previous committed scope, its cards and its markers all stay
+          // exactly as they were — the URL was never written.
+          setPolygonDraft({
+            status: 'INVALID',
+            polygon,
+            block: { kind: 'policy', rejection: validation.rejection },
+          });
+          return;
+        }
+
+        if (validation.outcome === 'unverified') {
+          // FAIL CLOSED. An earlier revision proceeded here, reasoning that
+          // the server would still catch a bad polygon on the real query. But
+          // the probe endpoint is authenticated, so this branch is the NORMAL
+          // path for an anonymous shopper rather than an edge case, and
+          // proceeding put an unvalidated POLYGON into the URL and history —
+          // the exact ordering the probe exists to prevent (PR review at head
+          // 9f061dcc). Nothing is committed, and the block is deliberately
+          // NOT reported as a #2420 rejection: the drawing may be perfectly
+          // fine and the app simply could not get a verdict.
+          setPolygonDraft({
+            status: 'INVALID',
+            polygon,
+            block: { kind: 'unverified', retryable: validation.retryable },
+          });
+          return;
+        }
+
+        // Read the scope as it is NOW, not as it was when drawing finished —
+        // see committedScopeRef's doc for the two races a stale snapshot
+        // causes (PR review at head aa5ab9e8).
+        if (committedScopeRef.current != null) {
+          // A scope (AREA_SET or another POLYGON) is already committed —
+          // surface the J3.3 replace-confirmation instead of committing
+          // immediately. Filters/URL are untouched until the user confirms.
+          setPolygonDraft({
+            status: 'REVIEWING',
+            polygon,
+            isValidating: false,
+            awaitingReplaceConfirm: true,
+          });
+        } else {
+          // Nothing committed yet — going from "nothing" to POLYGON is not a
+          // replacement, so commit directly without confirmation.
+          urlActions.commitResultScope({ kind: 'POLYGON', coordinates: polygon });
+          setPolygonDraft(IDLE_POLYGON_DRAFT);
+        }
+      });
     },
-    [resultScope.active, urlActions],
+    [city, isAuthenticated, urlActions],
   );
 
   const handlePolygonCleared = useCallback(() => {
-    setDraftPolygon(null);
-    setIsReplaceScopeConfirmOpen(false);
+    // Abandon any in-flight probe — its verdict must not resurrect a draft
+    // the shopper has just cleared.
+    polygonProbeSeqRef.current++;
+    setPolygonDraft(IDLE_POLYGON_DRAFT);
     // Only clear the committed scope when it is actually the POLYGON this
     // clear button applies to — never an unrelated committed AREA_SET.
     if (resultScope.active?.kind === 'POLYGON') {
@@ -402,17 +577,45 @@ export function useDiscoverPageState({
   }, [resultScope.active, urlActions]);
 
   const handleConfirmReplaceScope = useCallback(() => {
-    if (draftPolygon) {
-      urlActions.commitResultScope({ kind: 'POLYGON', coordinates: draftPolygon });
+    // Guarded on `awaitingReplaceConfirm` rather than merely "a draft
+    // exists": the dialog is only ever open in that sub-state, and a stray
+    // confirm must never commit a draft that is still being validated or has
+    // already been rejected.
+    if (polygonDraft.status === 'REVIEWING' && polygonDraft.awaitingReplaceConfirm) {
+      urlActions.commitResultScope({ kind: 'POLYGON', coordinates: polygonDraft.polygon });
     }
-    setIsReplaceScopeConfirmOpen(false);
-    setDraftPolygon(null);
-  }, [draftPolygon, urlActions]);
+    setPolygonDraft(IDLE_POLYGON_DRAFT);
+  }, [polygonDraft, urlActions]);
 
   const handleCancelReplaceScope = useCallback(() => {
     // Discard the draft only — the prior committed scope is never touched.
-    setIsReplaceScopeConfirmOpen(false);
-    setDraftPolygon(null);
+    polygonProbeSeqRef.current++;
+    setPolygonDraft(IDLE_POLYGON_DRAFT);
+  }, []);
+
+  const handleDismissPolygonRejection = useCallback(() => {
+    setPolygonDraft(IDLE_POLYGON_DRAFT);
+  }, []);
+
+  /**
+   * Re-runs the #2420 probe for a draft that could not be checked, without
+   * making the shopper redraw a shape that was never found to be wrong. Only
+   * meaningful while the draft is blocked on a RETRYABLE `unverified` block —
+   * a 401 will not change until the shopper signs in, and a policy rejection
+   * needs a different shape, not another attempt.
+   */
+  const handleRetryPolygonValidation = useCallback(() => {
+    if (polygonDraft.status !== 'INVALID') return;
+    if (polygonDraft.block.kind !== 'unverified' || !polygonDraft.block.retryable) return;
+    handlePolygonDrawn(polygonDraft.polygon);
+  }, [polygonDraft, handlePolygonDrawn]);
+
+  const handleRedrawPolygon = useCallback(() => {
+    // Abandon any in-flight probe, then hand the shopper back to point
+    // placement. The committed scope (if any) keeps producing results until a
+    // new polygon is drawn AND accepted — Redraw alone commits nothing.
+    polygonProbeSeqRef.current++;
+    setPolygonDraft({ status: 'DRAWING' });
   }, []);
 
   const handleAreaClick = useCallback(
@@ -472,6 +675,25 @@ export function useDiscoverPageState({
     urlActions.deselectArea(resultScope.active?.kind === 'AREA_SET' ? null : undefined);
   }, [urlActions, resultScope.active]);
 
+  // Issue #2419 (PR-1) — derived projections. `polygonDraft` is the single
+  // owner; these three are read-only views of it, kept on the result so every
+  // pre-existing consumer keeps compiling and behaving identically.
+  const polygonDraftPhase: PolygonDraftPhase = resolvePolygonDraftPhase(
+    polygonDraft,
+    resultScope.active?.kind === 'POLYGON',
+  );
+  const draftPolygon: [number, number][] | null =
+    polygonDraft.status === 'REVIEWING' || polygonDraft.status === 'INVALID'
+      ? polygonDraft.polygon
+      : null;
+  const isReplaceScopeConfirmOpen =
+    polygonDraft.status === 'REVIEWING' && polygonDraft.awaitingReplaceConfirm;
+  const polygonDraftBlock = polygonDraft.status === 'INVALID' ? polygonDraft.block : null;
+  // #2420-only view, so a consumer that renders "redraw a smaller area" can
+  // never be handed an unverified block and say the wrong thing.
+  const polygonRejection =
+    polygonDraftBlock?.kind === 'policy' ? polygonDraftBlock.rejection : null;
+
   return {
     filters,
     selectedArea,
@@ -512,5 +734,11 @@ export function useDiscoverPageState({
     isReplaceScopeConfirmOpen,
     handleConfirmReplaceScope,
     handleCancelReplaceScope,
+    polygonDraftPhase,
+    polygonDraftBlock,
+    polygonRejection,
+    handleDismissPolygonRejection,
+    handleRetryPolygonValidation,
+    handleRedrawPolygon,
   };
 }

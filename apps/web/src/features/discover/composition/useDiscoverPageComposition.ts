@@ -284,6 +284,17 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     nodeAreaPoint,
     panelContent,
     selectedMarkerListing,
+    // Issue #2419 (PR-1) — the auth signals this composition already reads,
+    // so the page-state hook can refuse an anonymous POLYGON commit before
+    // any validation request is made.
+    //
+    // Both are passed RAW. The "unknown while loading" derivation lives in
+    // the controller, not here: this hook is composition-only and its
+    // structural guard (compositionHookScope.guard.test.ts) forbids
+    // derivations, ternaries included. Passing two plain values and letting
+    // the controller decide keeps that rule intact.
+    isAuthenticated,
+    authLoading,
   });
   const {
     filters, legacySelectedArea, mapZoom, mapReady,

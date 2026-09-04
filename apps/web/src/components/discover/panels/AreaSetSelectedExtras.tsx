@@ -2,6 +2,12 @@ import { useMemo, type ReactNode } from 'react';
 import { ChevronRight, GraduationCap, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDiscoverAreas, type DiscoverArea } from '@/hooks/useDiscoverAreas';
+import { useDiscoverNav } from '@/features/discover/context/useDiscoverContext';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  resolveDrawSearchAreaEligibility,
+  DRAW_SEARCH_AREA_UNAVAILABLE_TITLE,
+} from '@/features/discover/state/drawSearchAreaEligibility';
 
 /**
  * Issue #2017 — multi-area AREA_SET committed-scope extras for
@@ -78,11 +84,18 @@ export interface AreaSetSelectedHeaderProps {
  * areas" / "Draw search area" / "Create alert") + heading with joined area
  * names + a "why" line summing per-area counts.
  *
- * "Draw search area" and "Create alert" are rendered disabled — no real
- * `drawArea`/alert-creation action exists anywhere in this app yet (only in
- * the design-mock docs), so wiring a fake handler would be worse than an
- * honest disabled state. See the calling report's "Issues noticed but not
- * fixed" for detail.
+ * "Create alert" is rendered disabled — no alert-creation action exists
+ * anywhere in this app yet (only in the design-mock docs), so wiring a fake
+ * handler would be worse than an honest disabled state.
+ *
+ * Issue #2419 (PR-1) — "Draw search area" is no longer unconditionally
+ * disabled with a placeholder title. It now runs the binding journey matrix
+ * (`state/drawSearchAreaEligibility.ts`): hidden outright where POLYGON scope
+ * does not apply, and where it does apply, disabled with a title that says
+ * what is actually true. It stays disabled for the whole of PR-1 because
+ * nothing can enter draw mode yet — `shared/map/DrawControl.tsx` exposes no
+ * external start handle, and adding one requires the map canvas, owned by the
+ * #2426 lane. PR-2 supplies the handler and flips `isDrawModeWired`.
  */
 export function AreaSetSelectedHeader({
   areaKeys,
@@ -96,6 +109,26 @@ export function AreaSetSelectedHeader({
   onFocusArea,
 }: AreaSetSelectedHeaderProps) {
   const { data } = useDiscoverAreas(city);
+  // Reads the nav facade directly, matching this file's existing
+  // self-sourcing convention (see the module doc) and the same pattern
+  // ActiveScopeChip/AreaSetChips use — the caller's prop surface is unchanged.
+  const nav = useDiscoverNav();
+  const { user, isLoading: authLoading } = useAuth();
+
+  // This header only ever renders for a committed multi-area AREA_SET, so a
+  // residential listing scope is structurally present here. The predicate is
+  // still consulted rather than assumed: it is the ONE place the journey
+  // matrix lives, and PR-2 reuses it verbatim for the map-side entry, where
+  // neither condition is guaranteed.
+  //
+  // `isAuthenticated` stays `undefined` while auth loads rather than
+  // collapsing to `false`, so the entry never flashes "Sign in to search a
+  // drawn area" at a shopper who is in fact signed in.
+  const drawEligibility = resolveDrawSearchAreaEligibility({
+    journey: nav?.journey,
+    hasResidentialListingScope: areaKeys.length > 0,
+    isAuthenticated: authLoading ? undefined : user !== null,
+  });
 
   const areasByKey = useMemo(() => {
     const map = new Map<string, DiscoverArea>();
@@ -155,9 +188,19 @@ export function AreaSetSelectedHeader({
         >
           Fit all
         </EPGhost>
-        <EPGhost disabled title="Draw search area is not available yet" testId="area-set-draw-area">
-          Draw search area
-        </EPGhost>
+        {drawEligibility.status !== 'HIDDEN' && (
+          <EPGhost
+            disabled={drawEligibility.status === 'UNAVAILABLE'}
+            title={
+              drawEligibility.status === 'UNAVAILABLE'
+                ? DRAW_SEARCH_AREA_UNAVAILABLE_TITLE[drawEligibility.reason]
+                : 'Draw a boundary on the map to search inside it'
+            }
+            testId="area-set-draw-area"
+          >
+            Draw search area
+          </EPGhost>
+        )}
         <EPGhost disabled title="Create alert is not available yet" testId="area-set-create-alert">
           Create alert
         </EPGhost>

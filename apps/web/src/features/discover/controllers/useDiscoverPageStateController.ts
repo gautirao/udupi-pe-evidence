@@ -15,6 +15,22 @@ export interface UseDiscoverPageStateControllerParams {
   panelContent: DiscoverPanelContent;
   /** Issue #1374 — an agri polygon selection overrides the routed panel. */
   selectedMarkerListing: (PropertyListing & { images?: PropertyImage[] }) | null;
+  /**
+   * Issue #2419 (PR-1) — forwarded to `useDiscoverPageState`, which refuses an
+   * anonymous POLYGON commit before any validation request. Optional so
+   * fixtures that predate it keep compiling; see that hook's param doc for why
+   * only an explicit `false` blocks and why optional is safe here.
+   */
+  isAuthenticated?: boolean;
+  /**
+   * Issue #2419 (PR-1) — whether auth is still resolving. Needed because
+   * `isAuthenticated` is derived upstream as "not loading AND user present",
+   * so it reads `false` during the load window for a shopper who IS signed in.
+   * This controller turns that pair into the tri-state the gate wants; the
+   * composition cannot, because it is composition-only and its structural
+   * guard forbids derivations.
+   */
+  authLoading?: boolean;
 }
 
 /**
@@ -47,6 +63,8 @@ export function useDiscoverPageStateController({
   nodeAreaPoint,
   panelContent,
   selectedMarkerListing,
+  isAuthenticated,
+  authLoading,
 }: UseDiscoverPageStateControllerParams) {
   // `selectedArea` is renamed OUT of the spread on purpose: this controller
   // must not re-expose the confusable raw name at all (issue #2083 cycle 4,
@@ -55,6 +73,10 @@ export function useDiscoverPageStateController({
   const { selectedArea: legacySelectedArea, ...pageState } = useDiscoverPageState({
     urlState,
     urlActions,
+    // Issue #2419 (PR-1) — `undefined` while auth is still resolving, so the
+    // signed-in gate never refuses a shopper who is in fact signed in and
+    // merely mid-load. Only an explicit `false` blocks.
+    isAuthenticated: authLoading ? undefined : isAuthenticated,
   });
 
   // Issue #1956 PR-4 (Option C) — bridges nodeAreaPoint into every existing

@@ -1,8 +1,9 @@
-import { MapPin, X } from 'lucide-react';
+import { MapPin, PenTool, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useDiscoverActions, useDiscoverNav } from '@/features/discover/context/useDiscoverContext';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { computeGroupBounds } from '@/utils/discoverGroupBounds';
+import { SCOPE_TITLE } from '@/features/discover/presentation/scopeTitles';
 
 /**
  * Issue #2015 AC6 — active-scope chip + "Return to <Area>" for a committed
@@ -27,9 +28,33 @@ import { computeGroupBounds } from '@/utils/discoverGroupBounds';
  * MUST-HAVE #3 root cause). `discoverAreas` stays populated regardless of
  * nav state, so the lookup actually resolves.
  *
- * Renders nothing unless the ACTIVE committed scope is VIEWPORT — AREA_SET
- * and POLYGON scopes have their own selection UX (#2017's chip strip /
- * boundary-draw affordances) and are not this component's concern.
+ * Renders nothing unless the ACTIVE committed scope is VIEWPORT or POLYGON.
+ * AREA_SET has its own selection UX (#2017's chip strip) and is not this
+ * component's concern.
+ *
+ * Issue #2419 (PR-1) — the POLYGON branch. Before this issue a committed
+ * POLYGON had NO scope chip here at all; its only indicator was
+ * `MapStatsBar`'s "Area search / Clear area" card, which was gated on
+ * `isAuthenticated` and so left the state completely unlabelled for anonymous
+ * shoppers. That card is retired (see MapStatsBar.tsx) and this chip is now
+ * the single committed-POLYGON surface, matching the mock's own POLYGON
+ * treatment (`ExpPanel.jsx` `EPResultHead`, `kind === 'POLYGON'`): the chip
+ * names the scope "Drawn area" and offers the return action.
+ *
+ * PARITY NOTE (recorded on PR #2441): in the mock this scope bar is a PANEL
+ * block, not a map overlay. PR-1 adds the POLYGON branch HERE because that
+ * reuses the existing `previous`-restore logic and the already-threaded
+ * `publishCameraIntent` without touching the map canvas (owned by another
+ * lane). Placement parity with the mock's single panel scope bar is a
+ * lane-wide question, deliberately not settled by this PR.
+ *
+ * There is deliberately NO "Redraw"/"Edit boundary" action here yet: nothing
+ * in the app can currently enter draw mode programmatically (`DrawControl`
+ * mounts `L.Control.Draw` with no external start handle), so a Redraw button
+ * in PR-1 would be a control that does nothing. PR-2 wires draw-mode entry
+ * and adds it. Note also that the mock's own "Edit boundary" label is
+ * data-only — `ExpPanel.jsx` never renders it, and `Experience.jsx`'s
+ * `drawArea` action is a REDRAW, not vertex editing.
  *
  * "Return to <Area>" restores `resultScope.previous` by committing it back
  * as the active scope AND re-fits the camera to that previous area (single
@@ -59,7 +84,8 @@ export function ActiveScopeChip({ discoverAreas, publishCameraIntent }: ActiveSc
   // "Consumers must treat an absent value the same as { active: null,
   // previous: null }") — partial state literals in tests/callers may omit
   // it entirely, so this reads defensively rather than assuming it's set.
-  if (resultScope?.active?.kind !== 'VIEWPORT') return null;
+  const activeKind = resultScope?.active?.kind;
+  if (activeKind !== 'VIEWPORT' && activeKind !== 'POLYGON') return null;
 
   const { previous } = resultScope;
 
@@ -94,10 +120,30 @@ export function ActiveScopeChip({ discoverAreas, publishCameraIntent }: ActiveSc
     }
   };
 
+  const isPolygon = activeKind === 'POLYGON';
+  const ScopeIcon = isPolygon ? PenTool : MapPin;
+
   return (
-    <div className="inline-flex items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-sm shadow-sm">
-      <MapPin className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-      <span>Visible map area</span>
+    // Issue #2419 (PR-1) — positioning added here after real-browser evidence
+    // at 1366x768 showed the chip rendering IN NORMAL FLOW inside the map
+    // container, where it landed underneath DiscoverMapContextOverlay's
+    // top-left city chip and was partially unreadable. (Pre-existing for the
+    // VIEWPORT branch, but VIEWPORT is rarely reachable, so it went unseen;
+    // a committed POLYGON makes it routine.) The canvas that composes these
+    // overlays belongs to another lane, so the fix lives here.
+    //
+    // The slot is the same row AreaSetChips uses, including its documented
+    // sub-lg offset for a breadcrumb that can wrap to two rows. There is no
+    // contention: AreaSetChips seeds its draft from a committed AREA_SET and
+    // renders null whenever POLYGON or VIEWPORT is the active scope — which
+    // is the only time this chip renders at all. top-4 is deliberately
+    // avoided: the city chip holds its left and SearchThisAreaCta its centre.
+    <div
+      className="absolute left-4 top-14 z-[999] inline-flex max-w-[calc(100%-2rem)] items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-sm shadow-sm [@media(max-width:1023px)]:top-24"
+      data-testid={isPolygon ? 'active-scope-chip-polygon' : 'active-scope-chip-viewport'}
+    >
+      <ScopeIcon className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+      <span>{SCOPE_TITLE[activeKind]}</span>
       {returnLabel && (
         <Button
           type="button"

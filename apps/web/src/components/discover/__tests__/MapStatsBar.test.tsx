@@ -7,28 +7,35 @@ import { PropertyFilters } from '@/hooks/usePropertyListings';
 const emptyFilters: PropertyFilters = {};
 const polygonFilters: PropertyFilters = { polygon: [[13.3, 74.7], [13.4, 74.8]] as unknown as PropertyFilters['polygon'] };
 
-describe('MapStatsBar', () => {
-  it('does not render "on map" listing count', () => {
-    render(<MapStatsBar filters={emptyFilters} onPolygonClear={vi.fn()} />);
-    expect(screen.queryByText(/on map/i)).not.toBeInTheDocument();
+/**
+ * Issue #2419 (PR-1) — MapStatsBar is retired and renders nothing.
+ *
+ * It used to be the committed-POLYGON indicator ("Area search" + "Clear
+ * area"). #2419 requires ONE POLYGON scope surface, and that is now
+ * `features/discover/components/map/ActiveScopeChip.tsx`, which names the
+ * scope "Drawn area" and is not gated on authentication. These tests changed
+ * because the BEHAVIOUR was deliberately removed, not because they became
+ * inconvenient — the replacement surface is covered by ActiveScopeChip's own
+ * committed-POLYGON suite.
+ */
+describe('MapStatsBar (retired — #2419)', () => {
+  it('renders nothing when no polygon filter is active', () => {
+    const { container } = render(<MapStatsBar filters={emptyFilters} onPolygonClear={vi.fn()} />);
+    expect(container).toBeEmptyDOMElement();
   });
 
-  it('does not render "total listings" count', () => {
-    render(<MapStatsBar filters={emptyFilters} onPolygonClear={vi.fn()} />);
-    expect(screen.queryByText(/total listings/i)).not.toBeInTheDocument();
+  it('no longer renders a second committed-POLYGON indicator', () => {
+    const { container } = render(<MapStatsBar filters={polygonFilters} onPolygonClear={vi.fn()} />);
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText('Area search')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /clear polygon search/i })).not.toBeInTheDocument();
   });
 
-  it('shows "Area search" indicator + Clear area when polygon filter active', () => {
-    render(<MapStatsBar filters={polygonFilters} onPolygonClear={vi.fn()} />);
-    expect(screen.getByText('Area search')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /clear polygon search/i })).toBeInTheDocument();
-  });
-
-  it('does NOT render any school name or radius chip — that lives in the breadcrumb + legend now', () => {
-    // The selected-school chip was removed; MapStatsBar no longer accepts selectedSchool.
-    render(<MapStatsBar filters={{ schoolRadiusKm: 5 }} onPolygonClear={vi.fn()} />);
-    expect(screen.queryByText(/km\)/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Manipal Academy/)).not.toBeInTheDocument();
+  it('still renders nothing for a school radius — that lives in the breadcrumb + legend', () => {
+    const { container } = render(
+      <MapStatsBar filters={{ schoolRadiusKm: 5 }} onPolygonClear={vi.fn()} />,
+    );
+    expect(container).toBeEmptyDOMElement();
   });
 });
 
