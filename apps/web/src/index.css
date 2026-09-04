@@ -632,6 +632,24 @@
     @apply bg-muted;
   }
 
+  /* Issue #2419 (PR-2) — hide the plugin's own draw chrome once the product
+     supplies the entry point and the draw-mode overlay.
+
+     #2419: "Do not expose unexplained Leaflet/plugin iconography as the
+     primary entry point" and "Do not rely only on plugin toolbar
+     icons/tooltips". The control itself stays mounted, because it owns the
+     handler machinery DrawControl drives programmatically — only its UI is
+     suppressed, by a class DrawControl toggles on the map container.
+
+     The cursor tooltip goes too: it is plugin-default wording ("Click to
+     continue drawing shape") that would contradict the product instructions
+     shown in the overlay, and it follows the pointer closely enough to
+     intercept clicks. */
+  .discover-hide-leaflet-draw-toolbar .leaflet-draw,
+  .discover-hide-leaflet-draw-toolbar .leaflet-draw-tooltip {
+    display: none !important;
+  }
+
   /* Issue #1808 — region-selection guidance: one-shot copper attention ring on
      the panel's existing "choose how to continue" section, plus the map
      guidance card's directional arrow nudge. Fires only after a map/panel

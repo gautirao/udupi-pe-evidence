@@ -9,7 +9,7 @@ import { DiscoverMapLegend } from '@/components/discover/DiscoverMapLegend';
 import { RegionGuidanceCard, type RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCard';
 import { ExploreMapPanel } from '@/components/map/ExploreMapPanel';
 import { DiscoverMapCountBadge } from '@/components/discover/DiscoverMapCountBadge';
-import { MapStatsBar, MarkersTruncationNotice } from '@/components/discover/MapStatsBar';
+import { MarkersTruncationNotice } from '@/components/discover/MapStatsBar';
 import { MapEmptyGuidance } from '@/components/discover/MapEmptyGuidance';
 import { DiscoverMapMarkerPopover } from '@/components/discover/DiscoverMapMarkerPopover';
 import { clampSchoolRadiusKm, type PropertyFilters, type PropertyListing, type PropertyImage } from '@/hooks/usePropertyListings';
@@ -36,6 +36,11 @@ import type { UseAreasNavigationJourneyResult } from '@/features/discover/naviga
 import { ReplaceResultScopeDialog } from '@/features/discover/components/ReplaceResultScopeDialog';
 import { SearchThisAreaCta } from '@/features/discover/components/map/SearchThisAreaCta';
 import { ActiveScopeChip } from '@/features/discover/components/map/ActiveScopeChip';
+import { DrawModeOverlay } from '@/features/discover/components/map/DrawModeOverlay';
+import type {
+  PolygonDraftBlock,
+  PolygonDraftPhase,
+} from '@/features/discover/state/polygonDraftPhase';
 import { AreaSetChips } from '@/features/discover/components/AreaSetChips';
 import { useAreaSetDraftContext } from '@/features/discover/state/AreaSetDraftContext';
 import { useSearchThisAreaCtaOffset } from '@/features/discover/state/useSearchThisAreaCtaOffset';
@@ -91,6 +96,28 @@ export interface DiscoverMapCanvasProps {
   isLandingState: boolean;
   handlePolygonDrawn: (polygon: [number, number][]) => void;
   handlePolygonCleared: () => void;
+  /**
+   * Issue #2419 (PR-2) — the product-native draw-mode seam and its overlay.
+   * All optional, for the same reason the #2016 props below are: every
+   * existing fixture and caller that predates PR-2 keeps compiling and
+   * behaving identically, and with these omitted the plugin's own toolbar
+   * stays the only entry while the overlay never renders. The real page
+   * composition supplies them from the same `useDiscoverPageState` instance
+   * that already owns the polygon phase.
+   */
+  polygonDraftPhase?: PolygonDraftPhase;
+  polygonDraftBlock?: PolygonDraftBlock | null;
+  drawVertexCount?: number;
+  startDrawNonce?: number;
+  cancelDrawNonce?: number;
+  undoVertexNonce?: number;
+  handleCancelDrawPolygon?: () => void;
+  handleUndoDrawVertex?: () => void;
+  handleRedrawPolygon?: () => void;
+  handleRetryPolygonValidation?: () => void;
+  handleDismissPolygonRejection?: () => void;
+  handleDrawVertexCountChange?: (count: number) => void;
+  handleDrawModeExit?: () => void;
   /**
    * Issue #2016 — J3.3 replace-confirmation dialog state, owned by
    * useDiscoverPageState.ts. Optional (like isColdNavigate above) so
@@ -398,6 +425,19 @@ export function DiscoverMapCanvas({
   isLandingState,
   handlePolygonDrawn,
   handlePolygonCleared,
+  polygonDraftPhase,
+  polygonDraftBlock = null,
+  drawVertexCount = 0,
+  startDrawNonce,
+  cancelDrawNonce,
+  undoVertexNonce,
+  handleCancelDrawPolygon,
+  handleUndoDrawVertex,
+  handleRedrawPolygon,
+  handleRetryPolygonValidation,
+  handleDismissPolygonRejection,
+  handleDrawVertexCountChange,
+  handleDrawModeExit,
   isReplaceScopeConfirmOpen = false,
   handleConfirmReplaceScope,
   handleCancelReplaceScope,
@@ -534,7 +574,24 @@ export function DiscoverMapCanvas({
   // Issue #2426 — real-measured clearance so SearchThisAreaCta (rendered
   // below) never overlaps DiscoverMapContextOverlay's breadcrumb or the
   // AreaSetChips strip beneath it. See useSearchThisAreaCtaOffset's own doc.
-  const { ctaTopOffsetPx, onBreadcrumbHeightChange, chipsRowRef } = useSearchThisAreaCtaOffset(mapContainerRef);
+  const {
+    ctaTopOffsetPx,
+    scopeChipTopOffsetPx,
+    drawOverlayTopOffsetPx,
+    onBreadcrumbHeightChange,
+    chipsRowRef,
+    scopeChipRef,
+  } = useSearchThisAreaCtaOffset(mapContainerRef);
+
+  // Issue #2419 (PR-2) — touch vs pointer wording for the draw instructions.
+  // #2419 specifies different copy for the two ("Click points" / "Tap
+  // points"), and the honest discriminator is the input device, not the
+  // viewport width: a narrow desktop window is still a mouse, and a large
+  // tablet is still a finger.
+  const isTouchPointer =
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(pointer: coarse)').matches
+      : false;
   // Code-review fix (PR #2424) — gated on `shell.isAreaSetDraftOpen`. Without
   // this gate, `useAreaSetDraftContext()` always seeds `draftAreaKeys` from
   // the committed AREA_SET and always runs the nearby-candidate query in
@@ -760,7 +817,37 @@ export function DiscoverMapCanvas({
         onActivate={onActivateViewportSearch ?? (() => {})}
         topOffsetPx={ctaTopOffsetPx}
       />
-      <ActiveScopeChip discoverAreas={discoverAreas} publishCameraIntent={publishCameraIntent} />
+      <ActiveScopeChip
+        discoverAreas={discoverAreas}
+        publishCameraIntent={publishCameraIntent}
+        // Its OWN rung, above the CTA. An earlier revision handed it
+        // `ctaTopOffsetPx` verbatim, which put the chip and the CTA on the
+        // same row — see useSearchThisAreaCtaOffset for why nothing else in
+        // the stack was reserving space for the chip.
+        topOffsetPx={scopeChipTopOffsetPx}
+        measureRef={scopeChipRef}
+        onRedraw={handleRedrawPolygon}
+      />
+      {/* Issue #2419 (PR-2) — draw-mode instructions with Cancel/Undo, and
+          the blocked-draft surface for a #2420 rejection or an unobtainable
+          verdict. Bottom rung of the measured stack: redrawing a COMMITTED
+          polygon shows this overlay while the chip still reads COMMITTED (the
+          chip renders from the URL scope, which does not change until the new
+          shape is accepted), so chip, CTA and overlay can all be up at once. */}
+      {polygonDraftPhase && (
+        <DrawModeOverlay
+          phase={polygonDraftPhase}
+          block={polygonDraftBlock}
+          vertexCount={drawVertexCount}
+          isTouch={isTouchPointer}
+          onCancelDraw={handleCancelDrawPolygon ?? (() => {})}
+          onUndoVertex={handleUndoDrawVertex ?? (() => {})}
+          onRedraw={handleRedrawPolygon ?? (() => {})}
+          onRetryValidation={handleRetryPolygonValidation ?? (() => {})}
+          onDismissBlock={handleDismissPolygonRejection ?? (() => {})}
+          topOffsetPx={drawOverlayTopOffsetPx}
+        />
+      )}
       {error ? (
         <div className="absolute inset-0 flex items-center justify-center">
           <Card className="p-6 text-center max-w-sm">
@@ -801,6 +888,16 @@ export function DiscoverMapCanvas({
           // while preserving area-draw search in every drill-down state.
           onPolygonDrawn={isLandingState ? undefined : handlePolygonDrawn}
           onPolygonCleared={isLandingState ? undefined : handlePolygonCleared}
+          // Issue #2419 (PR-2) — the product-native draw seam.
+          startDrawNonce={startDrawNonce}
+          cancelDrawNonce={cancelDrawNonce}
+          undoVertexNonce={undoVertexNonce}
+          onDrawVertexCountChange={handleDrawVertexCountChange}
+          onDrawModeExit={handleDrawModeExit}
+          // The plugin toolbar is hidden ONLY once the product entry is
+          // actually wired (the page supplies the phase). Without that, hiding
+          // it would leave no way to draw at all.
+          hideDrawPluginToolbar={polygonDraftPhase != null}
           schoolCircle={selectedSchool ? {
             lat: selectedSchool.latitude, lon: selectedSchool.longitude,
             // Issue #1210: clamp so the drawn circle reflects the effective (>=1 km) radius.
@@ -1153,12 +1250,12 @@ export function DiscoverMapCanvas({
         }}
       />
 
-      {isAuthenticated && filters.polygon && (
-        <MapStatsBar
-          filters={filters}
-          onPolygonClear={handlePolygonCleared}
-        />
-      )}
+      {/* Issue #2419 (PR-2) — MapStatsBar deleted here and in its own file.
+          It was a second owner of the committed-POLYGON state, labelled
+          "Area search" against the chip's "Drawn area", and this mount gated
+          it on `isAuthenticated` by accident of ownership rather than policy,
+          so anonymous shoppers saw no indicator while signed-in ones saw two.
+          ActiveScopeChip above is now the single surface. */}
 
       <MarkersTruncationNotice
         truncated={markersTruncated}

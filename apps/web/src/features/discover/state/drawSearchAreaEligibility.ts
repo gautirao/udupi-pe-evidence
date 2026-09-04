@@ -18,7 +18,16 @@
  * draw chrome (PR-2) can share one rule rather than re-deriving it.
  */
 
-export type DrawSearchAreaHiddenReason = 'agricultural_journey' | 'hierarchy_only';
+export type DrawSearchAreaHiddenReason =
+  | 'agricultural_journey'
+  | 'hierarchy_only'
+  /**
+   * Issue #2419 (PR-2, owner ruling) — anonymous shoppers. Moved here from
+   * UNAVAILABLE once the entry became a working control; see the branch in
+   * `resolveDrawSearchAreaEligibility` for why a disabled control is worse
+   * than an absent one now.
+   */
+  | 'signed_in_required';
 
 export type DrawSearchAreaUnavailableReason =
   /**
@@ -35,18 +44,7 @@ export type DrawSearchAreaUnavailableReason =
    * `canonical_boundary_geometry` status to the client (see PR #2441,
    * Blocker C). Modelled now so PR-2 only has to supply the flag.
    */
-  | 'city_boundary_missing'
-  /**
-   * The shopper is not signed in. Drawn-area search is a signed-in capability
-   * in PR-1 (Main Agent ruling, owner informed) because the anonymous results
-   * path never sends `polygon` — see polygonDraftPhase.ts's
-   * `signed_in_required` for the full reasoning.
-   *
-   * UNAVAILABLE rather than HIDDEN, unlike Agricultural: this is a real
-   * feature for this shopper, one sign-in away, so naming the requirement is
-   * more useful than silently removing the control.
-   */
-  | 'signed_in_required';
+  | 'city_boundary_missing';
 
 export type DrawSearchAreaEligibility =
   | { status: 'ELIGIBLE' }
@@ -103,12 +101,24 @@ export function resolveDrawSearchAreaEligibility({
   if (!hasResidentialListingScope) {
     return { status: 'HIDDEN', reason: 'hierarchy_only' };
   }
-  // Ordered most-specific first among the UNAVAILABLE reasons, so the title
-  // names the thing this shopper would actually have to change. Signing in is
-  // the one they can act on immediately, so it outranks a missing city
-  // boundary and the not-yet-wired placeholder.
+  // Issue #2419 (PR-2, owner ruling) — an anonymous shopper gets NOTHING, not
+  // a disabled control.
+  //
+  // PR-1 returned UNAVAILABLE here, and that was right at the time: the entry
+  // was disabled for everyone, so its title was the only place to say anything
+  // true. PR-2 makes the control real, and the ruling's own constraint is not
+  // to "expose a control that lets them complete a draw only to hit an auth
+  // failure". An entry that works for one shopper and is decorative for
+  // another is worse than an absent one, and the approved surface has no
+  // precedent for a sign-in-gated map tool — `ExpPanel.jsx:121` renders this
+  // entry unconditionally inside an eligible scope, and the kit's only
+  // sign-in affordances are per-listing price and contact reveals.
+  //
+  // Checked BEFORE the city-boundary and wiring reasons because it is the
+  // strongest statement available: those two describe a feature this shopper
+  // could otherwise use, and this one says they cannot use it at all yet.
   if (isAuthenticated === false) {
-    return { status: 'UNAVAILABLE', reason: 'signed_in_required' };
+    return { status: 'HIDDEN', reason: 'signed_in_required' };
   }
   if (cityBoundaryAvailable === false) {
     return { status: 'UNAVAILABLE', reason: 'city_boundary_missing' };
@@ -129,5 +139,7 @@ export const DRAW_SEARCH_AREA_UNAVAILABLE_TITLE: Readonly<
 > = {
   draw_not_wired_yet: 'Drawing a search area is coming soon',
   city_boundary_missing: 'Drawing a search area is not available in this city yet',
-  signed_in_required: 'Sign in to search a drawn area',
 };
+
+/** Title for the ELIGIBLE (live) entry — says what the control will do. */
+export const DRAW_SEARCH_AREA_ELIGIBLE_TITLE = 'Draw a boundary on the map to search inside it';

@@ -2,10 +2,13 @@ import { useMemo, type ReactNode } from 'react';
 import { ChevronRight, GraduationCap, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDiscoverAreas, type DiscoverArea } from '@/hooks/useDiscoverAreas';
+import { useDiscoverSummary } from '@/hooks/useDiscoverSummary';
 import { useDiscoverNav } from '@/features/discover/context/useDiscoverContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { DEFAULT_CITY } from '@/lib/localityUtils';
 import {
   resolveDrawSearchAreaEligibility,
+  DRAW_SEARCH_AREA_ELIGIBLE_TITLE,
   DRAW_SEARCH_AREA_UNAVAILABLE_TITLE,
 } from '@/features/discover/state/drawSearchAreaEligibility';
 
@@ -55,6 +58,81 @@ function EPGhost({
   );
 }
 
+export interface DrawSearchAreaEntryProps {
+  /**
+   * True when this state actually produces a residential listing result set.
+   * Both panel branches that render this pass `true` by construction — a
+   * committed area IS a listing scope — but the predicate is still consulted
+   * rather than assumed, because it is the ONE place the journey matrix lives
+   * and PR-2's map-side reuse cannot make that guarantee.
+   */
+  hasResidentialListingScope: boolean;
+  onDrawSearchArea?: () => void;
+  onRevealMap?: () => void;
+}
+
+/**
+ * Issue #2419 (PR-2) — the "Draw search area" entry, extracted so BOTH
+ * committed-AREA_SET panel branches render the same control.
+ *
+ * It previously lived inline in the multi-area header only, which meant a
+ * SINGLE committed area — much the more common state — had no draw entry at
+ * all. That contradicted the issue's rule that the entry belongs in eligible
+ * residential listing states, and it was invisible because the multi-area
+ * header was simply where the disabled placeholder happened to sit when PR-1
+ * inherited it.
+ *
+ * Extracted rather than duplicated: the eligibility call, the reveal-then-arm
+ * ordering and the title copy are all decisions that must not drift between
+ * two copies.
+ */
+export function DrawSearchAreaEntry({
+  hasResidentialListingScope,
+  onDrawSearchArea,
+  onRevealMap,
+}: DrawSearchAreaEntryProps) {
+  const nav = useDiscoverNav();
+  const { user, isLoading: authLoading } = useAuth();
+  const { data: summary } = useDiscoverSummary({ city: nav?.city || DEFAULT_CITY });
+
+  const eligibility = resolveDrawSearchAreaEligibility({
+    // The entry is live only once a handler exists; without one it stays
+    // disabled, so a caller that has not adopted the prop cannot end up with
+    // a control that looks usable and does nothing.
+    isDrawModeWired: onDrawSearchArea != null,
+    cityBoundaryAvailable: summary?.polygonSearchAvailable,
+    journey: nav?.journey,
+    hasResidentialListingScope,
+    // `undefined` while auth loads rather than `false`, so the entry never
+    // blinks out from under a shopper who is in fact signed in.
+    isAuthenticated: authLoading ? undefined : user !== null,
+  });
+
+  if (eligibility.status === 'HIDDEN') return null;
+
+  return (
+    <EPGhost
+      disabled={eligibility.status === 'UNAVAILABLE'}
+      onClick={() => {
+        // Reveal the map FIRST on the mobile shell. Below `lg` the map canvas
+        // is not mounted until the shopper opens the Map view, so arming the
+        // draw tool without this would put them in draw mode on a surface
+        // they cannot see. A no-op on desktop.
+        onRevealMap?.();
+        onDrawSearchArea?.();
+      }}
+      title={
+        eligibility.status === 'UNAVAILABLE'
+          ? DRAW_SEARCH_AREA_UNAVAILABLE_TITLE[eligibility.reason]
+          : DRAW_SEARCH_AREA_ELIGIBLE_TITLE
+      }
+      testId="area-set-draw-area"
+    >
+      Draw search area
+    </EPGhost>
+  );
+}
+
 export interface AreaSetSelectedHeaderProps {
   /** The committed AREA_SET's areaKeys (already confirmed length > 1 by the caller). */
   areaKeys: string[];
@@ -77,6 +155,22 @@ export interface AreaSetSelectedHeaderProps {
    * only; must never mutate the committed result scope.
    */
   onFocusArea: (areaKey: string) => void;
+  /**
+   * Issue #2419 (PR-2) — "Draw search area". Enters draw mode on the map;
+   * commits nothing by itself. Optional so callers that predate PR-2 keep
+   * compiling — without it the entry falls back to the disabled treatment,
+   * which is exactly what PR-1 shipped.
+   */
+  onDrawSearchArea?: () => void;
+  /**
+   * Issue #2419 (PR-2) — reveals the map on the mobile shell. Below the `lg`
+   * breakpoint the map canvas is not mounted at all until the shopper opens
+   * the Map view (verified in PR-1's browser evidence), so arming the draw
+   * tool from a panel button would otherwise put them in draw mode on a
+   * surface they cannot see. Optional; omitted on desktop, where the map is
+   * always present.
+   */
+  onRevealMap?: () => void;
 }
 
 /**
@@ -107,28 +201,10 @@ export function AreaSetSelectedHeader({
   onClearAreas,
   onFitAll,
   onFocusArea,
+  onDrawSearchArea,
+  onRevealMap,
 }: AreaSetSelectedHeaderProps) {
   const { data } = useDiscoverAreas(city);
-  // Reads the nav facade directly, matching this file's existing
-  // self-sourcing convention (see the module doc) and the same pattern
-  // ActiveScopeChip/AreaSetChips use — the caller's prop surface is unchanged.
-  const nav = useDiscoverNav();
-  const { user, isLoading: authLoading } = useAuth();
-
-  // This header only ever renders for a committed multi-area AREA_SET, so a
-  // residential listing scope is structurally present here. The predicate is
-  // still consulted rather than assumed: it is the ONE place the journey
-  // matrix lives, and PR-2 reuses it verbatim for the map-side entry, where
-  // neither condition is guaranteed.
-  //
-  // `isAuthenticated` stays `undefined` while auth loads rather than
-  // collapsing to `false`, so the entry never flashes "Sign in to search a
-  // drawn area" at a shopper who is in fact signed in.
-  const drawEligibility = resolveDrawSearchAreaEligibility({
-    journey: nav?.journey,
-    hasResidentialListingScope: areaKeys.length > 0,
-    isAuthenticated: authLoading ? undefined : user !== null,
-  });
 
   const areasByKey = useMemo(() => {
     const map = new Map<string, DiscoverArea>();
@@ -188,19 +264,11 @@ export function AreaSetSelectedHeader({
         >
           Fit all
         </EPGhost>
-        {drawEligibility.status !== 'HIDDEN' && (
-          <EPGhost
-            disabled={drawEligibility.status === 'UNAVAILABLE'}
-            title={
-              drawEligibility.status === 'UNAVAILABLE'
-                ? DRAW_SEARCH_AREA_UNAVAILABLE_TITLE[drawEligibility.reason]
-                : 'Draw a boundary on the map to search inside it'
-            }
-            testId="area-set-draw-area"
-          >
-            Draw search area
-          </EPGhost>
-        )}
+        <DrawSearchAreaEntry
+          hasResidentialListingScope={areaKeys.length > 0}
+          onDrawSearchArea={onDrawSearchArea}
+          onRevealMap={onRevealMap}
+        />
         <EPGhost disabled title="Create alert is not available yet" testId="area-set-create-alert">
           Create alert
         </EPGhost>

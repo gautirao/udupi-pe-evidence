@@ -25,7 +25,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { deriveDiscoverEmptyStateCopy } from '../emptyStateCopy';
 import { StartOverButton } from '../StartOverButton';
 import { useDiscoverActions, useDiscoverNav, useDiscoverShell } from '@/features/discover/context/useDiscoverContext';
-import { AreaSetSelectedHeader, AreaSetTwoTileRow } from './AreaSetSelectedExtras';
+import { AreaSetSelectedHeader, AreaSetTwoTileRow, DrawSearchAreaEntry } from './AreaSetSelectedExtras';
 import { AreaZeroResultRecovery } from './AreaZeroResultRecovery';
 import { DEFAULT_CITY } from '@/lib/localityUtils';
 
@@ -529,9 +529,37 @@ export function AreaSelectedPanel({
             // call touches `resultScope`/`rareas`.
             onFitAll={shell.fitAreaSet}
             onFocusArea={shell.focusAreaSetMember}
+            // Issue #2419 (PR-2) — "Draw search area". Same shell-registered
+            // indirection as the two camera actions above; unlike them it
+            // enters draw mode rather than moving the camera, and still
+            // commits nothing on its own.
+            onDrawSearchArea={shell.startDrawSearchArea}
+            // Below the mobile breakpoint the map canvas is not mounted until
+            // the Map view is open, so the draw tool must have a surface to
+            // arm on. A no-op on desktop, where the map is always present.
+            onRevealMap={shell.isMobileShell ? () => shell.setMobileView('MAP') : undefined}
           />
         ) : (
           <>
+            {/* Issue #2419 (PR-2) — the draw entry belongs in EVERY eligible
+                residential listing state, not only the multi-area one. It
+                previously lived inline in AreaSetSelectedHeader above, so a
+                SINGLE committed area — much the more common state, and the
+                one the #2016 contract spec reaches — had no entry at all.
+                Hidden by its own eligibility rule for VIEWPORT scope, agri
+                and anonymous shoppers, so this placement adds a control only
+                where drawing genuinely applies. */}
+            {!isViewportScope && (
+              <div className="mb-2 flex flex-wrap items-center gap-1.5" data-testid="area-single-action-row">
+                <DrawSearchAreaEntry
+                  hasResidentialListingScope
+                  onDrawSearchArea={shell.startDrawSearchArea}
+                  onRevealMap={
+                    shell.isMobileShell ? () => shell.setMobileView('MAP') : undefined
+                  }
+                />
+              </div>
+            )}
             <div className="flex items-end justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">

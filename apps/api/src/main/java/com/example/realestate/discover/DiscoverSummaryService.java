@@ -122,7 +122,30 @@ public class DiscoverSummaryService implements DiscoverSummaryPort {
         List<DiscoverSummaryResponse.Hotspot> hotspots = queryHotspots(areaCounts, query.hotspotLimit());
 
         return new DiscoverSummaryResponse(
-                city, echoedType, query.groupBy(), total, regions, hotspots, Instant.now());
+                city, echoedType, query.groupBy(), total, regions, hotspots, Instant.now(),
+                hasValidCityBoundary(city));
+    }
+
+    /**
+     * Issue #2419 (PR-2) — does this city have a VALID canonical CITY boundary?
+     *
+     * <p>Mirrors the containment source {@link PolygonGeographicSafetyPolicy#validate} reads, so
+     * the client's "can I offer the draw entry" answer and the server's "will I accept this
+     * polygon" answer come from the SAME row rather than two definitions that can drift.
+     *
+     * <p>Deliberately an EXISTS check rather than a fetch: the client needs a yes or no, and
+     * pulling geometry into a summary payload would be both wasteful and an invitation to
+     * re-derive #2420's policy client-side.
+     */
+    private boolean hasValidCityBoundary(String citySlug) {
+        Boolean present = jdbcOperations.queryForObject(
+                "SELECT EXISTS ("
+                        + "  SELECT 1 FROM public.canonical_boundary_geometry cbg"
+                        + "  JOIN public.cities c ON c.id = cbg.city_id"
+                        + "  WHERE lower(c.slug) = lower(?)"
+                        + "    AND cbg.entity_type = 'CITY' AND cbg.status = 'VALID')",
+                Boolean.class, citySlug);
+        return Boolean.TRUE.equals(present);
     }
 
     // ── Total ─────────────────────────────────────────────────────────────────

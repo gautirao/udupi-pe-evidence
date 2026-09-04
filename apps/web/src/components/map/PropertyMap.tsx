@@ -153,6 +153,18 @@ interface PropertyMapProps {
   onPolygonDrawn?: (polygon: [number, number][]) => void;
   /** Called when the user clears the drawn polygon. */
   onPolygonCleared?: () => void;
+  /**
+   * Issue #2419 (PR-2) — the product-native draw-mode seam, threaded straight
+   * through to `DrawControl`. See that component for why these are nonces
+   * rather than booleans. All optional: omitting them leaves the plugin
+   * toolbar as the only entry, exactly as before this PR.
+   */
+  startDrawNonce?: number;
+  cancelDrawNonce?: number;
+  undoVertexNonce?: number;
+  onDrawVertexCountChange?: (count: number) => void;
+  onDrawModeExit?: () => void;
+  hideDrawPluginToolbar?: boolean;
   /** When set, displays a circle around the selected school on the map. */
   schoolCircle?: SchoolCircle;
   /**
@@ -2707,6 +2719,12 @@ export function PropertyMap({
   focusBounds,
   polygon,
   onPolygonDrawn,
+  startDrawNonce,
+  cancelDrawNonce,
+  undoVertexNonce,
+  onDrawVertexCountChange,
+  onDrawModeExit,
+  hideDrawPluginToolbar,
   onPolygonCleared,
   schoolCircle,
   initialCenter,
@@ -3111,6 +3129,12 @@ export function PropertyMap({
             polygon={polygon}
             onPolygonDrawn={onPolygonDrawn}
             onPolygonCleared={onPolygonCleared}
+            startDrawNonce={startDrawNonce}
+            cancelDrawNonce={cancelDrawNonce}
+            undoVertexNonce={undoVertexNonce}
+            onDrawVertexCountChange={onDrawVertexCountChange}
+            onDrawModeExit={onDrawModeExit}
+            hidePluginToolbar={hideDrawPluginToolbar}
           />
         )}
         {/* Issue #1429 — sector overlay for agri corridor-first discovery.

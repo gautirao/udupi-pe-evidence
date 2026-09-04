@@ -106,6 +106,26 @@ type MapDrawingCommands = Pick<
   // DiscoverMapSurface.tsx) so it reaches DiscoverMapCanvasProps without a
   // new spread group, same shape as the ReplaceResultScopeDialog fields above.
   | 'onActivateViewportSearch'
+  // Issue #2419 (PR-2) — the product-native draw-mode seam. The phase, block
+  // and vertex count are view data in spirit, but they travel with the
+  // commands that change them: DiscoverMapCanvas gates the overlay, the
+  // plugin-toolbar hide and the DrawControl nonces on exactly these fields,
+  // and a canvas handed the handlers without the phase (or vice versa) is a
+  // control that looks armed and does nothing — the gap the #2016 contract
+  // spec's re-pointed draw arm caught on the first live run.
+  | 'polygonDraftPhase'
+  | 'polygonDraftBlock'
+  | 'drawVertexCount'
+  | 'startDrawNonce'
+  | 'cancelDrawNonce'
+  | 'undoVertexNonce'
+  | 'handleCancelDrawPolygon'
+  | 'handleUndoDrawVertex'
+  | 'handleRedrawPolygon'
+  | 'handleRetryPolygonValidation'
+  | 'handleDismissPolygonRejection'
+  | 'handleDrawVertexCountChange'
+  | 'handleDrawModeExit'
 >;
 
 type MapNavigationView = Pick<DiscoverMapCanvasProps, 'showSchoolBreadcrumb' | 'focusedGroup' | 'city'> &
@@ -385,6 +405,20 @@ export type BuildMapSurfaceViewParams = Omit<
   | 'handleCancelReplaceScope'
   // Issue #2015 — command, not view data; lives in MapDrawingCommands below.
   | 'onActivateViewportSearch'
+  // Issue #2419 (PR-2) — draw-mode seam; lives in MapDrawingCommands below.
+  | 'polygonDraftPhase'
+  | 'polygonDraftBlock'
+  | 'drawVertexCount'
+  | 'startDrawNonce'
+  | 'cancelDrawNonce'
+  | 'undoVertexNonce'
+  | 'handleCancelDrawPolygon'
+  | 'handleUndoDrawVertex'
+  | 'handleRedrawPolygon'
+  | 'handleRetryPolygonValidation'
+  | 'handleDismissPolygonRejection'
+  | 'handleDrawVertexCountChange'
+  | 'handleDrawModeExit'
   // Issue #2015 — view data, but derived from viewportSearchController.isDirty
   // / .isEligible (already a param below) rather than supplied as its own
   // flat field.
@@ -773,6 +807,20 @@ export type BuildMapSurfaceCommandsParams = Pick<
     | 'isReplaceScopeConfirmOpen'
     | 'handleConfirmReplaceScope'
     | 'handleCancelReplaceScope'
+    // Issue #2419 (PR-2) — draw-mode seam (see MapDrawingCommands).
+    | 'polygonDraftPhase'
+    | 'polygonDraftBlock'
+    | 'drawVertexCount'
+    | 'startDrawNonce'
+    | 'cancelDrawNonce'
+    | 'undoVertexNonce'
+    | 'handleCancelDrawPolygon'
+    | 'handleUndoDrawVertex'
+    | 'handleRedrawPolygon'
+    | 'handleRetryPolygonValidation'
+    | 'handleDismissPolygonRejection'
+    | 'handleDrawVertexCountChange'
+    | 'handleDrawModeExit'
     | 'setMapZoom'
     | 'setMapReady'
     | 'handleCityChange'
@@ -845,6 +893,20 @@ export function buildMapSurfaceCommands(
       isReplaceScopeConfirmOpen,
       handleConfirmReplaceScope,
       handleCancelReplaceScope,
+      // Issue #2419 (PR-2) — draw-mode seam.
+      polygonDraftPhase,
+      polygonDraftBlock,
+      drawVertexCount,
+      startDrawNonce,
+      cancelDrawNonce,
+      undoVertexNonce,
+      handleCancelDrawPolygon,
+      handleUndoDrawVertex,
+      handleRedrawPolygon,
+      handleRetryPolygonValidation,
+      handleDismissPolygonRejection,
+      handleDrawVertexCountChange,
+      handleDrawModeExit,
       setMapZoom,
       setMapReady,
       handleCityChange,
@@ -888,6 +950,20 @@ export function buildMapSurfaceCommands(
       handleCancelReplaceScope,
       // Issue #2015 — commits the live viewport as a VIEWPORT result scope (AC2/AC7).
       onActivateViewportSearch: activateViewportSearch,
+      // Issue #2419 (PR-2) — draw-mode seam.
+      polygonDraftPhase,
+      polygonDraftBlock,
+      drawVertexCount,
+      startDrawNonce,
+      cancelDrawNonce,
+      undoVertexNonce,
+      handleCancelDrawPolygon,
+      handleUndoDrawVertex,
+      handleRedrawPolygon,
+      handleRetryPolygonValidation,
+      handleDismissPolygonRejection,
+      handleDrawVertexCountChange,
+      handleDrawModeExit,
     },
     navigation: {
       handleOverviewAreaClick,

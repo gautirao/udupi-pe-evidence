@@ -74,9 +74,52 @@ interface ActiveScopeChipProps {
   /** The existing camera-fit producer (DiscoverMapCanvas's
    * `publishCameraIntent` prop), reused verbatim for the Return action. */
   publishCameraIntent: (area: AreaPoint) => void;
+  /**
+   * Issue #2419 (PR-2) — top offset (px) from the map container, from the
+   * SAME measured stack #2426 built for `SearchThisAreaCta`
+   * (`useSearchThisAreaCtaOffset`).
+   *
+   * PR-1 positioned this chip with hard-coded `top-14`/`top-24` because that
+   * measured stack did not exist on its base. It does now, and leaving the
+   * chip outside it was a real collision, not a tidiness point: the offset
+   * measures the breadcrumb and the `AreaSetChips` wrapper, and that wrapper
+   * collapses to zero height exactly when this chip is visible (POLYGON or
+   * VIEWPORT committed means the AREA_SET draft is empty). A committed
+   * POLYGON plus a dirty viewport therefore put the "Search this area" CTA
+   * on top of this chip. Optional so fixtures that predate it keep compiling.
+   */
+  topOffsetPx?: number;
+  /**
+   * Issue #2419 (PR-2) — "Redraw", offered only for a committed POLYGON.
+   * Absent hides the action, which is what leaves the VIEWPORT branch
+   * unchanged.
+   *
+   * The mock labels this "Edit boundary" (`transitions-data.js:293`) but
+   * never renders it in any JSX, and its own `Experience.jsx:264` action
+   * fabricates a fresh shape rather than editing vertices — so Redraw is
+   * behaviourally faithful and only the wording differs.
+   */
+  onRedraw?: () => void;
+  /**
+   * Issue #2419 (PR-2) — attached to the chip's own element so
+   * `useSearchThisAreaCtaOffset` can measure its real height and place the
+   * CTA below it. Measured rather than assumed a constant because the chip
+   * grows a second line when its "Return to <long area names>" label wraps,
+   * which is routine on the narrow viewport.
+   */
+  measureRef?: React.Ref<HTMLDivElement>;
 }
 
-export function ActiveScopeChip({ discoverAreas, publishCameraIntent }: ActiveScopeChipProps) {
+/** Matches PR-1's `top-14`; used only until the first real measurement lands. */
+const FALLBACK_TOP_OFFSET_PX = 56;
+
+export function ActiveScopeChip({
+  discoverAreas,
+  publishCameraIntent,
+  topOffsetPx,
+  onRedraw,
+  measureRef,
+}: ActiveScopeChipProps) {
   const { resultScope } = useDiscoverNav();
   const { commitResultScope } = useDiscoverActions();
 
@@ -132,18 +175,33 @@ export function ActiveScopeChip({ discoverAreas, publishCameraIntent }: ActiveSc
     // a committed POLYGON makes it routine.) The canvas that composes these
     // overlays belongs to another lane, so the fix lives here.
     //
-    // The slot is the same row AreaSetChips uses, including its documented
-    // sub-lg offset for a breadcrumb that can wrap to two rows. There is no
-    // contention: AreaSetChips seeds its draft from a committed AREA_SET and
-    // renders null whenever POLYGON or VIEWPORT is the active scope — which
-    // is the only time this chip renders at all. top-4 is deliberately
-    // avoided: the city chip holds its left and SearchThisAreaCta its centre.
+    // Issue #2419 (PR-2) — the hard-coded `top-14`/`top-24` is replaced by
+    // the MEASURED offset #2426 introduced for SearchThisAreaCta. PR-1's
+    // reasoning ("AreaSetChips renders null whenever this chip shows, so the
+    // row is free") was right about AreaSetChips and wrong about the CTA:
+    // that same collapse-to-zero is why the measured offset stopped
+    // reserving this row, so the CTA could land on top of this chip.
     <div
-      className="absolute left-4 top-14 z-[999] inline-flex max-w-[calc(100%-2rem)] items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-sm shadow-sm [@media(max-width:1023px)]:top-24"
+      ref={measureRef}
+      className="absolute left-4 z-[999] inline-flex max-w-[calc(100%-2rem)] items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-sm shadow-sm"
+      style={{ top: topOffsetPx ?? FALLBACK_TOP_OFFSET_PX }}
       data-testid={isPolygon ? 'active-scope-chip-polygon' : 'active-scope-chip-viewport'}
     >
       <ScopeIcon className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
       <span>{SCOPE_TITLE[activeKind]}</span>
+      {isPolygon && onRedraw && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onRedraw}
+          className="h-auto gap-1 px-1.5 py-0.5 text-xs"
+          data-testid="active-scope-chip-redraw"
+        >
+          <PenTool className="h-3 w-3" aria-hidden="true" />
+          Redraw
+        </Button>
+      )}
       {returnLabel && (
         <Button
           type="button"

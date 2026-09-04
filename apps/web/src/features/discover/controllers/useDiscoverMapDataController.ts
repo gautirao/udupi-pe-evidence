@@ -33,6 +33,18 @@ export interface UseDiscoverMapDataControllerParams {
   intentListingPurpose: string;
   /** From useAuth via the page context — part of the isLoading aggregate. */
   authLoading: boolean;
+  /**
+   * Issue #2419 (PR-2) — `handleStartDrawPolygon` from
+   * `useDiscoverPageStateController`, registered alongside the AREA_SET
+   * camera actions below.
+   *
+   * It arrives as a PARAM rather than this controller registering separately,
+   * because `registerAreaSetCameraActions` stores ONE object: a second
+   * registrant would replace the first, and the two would silently fight over
+   * which set of actions the panel sees. One registrant, three actions.
+   * Optional so fixtures that predate PR-2 keep compiling; a safe no-op then.
+   */
+  startDrawSearchArea?: () => void;
   /** useDiscoverPageState's delayed-spinner setter, driven by the effect below. */
   setShowLoader: (show: boolean) => void;
 }
@@ -77,6 +89,7 @@ export function useDiscoverMapDataController({
   intentListingPurpose,
   authLoading,
   setShowLoader,
+  startDrawSearchArea,
 }: UseDiscoverMapDataControllerParams) {
   // Area-scoping for the combined panel (AC4): when BOTH area and school are selected
   // and no user-drawn polygon is present, derive a bounding-box polygon from the area's
@@ -349,9 +362,19 @@ export function useDiscoverMapDataController({
         if (!target) return;
         mapData.publishRecenterCameraIntent(target.bounds, target.center, 'leaf');
       },
+      // Issue #2419 (PR-2) — not a camera action, but registered through the
+      // same single object: see the param's doc for why a second registrant
+      // would silently clobber this one.
+      startDrawSearchArea: () => startDrawSearchArea?.(),
     });
     return () => shell.registerAreaSetCameraActions(null);
-  }, [shell, resultScope, mapData.discoverAreasData, mapData.publishRecenterCameraIntent]);
+  }, [
+    shell,
+    resultScope,
+    mapData.discoverAreasData,
+    mapData.publishRecenterCameraIntent,
+    startDrawSearchArea,
+  ]);
 
   // isLoading depends on both hooks and useAuth — must be computed here (Rule 1).
   const isLoading =

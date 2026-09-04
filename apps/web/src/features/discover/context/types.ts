@@ -39,6 +39,18 @@ export interface AreaSetCameraActions {
   fitAreaSet: () => void;
   /** Frames the camera on ONE committed area's own bounds, leaving the committed result scope untouched. */
   focusAreaSetMember: (areaKey: string) => void;
+  /**
+   * Issue #2419 (PR-2) — "Draw search area". Registered here for the same
+   * reason the two camera actions above are: the panel owns the button, the
+   * page/map side owns the action, and this ref indirection is this file's
+   * established answer to that split rather than threading a handler down
+   * through every panel layer.
+   *
+   * Unlike its siblings this one is NOT camera-only — it enters draw mode.
+   * It still commits nothing: a scope is only written after the shopper
+   * finishes a shape AND it passes #2420 validation.
+   */
+  startDrawSearchArea: () => void;
 }
 
 export interface DiscoverShellContextValue {
@@ -82,6 +94,11 @@ export interface DiscoverShellContextValue {
    */
   fitAreaSet: () => void;
   focusAreaSetMember: (areaKey: string) => void;
+  /**
+   * Issue #2419 (PR-2) — enters draw mode. Safe no-op until the map data
+   * controller registers, exactly like its siblings above.
+   */
+  startDrawSearchArea: () => void;
   /** Registers (or, with `null`, clears) the live camera-action implementations. */
   registerAreaSetCameraActions: (actions: AreaSetCameraActions | null) => void;
 }

@@ -394,6 +394,8 @@ function mockShell(overrides: Partial<DiscoverShellContextValue> = {}): void {
     closeAreaSetDraft: vi.fn(),
     fitAreaSet: vi.fn(),
     focusAreaSetMember: vi.fn(),
+    // Issue #2419 (PR-2) — new required shell member (see context/types.ts).
+    startDrawSearchArea: vi.fn(),
     registerAreaSetCameraActions: vi.fn(),
     ...overrides,
   });

@@ -108,11 +108,12 @@ describe('resolveDrawSearchAreaEligibility', () => {
     ).toEqual({ status: 'UNAVAILABLE', reason: 'city_boundary_missing' });
   });
 
-  // Main Agent ruling: polygon search is signed-in-only in PR-1. UNAVAILABLE
-  // rather than HIDDEN, because unlike Agricultural this is a real feature for
-  // this shopper, one sign-in away — so naming the requirement beats silently
-  // removing the control.
-  it('reports the entry unavailable, not hidden, for an anonymous shopper', () => {
+  // Owner ruling (#2419 PR-2): HIDDEN, not UNAVAILABLE. PR-1 returned
+  // UNAVAILABLE and that was right while the entry was disabled for everyone,
+  // because its title was the only place to say anything true. Now that the
+  // control actually works, an entry that is live for one shopper and
+  // decorative for another is worse than an absent one.
+  it('hides the entry entirely for an anonymous shopper', () => {
     expect(
       resolveDrawSearchAreaEligibility({
         journey: 'area-first',
@@ -121,7 +122,7 @@ describe('resolveDrawSearchAreaEligibility', () => {
         isDrawModeWired: true,
         isAuthenticated: false,
       }),
-    ).toEqual({ status: 'UNAVAILABLE', reason: 'signed_in_required' });
+    ).toEqual({ status: 'HIDDEN', reason: 'signed_in_required' });
   });
 
   // The composition passes `undefined` while auth resolves, because its own
@@ -150,9 +151,10 @@ describe('resolveDrawSearchAreaEligibility', () => {
     ).toEqual({ status: 'HIDDEN', reason: 'agricultural_journey' });
   });
 
-  // Signing in is the one thing this shopper can act on immediately, so it
-  // outranks the other two unavailable reasons.
-  it('prefers the sign-in reason over the city-boundary and not-wired reasons', () => {
+  // Hiding is the strongest statement available, so it outranks both
+  // UNAVAILABLE reasons: those describe a feature this shopper could
+  // otherwise use, and this one says they cannot use it at all yet.
+  it('hides for an anonymous shopper even when the city and wiring are also unavailable', () => {
     expect(
       resolveDrawSearchAreaEligibility({
         journey: 'area-first',
@@ -161,6 +163,6 @@ describe('resolveDrawSearchAreaEligibility', () => {
         isDrawModeWired: false,
         isAuthenticated: false,
       }),
-    ).toEqual({ status: 'UNAVAILABLE', reason: 'signed_in_required' });
+    ).toEqual({ status: 'HIDDEN', reason: 'signed_in_required' });
   });
 });

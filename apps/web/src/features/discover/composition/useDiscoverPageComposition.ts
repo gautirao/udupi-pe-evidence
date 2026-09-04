@@ -334,6 +334,10 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
   } = geographyController;
 
   const mapDataController = useDiscoverMapDataController({
+    // Issue #2419 (PR-2) — the panel's "Draw search area" action, handed to
+    // the controller that already registers the shell's AREA_SET actions so
+    // there stays exactly ONE registrant of that single shared object.
+    startDrawSearchArea: pageStateController.handleStartDrawPolygon,
     nav,
     city,
     effectiveSelectedArea,

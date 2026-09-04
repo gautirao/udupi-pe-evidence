@@ -1,43 +1,21 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import React from 'react';
-import { MapStatsBar, MarkersTruncationNotice } from '../MapStatsBar';
-import { PropertyFilters } from '@/hooks/usePropertyListings';
+import { MarkersTruncationNotice } from '../MapStatsBar';
 
-const emptyFilters: PropertyFilters = {};
-const polygonFilters: PropertyFilters = { polygon: [[13.3, 74.7], [13.4, 74.8]] as unknown as PropertyFilters['polygon'] };
 
 /**
- * Issue #2419 (PR-1) — MapStatsBar is retired and renders nothing.
+ * `MapStatsBar` was DELETED by Issue #2419 (PR-2).
  *
- * It used to be the committed-POLYGON indicator ("Area search" + "Clear
- * area"). #2419 requires ONE POLYGON scope surface, and that is now
- * `features/discover/components/map/ActiveScopeChip.tsx`, which names the
- * scope "Drawn area" and is not gated on authentication. These tests changed
- * because the BEHAVIOUR was deliberately removed, not because they became
- * inconvenient — the replacement surface is covered by ActiveScopeChip's own
- * committed-POLYGON suite.
+ * PR-1 emptied it (it had become a second, auth-gated owner of the
+ * committed-POLYGON state, labelled "Area search" against the chip's "Drawn
+ * area") but could not remove its mount, which lived in a file another lane
+ * owned. PR-2 touches that file legitimately, so the component and its mount
+ * went together. Its replacement, `ActiveScopeChip`, has its own suite.
+ *
+ * This file remains because `MarkersTruncationNotice` — unrelated, and still
+ * in active use — happens to live in the same module.
  */
-describe('MapStatsBar (retired — #2419)', () => {
-  it('renders nothing when no polygon filter is active', () => {
-    const { container } = render(<MapStatsBar filters={emptyFilters} onPolygonClear={vi.fn()} />);
-    expect(container).toBeEmptyDOMElement();
-  });
-
-  it('no longer renders a second committed-POLYGON indicator', () => {
-    const { container } = render(<MapStatsBar filters={polygonFilters} onPolygonClear={vi.fn()} />);
-    expect(container).toBeEmptyDOMElement();
-    expect(screen.queryByText('Area search')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /clear polygon search/i })).not.toBeInTheDocument();
-  });
-
-  it('still renders nothing for a school radius — that lives in the breadcrumb + legend', () => {
-    const { container } = render(
-      <MapStatsBar filters={{ schoolRadiusKm: 5 }} onPolygonClear={vi.fn()} />,
-    );
-    expect(container).toBeEmptyDOMElement();
-  });
-});
 
 // ─── AC-F3: MarkersTruncationNotice (#944) ────────────────────────────────
 

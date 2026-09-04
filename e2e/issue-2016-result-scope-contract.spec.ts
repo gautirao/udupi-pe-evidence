@@ -13,8 +13,9 @@
  * (seeded Bangalore fixture, no mocking) to prove:
  *
  *   1. Polygon-draw-BY-CLICK completion + the J3.3 replace-confirmation
- *      dialog, driven through Leaflet.Draw's own toolbar (not a
- *      directly-constructed URL).
+ *      dialog, driven through the product's own "Draw search area" entry
+ *      (not a directly-constructed URL). Issue #2419 (PR-2) moved this off
+ *      Leaflet.Draw's toolbar, which that issue hides as the primary entry.
  *   2. Browser Back after a POLYGON commit restores the prior AREA_SET by
  *      name, in exactly one Back press.
  *   3. Refresh-persistence for both a committed AREA_SET and a committed
@@ -56,6 +57,38 @@ function urlParam(page: Page, name: string): string | null {
   return new URL(page.url()).searchParams.get(name);
 }
 
+// The header's Sign in link (apps/web/src/components/layout/AppLayout.tsx) is
+// the auth-state oracle for every arm below. Each arm DECLARES its auth state
+// and then PROVES it, because a suite whose storageState silently failed to
+// mint runs anonymous while claiming otherwise — which happened on several
+// PR-1 heads of #2419 before this guard existed.
+const SIGN_IN_LINK = { name: /^sign in$/i } as const;
+
+async function assertSignedIn(page: Page): Promise<void> {
+  await expect(
+    page.getByRole('link', SIGN_IN_LINK),
+    'this arm must run SIGNED IN (e2e/fixtures/user-auth.json) — the Sign in link must be absent',
+  ).toHaveCount(0, { timeout: 10_000 });
+}
+
+/**
+ * The results panel that mounts for a committed area. The Areas journey
+ * renders `areas-journey-panel-listings`; `discover-right-panel` is the
+ * Schools-journey / legacy panel this spec drove before it moved onto the
+ * Areas journey (see reachCommittedKoramangalaAreaSet). Either proves the
+ * panel survived a reload or a Back.
+ */
+function resultsPanel(page: Page) {
+  return page.getByTestId('discover-right-panel').or(page.getByTestId('areas-journey-panel-listings'));
+}
+
+async function assertAnonymous(page: Page): Promise<void> {
+  await expect(
+    page.getByRole('link', SIGN_IN_LINK),
+    'this arm must run ANONYMOUS (empty storageState) — the Sign in link must be visible',
+  ).toBeVisible({ timeout: 10_000 });
+}
+
 async function declineConsentBannerIfPresent(page: Page): Promise<void> {
   const banner = page.getByTestId('discover-consent-banner');
   if (await banner.isVisible({ timeout: 5_000 }).catch(() => false)) {
@@ -66,42 +99,29 @@ async function declineConsentBannerIfPresent(page: Page): Promise<void> {
 
 /**
  * Drive the real click path from the Bangalore city root down to a committed
- * AREA_SET(Koramangala).
+ * AREA_SET(Koramangala) on the DEFAULT Areas journey.
  *
- * IMPORTANT FINDING (see the E2E-authoring report for full detail): the
- * DEFAULT/plain Areas journey's real navigation UI — both the
- * `discover-areas-journey-panel-shell` panel rows AND the map's own
- * `area-single-marker` markers (apps/web/src/components/map/AreaMarkerLayer.tsx)
- * — does NOT commit an AREA_SET result scope when drilling
- * Direction -> Cluster -> Area. This was verified two ways: (a) real browser
- * clicks through both surfaces left `rscope`/`rareas` unset while `node=` was
- * written correctly, reproduced on both Bangalore (3-level, with a Cluster
- * tier) and Udupi (2-level, no Cluster tier); (b) source inspection of
- * apps/web/src/features/discover/controllers/useDiscoverOverviewNavigationController.ts's
- * `handleCanonicalNodeSelect` — its default (non-`school-first`) branch calls
- * only `actions.goToNode(nodeKey)`, never `handleAreaClick`/`handleAreaSelect`
- * (the only two functions that call `commitResultScope`/`selectArea` with an
- * AREA_SET delta, per apps/web/src/hooks/useDiscoverPageState.ts).
+ * HISTORY: when this spec was first written (#2016), the plain Areas journey's
+ * Direction -> Cluster -> Area click path wrote `node=` but did NOT commit an
+ * AREA_SET result scope, so the spec drove the `journey=school-first` panel
+ * instead (the only path that then reached `rscope=areas`). That is no longer
+ * true — verified live on this branch: clicking the Koramangala AREA card in
+ * `discover-areas-journey-panel-shell` lands on
+ * `node=a:IN|KA|Bengaluru|Koramangala&rscope=areas&rareas=IN|KA|Bengaluru|Koramangala`.
  *
- * The ONE real, currently-reachable click path that DOES commit AREA_SET is
- * the `journey=school-first` navigation panel (`discover-schools-journey-panel-shell`,
- * same `navigation-child-card-<nodeKey>` testid convention as
- * discover-schools-canonical-2124.spec.ts drives) — its `handleCanonicalNodeSelect`
- * branch (`journey === 'school-first'`) explicitly calls `handleAreaSelect`,
- * confirmed live: this exact click sequence lands on
- * `rscope=areas&rareas=IN|KA|Bengaluru|Koramangala`. The ResultScope
- * mechanics under test here (draw/replace/confirm, refresh-restore, Back)
- * live in useDiscoverPageState.ts/state/url/resultScope.ts and are NOT
- * journey-gated, so a school-first-committed AREA_SET is a faithful,
- * real (non-URL-constructed) starting point for testing them — the gap is
- * specifically that the DEFAULT Areas journey has no such real trigger today.
+ * Issue #2419 (PR-2) makes the journey choice load-bearing: the product-native
+ * "Draw search area" entry lives in the Areas journey's `AreaSelectedPanel`
+ * (single- and multi-area branches). The Schools journey renders its own
+ * panel and never mounts that entry, so a school-first start would leave the
+ * draw arm nothing to click. The ResultScope mechanics under test (draw /
+ * replace / confirm, refresh-restore, Back) are not journey-gated either way.
  */
 async function reachCommittedKoramangalaAreaSet(page: Page): Promise<void> {
-  await page.goto(`/discover?city=${CITY}&journey=school-first`);
+  await page.goto(`/discover?city=${CITY}`);
   await page.waitForLoadState('domcontentloaded');
 
-  const panelShell = page.getByTestId('discover-schools-journey-panel-shell');
-  await expect(panelShell, 'the Schools-journey navigation panel must mount at the city root').toBeVisible({ timeout: 15_000 });
+  const panelShell = page.getByTestId('discover-areas-journey-panel-shell');
+  await expect(panelShell, 'the Areas-journey navigation panel must mount at the city root').toBeVisible({ timeout: 15_000 });
   await declineConsentBannerIfPresent(page);
 
   const directionCard = panelShell.getByTestId(`navigation-child-card-${D_CENTRAL}`);
@@ -119,9 +139,9 @@ async function reachCommittedKoramangalaAreaSet(page: Page): Promise<void> {
   await areaCard.click();
 
   // This real click must commit rscope=areas/rareas (result scope) — verified
-  // live via the school-first handleCanonicalNodeSelect -> handleAreaSelect path.
+  // live on the Areas journey (see the docblock above).
   await expect
-    .poll(() => urlParam(page, 'rscope'), { message: 'clicking the Koramangala AREA card (school-first) must commit an AREA_SET result scope', timeout: 10_000 })
+    .poll(() => urlParam(page, 'rscope'), { message: 'clicking the Koramangala AREA card (Areas journey) must commit an AREA_SET result scope', timeout: 10_000 })
     .toBe('areas');
   expect(urlParam(page, 'rareas'), 'the committed AREA_SET must name Koramangala').toBe(AREA_KORAMANGALA_KEY);
 
@@ -129,58 +149,157 @@ async function reachCommittedKoramangalaAreaSet(page: Page): Promise<void> {
 }
 
 /**
- * Draw a triangular polygon on the Discover map via Leaflet.Draw's own
- * toolbar, using real synthetic mouse move/down/up at each vertex (the same
- * technique this repo's existing specs use for reliable Leaflet interaction —
- * `locator.click()` is unreliable against Leaflet's own event plumbing).
+ * Draw a triangular polygon on the Discover map, starting from the PRODUCT
+ * entry point.
  *
- * Sequence: click the pentagon "Draw a polygon" toolbar button (top-right,
- * `.leaflet-draw-draw-polygon`) to enter draw mode, place >= 3 vertices with
- * real clicks inside the map viewport, then click the "Finish" action link
- * Leaflet.Draw renders inline once >= 2 vertices exist.
+ * Sequence: click "Draw search area" in the committed-area panel, confirm the
+ * draw-mode overlay appeared, place three vertices with real synthetic mouse
+ * moves and clicks, then close the ring on the first vertex.
+ *
+ * Re-pointed by Issue #2419 (PR-2). This used to click Leaflet.Draw's own
+ * pentagon toolbar button; that chrome is now hidden whenever the product
+ * entry is wired, so the old sequence would fail on a control that no longer
+ * exists. Synthetic mouse events (not `locator.click()`) are still used for
+ * the vertices themselves — Leaflet's own event plumbing does not reliably
+ * see Playwright's element clicks.
  */
 async function drawPolygonOnMap(page: Page): Promise<void> {
-  const drawBtn = page.locator('.leaflet-draw-draw-polygon');
-  await expect(drawBtn, 'the Leaflet.Draw polygon toolbar button must render').toBeVisible({ timeout: 10_000 });
-  const drawBox = await drawBtn.boundingBox();
-  if (!drawBox) throw new Error('leaflet-draw-draw-polygon has no bounding box');
-  await page.mouse.move(drawBox.x + drawBox.width / 2, drawBox.y + drawBox.height / 2);
-  await page.mouse.down();
-  await page.mouse.up();
+  // 1. The PRODUCT entry. #2419 PR-2 re-pointed this helper off Leaflet.Draw's
+  //    own pentagon toolbar button, which the issue removes as the primary
+  //    entry ("do not expose unexplained Leaflet/plugin iconography") and
+  //    which is now hidden whenever the product entry is wired — so the old
+  //    sequence would fail on a control that is no longer there.
+  //
+  //    This entry renders for BOTH single- and multi-area committed AREA_SET
+  //    states. Before PR-2 it existed only in the multi-area header, which is
+  //    exactly why this spec's single-area path had no entry to click.
+  //    It is SIGNED-IN-ONLY (owner ruling on PR #2452): anonymous shoppers get
+  //    no entry at all, so this helper is only meaningful in the signed-in arm.
+  await assertSignedIn(page);
+  const drawEntry = page.getByTestId('area-set-draw-area');
+  await expect(drawEntry, 'the product-native "Draw search area" entry must render for a committed area').toBeVisible({ timeout: 15_000 });
+  await expect(drawEntry, 'the entry must be enabled for a signed-in shopper in a drawable city').toBeEnabled();
+  await drawEntry.click();
 
-  // Confirm draw mode actually engaged (Leaflet.Draw adds this class to the
-  // map container while a shape is being drawn) before placing vertices —
-  // fail loudly here rather than silently clicking on an inert map.
-  await expect(page.locator('.leaflet-container.leaflet-crosshair, .leaflet-draw-toolbar a.leaflet-draw-draw-polygon.leaflet-draw-toolbar-button-enabled'))
-    .toHaveCount(1, { timeout: 5_000 })
-    .catch(() => {
-      // Class-based detection is best-effort across leaflet-draw versions —
-      // proceed to vertex placement regardless; the "Finish" action
-      // assertion below is the authoritative signal that drawing engaged.
-    });
+  // 2. The overlay IS the product's "draw mode is on" signal, and it is
+  //    authoritative — unlike the plugin CSS classes this helper used to
+  //    sniff, which varied by leaflet-draw version and had to be tolerated
+  //    with a catch(). Fail loudly here rather than clicking an inert map.
+  await expect(
+    page.getByTestId('draw-mode-overlay'),
+    'clicking the entry must enter draw mode and show the instructions overlay',
+  ).toBeVisible({ timeout: 10_000 });
 
-  const map = page.locator('.leaflet-container').first();
-  const mapBox = await map.boundingBox();
-  if (!mapBox) throw new Error('.leaflet-container has no bounding box');
+  // Place vertices inside the map's USABLE viewport, not its full box. The
+  // Leaflet container spans the whole shell and the results panel floats
+  // over its left edge, so a point at 35% of the container's width lands on
+  // panel text — exactly what the hit diagnostic below reported on the first
+  // live run ("vertex 1 ... hits: p.text-xs..."). `discover-map-usable-viewport`
+  // is the region PropertyMap itself treats as unobstructed.
+  const usable = page.getByTestId('discover-map-usable-viewport');
+  const fullBox = (await usable.boundingBox()) ?? (await page.locator('.leaflet-container').first().boundingBox());
+  if (!fullBox) throw new Error('neither discover-map-usable-viewport nor .leaflet-container has a bounding box');
+  // If the results panel overlaps the map horizontally, clip that side out.
+  // (On the desktop shell the panel sits beside the map, not over it; the
+  // clip is a no-op there and only matters for narrower layouts.)
+  const panelBox = await page.getByTestId('discover-areas-journey-panel-shell').boundingBox();
+  let mapBox = { ...fullBox };
+  if (panelBox) {
+    const overlapLeft = Math.max(fullBox.x, panelBox.x);
+    const overlapRight = Math.min(fullBox.x + fullBox.width, panelBox.x + panelBox.width);
+    if (overlapRight - overlapLeft > 0) {
+      const panelIsRight = panelBox.x > fullBox.x + fullBox.width / 2;
+      mapBox = panelIsRight
+        ? { ...fullBox, width: panelBox.x - fullBox.x }
+        : { ...fullBox, x: panelBox.x + panelBox.width, width: fullBox.x + fullBox.width - (panelBox.x + panelBox.width) };
+    }
+  }
+  console.log(
+    `[drawPolygonOnMap] map box ${JSON.stringify(fullBox)} panel box ${JSON.stringify(panelBox)} -> drawable ${JSON.stringify(mapBox)}`,
+  );
+  if (mapBox.width < 200) throw new Error(`drawable map region is too narrow (${mapBox.width}px) to place a triangle`);
 
-  // Triangle in the map's interior, away from corner controls/overlays.
+  /**
+   * The draw-mode overlay (instructions + Cancel/Undo) and the map's own
+   * context chrome float over the map surface; a synthetic click on them is
+   * swallowed. Walk downward from the requested point until the element under
+   * it belongs to Leaflet, exactly as a shopper would place points beside the
+   * overlay rather than through it.
+   */
+  const hitAt = async (px: number, py: number): Promise<string> =>
+    page.evaluate(
+      ([hx, hy]) => {
+        const el = document.elementFromPoint(hx, hy);
+        if (!el) return 'nothing';
+        const testId = el.getAttribute('data-testid');
+        return `${el.tagName.toLowerCase()}.${Array.from(el.classList).join('.')}${testId ? `[data-testid=${testId}]` : ''}`;
+      },
+      [px, py],
+    );
+  const findDrawablePoint = async (px: number, py: number): Promise<[number, number]> => {
+    const bottom = mapBox.y + mapBox.height - 24;
+    for (let cy = py; cy <= bottom; cy += 24) {
+      if ((await hitAt(px, cy)).includes('leaflet')) return [px, cy];
+    }
+    throw new Error(`no Leaflet surface found below (${Math.round(px)}, ${Math.round(py)}) — last hit: ${await hitAt(px, bottom)}`);
+  };
+
+  // 3. Listing markers, the drawn shape and leaflet-draw's own cursor tooltip
+  //    all sit above the map surface and swallow vertex clicks — the tooltip
+  //    especially, since it follows the pointer and GROWS as the shape
+  //    progresses. Suppressing pointer events on those panes (they stay
+  //    visible) is what makes vertex placement deterministic; without it the
+  //    draw arms correctly and then silently records nothing.
+  await page.addStyleTag({
+    content:
+      '.leaflet-marker-pane, .leaflet-overlay-pane, .leaflet-tooltip-pane, .leaflet-draw-tooltip { pointer-events: none !important; }',
+  });
+
+  // A triangle, not a rectangle: three vertices are all the app needs (the
+  // URL decoder requires >= 3 and #2420's policy no-ops below that), and a
+  // fourth vertex proved unreliable to place in every earlier run.
   const vertices: Array<[number, number]> = [
-    [mapBox.x + mapBox.width * 0.35, mapBox.y + mapBox.height * 0.35],
-    [mapBox.x + mapBox.width * 0.65, mapBox.y + mapBox.height * 0.35],
-    [mapBox.x + mapBox.width * 0.5, mapBox.y + mapBox.height * 0.65],
+    await findDrawablePoint(mapBox.x + mapBox.width * 0.35, mapBox.y + mapBox.height * 0.3),
+    await findDrawablePoint(mapBox.x + mapBox.width * 0.65, mapBox.y + mapBox.height * 0.35),
+    await findDrawablePoint(mapBox.x + mapBox.width * 0.5, mapBox.y + mapBox.height * 0.65),
   ];
-  for (const [x, y] of vertices) {
-    await page.mouse.move(x, y);
-    await page.mouse.down();
-    await page.mouse.up();
-    await page.waitForTimeout(150); // let Leaflet.Draw's own vertex-added redraw settle
+
+  // 4. Move -> settle -> click, and VERIFY each vertex registered before
+  //    moving on. leaflet-draw renders one `.leaflet-editing-icon` handle per
+  //    placed vertex, which is a direct observable signal; a bare click loop
+  //    drops vertices intermittently, and that failure only surfaces far
+  //    downstream as "no polygon was ever committed".
+  const vertexHandles = page.locator('.leaflet-editing-icon');
+  for (let i = 0; i < vertices.length; i += 1) {
+    const [x, y] = vertices[i];
+    // Diagnostic: name the element that will actually receive this click. A
+    // vertex that "never registered" is almost always a click swallowed by
+    // something above the map surface, and the failure message alone cannot
+    // say what.
+    console.log(`[drawPolygonOnMap] vertex ${i + 1} at (${Math.round(x)}, ${Math.round(y)}) hits: ${await hitAt(x, y)}`);
+    let placed = false;
+    for (let attempt = 0; attempt < 3 && !placed; attempt += 1) {
+      await page.mouse.move(x, y);
+      await page.waitForTimeout(120);
+      await page.mouse.click(x, y);
+      placed = await vertexHandles
+        .nth(i)
+        .waitFor({ state: 'attached', timeout: 2_000 })
+        .then(() => true)
+        .catch(() => false);
+    }
+    expect(placed, `vertex ${i + 1} of the search-area triangle never registered`).toBe(true);
   }
 
-  // Leaflet.Draw renders inline text actions ("Finish", "Delete last point",
-  // "Cancel") once enough vertices exist for a valid shape.
-  const finishAction = page.locator('.leaflet-draw-actions a', { hasText: 'Finish' });
-  await expect(finishAction, 'Leaflet.Draw must offer a "Finish" action after >= 3 vertices').toBeVisible({ timeout: 5_000 });
-  await finishAction.click();
+  // 5. Close the ring on the FIRST vertex — the instruction the overlay itself
+  //    gives ("Click the first point to finish"). There is deliberately no
+  //    Finish control: hiding the plugin chrome hides its action bar too, and
+  //    adding a product Finish button is an owner decision recorded on PR
+  //    #2452 rather than assumed here.
+  const [firstX, firstY] = vertices[0];
+  await page.mouse.move(firstX, firstY);
+  await page.waitForTimeout(120);
+  await page.mouse.click(firstX, firstY);
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +308,13 @@ async function drawPolygonOnMap(page: Page): Promise<void> {
 
 test.describe('Issue #2016 — result-scope contract', () => {
   test.describe.configure({ mode: 'serial' });
+
+  // Items 1, 2 and 3b DRAW, and drawing is signed-in-only (#2419 PR-2 ruling),
+  // so they run as the smoke user. Items 3a, 4 and 5 never draw and stay
+  // anonymous — and 3a doubles as the proof that the entry is HIDDEN for an
+  // anonymous shopper on a committed area.
+  test.describe('signed-in shopper — polygon draw arms', () => {
+  test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
   // -------------------------------------------------------------------------
   // Item 1 — polygon-draw-BY-CLICK + J3.3 confirmation dialog
@@ -250,20 +376,9 @@ test.describe('Issue #2016 — result-scope contract', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Item 3 — refresh persistence for both AREA_SET and POLYGON
+  // Item 3b — refresh persistence for a committed POLYGON (3a, the AREA_SET
+  // half, lives in the anonymous arm below: it never draws)
   // -------------------------------------------------------------------------
-
-  test('3a. refresh restores the exact committed AREA_SET', async ({ page }) => {
-    await reachCommittedKoramangalaAreaSet(page);
-    const beforeUrl = page.url();
-
-    await page.reload();
-    await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 15_000 });
-
-    expect(page.url(), 'a hard refresh must restore the exact same URL (no camera-inferred scope)').toBe(beforeUrl);
-    expect(urlParam(page, 'rscope')).toBe('areas');
-    expect(urlParam(page, 'rareas')).toBe(AREA_KORAMANGALA_KEY);
-  });
 
   test('3b. refresh restores the exact committed POLYGON (same coordinates)', async ({ page }) => {
     await reachCommittedKoramangalaAreaSet(page);
@@ -284,6 +399,32 @@ test.describe('Issue #2016 — result-scope contract', () => {
       .poll(() => urlParam(page, 'rscope'), { message: 'refresh must restore rscope=poly', timeout: 10_000 })
       .toBe('poly');
     expect(urlParam(page, 'rpoly'), 'refresh must restore the EXACT same polygon coordinates, not just some scope').toBe(rpolyBefore);
+  });
+  });
+
+  test.describe('anonymous shopper — no draw entry, scope mechanics unchanged', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  // -------------------------------------------------------------------------
+  // Item 3a — refresh persistence for a committed AREA_SET, plus the #2419
+  // anonymous-treatment ruling (entry HIDDEN, not disabled) on the same state.
+  // -------------------------------------------------------------------------
+
+  test('3a. refresh restores the exact committed AREA_SET (anonymous; no draw entry rendered)', async ({ page }) => {
+    await reachCommittedKoramangalaAreaSet(page);
+    await assertAnonymous(page);
+    await expect(
+      page.getByTestId('area-set-draw-area'),
+      '#2419 ruling: an anonymous shopper on a committed area gets NO "Draw search area" entry (hidden, not disabled)',
+    ).toHaveCount(0);
+    const beforeUrl = page.url();
+
+    await page.reload();
+    await expect(resultsPanel(page)).toBeVisible({ timeout: 15_000 });
+
+    expect(page.url(), 'a hard refresh must restore the exact same URL (no camera-inferred scope)').toBe(beforeUrl);
+    expect(urlParam(page, 'rscope')).toBe('areas');
+    expect(urlParam(page, 'rareas')).toBe(AREA_KORAMANGALA_KEY);
   });
 
   // -------------------------------------------------------------------------
@@ -312,6 +453,7 @@ test.describe('Issue #2016 — result-scope contract', () => {
         `&rscope=vp&rvp=${encodeURIComponent(rvp)}&rprev=${encodeURIComponent(rprev)}`,
     );
     await page.waitForLoadState('domcontentloaded');
+    await assertAnonymous(page);
 
     // App must not crash — the map + a results panel must still mount. Which
     // panel testid renders here is governed by `node=` (navigation), not by
@@ -362,7 +504,8 @@ test.describe('Issue #2016 — result-scope contract', () => {
 
   test('5. opening a listing detail and returning via Browser Back preserves the exact prior AREA_SET scope', async ({ page }) => {
     await reachCommittedKoramangalaAreaSet(page);
-    await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 15_000 });
+    await assertAnonymous(page);
+    await expect(resultsPanel(page)).toBeVisible({ timeout: 15_000 });
 
     // `.isVisible()` performs a single immediate check with no auto-wait —
     // the panel can be visible a tick before its listing cards finish
@@ -373,7 +516,12 @@ test.describe('Issue #2016 — result-scope contract', () => {
       .waitFor({ state: 'visible', timeout: 15_000 })
       .then(() => true)
       .catch(() => false);
-    test.skip(!hasCard, 'no [data-testid="listing-card"] rendered from the school-first Koramangala AREA_SET state reached in setup — see report for the underlying finding (the default Areas journey has no real click path that commits AREA_SET at all).');
+    // Pre-existing skip (same guard on origin/main, where setup went through
+    // journey=school-first): it fires when the committed area has no listings
+    // to open — true of Koramangala on the isolated fixture, whichever journey
+    // committed it. The committed-scope preservation mechanics it would
+    // exercise are covered by items 3a and 4.
+    test.skip(!hasCard, 'no [data-testid="listing-card"] rendered for the committed Koramangala AREA_SET (the fixture has no listings in this area), so there is no detail route to open and come Back from.');
 
     const beforeUrl = page.url();
     await card.getByTestId('listing-view-details').click();
@@ -386,8 +534,9 @@ test.describe('Issue #2016 — result-scope contract', () => {
     await page.goBack();
 
     await expect(page, 'Back from listing detail must return to the exact prior Discover URL').toHaveURL(beforeUrl, { timeout: 10_000 });
-    await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 15_000 });
+    await expect(resultsPanel(page)).toBeVisible({ timeout: 15_000 });
     expect(urlParam(page, 'rscope')).toBe('areas');
     expect(urlParam(page, 'rareas')).toBe(AREA_KORAMANGALA_KEY);
+  });
   });
 });

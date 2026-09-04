@@ -1,13 +1,26 @@
-import type { FC } from 'react';
 import { Info } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { PropertyFilters } from '@/hooks/usePropertyListings';
 
-interface MapStatsBarProps {
-  filters: PropertyFilters;
-  onPolygonClear: () => void;
-}
-
+/**
+ * `MapStatsBar` lived here until Issue #2419 (PR-2) deleted it.
+ *
+ * It was a floating top-centre card that labelled the committed-POLYGON state
+ * "Area search" with a "Clear area" button. #2419 requires ONE POLYGON scope
+ * surface, and that surface is `ActiveScopeChip`, which names the scope
+ * "Drawn area" from the shared `SCOPE_TITLE` vocabulary and carries the
+ * #2016 return action plus PR-2's Redraw.
+ *
+ * Keeping both meant two owners of one state disagreeing in two visible ways:
+ * different wording for the same thing, and a mount gated on
+ * `isAuthenticated` — by accident of ownership rather than policy — so
+ * anonymous shoppers saw no committed-POLYGON indicator while authenticated
+ * ones saw two. PR-1 emptied the component but could not remove its mount,
+ * which lived in a file another lane owned; PR-2 legitimately touches that
+ * file, so the component and its mount go together.
+ *
+ * `MarkersTruncationNotice` below is unrelated and still in active use — it
+ * shares this file only by history.
+ */
 interface MarkersTruncationNoticeProps {
   /** Whether the backend capped the marker result set. When false the notice is hidden. */
   truncated: boolean;
@@ -59,29 +72,3 @@ export function MarkersTruncationNotice({
   );
 }
 
-/**
- * RETIRED — Issue #2419 (PR-1). Renders nothing.
- *
- * This was a floating top-centre card that surfaced the committed-POLYGON
- * state as "Area search" with a "Clear area" button. #2419 requires ONE
- * POLYGON scope surface, and that surface is now the canonical result-scope
- * chip (`features/discover/components/map/ActiveScopeChip.tsx`), which names
- * the scope "Drawn area" using the same `SCOPE_TITLE` vocabulary as every
- * other scope kind and offers the #2016 return action.
- *
- * Keeping both would have meant two owners of the same state disagreeing in
- * two visible ways: this card said "Area search" where the chip says "Drawn
- * area", and its mount site gated it on `isAuthenticated`, so anonymous
- * shoppers saw no committed-POLYGON indicator at all while authenticated ones
- * saw two.
- *
- * The component and its props are retained ONLY so its existing mount site in
- * `features/discover/views/DiscoverMapCanvas.tsx` keeps compiling — that file
- * belongs to the #2426 map-canvas lane and is out of bounds for this PR.
- * **Follow-up: delete this component and its mount together** once that lane
- * lands (tracked on PR #2441). `MarkersTruncationNotice`, exported from this
- * same file, is unaffected and still in active use.
- */
-/* Typed via FC so the existing call site's props still type-check while the
-   implementation reads none of them. */
-export const MapStatsBar: FC<MapStatsBarProps> = () => null;

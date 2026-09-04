@@ -150,10 +150,30 @@ export interface UseDiscoverPageStateResult {
    */
   handleRetryPolygonValidation: () => void;
   /**
-   * "Redraw" — discards any draft and moves to DRAWING. PR-1 defines the
-   * transition; the map-side chrome that acts on DRAWING is wired by PR-2.
+   * "Redraw" — discards any draft and moves to DRAWING, arming the map's draw
+   * tool. PR-1 defined the transition; PR-2 makes it act.
    */
   handleRedrawPolygon: () => void;
+
+  // Issue #2419 (PR-2) — the product-native draw-mode seam. The nonces are
+  // consumed by `DrawControl`; this hook stays the single decider of WHEN
+  // drawing starts, stops, or loses a vertex.
+  /** "Draw search area" — enters DRAWING and arms the map's draw tool. */
+  handleStartDrawPolygon: () => void;
+  /** Cancels point placement, discarding the in-progress shape. Commits nothing. */
+  handleCancelDrawPolygon: () => void;
+  /** Removes the most recent vertex. Never ends draw mode. */
+  handleUndoDrawVertex: () => void;
+  /** Map callback — placement ended without a completed shape. */
+  handleDrawModeExit: () => void;
+  /** Map callback — how many vertices are placed so far. */
+  handleDrawVertexCountChange: (count: number) => void;
+  /** Vertices placed so far; gates the overlay's Undo affordance. */
+  drawVertexCount: number;
+  /** Increment-to-act signals consumed by `DrawControl`. */
+  startDrawNonce: number;
+  cancelDrawNonce: number;
+  undoVertexNonce: number;
 }
 
 export function useDiscoverPageState({
@@ -418,6 +438,17 @@ export function useDiscoverPageState({
   // since superseded it.
   const polygonProbeSeqRef = useRef(0);
 
+  // Issue #2419 (PR-2) — the map-side draw seam. Nonces, not booleans:
+  // "start drawing" is an event, and a boolean cannot express a second press
+  // after a cancel because it never changes value. `drawVertexCount` is
+  // reported back BY the map (leaflet-draw owns the vertices) purely so the
+  // overlay's Undo can be disabled at zero points rather than offering to
+  // undo something that does not exist.
+  const [startDrawNonce, setStartDrawNonce] = useState(0);
+  const [cancelDrawNonce, setCancelDrawNonce] = useState(0);
+  const [undoVertexNonce, setUndoVertexNonce] = useState(0);
+  const [drawVertexCount, setDrawVertexCount] = useState(0);
+
   const resultScope: CommittedResultScope = urlState.resultScope ?? { active: null, previous: null };
 
   /**
@@ -616,6 +647,50 @@ export function useDiscoverPageState({
     // new polygon is drawn AND accepted — Redraw alone commits nothing.
     polygonProbeSeqRef.current++;
     setPolygonDraft({ status: 'DRAWING' });
+    // Issue #2419 (PR-2) — arm the map's draw tool. PR-1 could set the
+    // DRAWING phase but nothing acted on it; this nonce is what makes the
+    // phase real. Incremented here rather than in the map so the page state
+    // stays the single decider of WHEN drawing starts.
+    setStartDrawNonce((n) => n + 1);
+  }, []);
+
+  /**
+   * Issue #2419 (PR-2) — "Draw search area". Same transition as Redraw; named
+   * separately because the two are different product actions with different
+   * entry points, and collapsing them would make the call sites lie about
+   * which one the shopper took.
+   */
+  const handleStartDrawPolygon = useCallback(() => {
+    polygonProbeSeqRef.current++;
+    setPolygonDraft({ status: 'DRAWING' });
+    setStartDrawNonce((n) => n + 1);
+  }, []);
+
+  /** Cancels point placement. Discards the in-progress shape; commits nothing. */
+  const handleCancelDrawPolygon = useCallback(() => {
+    setPolygonDraft(IDLE_POLYGON_DRAFT);
+    setDrawVertexCount(0);
+    setCancelDrawNonce((n) => n + 1);
+  }, []);
+
+  /** Removes the most recent vertex. Never ends draw mode, even at zero points. */
+  const handleUndoDrawVertex = useCallback(() => {
+    setUndoVertexNonce((n) => n + 1);
+  }, []);
+
+  /**
+   * The map reporting that point placement ended without a shape — the plugin
+   * aborted, or the shopper finished some other way. Returns to IDLE only if
+   * we still believe we are DRAWING, so a completed polygon (which switches
+   * the phase to REVIEWING first) is never clobbered by the trailing event.
+   */
+  const handleDrawModeExit = useCallback(() => {
+    setDrawVertexCount(0);
+    setPolygonDraft((prev) => (prev.status === 'DRAWING' ? IDLE_POLYGON_DRAFT : prev));
+  }, []);
+
+  const handleDrawVertexCountChange = useCallback((count: number) => {
+    setDrawVertexCount(count);
   }, []);
 
   const handleAreaClick = useCallback(
@@ -740,5 +815,14 @@ export function useDiscoverPageState({
     handleDismissPolygonRejection,
     handleRetryPolygonValidation,
     handleRedrawPolygon,
+    handleStartDrawPolygon,
+    handleCancelDrawPolygon,
+    handleUndoDrawVertex,
+    handleDrawModeExit,
+    handleDrawVertexCountChange,
+    drawVertexCount,
+    startDrawNonce,
+    cancelDrawNonce,
+    undoVertexNonce,
   };
 }

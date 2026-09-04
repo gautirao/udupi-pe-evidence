@@ -296,6 +296,12 @@ export function DiscoverProvider({ children }: DiscoverProviderProps) {
   const focusAreaSetMember = useCallback((areaKey: string) => {
     cameraActionsRef.current?.focusAreaSetMember(areaKey);
   }, []);
+  // Issue #2419 (PR-2) — same indirection, one non-camera action: the panel
+  // owns the "Draw search area" button, the page/map side owns entering draw
+  // mode. No-ops safely before registration.
+  const startDrawSearchArea = useCallback(() => {
+    cameraActionsRef.current?.startDrawSearchArea();
+  }, []);
   const registerAreaSetCameraActions = useCallback((actions: AreaSetCameraActions | null) => {
     cameraActionsRef.current = actions;
   }, []);
@@ -310,6 +316,7 @@ export function DiscoverProvider({ children }: DiscoverProviderProps) {
       closeAreaSetDraft,
       fitAreaSet,
       focusAreaSetMember,
+      startDrawSearchArea,
       registerAreaSetCameraActions,
     }),
     [
@@ -320,6 +327,7 @@ export function DiscoverProvider({ children }: DiscoverProviderProps) {
       closeAreaSetDraft,
       fitAreaSet,
       focusAreaSetMember,
+      startDrawSearchArea,
       registerAreaSetCameraActions,
     ],
   );

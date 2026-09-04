@@ -584,4 +584,33 @@ BEGIN
     v_central_cluster_areas, v_root_orders;
 END $$;
 
+-- ---------------------------------------------------------------------------
+-- Issue #2419 PR-2 (PR #2452) + #2420 — ONE VALID canonical CITY boundary for
+-- Bangalore, so the polygon ("Draw search area") flow is runnable on the
+-- isolated E2E fixture:
+--   * #2420's PolygonGeographicSafetyPolicy fails CLOSED without a VALID CITY
+--     row (every polygon is rejected as polygon_outside_searchable_city), and
+--   * #2419 PR-2's DiscoverSummaryService.hasValidCityBoundary reads the SAME
+--     row to decide polygonSearchAvailable, so with zero rows the product entry
+--     never becomes live and e2e/issue-2016-result-scope-contract.spec.ts's
+--     signed-in draw arm cannot run at all.
+-- A generous bounding box (not OSM geometry): lon 77.35..77.85, lat 12.75..13.20
+-- covers every Bangalore AREA leaf this seed creates, leaves room to draw a
+-- polygon "outside the city" by panning east, and is far larger than the
+-- 12 km^2 too-broad ceiling so both #2420 rejection reasons stay reachable.
+-- Guarded by NOT EXISTS on (city, CITY) so a second run is a no-op; never
+-- touches an existing row. TEST/LOCAL fixture only, like everything above.
+-- ---------------------------------------------------------------------------
+INSERT INTO public.canonical_boundary_geometry
+  (city_id, entity_type, area_key, status, geom, geometry_source, imported_at, updated_at)
+SELECT c.id, 'CITY', NULL, 'VALID',
+       ST_GeomFromText('POLYGON((77.35 12.75, 77.85 12.75, 77.85 13.20, 77.35 13.20, 77.35 12.75))', 4326),
+       'e2e-fixture-seed-2419', now(), now()
+  FROM public.cities c
+ WHERE lower(c.slug) = 'bangalore'
+   AND NOT EXISTS (
+     SELECT 1 FROM public.canonical_boundary_geometry g
+      WHERE g.city_id = c.id AND g.entity_type = 'CITY'
+   );
+
 COMMIT;

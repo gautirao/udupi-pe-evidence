@@ -44,6 +44,22 @@ export interface DiscoverSummaryResponse {
   regions: DiscoverSummaryRegion[];
   hotspots: DiscoverSummaryHotspot[];
   generatedAt: string;
+  /**
+   * Issue #2419 (PR-2) — whether this city has a VALID canonical CITY
+   * boundary, so the "Draw search area" entry can be hidden where a drawn
+   * polygon could never be accepted.
+   *
+   * `PolygonGeographicSafetyPolicy` fails closed when a city has no VALID
+   * CITY row, so without this the shopper only finds out AFTER drawing.
+   *
+   * OPTIONAL on purpose. A cached response from before this field shipped, or
+   * a preview/sandbox backend that predates it, deserialises with the key
+   * absent — and `undefined` must NOT read as `false`, which would hide a
+   * working feature. Consumers pass it straight to
+   * `resolveDrawSearchAreaEligibility`, which suppresses the entry only on an
+   * explicit `false`.
+   */
+  polygonSearchAvailable?: boolean;
 }
 
 const DEFAULT_HOTSPOT_LIMIT = 8;
