@@ -6,6 +6,7 @@
  * useDiscoverUrlState.ts's module doc for the full param contract.
  */
 import { useCallback } from 'react';
+import { isDiscoverCommercialSubtype } from '@/lib/listing-constants';
 import type { UrlDomainCtx, UrlDomainModule } from './_shared';
 import type {
   DiscoverUrlActions,
@@ -53,6 +54,14 @@ function serializeFilters(
     params.set('type', filters.propertyTypes.join(','));
   } else {
     params.delete('type');
+  }
+  // Issue #2431 — Commercial subtype. Comma-joined like `type`/`seller`, never repeated params.
+  // Written and cleared in the SAME pass as every other filter key, so "Clear all" (which calls
+  // serializeFilters with {}) drops it without needing to know it exists.
+  if (filters.commercialSubtypes && filters.commercialSubtypes.length > 0) {
+    params.set('subtype', filters.commercialSubtypes.join(','));
+  } else {
+    params.delete('subtype');
   }
   if (filters.bedrooms && filters.bedrooms.length > 0) {
     params.set('beds', filters.bedrooms.join(','));
@@ -183,8 +192,23 @@ export function useFiltersUrlDomain(
     return !isNaN(d.getTime()) ? raw : undefined;
   };
 
+  // Issue #2431 — parse `subtype` with an ALLOWLIST rather than passing the raw strings through.
+  // Every other filter here trusts the URL and lets the server decide, but this param is the one
+  // the server answers with a 400 rather than an empty result, so an unrecognised value in a
+  // hand-edited or stale link would break the whole page instead of just being ignored. Dropping
+  // unknown values (and, when nothing survives, the param entirely) keeps a bad URL degrading to
+  // "no subtype filter" in the UI, while a direct API call with the same bad value still gets its
+  // honest 400.
+  const commercialSubtypes = (() => {
+    const parsed = parseCommaStrings(urlParams.get('subtype'))
+      ?.map((s) => s.toUpperCase())
+      .filter(isDiscoverCommercialSubtype);
+    return parsed && parsed.length > 0 ? parsed : undefined;
+  })();
+
   const filters: DiscoverUrlFilters = {
     propertyTypes: parseCommaStrings(urlParams.get('type')),
+    commercialSubtypes,
     bedrooms: parseCommaInts(urlParams.get('beds')),
     priceMin: urlParams.get('priceMin') ? Number(urlParams.get('priceMin')) : undefined,
     priceMax: urlParams.get('priceMax') ? Number(urlParams.get('priceMax')) : undefined,

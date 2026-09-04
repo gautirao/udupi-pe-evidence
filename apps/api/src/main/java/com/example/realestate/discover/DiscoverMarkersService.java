@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -65,7 +66,15 @@ public class DiscoverMarkersService implements DiscoverMarkersPort {
 
         String sql = "SELECT pl.id, pl.latitude, pl.longitude, pl.price_paise, pl.locality, pl.property_type"
                 + ", CASE WHEN pl.property_type = 'agricultural_land' THEN ST_AsGeoJSON(pl.boundary) END AS boundary_geojson"
+                + ", lcsd.commercial_subtype"
                 + " FROM property_listings pl"
+                // #2431: LEFT JOIN, 1:0..1 on the projection table's PRIMARY KEY, so it cannot
+                // duplicate a marker or change the FETCH_LIMIT/CAP truncation arithmetic. LEFT
+                // (not INNER) keeps non-commercial listings and legacy commercial rows with no
+                // projection row in the result, carrying a NULL subtype. The shared WHERE
+                // fragment references only `pl`, so this join does not alter which rows match —
+                // the COUNT query below deliberately does NOT carry it, and must still agree.
+                + " LEFT JOIN listing_commercial_space_details lcsd ON lcsd.listing_id = pl.id"
                 + " WHERE " + predicate.whereFragment()
                 + " ORDER BY pl.id"
                 + " LIMIT " + FETCH_LIMIT;
@@ -86,7 +95,8 @@ public class DiscoverMarkersService implements DiscoverMarkersPort {
                             rs.getObject("price_paise") != null ? rs.getLong("price_paise") : null,
                             rs.getString("locality"),
                             rs.getString("property_type"),
-                            rs.getString("boundary_geojson")
+                            rs.getString("boundary_geojson"),
+                            rs.getString("commercial_subtype")
                     ),
                     paramArray
             );
@@ -149,7 +159,8 @@ public class DiscoverMarkersService implements DiscoverMarkersPort {
      * turned on — both backends for GET /api/discover/markers apply the same coarsening.
      */
     public static DiscoverMarker buildMarker(String id, double latitude, double longitude, Long pricePaise,
-                                              String locality, String propertyType, String boundaryGeoJson) {
+                                              String locality, String propertyType, String boundaryGeoJson,
+                                              String commercialSubtype) {
         return new DiscoverMarker(
                 id,
                 GeoCoarsener.coarsen(latitude),
@@ -157,6 +168,24 @@ public class DiscoverMarkersService implements DiscoverMarkersPort {
                 pricePaise,
                 locality,
                 propertyType,
-                boundaryGeoJson);
+                boundaryGeoJson,
+                normalizeCommercialSubtype(commercialSubtype));
+    }
+
+    /**
+     * Canonicalises the stored subtype to UPPER case and maps blank to {@code null} (#2431).
+     *
+     * <p>Applied in the SHARED funnel, for the same reason {@code GeoCoarsener.coarsen} is: so the
+     * Postgres row-mapper and {@code OpenSearchHitMapper.toMarker} cannot emit different spellings
+     * of the same subtype for the same listing. Deliberately identical in behaviour to
+     * {@code DiscoverListingsService}'s private helper of the same name — a marker and a card for
+     * one listing must not disagree either. The column carries no CHECK constraint (V102 L82-92),
+     * so a lower-case value is representable even though the write path never produces one.
+     */
+    private static String normalizeCommercialSubtype(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        return raw.trim().toUpperCase(Locale.ROOT);
     }
 }

@@ -114,7 +114,7 @@ class DiscoverMarkersPropertyTypeTest {
 
         // Build the marker that the real RowMapper will produce (via Mockito answer below)
         DiscoverMarker expectedMarker = new DiscoverMarker(
-                "test-id", 13.3, 74.7, 5_000_000L, "Malpe", "agricultural_land", null);
+                "test-id", 13.3, 74.7, 5_000_000L, "Malpe", "agricultural_land", null, null);
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<RowMapper<DiscoverMarker>> rowMapperCaptor =

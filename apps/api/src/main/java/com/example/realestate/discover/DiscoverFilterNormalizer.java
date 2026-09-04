@@ -92,6 +92,26 @@ public final class DiscoverFilterNormalizer {
      *  {@code dealer} is legacy but still a valid stored value — see V33/V42). */
     static final Set<String> ALLOWED_SELLER_TYPES = Set.of("owner", "dealer", "broker", "builder");
 
+    /**
+     * The Discover-facing {@code commercial_subtype} vocabulary (#2431): the two values that
+     * {@code property_type = 'commercial'} is ambiguous between.
+     *
+     * <p><b>Deliberately narrower than {@link
+     * com.example.realestate.listing.api.CommercialFieldOptions#VALID_COMMERCIAL_SUBTYPES}</b>,
+     * which additionally contains BUILDING/WAREHOUSE/LAND. Those three are not ambiguous and are
+     * already addressable through their own {@code property_type} tokens
+     * ({@code commercial_building} / {@code warehouse} / {@code commercial_land}) — the write path
+     * DERIVES their subtype from the property type rather than accepting it
+     * ({@code ListingController#resolveCommercialSubtype}). Offering them again as a Discover
+     * subtype filter would create two spellings of one query and a second place for the taxonomy
+     * to drift. Shop and Office are the only pair that {@code property_type} alone cannot separate,
+     * which is the whole reason this filter exists.
+     *
+     * <p>Stored UPPER-case by the write path; the predicate normalises the column with
+     * {@code UPPER()} rather than trusting that, since no CHECK constraint enforces it.
+     */
+    static final Set<String> ALLOWED_COMMERCIAL_SUBTYPES = Set.of("SHOP", "OFFICE");
+
     /** Smallest MEANINGFUL bedroom count: {@code 0} = studio. Values below this are nonsensical and
      *  are dropped — this is a validity floor, NOT a clamp target (see
      *  {@link #normalizeBedrooms}). */
@@ -115,6 +135,9 @@ public final class DiscoverFilterNormalizer {
 
     /** Likewise for the seller-type vocabulary. */
     public static final int MAX_SELLER_TYPE_VALUES = ALLOWED_SELLER_TYPES.size();
+
+    /** Likewise for the Discover commercial-subtype vocabulary (#2431) — SHOP and OFFICE, so 2. */
+    public static final int MAX_COMMERCIAL_SUBTYPE_VALUES = ALLOWED_COMMERCIAL_SUBTYPES.size();
 
     /**
      * Distinct meaningful bedroom values are {@code 0..4} inclusive — five — since everything above
@@ -145,10 +168,12 @@ public final class DiscoverFilterNormalizer {
         List<Integer> bedrooms = normalizeBedrooms(f.bedrooms());
         List<String> sellerTypes = normalizeSellerTypes(f.sellerTypes());
         String listingPurpose = normalizePurpose(f.listingPurpose());
+        List<String> commercialSubtypes = normalizeCommercialSubtypes(f.commercialSubtypes());
 
         return new DiscoverListingPredicateBuilder.Filters(
                 f.city(),
                 propertyTypes.isEmpty() ? null : propertyTypes,
+                commercialSubtypes.isEmpty() ? null : commercialSubtypes,
                 f.priceMinPaise(),
                 f.priceMaxPaise(),
                 f.dateFrom(),
@@ -296,6 +321,72 @@ public final class DiscoverFilterNormalizer {
                 continue;
             }
             kept.add(raw.trim().toLowerCase(Locale.ROOT));
+        }
+        if (kept.isEmpty()) {
+            return List.of();
+        }
+        List<String> sorted = new ArrayList<>(kept);
+        sorted.sort(String::compareTo);
+        return List.copyOf(sorted);
+    }
+
+    /**
+     * Allowlists each entry against {@link #ALLOWED_COMMERCIAL_SUBTYPES} case-insensitively and
+     * canonicalises to the stored UPPER-case form, deduped + sorted (#2431).
+     *
+     * <p><b>No exhaustive-selection collapse.</b> Selecting BOTH Shop and Office is NOT equivalent
+     * to no filter, because {@code commercial_subtype} is nullable and legacy V102-backfilled
+     * commercial rows carry NULL. Collapsing would silently readmit those un-disambiguated rows
+     * into a result set the buyer explicitly narrowed to "Shop or Office" — fabricating a
+     * classification the data does not support. Same reasoning as {@link #normalizeSellerTypes},
+     * and the opposite of {@link #normalizePropertyTypes}, whose column is {@code NOT NULL} and
+     * CHECK-constrained.
+     *
+     * <p>A non-empty list where nothing is recognised is UNSATISFIABLE, not blended: the requested
+     * values are preserved (upper-cased, deduped, sorted) so the predicate matches nothing rather
+     * than widening to every listing in the city. Public callers reject unknown values with a 400
+     * BEFORE reaching here (the issue's "unknown values fail deterministically" contract — a new
+     * param has no legacy URL shape to protect, unlike {@code propertyTypes}); this branch is the
+     * fail-closed backstop for any non-controller caller.
+     */
+    public static List<String> normalizeCommercialSubtypes(List<String> commercialSubtypes) {
+        if (commercialSubtypes == null || commercialSubtypes.isEmpty()) {
+            return List.of();
+        }
+        Set<String> canonical = new LinkedHashSet<>();
+        for (String raw : commercialSubtypes) {
+            if (raw == null) {
+                continue;
+            }
+            String trimmed = raw.trim();
+            for (String allowed : ALLOWED_COMMERCIAL_SUBTYPES) {
+                if (allowed.equalsIgnoreCase(trimmed)) {
+                    canonical.add(allowed);
+                    break;
+                }
+            }
+        }
+        if (canonical.isEmpty()) {
+            return preserveUnsatisfiableUpper(commercialSubtypes);
+        }
+        List<String> sorted = new ArrayList<>(canonical);
+        sorted.sort(String::compareTo);
+        return List.copyOf(sorted);
+    }
+
+    /**
+     * {@link #preserveUnsatisfiable}'s UPPER-case twin, for the one filter whose stored vocabulary
+     * is upper-case rather than lower-case. Same contract: keep the caller's own values so the
+     * emitted predicate matches nothing, and collapse spelling variants of the same impossible
+     * request onto ONE cache entry.
+     */
+    private static List<String> preserveUnsatisfiableUpper(List<String> requested) {
+        Set<String> kept = new LinkedHashSet<>();
+        for (String raw : requested) {
+            if (raw == null || raw.isBlank()) {
+                continue;
+            }
+            kept.add(raw.trim().toUpperCase(Locale.ROOT));
         }
         if (kept.isEmpty()) {
             return List.of();

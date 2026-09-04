@@ -95,6 +95,10 @@ export function useDiscoverPageState({
     const f = urlState.filters;
     return {
       propertyTypes: f.propertyTypes as PropertyFilters['propertyTypes'],
+      // Issue #2431 — seeded from the URL on cold-load so a shared
+      // ?type=commercial&subtype=SHOP link opens with the Shop box already ticked. The URL
+      // domain has already allowlisted these values, so the cast cannot widen the union.
+      commercialSubtypes: f.commercialSubtypes as PropertyFilters['commercialSubtypes'],
       bedrooms: f.bedrooms,
       priceMin: f.priceMin,
       priceMax: f.priceMax,
@@ -300,6 +304,11 @@ export function useDiscoverPageState({
       }
       urlActions.setFiltersLive({
         propertyTypes: next.propertyTypes,
+        // Issue #2431 — written alongside propertyTypes so the two always move together.
+        // PropertyTypeFilter clears this when the buyer leaves the generic Commercial family,
+        // and that cleared value must reach the URL in the SAME write, or the URL would retain
+        // a subtype the visible controls no longer express.
+        commercialSubtypes: next.commercialSubtypes,
         bedrooms: next.bedrooms,
         priceMin: next.priceMin,
         priceMax: next.priceMax,

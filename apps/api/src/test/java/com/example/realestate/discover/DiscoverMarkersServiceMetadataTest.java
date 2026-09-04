@@ -59,7 +59,7 @@ class DiscoverMarkersServiceMetadataTest {
     private static List<DiscoverMarker> markers(int count) {
         List<DiscoverMarker> list = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
-            list.add(new DiscoverMarker("id-" + i, 13.3 + i * 0.001, 74.7 + i * 0.001, null, "Locality", null, null));
+            list.add(new DiscoverMarker("id-" + i, 13.3 + i * 0.001, 74.7 + i * 0.001, null, "Locality", null, null, null));
         }
         return list;
     }

@@ -206,7 +206,7 @@ class NodeAreaInvariant2193IT {
         // (e) listings query for nodeKey=<leaf> contains the target listing id.
         ResponseEntity<DiscoverListingsPage> listingsResponse = listingsController.getListings(
                 CITY_SLUG, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, 0, 20, false, null, null, LEAF_NODE_KEY,
+                null, null, null, null, null, null, null, 0, 20, false, null, null, LEAF_NODE_KEY,
                 null, null);
 
         assertThat(listingsResponse.getStatusCode().is2xxSuccessful()).isTrue();
@@ -226,7 +226,7 @@ class NodeAreaInvariant2193IT {
 
         // (f) markers query for nodeKey=<leaf> contains a marker with the SAME listing id.
         ResponseEntity<DiscoverMarkersResponse> markersResponse = markersController.getMarkers(
-                CITY_SLUG, null, null, null, null, null, null, null, null, null, null, null,
+                CITY_SLUG, null, null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, LEAF_NODE_KEY, null, null);
 
         assertThat(markersResponse.getStatusCode().is2xxSuccessful()).isTrue();

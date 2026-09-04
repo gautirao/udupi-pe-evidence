@@ -31,5 +31,21 @@ public record DiscoverMarker(
         @JsonInclude(JsonInclude.Include.NON_NULL) String propertyType,
         @JsonInclude(JsonInclude.Include.NON_NULL)
         @JsonProperty("boundary")
-        String boundaryGeoJson
+        String boundaryGeoJson,
+        /**
+         * #2431 — {@code SHOP} or {@code OFFICE} for a commercial listing whose subtype has been
+         * declared; {@code null} otherwise, and omitted from the payload entirely via
+         * {@link JsonInclude#NON_NULL} so existing clients are unaffected.
+         *
+         * <p>{@code null} carries real information and must NOT be rendered as a subtype: it means
+         * either "not a commercial listing" or "a legacy {@code property_type='commercial'} row
+         * whose shop-vs-office distinction was never recorded" (V102's backfill leaves the column
+         * NULL for every pre-existing commercial row, deliberately, because the distinction cannot
+         * be recovered from legacy data). Consumers must fall back to the broad Commercial label
+         * rather than guessing.
+         *
+         * <p>Carried here so the marker popover can render the Shop/Office distinction without a
+         * second round-trip. Rendering itself is owned by #2430/#2433, not by this issue.
+         */
+        @JsonInclude(JsonInclude.Include.NON_NULL) String commercialSubtype
 ) {}

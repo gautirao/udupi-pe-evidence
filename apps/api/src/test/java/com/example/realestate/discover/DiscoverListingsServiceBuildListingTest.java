@@ -21,7 +21,7 @@ class DiscoverListingsServiceBuildListingTest {
                 5_000_000L, null, null, 100.0, "sq m", 3,
                 13.34091, 74.74215, null,
                 null, null, null, null, null,
-                5, false, null, false, "A", "READY", "owner", "sale", "LIVE");
+                5, false, null, false, "A", "READY", "owner", "sale", "LIVE", null);
 
         assertThat(listing.latitude()).isEqualTo(13.34);
         assertThat(listing.longitude()).isEqualTo(74.74);
@@ -36,7 +36,7 @@ class DiscoverListingsServiceBuildListingTest {
                 5_000_000L, null, null, 100.0, "sq m", 3,
                 null, null, null,
                 null, null, null, null, null,
-                5, false, null, false, "A", "READY", "owner", "sale", "LIVE");
+                5, false, null, false, "A", "READY", "owner", "sale", "LIVE", null);
 
         assertThat(listing.latitude()).isNull();
         assertThat(listing.longitude()).isNull();
@@ -49,7 +49,7 @@ class DiscoverListingsServiceBuildListingTest {
                 8_000_000L, null, null, 900.0, "sq ft", 2,
                 13.3, 74.7, "https://cdn.example.com/img.jpg",
                 null, null, null, null, null,
-                10, true, "RERA123", true, "B", "READY", "broker", "rent", "LIVE");
+                10, true, "RERA123", true, "B", "READY", "broker", "rent", "LIVE", null);
 
         assertThat(listing.id()).isEqualTo("id-3");
         assertThat(listing.pricePaise()).isEqualTo(8_000_000L);
@@ -66,7 +66,7 @@ class DiscoverListingsServiceBuildListingTest {
                 5_000_000L, null, null, 100.0, "sq m", 3,
                 13.3, 74.7, null,
                 null, null, null, null, null,
-                5, false, null, false, "D", "READY", "owner", "sale", "LIVE");
+                5, false, null, false, "D", "READY", "owner", "sale", "LIVE", null);
 
         assertThat(listing.trustBadge()).isNull();
     }
@@ -78,13 +78,13 @@ class DiscoverListingsServiceBuildListingTest {
                 5_000_000L, null, null, 100.0, "sq m", 3,
                 13.3, 74.7, null,
                 null, null, null, null, null,
-                5, false, null, false, "Z", "READY", "owner", "sale", "LIVE");
+                5, false, null, false, "Z", "READY", "owner", "sale", "LIVE", null);
         DiscoverListingResponse nullTier = DiscoverListingsService.buildListing(
                 "id-6", "L-006", "house", "Title", "Malpe", "IN|KA|Udupi|Malpe",
                 5_000_000L, null, null, 100.0, "sq m", 3,
                 13.3, 74.7, null,
                 null, null, null, null, null,
-                5, false, null, false, null, "READY", "owner", "sale", "LIVE");
+                5, false, null, false, null, "READY", "owner", "sale", "LIVE", null);
 
         assertThat(unknown.trustBadge()).isNull();
         assertThat(nullTier.trustBadge()).isNull();
@@ -101,7 +101,7 @@ class DiscoverListingsServiceBuildListingTest {
                 5_000_000L, null, null, 100.0, "sq m", 3,
                 13.3, 74.7, null,
                 null, null, null, null, confirmedAt,
-                5, false, null, false, "A", "READY", "owner", "sale", "LIVE");
+                5, false, null, false, "A", "READY", "owner", "sale", "LIVE", null);
 
         assertThat(listing.confirmedAt()).isEqualTo(confirmedAt);
     }
@@ -113,7 +113,7 @@ class DiscoverListingsServiceBuildListingTest {
                 5_000_000L, null, null, 100.0, "sq m", 3,
                 13.3, 74.7, null,
                 null, null, null, null, null,
-                5, false, null, false, "A", "READY", "owner", "sale", "LIVE");
+                5, false, null, false, "A", "READY", "owner", "sale", "LIVE", null);
 
         assertThat(listing.confirmedAt()).isNull();
     }

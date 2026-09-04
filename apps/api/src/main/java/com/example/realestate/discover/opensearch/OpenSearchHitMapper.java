@@ -55,7 +55,13 @@ final class OpenSearchHitMapper {
                 price != null ? price.longValue() : null,
                 locality,
                 propertyType,
-                null  // boundary GeoJSON not available from OpenSearch index
+                null,  // boundary GeoJSON not available from OpenSearch index
+                // #2431 — indexed as `commercial_subtype` (keyword) by ListingIndexDocument and
+                // requested in DiscoverQueryDsl.SOURCE_FIELDS. Absent for non-commercial listings
+                // and for legacy commercial rows whose subtype was never recorded; parses to null
+                // in both cases, which is the honest answer. The shared buildMarker funnel applies
+                // the same UPPER-case canonicalisation the Postgres path gets.
+                string(source, "commercial_subtype")
         );
     }
 
@@ -125,6 +131,12 @@ final class OpenSearchHitMapper {
         String sellerType = string(source, "seller_type");
         String listingPurpose = string(source, "listing_purpose");
         String status = string(source, "status");
+        // #2431 — indexed as `commercial_subtype` (keyword) by ListingIndexDocument. Absent for
+        // non-commercial listings and for legacy commercial rows whose subtype was never
+        // recorded; parses to null in both cases, which is the honest answer. The shared
+        // buildListing funnel below applies the same UPPER-case canonicalisation the Postgres
+        // path gets, so the two engines cannot emit different spellings for the same listing.
+        String commercialSubtype = string(source, "commercial_subtype");
 
         // #1726: route through the same DTO-construction funnel as the Postgres path so this
         // (currently dormant) OpenSearch backend cannot reintroduce the exact-pin leak.
@@ -157,7 +169,8 @@ final class OpenSearchHitMapper {
                 possessionStatus,
                 sellerType,
                 listingPurpose,
-                status
+                status,
+                commercialSubtype
         );
     }
 

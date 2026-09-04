@@ -27,8 +27,8 @@ export function clampSchoolRadiusKm(radiusKm: number): number {
     : MIN_SCHOOL_RADIUS_KM;
 }
 
-import type { PropertyType } from '@/lib/listing-constants';
-export type { PropertyType };
+import type { CommercialSubtype, PropertyType } from '@/lib/listing-constants';
+export type { CommercialSubtype, PropertyType };
 
 export interface PropertyImage {
   url: string;
@@ -125,6 +125,19 @@ export interface PropertyListing {
 
 export interface PropertyFilters {
   propertyTypes?: PropertyType[];
+  /**
+   * Issue #2431 — narrows the generic `commercial` property type to Shop or Office.
+   *
+   * Canonical upper-case values (`'SHOP'` / `'OFFICE'`), matching what the backend stores and
+   * what `GET /api/discover/{listings,markers}?commercialSubtypes=` accepts. Any other value is
+   * rejected server-side with a 400, so the UI must never emit one — which is why the type is
+   * the narrowed `CommercialSubtype` union rather than `string[]`.
+   *
+   * Only meaningful alongside `propertyTypes: ['commercial']`. The other commercial families are
+   * already addressable through their own property types and are deliberately not expressible
+   * here.
+   */
+  commercialSubtypes?: CommercialSubtype[];
   localities?: string[];
   /**
    * City filter — lowercase slug (e.g. 'udupi', 'bangalore', 'kundapur').

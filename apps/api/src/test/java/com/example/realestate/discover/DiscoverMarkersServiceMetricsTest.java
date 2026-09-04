@@ -51,7 +51,7 @@ class DiscoverMarkersServiceMetricsTest {
 
     @Test
     void getMarkers_success_emitsTimerWithSuccessTag() {
-        DiscoverMarker marker = new DiscoverMarker("id1", 13.3, 74.7, 5_000_000L, "Malpe", null, null);
+        DiscoverMarker marker = new DiscoverMarker("id1", 13.3, 74.7, 5_000_000L, "Malpe", null, null, null);
         when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
                 .thenReturn(List.of(marker));
 

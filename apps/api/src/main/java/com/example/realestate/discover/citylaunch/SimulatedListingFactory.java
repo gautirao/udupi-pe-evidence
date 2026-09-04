@@ -138,6 +138,11 @@ public final class SimulatedListingFactory {
                 listing.pricePaise(),
                 listing.areaName(),
                 listing.propertyType(),
+                null,
+                // commercialSubtype (#2431) — honest null, never fabricated. Simulated
+                // city-launch markers carry no typed commercial detail row, so there is no
+                // subtype to report; guessing one would put invented data in front of a
+                // launch reviewer.
                 null);
     }
 
@@ -198,6 +203,11 @@ public final class SimulatedListingFactory {
                 null, // possessionStatus — honest null, never fabricated
                 null, // sellerType — honest null, never fabricated
                 "sale",
-                "LIVE");
+                "LIVE",
+                // commercialSubtype (#2431) — honest null, never fabricated. Simulated
+                // city-launch listings carry no typed commercial detail row, so there is no
+                // subtype to report; guessing SHOP or OFFICE here would put invented data in
+                // front of a launch reviewer.
+                null);
     }
 }

@@ -73,6 +73,10 @@ export function buildDiscoverSearchParams({
   }
 
   filters.propertyTypes?.forEach((t) => params.append('propertyTypes', t));
+  // Issue #2431 — Commercial subtype. Emitted here, in the ONE builder both the listings hook and
+  // the markers hook call, which is what makes cards and map markers ask the server the same
+  // question. Adding it at either hook instead would let the two drift.
+  filters.commercialSubtypes?.forEach((s) => params.append('commercialSubtypes', s));
   filters.localities?.forEach((l) => params.append('localities', l));
 
   if (filters.priceMin != null) {

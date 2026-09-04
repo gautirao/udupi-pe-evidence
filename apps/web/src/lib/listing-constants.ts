@@ -167,6 +167,38 @@ export const COMMERCIAL_SUBTYPE_OPTIONS = [
   { value: 'LAND', label: 'Commercial land' },
 ] as const;
 
+/**
+ * Issue #2431 — the subtypes a BUYER can filter Discover by.
+ *
+ * Deliberately a strict subset of COMMERCIAL_SUBTYPE_OPTIONS above, and DERIVED from it rather
+ * than retyped, so the two cannot drift on labels or casing. SHOP and OFFICE are the only pair
+ * that `propertyType='commercial'` is ambiguous between; BUILDING, WAREHOUSE and LAND are each
+ * already reachable through their own property type (`commercial_building`, `warehouse`,
+ * `commercial_land`), so offering them here would give a buyer two different ways to ask the
+ * same question. The backend rejects them on this filter with a 400 for the same reason.
+ *
+ * Mirrors DiscoverFilterNormalizer.ALLOWED_COMMERCIAL_SUBTYPES on the server.
+ */
+export const DISCOVER_COMMERCIAL_SUBTYPES = ['SHOP', 'OFFICE'] as const;
+
+export type CommercialSubtype = (typeof DISCOVER_COMMERCIAL_SUBTYPES)[number];
+
+export const DISCOVER_COMMERCIAL_SUBTYPE_OPTIONS = COMMERCIAL_SUBTYPE_OPTIONS.filter(
+  (o): o is (typeof COMMERCIAL_SUBTYPE_OPTIONS)[number] & { value: CommercialSubtype } =>
+    (DISCOVER_COMMERCIAL_SUBTYPES as readonly string[]).includes(o.value),
+);
+
+/**
+ * The one property type the subtype filter applies to. Selecting a subtype is only meaningful
+ * alongside this type, and leaving it must clear any selected subtype — see PropertyTypeFilter.
+ */
+export const SUBTYPE_BEARING_PROPERTY_TYPE = 'commercial' satisfies PropertyType;
+
+/** Narrows an arbitrary string to a Discover subtype, so URL input cannot smuggle a bad value. */
+export function isDiscoverCommercialSubtype(value: string): value is CommercialSubtype {
+  return (DISCOVER_COMMERCIAL_SUBTYPES as readonly string[]).includes(value);
+}
+
 /** floorChoice — SHOP/OFFICE only. */
 export const COMMERCIAL_FLOOR_CHOICE_OPTIONS = [
   { value: 'GROUND_FLOOR', label: 'Ground floor' },

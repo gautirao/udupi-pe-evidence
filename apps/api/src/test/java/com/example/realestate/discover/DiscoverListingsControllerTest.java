@@ -86,7 +86,7 @@ class DiscoverListingsControllerTest {
                 "abc", "L-001", "house", "Test title", "Malpe", "IN|KA|Udupi|Malpe",
                 5_000_000L, null, null, 100.0, "sq m", 3, 13.3, 74.7,
                 null, OffsetDateTime.now(), null, null, null, null,
-                5, false, null, null, "A", null, "OWNER", "sale", "LIVE"
+                5, false, null, null, "A", null, "OWNER", "sale", "LIVE", null
         );
         DiscoverListingsPage page = new DiscoverListingsPage(
                 List.of(listing), 0, 20, 1L, 1, null);
@@ -706,5 +706,132 @@ class DiscoverListingsControllerTest {
                 .andExpect(status().isOk());
 
         verify(polygonGeographicSafetyPolicy).validate(eq("udupi"), isNull());
+    }
+
+    // ── #2431: commercialSubtypes over real HTTP ─────────────────────────────
+    //
+    // CommercialSubtypeFilter2431IT proves the SQL semantics against a real database, but it
+    // invokes the controller METHOD directly, so it cannot see Spring's request binding. A typo
+    // in the @RequestParam name, or a param that never reaches the query object, would pass that
+    // IT and fail in production. These tests close exactly that gap: they go through MockMvc, so
+    // the parameter is bound from a real query string.
+
+    @Test
+    void commercialSubtypes_isBoundFromTheQueryStringAndReachesTheQueryObject() throws Exception {
+        when(service.getListings(any())).thenReturn(
+                new DiscoverListingsPage(List.of(), 0, 20, 0L, 0, null));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("commercialSubtypes", "SHOP")
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getListings(argThat(q ->
+                q.commercialSubtypes() != null && q.commercialSubtypes().equals(List.of("SHOP"))));
+    }
+
+    @Test
+    void commercialSubtypes_repeatedParamBindsBothValues() throws Exception {
+        when(service.getListings(any())).thenReturn(
+                new DiscoverListingsPage(List.of(), 0, 20, 0L, 0, null));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("commercialSubtypes", "SHOP")
+                        .param("commercialSubtypes", "OFFICE")
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getListings(argThat(q ->
+                q.commercialSubtypes() != null
+                        && q.commercialSubtypes().containsAll(List.of("SHOP", "OFFICE"))));
+    }
+
+    @Test
+    void commercialSubtypes_absent_leavesTheQueryUnfiltered_andReachesTheServiceAsNull() throws Exception {
+        when(service.getListings(any())).thenReturn(
+                new DiscoverListingsPage(List.of(), 0, 20, 0L, 0, null));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getListings(argThat(q -> q.commercialSubtypes() == null));
+    }
+
+    @Test
+    void commercialSubtypes_unknownValue_returns400_andTheServiceIsNeverCalled() throws Exception {
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("commercialSubtypes", "RESTAURANT")
+                        .with(jwt()))
+                .andExpect(status().isBadRequest());
+
+        // Rejection happens at the boundary — proven by the side effect, not just the status:
+        // a 400 that still ran the query would be a different (and worse) implementation.
+        verify(service, never()).getListings(any());
+    }
+
+    @Test
+    void commercialSubtypes_nonAmbiguousSubtype_returns400() throws Exception {
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("commercialSubtypes", "WAREHOUSE")
+                        .with(jwt()))
+                .andExpect(status().isBadRequest());
+
+        verify(service, never()).getListings(any());
+    }
+
+    @Test
+    void commercialSubtypes_tooManyValues_returns400() throws Exception {
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("commercialSubtypes", "SHOP")
+                        .param("commercialSubtypes", "OFFICE")
+                        .param("commercialSubtypes", "SHOP")
+                        .with(jwt()))
+                .andExpect(status().isBadRequest());
+
+        verify(service, never()).getListings(any());
+    }
+
+    @Test
+    void commercialSubtype_isSerialisedOntoTheResponseWhenPresent() throws Exception {
+        DiscoverListingResponse shop = new DiscoverListingResponse(
+                "abc", "L-001", "commercial", "Shop unit", "Malpe", "IN|KA|Udupi|Malpe",
+                5_000_000L, null, null, 100.0, "sq m", null, 13.3, 74.7,
+                null, OffsetDateTime.now(), null, null, null, null,
+                5, false, null, null, "A", null, "OWNER", "sale", "LIVE", "SHOP");
+        when(service.getListings(any())).thenReturn(
+                new DiscoverListingsPage(List.of(shop), 0, 20, 1L, 1, null));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .with(jwt()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].commercialSubtype").value("SHOP"));
+    }
+
+    @Test
+    void commercialSubtype_isOMITTED_notNull_whenTheListingHasNoRecordedSubtype() throws Exception {
+        DiscoverListingResponse legacy = new DiscoverListingResponse(
+                "abc", "L-001", "commercial", "Legacy commercial", "Malpe", "IN|KA|Udupi|Malpe",
+                5_000_000L, null, null, 100.0, "sq m", null, 13.3, 74.7,
+                null, OffsetDateTime.now(), null, null, null, null,
+                5, false, null, null, "A", null, "OWNER", "sale", "LIVE", null);
+        when(service.getListings(any())).thenReturn(
+                new DiscoverListingsPage(List.of(legacy), 0, 20, 1L, 1, null));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .with(jwt()))
+                .andExpect(status().isOk())
+                // The record is NON_NULL-serialised, so an unrecorded subtype is absent from the
+                // JSON entirely rather than present as null — a consumer cannot mistake it for a
+                // value it has to render.
+                .andExpect(jsonPath("$.content[0].commercialSubtype").doesNotExist());
     }
 }

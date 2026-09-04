@@ -1,0 +1,28 @@
+[
+  {
+    "viewport": "desktop-1366x768",
+    "steps": {
+      "1_initial_no_subtype": null,
+      "2_navigated_to_SHOP": "SHOP",
+      "3_navigated_to_OFFICE": "OFFICE",
+      "4_after_BACK_expect_SHOP": "SHOP",
+      "5_after_BACK_again_expect_null": null,
+      "6_after_FORWARD_expect_SHOP": "SHOP",
+      "7_after_FORWARD_again_expect_OFFICE": "OFFICE"
+    },
+    "restorationPass": true
+  },
+  {
+    "viewport": "mobile-390x844",
+    "steps": {
+      "1_initial_no_subtype": null,
+      "2_navigated_to_SHOP": "SHOP",
+      "3_navigated_to_OFFICE": "OFFICE",
+      "4_after_BACK_expect_SHOP": "SHOP",
+      "5_after_BACK_again_expect_null": null,
+      "6_after_FORWARD_expect_SHOP": "SHOP",
+      "7_after_FORWARD_again_expect_OFFICE": "OFFICE"
+    },
+    "restorationPass": true
+  }
+]

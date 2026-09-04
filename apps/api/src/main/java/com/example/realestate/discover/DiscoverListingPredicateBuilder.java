@@ -25,6 +25,18 @@ public class DiscoverListingPredicateBuilder {
     public record Filters(
             String city,
             List<String> propertyTypes,
+            /**
+             * Commercial subtype narrowing filter (#2431): {@code SHOP} / {@code OFFICE}, the two
+             * values {@code property_type = 'commercial'} is ambiguous between. {@code null} or
+             * empty = no filter.
+             *
+             * <p>Canonicalised (upper-cased, allowlisted, deduped, sorted) by
+             * {@link DiscoverFilterNormalizer#normalizeCommercialSubtypes} inside {@link #build},
+             * exactly like {@code propertyTypes}/{@code sellerTypes} — so no caller can produce a
+             * {@code Filters} whose predicate disagrees with the count computed from the same raw
+             * input.
+             */
+            List<String> commercialSubtypes,
             Long priceMinPaise,       // already converted from rupees by caller
             Long priceMaxPaise,
             String dateFrom,          // ISO-8601 date string, nullable
@@ -45,7 +57,51 @@ public class DiscoverListingPredicateBuilder {
             List<String> excludePropertyTypes,  // property types to exclude via NOT IN; null = no exclusion
             List<String> areaKeys,         // restrict to specific area_keys (group members); null = no filter; MUST NOT be empty
             Bbox viewportScope              // #2015 "Search this area" candidate result scope; boundary-inclusive rectangle filter, nullable
-    ) {}
+    ) {
+
+        /**
+         * Backward-compatible constructor for the pre-#2431 22-component shape (no
+         * {@code commercialSubtypes}). Defaults the new field to {@code null} — "no subtype
+         * filter" — which is byte-for-byte the behaviour every one of these call sites had
+         * before the field existed.
+         *
+         * <p>Kept so that the seven summary/navigation/agri/school call sites that have no
+         * concept of a commercial subtype do not have to thread a literal {@code null} through
+         * a 23-argument constructor. The two call sites that DO carry the filter
+         * ({@code DiscoverListingsService#toFilters}, {@code DiscoverMarkersController}) use the
+         * canonical constructor explicitly.
+         */
+        @SuppressWarnings("java:S107") // mirrors the pre-#2431 record shape verbatim
+        public Filters(
+                String city,
+                List<String> propertyTypes,
+                Long priceMinPaise,
+                Long priceMaxPaise,
+                String dateFrom,
+                String dateTo,
+                List<Integer> bedrooms,
+                List<String> sellerTypes,
+                Boolean backOnMarket,
+                Boolean newToMarket,
+                Boolean reraRegistered,
+                Boolean readyToMove,
+                List<List<Double>> polygon,
+                Double schoolLat,
+                Double schoolLon,
+                Double schoolRadiusKm,
+                Bbox bbox,
+                String q,
+                String listingPurpose,
+                List<String> excludePropertyTypes,
+                List<String> areaKeys,
+                Bbox viewportScope
+        ) {
+            this(city, propertyTypes, null, priceMinPaise, priceMaxPaise, dateFrom, dateTo,
+                    bedrooms, sellerTypes, backOnMarket, newToMarket, reraRegistered, readyToMove,
+                    polygon, schoolLat, schoolLon, schoolRadiusKm, bbox, q, listingPurpose,
+                    excludePropertyTypes, areaKeys, viewportScope);
+        }
+    }
 
     /**
      * Assembled SQL fragment + bound params + derived flags.
@@ -99,6 +155,51 @@ public class DiscoverListingPredicateBuilder {
                 }
                 sb.append(")");
             }
+        }
+
+        // commercialSubtypes (#2431) — narrows the generic Commercial family to SHOP or OFFICE.
+        //
+        // Expressed as a CORRELATED EXISTS against the typed projection table rather than a JOIN,
+        // because this fragment is shared verbatim by five callers (listings SELECT, listings
+        // COUNT, listings aggregates, markers, navigation area counts) whose FROM clauses this
+        // builder does not control. An EXISTS is drop-in for all of them; a JOIN would not be.
+        // listing_id is the PK of listing_commercial_space_details, so the subquery is a single
+        // index seek per candidate row.
+        //
+        // THREE properties this predicate must have, all of which fall out of EXISTS semantics:
+        //
+        //   1. A legacy property_type='commercial' row with commercial_subtype NULL is NEVER
+        //      classified as SHOP or OFFICE. `NULL IN ('SHOP')` is NULL (not TRUE), so the row
+        //      is excluded — the honest answer, and exactly what the issue requires. V102's
+        //      backfill hardcodes NULL for every legacy commercial row precisely because shop
+        //      vs office cannot be recovered from legacy data; guessing here would fabricate it.
+        //
+        //   2. A row with NO projection row at all (non-commercial property types) is excluded
+        //      too. That is deliberate: `commercialSubtypes=SHOP` asks for shops, and an
+        //      apartment is not one. Combining it with `propertyTypes=apartment` therefore
+        //      yields zero rather than silently ignoring the subtype and handing the shopper the
+        //      whole apartment inventory presented as if it matched — the exact class of
+        //      quiet-wrongness DiscoverFilterNormalizer's javadoc exists to prevent. The
+        //      frontend clears subtype state when the buyer leaves the Commercial family, so
+        //      that contradictory combination is not reachable through the UI.
+        //
+        //   3. UPPER() on the column, not on a bind: the write path stamps canonical upper-case
+        //      (ListingController#resolveCommercialSubtype), but the column carries no CHECK
+        //      constraint (V102 L82-92), so a lower-case row is representable. Normalising the
+        //      column defends against that without a second source of truth for the vocabulary.
+        //      Cost is nil — the row is already located by primary key before UPPER() is applied.
+        //
+        // No unsatisfiable short-circuit here (unlike propertyTypes/sellerTypes above): without a
+        // CHECK constraint, an out-of-vocabulary value is not PROVABLY empty, so it must be run,
+        // not assumed. See DiscoverFilterNormalizer#isProvablyEmpty for why that distinction
+        // matters (it is the same reason `bedrooms` is excluded there).
+        if (f.commercialSubtypes() != null && !f.commercialSubtypes().isEmpty()) {
+            List<String> placeholders = Collections.nCopies(f.commercialSubtypes().size(), "?");
+            sb.append(" AND EXISTS (SELECT 1 FROM listing_commercial_space_details lcsd")
+              .append(" WHERE lcsd.listing_id = pl.id AND UPPER(lcsd.commercial_subtype) IN (")
+              .append(String.join(", ", placeholders))
+              .append("))");
+            params.addAll(f.commercialSubtypes());
         }
 
         // price range

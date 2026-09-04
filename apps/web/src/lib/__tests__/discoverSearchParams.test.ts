@@ -147,6 +147,9 @@ describe('discoverSearchParams — parity test', () => {
       schoolLat: 13.34,
       schoolLon: 74.74,
       schoolRadiusKm: 5,
+      // #2431 — set here so the parity assertion below is not vacuous: without a value, both
+      // sides would return an empty array and the key would "match" while proving nothing.
+      commercialSubtypes: ['SHOP', 'OFFICE'] as ['SHOP', 'OFFICE'],
     };
 
     const bbox: [number, number, number, number] = [13.341, 74.741, 13.359, 74.759];
@@ -223,7 +226,14 @@ describe('discoverSearchParams — parity test', () => {
       'schoolRadiusKm',
       'q',
       'listingPurpose',
+      // #2431 — cards and markers must ask the server the SAME subtype question, or the map
+      // would show pins the result list omits.
+      'commercialSubtypes',
     ];
+
+    // Guard against a vacuous parity assertion: if the builder silently dropped
+    // commercialSubtypes, both sides would be empty and the loop below would still pass.
+    expect(listingUrlParams.getAll('commercialSubtypes')).toEqual(['SHOP', 'OFFICE']);
 
     // Assert parity
     for (const key of overlappingKeys) {

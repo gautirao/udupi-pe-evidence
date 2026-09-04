@@ -106,6 +106,13 @@ export interface DiscoverViewport {
 
 export interface DiscoverUrlFilters {
   propertyTypes?: string[];
+  /**
+   * Issue #2431 — Commercial subtype narrowing (`'SHOP'` / `'OFFICE'`). Serialised as a
+   * comma-joined `subtype` param, matching the existing `type` / `seller` convention. Values
+   * outside the allowlist are DROPPED on parse, so a hand-edited or stale URL cannot produce a
+   * request the server would reject with a 400.
+   */
+  commercialSubtypes?: string[];
   bedrooms?: number[];
   priceMin?: number;
   priceMax?: number;

@@ -38,5 +38,18 @@ public record DiscoverListingResponse(
         String possessionStatus,
         String sellerType,
         String listingPurpose,
-        String status
+        String status,
+        /**
+         * #2431 — {@code SHOP} or {@code OFFICE} for a commercial listing whose subtype has been
+         * declared; {@code null} otherwise.
+         *
+         * <p>{@code null} carries real information and must NOT be rendered as a subtype: it means
+         * either "not a commercial listing" or "a legacy {@code property_type='commercial'} row
+         * whose shop-vs-office distinction was never recorded". V102's backfill left the column
+         * NULL for every pre-existing commercial row deliberately, because that distinction cannot
+         * be recovered from legacy data. Consumers must fall back to the broad Commercial label
+         * rather than guessing. The record is {@code NON_NULL}-serialised, so the field is simply
+         * absent from the JSON in those cases.
+         */
+        String commercialSubtype
 ) {}

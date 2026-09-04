@@ -18,6 +18,7 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -131,8 +132,17 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                         pl.possession_status,
                         pl.seller_type,
                         pl.listing_purpose,
-                        pl.status
+                        pl.status,
+                        lcsd.commercial_subtype
                     FROM property_listings pl
+                    -- #2431: LEFT JOIN, not a correlated subselect, because the FROM clause of
+                    -- THIS query is ours to shape. listing_id is the PK of the projection table,
+                    -- so the join is 1:0..1 and cannot duplicate a listing row or change the
+                    -- page's cardinality. LEFT (not INNER) keeps non-commercial listings — and
+                    -- legacy commercial rows that have no projection row — in the result with a
+                    -- NULL subtype. The shared WHERE fragment still references only `pl`, so
+                    -- adding this join does not alter which rows match.
+                    LEFT JOIN listing_commercial_space_details lcsd ON lcsd.listing_id = pl.id
                     WHERE \s""" + whereFragment + """
 
                     ORDER BY pl.created_at DESC
@@ -197,7 +207,8 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                         rs.getString("possession_status"),
                         rs.getString("seller_type"),
                         rs.getString("listing_purpose"),
-                        rs.getString("status")
+                        rs.getString("status"),
+                        rs.getString("commercial_subtype")
                 );
             }, pageParams.toArray());
 
@@ -283,14 +294,33 @@ public class DiscoverListingsService implements DiscoverListingsPort {
             OffsetDateTime firstPublishedAt, OffsetDateTime lastUpdatedAt, OffsetDateTime confirmedAt,
             int daysOnMarket,
             boolean backOnMarket, String reraNumber, boolean reraValid, String rawTrustTier,
-            String possessionStatus, String sellerType, String listingPurpose, String status) {
+            String possessionStatus, String sellerType, String listingPurpose, String status,
+            String commercialSubtype) {
         return new DiscoverListingResponse(
                 id, listingNumber, propertyType, title, locality, areaKey, pricePaise,
                 landArea, landAreaUnit, builtArea, builtAreaUnit, bedrooms,
                 GeoCoarsener.coarsen(latitude), GeoCoarsener.coarsen(longitude),
                 heroImageUrl, createdAt, updatedAt, firstPublishedAt, lastUpdatedAt, confirmedAt,
                 daysOnMarket, backOnMarket, reraNumber, reraValid, TrustBadge.publicBadge(rawTrustTier),
-                possessionStatus, sellerType, listingPurpose, status);
+                possessionStatus, sellerType, listingPurpose, status,
+                normalizeCommercialSubtype(commercialSubtype));
+    }
+
+    /**
+     * Canonicalises the stored subtype to UPPER case, and maps blank to {@code null} (#2431).
+     *
+     * <p>Applied in the SHARED funnel so the Postgres row-mapper and {@code OpenSearchHitMapper}
+     * cannot emit different spellings of the same subtype for the same listing — the identical
+     * reason {@code TrustBadge.publicBadge} and {@code GeoCoarsener.coarsen} live here rather than
+     * at each call site. The column carries no CHECK constraint (V102 L82-92), so a lower-case or
+     * whitespace-only value is representable even though the write path never produces one; this
+     * is the read-side counterpart of the {@code UPPER()} in the predicate builder.
+     */
+    private static String normalizeCommercialSubtype(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        return raw.trim().toUpperCase(Locale.ROOT);
     }
 
     private static boolean reraValidFrom(String reraNumber) {
@@ -307,6 +337,7 @@ public class DiscoverListingsService implements DiscoverListingsPort {
         return new DiscoverListingPredicateBuilder.Filters(
                 q.city(),
                 q.propertyTypes(),
+                q.commercialSubtypes(),
                 q.priceMinPaise(),
                 q.priceMaxPaise(),
                 q.dateFrom(),

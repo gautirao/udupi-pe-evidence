@@ -125,7 +125,7 @@ class DiscoverSearchMetricsTest {
                 null, null, null, null, null,
                 5, false,
                 null, false,
-                "A", "READY", "owner", "sale", "LIVE"
+                "A", "READY", "owner", "sale", "LIVE", null
         );
     }
 }

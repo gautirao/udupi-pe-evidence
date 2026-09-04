@@ -1,0 +1,46 @@
+[
+  {
+    "viewport": "desktop-1366x768",
+    "requestedUrl": "http://localhost:5201/discover?city=udupi&type=commercial&subtype=SHOP&journey=area-first",
+    "urlAfterNavigation": "http://localhost:5201/discover?city=udupi&type=commercial&subtype=SHOP&journey=area-first&node=d%3Acentral&lat=13.33730&lon=74.74097&zoom=15&nodeListings=1",
+    "subtypeParamSurvived": "SHOP",
+    "typeParamSurvived": "commercial",
+    "propertyTypeHeadingPresent": true,
+    "shopOfficeControlsPresent": false,
+    "visiblePropertyTypeChips": [
+      "quick-chip-all",
+      "quick-chip-apartment",
+      "quick-chip-villa",
+      "quick-chip-land",
+      "quick-chip-ready-to-move",
+      "quick-chip-2-bhk",
+      "quick-chip-3-bhk",
+      "quick-chip-budget-any",
+      "quick-chip-budget-5000000",
+      "quick-chip-budget-8000000",
+      "quick-chip-budget-12000000"
+    ]
+  },
+  {
+    "viewport": "mobile-390x844",
+    "requestedUrl": "http://localhost:5201/discover?city=udupi&type=commercial&subtype=SHOP&journey=area-first",
+    "urlAfterNavigation": "http://localhost:5201/discover?city=udupi&type=commercial&subtype=SHOP&journey=area-first&node=d%3Acentral&nodeListings=1",
+    "subtypeParamSurvived": "SHOP",
+    "typeParamSurvived": "commercial",
+    "propertyTypeHeadingPresent": true,
+    "shopOfficeControlsPresent": false,
+    "visiblePropertyTypeChips": [
+      "quick-chip-all",
+      "quick-chip-apartment",
+      "quick-chip-villa",
+      "quick-chip-land",
+      "quick-chip-ready-to-move",
+      "quick-chip-2-bhk",
+      "quick-chip-3-bhk",
+      "quick-chip-budget-any",
+      "quick-chip-budget-5000000",
+      "quick-chip-budget-8000000",
+      "quick-chip-budget-12000000"
+    ]
+  }
+]

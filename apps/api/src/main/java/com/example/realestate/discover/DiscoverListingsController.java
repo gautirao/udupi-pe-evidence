@@ -60,6 +60,7 @@ public class DiscoverListingsController {
     public ResponseEntity<DiscoverListingsPage> getListings(
             @RequestParam(name = "city") String city,
             @RequestParam(name = "propertyTypes", required = false) List<String> propertyTypes,
+            @RequestParam(name = "commercialSubtypes", required = false) List<String> commercialSubtypes,
             @RequestParam(name = "priceMin", required = false) Long priceMin,
             @RequestParam(name = "priceMax", required = false) Long priceMax,
             @RequestParam(name = "dateFrom", required = false) String dateFrom,
@@ -104,6 +105,11 @@ public class DiscoverListingsController {
         if ((schoolLat == null) != (schoolLon == null)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "school_lat_and_lon_required_together");
         }
+
+        // commercialSubtypes (#2431): unknown values fail deterministically with a 400 rather
+        // than silently returning an empty page. Same validator as the markers endpoint, so the
+        // two cannot accept different vocabularies.
+        CommercialSubtypeParam.validate(commercialSubtypes);
 
         // Parse and validate polygon
         List<List<Double>> polygon = parsePolygon(polygonJson);
@@ -158,6 +164,7 @@ public class DiscoverListingsController {
         DiscoverListingsQuery query = new DiscoverListingsQuery(
                 city,
                 propertyTypes,
+                commercialSubtypes,
                 priceMinPaise,
                 priceMaxPaise,
                 dateFrom,

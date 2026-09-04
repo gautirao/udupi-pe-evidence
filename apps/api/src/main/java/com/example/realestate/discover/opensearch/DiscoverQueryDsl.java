@@ -36,7 +36,7 @@ import java.util.Map;
 public final class DiscoverQueryDsl {
 
     /**
-     * Explicit _source field list: exactly the 26 fields the adapters need.
+     * Explicit _source field list: exactly the fields the adapters need — no more.
      * No wildcard — keeps network payload predictable and prevents leaking PII fields.
      */
     static final List<String> SOURCE_FIELDS = List.of(
@@ -45,7 +45,12 @@ public final class DiscoverQueryDsl {
             "bedrooms", "latitude", "longitude", "hero_image_url",
             "created_at", "updated_at", "first_published_at", "last_updated_at",
             "back_to_market_at", "rera_number", "trust_tier", "possession_status",
-            "seller_type", "listing_purpose", "status", "city_slug"
+            "seller_type", "listing_purpose", "status", "city_slug",
+            // #2431 — required by OpenSearchHitMapper.toListing so the OpenSearch-backed
+            // DiscoverListingResponse carries the same commercialSubtype the Postgres-backed one
+            // does. Omitting it would make the two engines return DIFFERENT DTOs for the same
+            // listing, which is the divergence the shared buildListing funnel exists to prevent.
+            "commercial_subtype"
     );
 
     private static final int MARKERS_FETCH_LIMIT = 1001; // CAP + 1 sentinel
@@ -117,6 +122,7 @@ public final class DiscoverQueryDsl {
         return new DiscoverListingPredicateBuilder.Filters(
                 q.city(),
                 q.propertyTypes(),
+                q.commercialSubtypes(),
                 q.priceMinPaise(),
                 q.priceMaxPaise(),
                 q.dateFrom(),
@@ -184,6 +190,25 @@ public final class DiscoverQueryDsl {
         // sellerTypes
         if (f.sellerTypes() != null && !f.sellerTypes().isEmpty()) {
             filter.add(terms("seller_type", f.sellerTypes()));
+        }
+
+        // commercialSubtypes (#2431) — SHOP/OFFICE narrowing, the OpenSearch twin of the Postgres
+        // EXISTS predicate in DiscoverListingPredicateBuilder#build.
+        //
+        // MEMBERSHIP IS IDENTICAL ON BOTH ENGINES, which is the issue's HOLD condition:
+        //   * commercial_subtype is a `keyword` field (see ListingIndexDocument), so `terms` is an
+        //     exact non-analysed match — the same comparison the SQL side performs.
+        //   * Both sides receive the value from the SAME DiscoverFilterNormalizer.normalize call
+        //     above, canonicalised to the stored UPPER-case form, so no casing drift is possible.
+        //   * A document with NO commercial_subtype (non-commercial listings, and legacy
+        //     property_type='commercial' rows whose subtype was never recorded) does not match a
+        //     `terms` clause — mirroring `NULL IN (...)` being NULL rather than TRUE in Postgres.
+        //     Neither engine can fabricate a Shop/Office classification for a NULL row.
+        //
+        // The one residual difference is which documents EXIST in the index at all, which is the
+        // pre-existing indexing-freshness contract (#1734) and not specific to this filter.
+        if (f.commercialSubtypes() != null && !f.commercialSubtypes().isEmpty()) {
+            filter.add(terms("commercial_subtype", f.commercialSubtypes()));
         }
 
         // priceMin / priceMax

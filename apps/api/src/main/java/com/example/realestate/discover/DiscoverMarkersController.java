@@ -59,6 +59,7 @@ public class DiscoverMarkersController {
     public ResponseEntity<DiscoverMarkersResponse> getMarkers(
             @RequestParam(name = "city") String city,
             @RequestParam(name = "propertyTypes", required = false) List<String> propertyTypes,
+            @RequestParam(name = "commercialSubtypes", required = false) List<String> commercialSubtypes,
             @RequestParam(name = "priceMin", required = false) Long priceMin,
             @RequestParam(name = "priceMax", required = false) Long priceMax,
             @RequestParam(name = "dateFrom", required = false) String dateFrom,
@@ -93,6 +94,11 @@ public class DiscoverMarkersController {
         if ((schoolLat == null) != (schoolLon == null)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "school_lat_and_lon_required_together");
         }
+
+        // commercialSubtypes (#2431): identical validation to the listings endpoint — same
+        // validator, so markers and cards cannot accept different vocabularies and therefore
+        // cannot disagree on membership for a request either one accepts.
+        CommercialSubtypeParam.validate(commercialSubtypes);
 
         // Parse and validate polygon
         List<List<Double>> polygon = parsePolygon(polygonJson);
@@ -144,6 +150,7 @@ public class DiscoverMarkersController {
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 city,
                 propertyTypes,
+                commercialSubtypes,
                 priceMinPaise,
                 priceMaxPaise,
                 dateFrom,

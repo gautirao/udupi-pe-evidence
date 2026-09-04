@@ -1080,4 +1080,108 @@ class DiscoverQueryDslTest {
         throw new IllegalStateException("Could not locate " + relPath + " by walking up from "
                 + System.getProperty("user.dir"));
     }
+
+    // -----------------------------------------------------------------------
+    // #2431: commercialSubtypes — SQL/OpenSearch membership parity
+    //
+    // The issue's HOLD condition is "if SQL and OpenSearch cannot express identical membership,
+    // HOLD rather than shipping divergent result sets". These tests are the evidence that they
+    // CAN: the field is a `keyword` in the index, so `terms` is an exact non-analysed match —
+    // the same comparison the Postgres EXISTS predicate performs — and both engines receive the
+    // value from the SAME DiscoverFilterNormalizer.normalize call.
+    // -----------------------------------------------------------------------
+
+    /** Extracts the values of the {@code terms(commercial_subtype, ...)} clause, or null if absent. */
+    @SuppressWarnings("unchecked")
+    private static List<String> commercialSubtypeTermsValues(List<Object> filter) {
+        for (Object f : filter) {
+            if (!(f instanceof Map<?, ?> m)) continue;
+            Object termsObj = m.get("terms");
+            if (!(termsObj instanceof Map<?, ?> t)) continue;
+            Object vals = t.get("commercial_subtype");
+            if (vals instanceof List<?> list) return (List<String>) list;
+        }
+        return null;
+    }
+
+    private static DiscoverListingPredicateBuilder.Filters filtersWithSubtypes(
+            String city, List<String> commercialSubtypes) {
+        return new DiscoverListingPredicateBuilder.Filters(
+                city, null, commercialSubtypes, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+    }
+
+    @Test
+    void commercialSubtypes_emitsATermsClauseOnTheKeywordField() {
+        Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(
+                filtersWithSubtypes("udupi", List.of("SHOP")), ANY_ACTIVE_AREA_KEYS);
+
+        assertThat(commercialSubtypeTermsValues(getFilter(getBool(body))))
+                .as("a `terms` clause is the exact-match equivalent of the Postgres IN list; "
+                        + "commercial_subtype is mapped as a keyword, so it is not analysed")
+                .containsExactly("SHOP");
+    }
+
+    @Test
+    void commercialSubtypes_canonicalisesCaseThroughTheSharedNormaliser() {
+        Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(
+                filtersWithSubtypes("udupi", List.of("shop")), ANY_ACTIVE_AREA_KEYS);
+
+        assertThat(commercialSubtypeTermsValues(getFilter(getBool(body))))
+                .as("both engines canonicalise through DiscoverFilterNormalizer, so a lower-case "
+                        + "request cannot become an exact-match miss on OpenSearch while the "
+                        + "Postgres UPPER() predicate still matches")
+                .containsExactly("SHOP");
+    }
+
+    @Test
+    void commercialSubtypes_bothValuesEmittedAndNotCollapsedToNoClause() {
+        Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(
+                filtersWithSubtypes("udupi", List.of("SHOP", "OFFICE")), ANY_ACTIVE_AREA_KEYS);
+
+        assertThat(commercialSubtypeTermsValues(getFilter(getBool(body))))
+                .as("selecting both subtypes must NOT collapse to no-clause: commercial_subtype is "
+                        + "nullable, so a missing-field document (a legacy commercial listing) must "
+                        + "stay excluded. A `terms` clause never matches a document lacking the "
+                        + "field, mirroring NULL IN (...) being NULL rather than TRUE in Postgres.")
+                .containsExactlyInAnyOrder("SHOP", "OFFICE");
+    }
+
+    @Test
+    void commercialSubtypes_absent_emitsNoClauseAtAll() {
+        Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(
+                filtersFor("udupi"), ANY_ACTIVE_AREA_KEYS);
+
+        assertThat(commercialSubtypeTermsValues(getFilter(getBool(body))))
+                .as("no filter requested means no clause — existing queries are byte-identical")
+                .isNull();
+    }
+
+    @Test
+    void commercialSubtypes_listingsQueryEmitsTheSameClauseAsTheMarkersQuery() {
+        DiscoverListingsQuery query = new DiscoverListingsQuery(
+                "udupi", null, List.of("OFFICE"), null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, 0, 20, false, null, null,
+                null, null);
+
+        List<String> listingsClause = commercialSubtypeTermsValues(
+                getFilter(getBool(DiscoverQueryDsl.buildListingsQuery(query, ANY_ACTIVE_AREA_KEYS))));
+        List<String> markersClause = commercialSubtypeTermsValues(
+                getFilter(getBool(DiscoverQueryDsl.buildMarkersQuery(
+                        filtersWithSubtypes("udupi", List.of("OFFICE")), ANY_ACTIVE_AREA_KEYS))));
+
+        // Non-vacuous: assert the actual value before asserting equality, so two nulls could not
+        // pass this as "parity".
+        assertThat(listingsClause).containsExactly("OFFICE");
+        assertThat(listingsClause).isEqualTo(markersClause);
+    }
+
+    @Test
+    void commercialSubtype_isRequestedInSourceFields_soTheHitMapperCanPopulateTheDto() {
+        assertThat(DiscoverQueryDsl.SOURCE_FIELDS)
+                .as("without this the OpenSearch-backed DTO would carry a null subtype while the "
+                        + "Postgres-backed DTO carried a real one — the exact engine divergence the "
+                        + "shared buildListing/buildMarker funnels exist to prevent")
+                .contains("commercial_subtype");
+    }
 }
