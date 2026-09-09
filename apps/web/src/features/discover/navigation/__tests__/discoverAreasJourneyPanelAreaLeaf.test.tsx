@@ -169,10 +169,11 @@ function renderPanel(
   );
 }
 
+// `/add nearby areas/i` was removed from this list (Issue #2440).
+// Superseded by #2017 / PR #2424 — canonical AREA is the valid entry point for the multi-area draft flow.
 const INVARIANT_8_LITERALS = [
   /edit areas/i,
   /clear selected areas/i,
-  /add nearby areas/i,
   /draw search area/i,
   /search this area/i,
   /create alert/i,
