@@ -512,8 +512,9 @@
         </profile>
         <!--
             Activate with `mvn -f apps/api/pom.xml -Psaved-search-it verify`.
-            Runs SavedSearchServiceIT + SavedSearchPolygonPolicyIT tagged @Tag("integration")
-            via failsafe — the full Testcontainers-backed test matrix for issue #2019 Slice A
+            Runs SavedSearchServiceIT + SavedSearchPolygonPolicyIT + SavedSearchCreateIdempotencyRaceIT
+            (Slice A) and SavedSearchAlertDeliveryIT (Slice B matcher/delivery) tagged @Tag("integration")
+            via failsafe — the full Testcontainers-backed test matrix for issue #2019
             (saved-search core): idempotent create/fingerprint, all three result-scope kinds,
             filter allowlist rejection, IDOR-safe ownership scoping, max-active cap enforcement,
             pause/resume, deterministic update semantics, the DB unique-index backstop, and
@@ -550,10 +551,12 @@
                                 -XX:+EnableDynamicAgentLoading
                                 -Dnet.bytebuddy.experimental=true
                             </argLine>
-                            <!-- Narrowed include: ONLY the issue #2019 Slice A saved-search ITs
-                                 (SavedSearchServiceIT + SavedSearchPolygonPolicyIT). -->
+                            <!-- Narrowed include: ONLY the issue #2019 saved-search ITs —
+                                 Slice A (savedsearch/SavedSearch*IT) and Slice B's matcher/delivery
+                                 IT (savedsearch/alert/SavedSearchAlertDeliveryIT). -->
                             <includes>
                                 <include>**/savedsearch/SavedSearch*IT.java</include>
+                                <include>**/savedsearch/alert/SavedSearch*IT.java</include>
                             </includes>
                             <groups>integration</groups>
                         </configuration>

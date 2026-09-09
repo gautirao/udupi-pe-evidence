@@ -59,7 +59,9 @@ class SavedSearchFilterAllowlistParityTest {
     static final Set<String> NON_ALERTABLE =
             Set.of(
                     "city", "dateFrom", "dateTo", "polygon", "schoolLat", "schoolLon",
-                    "schoolRadiusKm", "bbox", "q", "areaKeys", "viewportScope");
+                    "schoolRadiusKm", "bbox", "q", "areaKeys", "viewportScope",
+                    // #2019 Slice B ruling: no #2016 restore-link URL representation → not alertable
+                    "excludePropertyTypes");
 
     private static Set<String> actualFiltersComponentNames() {
         RecordComponent[] components = DiscoverListingPredicateBuilder.Filters.class.getRecordComponents();

@@ -90,6 +90,60 @@ public class EmailService {
         log.debug("Alert email sent to={} listingId={}", toEmail, listingId);
     }
 
+    /**
+     * #2019 Slice B: sends a saved-search alert digest via Resend. Fire-and-forget — callers
+     * must handle exceptions and record the outcome. Deliberately carries NO listing titles,
+     * prices or coordinates: only the count, the canonical scope/filter summary, the exact
+     * restore link and the manage (pause/unsubscribe) link.
+     *
+     * @param toEmail        owner's address (required)
+     * @param label          user label, or null (falls back to the scope summary)
+     * @param scopeSummary   canonical scope summary (never geometry/bounds)
+     * @param filtersSummary canonical filter summary, possibly empty
+     * @param matchCount     number of newly matching listings in this batch
+     * @param restoreUrl     #2016-contract link restoring the exact saved search
+     * @param manageUrl      owner-scoped saved-searches management page
+     */
+    public void sendSavedSearchAlert(String toEmail, String label, String scopeSummary,
+                                     String filtersSummary, int matchCount,
+                                     String restoreUrl, String manageUrl) {
+        String safeLabel = (label != null && !label.isBlank()) ? label : scopeSummary;
+        String subject = matchCount == 1
+                ? "1 new listing matches your saved search: " + safeLabel
+                : matchCount + " new listings match your saved search: " + safeLabel;
+        String html = buildSavedSearchAlertHtml(safeLabel, scopeSummary, filtersSummary, matchCount, restoreUrl, manageUrl);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(apiKey);
+
+        Map<String, Object> body = Map.of(
+                "from", fromAddress,
+                "to", new String[]{toEmail},
+                "subject", subject,
+                "html", html
+        );
+
+        restTemplate.postForObject(RESEND_EMAILS_URL, new HttpEntity<>(body, headers), Map.class);
+        log.debug("Saved-search alert email sent matchCount={}", matchCount);
+    }
+
+    private String buildSavedSearchAlertHtml(String label, String scopeSummary, String filtersSummary,
+                                             int matchCount, String restoreUrl, String manageUrl) {
+        String count = matchCount == 1 ? "1 new listing" : matchCount + " new listings";
+        return "<html><body style=\"font-family:sans-serif;\">" +
+               "<h2>" + escapeHtml(count) + " for “" + escapeHtml(label) + "”</h2>" +
+               "<p><strong>Where:</strong> " + escapeHtml(scopeSummary) + "</p>" +
+               (filtersSummary == null || filtersSummary.isBlank()
+                       ? ""
+                       : "<p><strong>Filters:</strong> " + escapeHtml(filtersSummary) + "</p>") +
+               "<p><a href=\"" + escapeAttr(restoreUrl) + "\">View the new listings</a></p>" +
+               "<hr/><p style=\"color:#888;font-size:12px;\">You received this because you created a " +
+               "saved search with alerts on Udupi Properties. " +
+               "<a href=\"" + escapeAttr(manageUrl) + "\">Manage, pause or delete your alerts</a>.</p>" +
+               "</body></html>";
+    }
+
     private String buildBookingHtml(String buyerName, String listingTitle, UUID listingId) {
         return "<html><body style=\"font-family:sans-serif;\">" +
                "<h2>New viewing request</h2>" +
@@ -125,5 +179,9 @@ public class EmailService {
     private static String escapeHtml(String s) {
         if (s == null) return "";
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
+    private static String escapeAttr(String s) {
+        return escapeHtml(s).replace("\"", "&quot;");
     }
 }

@@ -146,6 +146,20 @@ public class SavedSearchController {
         return ResponseEntity.ok(SavedSearchResponse.from(resumed));
     }
 
+    /** #2019 Slice B: owner-scoped email unsubscribe/resubscribe for one saved search. */
+    @PatchMapping("/{id}/email-alerts")
+    public ResponseEntity<SavedSearchResponse> setEmailAlerts(
+            JwtAuthenticationToken auth, @PathVariable UUID id, @RequestBody EmailAlertsRequest req) {
+        UUID userId = extractUserId(auth);
+        if (req == null || req.enabled() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "saved_search_email_alerts_enabled_required");
+        }
+
+        SavedSearch updated = savedSearchService.setEmailAlerts(userId, id, req.enabled());
+        log.info("PATCH /api/saved-searches/{}/email-alerts -> 200 enabled={} userId={}", id, req.enabled(), userId);
+        return ResponseEntity.ok(SavedSearchResponse.from(updated));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(JwtAuthenticationToken auth, @PathVariable UUID id) {
         UUID userId = extractUserId(auth);
@@ -185,6 +199,10 @@ public class SavedSearchController {
             AlertFrequency alertFrequency) {
     }
 
+    /** Body for {@code PATCH /{id}/email-alerts}: {@code enabled} is required. */
+    public record EmailAlertsRequest(Boolean enabled) {
+    }
+
     public record SavedSearchResponse(
             UUID id,
             String citySlug,
@@ -201,6 +219,7 @@ public class SavedSearchController {
             SavedSearchStatus status,
             AlertFrequency alertFrequency,
             AlertStatus alertStatus,
+            boolean emailAlertsEnabled,
             String lastAlertedAt,
             String alertWatermark,
             String createdAt,
@@ -222,6 +241,7 @@ public class SavedSearchController {
                     s.getStatus(),
                     s.getAlertFrequency(),
                     s.getAlertStatus(),
+                    s.isEmailAlertsEnabled(),
                     s.getLastAlertedAt() != null ? s.getLastAlertedAt().toString() : null,
                     s.getAlertWatermark() != null ? s.getAlertWatermark().toString() : null,
                     s.getCreatedAt() != null ? s.getCreatedAt().toString() : null,

@@ -318,4 +318,45 @@ class SavedSearchControllerTest {
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
                 .andExpect(status().isOk());
     }
+
+    // ── #2019 Slice B: email unsubscribe / resubscribe ─────────────────────────────────
+
+    @Test
+    void emailAlerts_disable_returns200_andUserIdComesFromJwtSubject() throws Exception {
+        SavedSearch optedOut = sampleSearch(USER_ID);
+        optedOut.setEmailAlertsEnabled(false, OffsetDateTime.now());
+        when(savedSearchService.setEmailAlerts(USER_ID, SEARCH_ID, false)).thenReturn(optedOut);
+
+        mockMvc.perform(patch("/api/saved-searches/{id}/email-alerts", SEARCH_ID)
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"enabled\":false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.emailAlertsEnabled", is(false)));
+
+        verify(savedSearchService).setEmailAlerts(USER_ID, SEARCH_ID, false);
+    }
+
+    @Test
+    void emailAlerts_missingEnabled_returns400_andServiceNeverCalled() throws Exception {
+        mockMvc.perform(patch("/api/saved-searches/{id}/email-alerts", SEARCH_ID)
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+
+        verify(savedSearchService, never()).setEmailAlerts(any(), any(), any(Boolean.class));
+    }
+
+    @Test
+    void emailAlerts_notOwned_returns404NotFound_never403() throws Exception {
+        when(savedSearchService.setEmailAlerts(OTHER_USER_ID, SEARCH_ID, false))
+                .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "saved_search_not_found"));
+
+        mockMvc.perform(patch("/api/saved-searches/{id}/email-alerts", SEARCH_ID)
+                        .with(jwt().jwt(j -> j.subject(OTHER_USER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"enabled\":false}"))
+                .andExpect(status().isNotFound());
+    }
 }

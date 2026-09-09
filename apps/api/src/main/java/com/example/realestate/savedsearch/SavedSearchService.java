@@ -256,6 +256,17 @@ public class SavedSearchService {
         return savedSearchRepository.save(savedSearch);
     }
 
+    /**
+     * #2019 Slice B: owner-scoped EMAIL opt-out/opt-in for one saved search (the "unsubscribe"
+     * action alert emails link to). Independent of pause: in-app alerts continue.
+     */
+    @Transactional
+    public SavedSearch setEmailAlerts(UUID userId, UUID id, boolean enabled) {
+        SavedSearch savedSearch = findOwnedOrThrow(userId, id);
+        savedSearch.setEmailAlertsEnabled(enabled, OffsetDateTime.now());
+        return savedSearchRepository.save(savedSearch);
+    }
+
     @Transactional(readOnly = true)
     public List<SavedSearch> list(UUID userId) {
         return savedSearchRepository.findByUserIdOrderByCreatedAtDesc(userId);

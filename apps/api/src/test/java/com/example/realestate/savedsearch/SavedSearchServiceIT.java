@@ -290,6 +290,18 @@ class SavedSearchServiceIT {
         assertThat(savedSearchRepository.findByUserIdOrderByCreatedAtDesc(USER_A)).isEmpty();
     }
 
+    @Test
+    @DisplayName("#2019 Slice B: excludePropertyTypes has no restore-link representation, so it is rejected at save (never silently dropped) — saved semantics == restored semantics")
+    void create_excludePropertyTypes_rejectedAtSave() {
+        Map<String, Object> filters = Map.of("propertyTypes", List.of("apartment"), "excludePropertyTypes", List.of("land"));
+
+        assertThatThrownBy(() -> createAreaSet(USER_A, "bangalore", List.of("area-1"), filters, null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("saved_search_unsupported_filter:excludePropertyTypes");
+
+        assertThat(savedSearchRepository.findByUserIdOrderByCreatedAtDesc(USER_A)).isEmpty();
+    }
+
     // -----------------------------------------------------------------------
     // 5. Input validation: city slug, label
     // -----------------------------------------------------------------------

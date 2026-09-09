@@ -66,6 +66,12 @@ app:
     resend-api-key: ${RESEND_API_KEY:disabled}
     from-address: ${RESEND_FROM_ADDRESS:alerts@udupi-properties.com}
 
+  # #2019 Slice B — saved-search alert delivery. Links are site-relative (like the existing
+  # /listing/{id} email links) unless a public base URL is configured.
+  saved-search-alerts:
+    public-base-url: ${SAVED_SEARCH_ALERTS_PUBLIC_BASE_URL:}
+    max-matches-per-run: ${SAVED_SEARCH_ALERTS_MAX_MATCHES_PER_RUN:200}
+
   regional-classification:
     backfill-enabled: false  # Set to true on a single deployment to populate regional_area_classifications
     city-slug: ""  # Optional: scope the backfill to one city (e.g. "bangalore"). Blank = all active cities.

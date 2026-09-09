@@ -90,6 +90,21 @@ public class SavedSearch {
     @Column(name = "alert_watermark")
     private OffsetDateTime alertWatermark;
 
+    /**
+     * Slice B: id half of the lexicographic delivery cursor {@code (alertWatermark,
+     * alertWatermarkListingId)}; NULL (treated as the zero UUID by the matcher) until a run
+     * advances it, and reset together with {@link #alertWatermark} on edit.
+     */
+    @Column(name = "alert_watermark_listing_id")
+    private UUID alertWatermarkListingId;
+
+    /**
+     * Slice B: per-subscription EMAIL opt-out (mirrors {@code user_saved_areas.alerts_enabled}).
+     * {@code false} stops email only; in-app notification and delivery bookkeeping continue.
+     */
+    @Column(name = "email_alerts_enabled", nullable = false)
+    private boolean emailAlertsEnabled = true;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
@@ -211,6 +226,14 @@ public class SavedSearch {
         return alertWatermark;
     }
 
+    public UUID getAlertWatermarkListingId() {
+        return alertWatermarkListingId;
+    }
+
+    public boolean isEmailAlertsEnabled() {
+        return emailAlertsEnabled;
+    }
+
     public OffsetDateTime getCreatedAt() {
         return createdAt;
     }
@@ -250,11 +273,17 @@ public class SavedSearch {
         // watermark and returns the row to IDLE so Slice B's matcher re-evaluates the
         // new scope/filters from scratch rather than diffing against a stale watermark.
         this.alertWatermark = null;
+        this.alertWatermarkListingId = null;
         this.alertStatus = AlertStatus.IDLE;
     }
 
     public void setStatus(SavedSearchStatus status, OffsetDateTime updatedAt) {
         this.status = status;
+        this.updatedAt = updatedAt;
+    }
+
+    public void setEmailAlertsEnabled(boolean emailAlertsEnabled, OffsetDateTime updatedAt) {
+        this.emailAlertsEnabled = emailAlertsEnabled;
         this.updatedAt = updatedAt;
     }
 }
