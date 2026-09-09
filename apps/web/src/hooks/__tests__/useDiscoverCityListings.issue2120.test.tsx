@@ -7,6 +7,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { AreaSelectedPanel } from '@/components/discover/panels/AreaSelectedPanel';
 import { useDiscoverCityListings } from '../useDiscoverCityListings';
 import { DiscoverDataSourceProvider } from '@/features/discover/state/DiscoverDataSourceContext';
+import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import { api } from '@/lib/api';
 
 const mockGet = vi.hoisted(() => vi.fn());
@@ -50,6 +51,11 @@ function PreviewListingsTestComponent() {
   );
 }
 
+// Issue #2463 — mirrors the production preview mount (pages/admin/
+// CityLaunchPreview.tsx wraps the unmodified <MapDiscovery/> in
+// DiscoverDataSourceProvider(mode='preview') > DiscoverProvider). Since #2017,
+// AreaSelectedPanel reads useDiscoverNav/useDiscoverActions/useDiscoverShell
+// unconditionally, so the panel needs DiscoverProvider in preview mode too.
 function makePreviewWrapper(cityId: number, revisionId: number) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -63,7 +69,8 @@ function makePreviewWrapper(cityId: number, revisionId: number) {
         { initialEntries: ['/discover'] },
         React.createElement(
           DiscoverDataSourceProvider,
-          { value: { mode: 'preview', cityId, revisionId, citySlug: 'preview-city' }, children },
+          { value: { mode: 'preview', cityId, revisionId, citySlug: 'preview-city' } },
+          React.createElement(DiscoverProvider, null, children),
         )
       )
     );
