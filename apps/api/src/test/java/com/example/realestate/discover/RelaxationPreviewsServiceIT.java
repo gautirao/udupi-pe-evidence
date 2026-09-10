@@ -600,6 +600,57 @@ class RelaxationPreviewsServiceIT {
     }
 
     @Test
+    @DisplayName("#2461 POLYGON: agricultural inventory inside the committed shape is never counted in a relaxation preview")
+    void polygonScope_agriculturalLand_isNeverCounted() {
+        String slug = "rpx30";
+        int cityId = seedCity(slug);
+        String areaKey = "IN|KA|" + slug + "|area-a";
+        seedArea(cityId, areaKey);
+        List<List<Double>> polygon = rect(13.00, 74.60, 13.10, 74.80);
+        // Both fail ONLY the ₹50L ceiling; the ×1.2 band (₹60L) would rescue either one.
+        insertListingAt(areaKey, "agricultural_land", "sale", 5_500_000L, 0, "READY", 13.05, 74.70);
+        insertListingAt(areaKey, "apartment", "sale", 5_500_000L, 3, "READY", 13.05, 74.70);
+
+        RelaxationPreviewsResponse response = service.findPreviewsForScope(
+                slug, new RelaxationScope.Polygon(polygon), null,
+                polygonFilters(slug, 5_000_000L, polygon));
+
+        assertThat(response.baselineCount()).as("genuine zero at ₹50L").isZero();
+        assertThat(response.previews()).singleElement().satisfies(p -> {
+            assertThat(p.kind()).isEqualTo(RelaxationPreview.Kind.PRICE_MAX);
+            assertThat(p.resultingCount())
+                    .as("only the apartment; agricultural_land inside the same polygon is never counted")
+                    .isEqualTo(1L);
+        });
+        // Sanity check: the raw predicate (no property-type exclusion applied) counts BOTH rows,
+        // proving the drop is the #2461 exclusion and not mere scope emptiness.
+        assertThat(listingsCount(polygonFilters(slug, 6_000_000L, polygon)))
+                .as("sanity: without the #2461 exclusion the raw predicate counts both rows")
+                .isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("#2461 POLYGON: a relaxation whose only rescuing row is agricultural land is omitted, never offered as a false recovery")
+    void polygonScope_agriculturalOnlyRelaxation_isOmitted() {
+        String slug = "rpx31";
+        int cityId = seedCity(slug);
+        String areaKey = "IN|KA|" + slug + "|area-a";
+        seedArea(cityId, areaKey);
+        List<List<Double>> polygon = rect(13.00, 74.60, 13.10, 74.80);
+        // Fails ONLY the ₹50L ceiling; the ×1.2 band (₹60L) WOULD rescue it — if agricultural counted.
+        insertListingAt(areaKey, "agricultural_land", "sale", 5_500_000L, 0, "READY", 13.05, 74.70);
+
+        RelaxationPreviewsResponse response = service.findPreviewsForScope(
+                slug, new RelaxationScope.Polygon(polygon), null,
+                polygonFilters(slug, 5_000_000L, polygon));
+
+        assertThat(response.baselineCount()).isZero();
+        // No relaxation may be offered: an offer of "1 listing" here is the #2461 defect — it
+        // would advertise a recovery the results panel can never actually display.
+        assertThat(response.previews()).isEmpty();
+    }
+
+    @Test
     @DisplayName("#2454 VIEWPORT: the preview count equals the listings predicate for the same bbox + relaxed filter")
     void viewportScope_countsEqualTheListingsPredicate() {
         String slug = "rpx16";

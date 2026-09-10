@@ -450,6 +450,33 @@ export interface UseDiscoverMapDataResult {
   authViewportListingsLoading: boolean;
   /** True once the authenticated-viewport listings query has settled with an error. */
   isErrorAuthViewport: boolean;
+  /**
+   * Issue #2461 — true only for an AUTHENTICATED caller with a COMMITTED POLYGON
+   * `resultScope` (a drawn search area). Polygon search is signed-in-only for MVP
+   * (the anonymous listings path never sends a polygon), so there is no anon twin.
+   * Mirrors `isAuthViewport` so the right-panel callers can swap away from the
+   * AREA-keyed `areaListings` without re-deriving `resultScope?.kind === 'POLYGON'`.
+   */
+  isPolygonScope: boolean;
+  /**
+   * Issue #2461 — the committed-POLYGON reconciled listing set: the SAME
+   * `discoverListingsPage` query (`GET /api/discover/listings?polygon=`, the ruled
+   * parity target for POLYGON) the map's markers/totals already share via
+   * `resultScope`, remapped through `discoverListingToCityListing` exactly like
+   * `authViewportListings`. Empty whenever the branch isn't active.
+   *
+   * Membership note: this endpoint applies NO property-type exclusion, whereas
+   * the AREA path (`CityAreaListingsService`) drops `agricultural_land`
+   * unconditionally — so a drawn area may legitimately show an agri listing the
+   * AREA-keyed list never would. That is the ruled target, not a bug here.
+   */
+  polygonListings: DiscoverCityListingItem[];
+  /** True while the committed-POLYGON listings query is in-flight. */
+  polygonListingsLoading: boolean;
+  /** True once the committed-POLYGON listings query has settled with an error. */
+  isErrorPolygonListings: boolean;
+  /** Re-issues the SAME committed-POLYGON listings query (Retry-on-error). */
+  refetchPolygonListings: () => void;
   topLocalities: { locality: string; count: number }[];
   activeFocusBounds: [[number, number], [number, number]] | null;
   localityToAreaKey: Map<string, string>;
@@ -583,6 +610,9 @@ export function useDiscoverMapData({
     isLoading: discoverListingsLoading,
     isFetching: discoverListingsFetching,
     error: discoverListingsError,
+    // Issue #2461 — exposed as `refetchPolygonListings` so the POLYGON card
+    // slot's Retry re-issues the actual failed request instead of being inert.
+    refetch: refetchDiscoverListings,
   } = useDiscoverListings({
     city,
     page,
@@ -785,6 +815,24 @@ export function useDiscoverMapData({
   }, [isAuthViewport, discoverListingsPage]);
   const authViewportListingsLoading = isAuthViewport && discoverListingsLoading;
   const isErrorAuthViewport = isAuthViewport && discoverListingsError != null;
+
+  // ── Auth POLYGON listings (Issue #2461) ──────────────────────────────────────
+  // Same shape as the VIEWPORT branch above: a committed POLYGON already reaches
+  // `useDiscoverListings` via `filters.polygon` + `resultScope`, so the page in
+  // hand IS `/api/discover/listings?polygon=` — the ruled POLYGON parity target.
+  // Until this branch existed nothing on the panel READ that page under POLYGON,
+  // which left AreaSelectedPanel's cards AREA-keyed while the markers were
+  // polygon-correct. Polygon search is signed-in-only, hence no anon twin.
+  const isPolygonScope = isAuthenticated && resultScope?.kind === 'POLYGON';
+  const polygonListings = useMemo((): DiscoverCityListingItem[] => {
+    if (!isPolygonScope) return [];
+    return (discoverListingsPage?.content ?? []).map(discoverListingToCityListing);
+  }, [isPolygonScope, discoverListingsPage]);
+  const polygonListingsLoading = isPolygonScope && discoverListingsLoading;
+  const isErrorPolygonListings = isPolygonScope && discoverListingsError != null;
+  const refetchPolygonListings = useCallback(() => {
+    void refetchDiscoverListings();
+  }, [refetchDiscoverListings]);
 
   const listingsWithCoords = useMemo(
     () => filteredListings.filter((l) => l.latitude && l.longitude),
@@ -1159,6 +1207,11 @@ export function useDiscoverMapData({
     authViewportListings,
     authViewportListingsLoading,
     isErrorAuthViewport,
+    isPolygonScope,
+    polygonListings,
+    polygonListingsLoading,
+    isErrorPolygonListings,
+    refetchPolygonListings,
     topLocalities,
     activeFocusBounds,
     localityToAreaKey,

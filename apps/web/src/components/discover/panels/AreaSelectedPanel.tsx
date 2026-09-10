@@ -563,10 +563,23 @@ export function AreaSelectedPanel({
             <div className="flex items-end justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-                  {isViewportScope ? 'Result scope — Search this area' : 'Result scope — Selected area'}
+                  {isViewportScope
+                    ? 'Result scope — Search this area'
+                    : resultScopeKind === 'POLYGON'
+                      ? 'Result scope — Drawn area'
+                      : 'Result scope — Selected area'}
                 </p>
                 <h1 className="mt-0.5 font-['Fraunces',_ui-serif,_Georgia,_serif] text-[1.625rem] font-semibold leading-[1.15] tracking-[-0.02em] text-foreground">
-                  {isViewportScope ? 'Properties in this area' : `Properties in ${areaLabel}`}
+                  {/* Issue #2461 — a committed POLYGON now renders the
+                      polygon-scoped card list, so the heading must stop
+                      attributing those results to the previously-selected
+                      area. Keyed off the same `resultScopeKind` the
+                      zero-result recovery already reads. */}
+                  {isViewportScope
+                    ? 'Properties in this area'
+                    : resultScopeKind === 'POLYGON'
+                      ? 'Properties in your drawn area'
+                      : `Properties in ${areaLabel}`}
                 </h1>
               </div>
               {!isLoadingListings && (
@@ -584,7 +597,9 @@ export function AreaSelectedPanel({
             <p className="mt-1.5 text-[15px] leading-[1.55] text-[hsl(var(--text-body))]">
               {isViewportScope
                 ? 'Explore verified listings in this map area, with map context and area-first filters.'
-                : `Explore verified listings around ${areaLabel}, with map context and area-first filters.`}
+                : resultScopeKind === 'POLYGON'
+                  ? 'Explore verified listings inside the area you drew, with map context and area-first filters.'
+                  : `Explore verified listings around ${areaLabel}, with map context and area-first filters.`}
             </p>
           </>
         )}
@@ -609,7 +624,9 @@ export function AreaSelectedPanel({
         <p className="mt-2.5 text-xs text-muted-foreground" data-testid="area-intent-helper">
           {isViewportScope
             ? `Showing ${intentNoun} prices in ₹ for this area.`
-            : `Showing ${intentNoun} prices in ₹ for ${areaLabel}.`}
+            : resultScopeKind === 'POLYGON'
+              ? `Showing ${intentNoun} prices in ₹ for your drawn area.`
+              : `Showing ${intentNoun} prices in ₹ for ${areaLabel}.`}
         </p>
 
         {activeContextChips != null && (
@@ -1007,7 +1024,11 @@ export function AreaSelectedPanel({
               <p className="text-xs font-medium text-foreground" data-testid="area-result-summary-text">
                 {areaResultSummaryText ??
                   `${count} verified ${count === 1 ? 'property' : 'properties'} for ${intentNoun}${
-                    isViewportScope ? ' in this area' : ` in ${areaLabel}`
+                    isViewportScope
+                      ? ' in this area'
+                      : resultScopeKind === 'POLYGON'
+                        ? ' in your drawn area'
+                        : ` in ${areaLabel}`
                   }`}
               </p>
             </div>

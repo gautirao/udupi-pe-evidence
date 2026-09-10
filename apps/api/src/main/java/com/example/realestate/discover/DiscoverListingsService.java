@@ -355,7 +355,14 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                 q.bbox(),
                 q.q(),
                 q.listingPurpose(),
-                null,      // excludePropertyTypes — listings path does not apply type exclusion
+                // #2461: a committed POLYGON must exclude agricultural_land from the
+                // shopper-visible result set so cards+count converge with markers
+                // (#1463) and relaxation (#2457). ResultScopeExclusivity guarantees
+                // polygon != null implies no areaKeys/viewportScope are active, so
+                // this cannot leak into AREA_SET or VIEWPORT. VIEWPORT stays
+                // unrestricted; AREA_SET is excluded independently via
+                // CityAreaListingsService itself.
+                q.polygon() != null ? CityAreaListingsService.AREA_FIRST_EXCLUDED_PROPERTY_TYPES : null,
                 q.areaKeys(),
                 q.viewportScope()
         );

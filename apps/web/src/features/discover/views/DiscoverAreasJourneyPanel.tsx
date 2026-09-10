@@ -263,6 +263,19 @@ export interface DiscoverAreasJourneyPanelProps {
   authViewportListings?: DiscoverCityListingItem[];
   authViewportListingsLoading?: boolean;
   /**
+   * Issue #2461 — the committed-POLYGON (drawn search area) equivalent of the
+   * VIEWPORT fields above. When `isPolygonScope` is true,
+   * `AreaLeafListingsSurface` renders `polygonListings` (the SAME
+   * resultScope-aware `/api/discover/listings?polygon=` page the map's markers
+   * share) instead of the AREA-keyed `mapAreaListings`/own query. Signed-in
+   * only, so there is no anon twin. Optional for the same reason as above.
+   */
+  isPolygonScope?: boolean;
+  polygonListings?: DiscoverCityListingItem[];
+  polygonListingsLoading?: boolean;
+  isErrorPolygonListings?: boolean;
+  refetchPolygonListings?: () => void;
+  /**
    * Issue #1956 PR-4 FINAL FIX PASS (regression fix) — the SAME
    * `urlActions.enterSchoolPicking` handler `DiscoverRightPanelContainer`
    * already wires to the legacy `DiscoverRightPanel`'s `onAddSchool` (see
@@ -352,6 +365,11 @@ export function DiscoverAreasJourneyPanel({
   isAuthViewport,
   authViewportListings,
   authViewportListingsLoading,
+  isPolygonScope,
+  polygonListings,
+  polygonListingsLoading,
+  isErrorPolygonListings,
+  refetchPolygonListings,
   onAddSchool,
   onSelectedListingPreviewChange,
   cityLabel,
@@ -610,6 +628,12 @@ export function DiscoverAreasJourneyPanel({
         isAuthViewport={isAuthViewport}
         authViewportListings={authViewportListings}
         authViewportListingsLoading={authViewportListingsLoading}
+        // Issue #2461 — committed-POLYGON signals, forwarded unchanged.
+        isPolygonScope={isPolygonScope}
+        polygonListings={polygonListings}
+        polygonListingsLoading={polygonListingsLoading}
+        isErrorPolygonListings={isErrorPolygonListings}
+        refetchPolygonListings={refetchPolygonListings}
         onAddSchool={onAddSchool}
         // Issue #1956 PR-5 (AC5.9 breadcrumb omission-class fix) — the SAME
         // journey.selectNode reference (AC3.9's ONE selection action) every
@@ -722,6 +746,12 @@ interface AreaLeafListingsSurfaceProps {
   isAuthViewport?: boolean;
   authViewportListings?: DiscoverCityListingItem[];
   authViewportListingsLoading?: boolean;
+  /** Issue #2461 — see `DiscoverAreasJourneyPanelProps.isPolygonScope`/etc. */
+  isPolygonScope?: boolean;
+  polygonListings?: DiscoverCityListingItem[];
+  polygonListingsLoading?: boolean;
+  isErrorPolygonListings?: boolean;
+  refetchPolygonListings?: () => void;
   /** See `DiscoverAreasJourneyPanelProps.onAddSchool` — forwarded unchanged to `AreaSelectedPanel`. */
   onAddSchool?: () => void;
   /**
@@ -801,6 +831,11 @@ function AreaLeafListingsSurface({
   isAuthViewport,
   authViewportListings,
   authViewportListingsLoading,
+  isPolygonScope,
+  polygonListings,
+  polygonListingsLoading,
+  isErrorPolygonListings,
+  refetchPolygonListings,
   onAddSchool,
   selectNode,
   onSelectedListingPreviewChange,
@@ -926,12 +961,25 @@ function AreaLeafListingsSurface({
   const viewportListingsLoading = isAnonViewport
     ? (anonViewportListingsLoading ?? false)
     : (authViewportListingsLoading ?? false);
+  // Issue #2461 — a committed POLYGON (drawn search area) gets the SAME
+  // substitution as VIEWPORT: `polygonListings` is the resultScope-aware
+  // `/api/discover/listings?polygon=` page the map's markers already share,
+  // so cards and markers agree on membership and count. Without this the
+  // surface kept rendering the AREA-keyed leaf list under a polygon scope.
+  // The two scope kinds are mutually exclusive on `resultScope.kind`.
+  const isPolygonSubstituted = Boolean(isPolygonScope);
+  const isScopeSubstituted = isViewportScope || isPolygonSubstituted;
+  const substitutedListings = isViewportScope ? viewportListings : (polygonListings ?? []);
+  const substitutedListingsLoading = isViewportScope
+    ? viewportListingsLoading
+    : (polygonListingsLoading ?? false);
   const areaListingsQuery = useDiscoverCityListings({
     city: resolveEffectiveCity(nav.city),
-    // A VIEWPORT scope disables this surface's own AREA-keyed query too —
-    // it would otherwise issue a wasted fetch whose result is never used
-    // (viewportListings takes priority below regardless).
-    areaKeys: hasMapAreaListings || isViewportScope ? [] : [areaPoint.areaKey],
+    // A VIEWPORT (or #2461 POLYGON) scope disables this surface's own
+    // AREA-keyed query too — it would otherwise issue a wasted fetch whose
+    // result is never used (the substituted listings take priority below
+    // regardless).
+    areaKeys: hasMapAreaListings || isScopeSubstituted ? [] : [areaPoint.areaKey],
     limitPerArea: 50,
     propertyType:
       effectiveFilters.propertyTypes?.length === 1 ? effectiveFilters.propertyTypes[0] : undefined,
@@ -950,15 +998,15 @@ function AreaLeafListingsSurface({
   // this component's own (now-disabled-when-prop-present) query above.
   const rawAreaListings = useMemo(
     () =>
-      isViewportScope
-        ? viewportListings
+      isScopeSubstituted
+        ? substitutedListings
         : hasMapAreaListings
           ? (mapAreaListings ?? [])
           : (areaListingsQuery.data?.areas.flatMap((a) => a.listings) ?? []),
-    [isViewportScope, viewportListings, hasMapAreaListings, mapAreaListings, areaListingsQuery.data],
+    [isScopeSubstituted, substitutedListings, hasMapAreaListings, mapAreaListings, areaListingsQuery.data],
   );
-  const isLoadingAreaListingsResolved = isViewportScope
-    ? viewportListingsLoading
+  const isLoadingAreaListingsResolved = isScopeSubstituted
+    ? substitutedListingsLoading
     : hasMapAreaListings
       ? (mapAreaListingsLoading ?? false)
       : areaListingsQuery.isLoading;
@@ -974,9 +1022,14 @@ function AreaLeafListingsSurface({
   const isFetchingAreaListingsResolved = hasMapAreaListings
     ? (mapAreaListingsFetching ?? false)
     : areaListingsQuery.isFetching;
-  const isErrorAreaListingsResolved = hasMapAreaListings
-    ? (mapAreaListingsError ?? false)
-    : areaListingsQuery.isError;
+  // Issue #2461 — under a committed POLYGON the error/retry pair must belong
+  // to the polygon listings query actually being rendered, never to the
+  // AREA-keyed query (which is disabled above and can't error).
+  const isErrorAreaListingsResolved = isPolygonSubstituted
+    ? (isErrorPolygonListings ?? false)
+    : hasMapAreaListings
+      ? (mapAreaListingsError ?? false)
+      : areaListingsQuery.isError;
   // Issue #2353 (code-review fix) — was a no-op (`() => undefined`) on the
   // prop path, leaving Retry visibly clickable but non-functional on a real
   // map-fetch error. `mapAreaListingsRefetch` is the SAME query
@@ -987,9 +1040,11 @@ function AreaLeafListingsSurface({
   // one call site above. Falls back to a no-op only if a caller supplies
   // `mapAreaListings` without also supplying `mapAreaListingsRefetch`
   // (defensive — production always supplies both together).
-  const refetchAreaListings = hasMapAreaListings
-    ? (mapAreaListingsRefetch ?? (() => undefined))
-    : () => areaListingsQuery.refetch();
+  const refetchAreaListings = isPolygonSubstituted
+    ? (refetchPolygonListings ?? (() => undefined))
+    : hasMapAreaListings
+      ? (mapAreaListingsRefetch ?? (() => undefined))
+      : () => areaListingsQuery.refetch();
   const areaListingsForPanel = useMemo(() => {
     const listings = rawAreaListings;
     // Issue #1956 PR-4 FIX CYCLE 3 (SF4, defense-in-depth) — the anon

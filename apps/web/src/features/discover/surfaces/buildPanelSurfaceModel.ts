@@ -196,6 +196,14 @@ type MapDataSlice = Pick<
   | 'authViewportListings'
   | 'authViewportListingsLoading'
   | 'isErrorAuthViewport'
+  // Issue #2461 — the committed-POLYGON reconciled card list (signed-in
+  // only), so the panel surface can swap away from the AREA-keyed
+  // `areaListings` under a drawn search area exactly as it does for VIEWPORT.
+  | 'isPolygonScope'
+  | 'polygonListings'
+  | 'polygonListingsLoading'
+  | 'isErrorPolygonListings'
+  | 'refetchPolygonListings'
 >;
 type AgriSlice = Pick<
   ReturnType<typeof useDiscoverAgriController>,
@@ -425,6 +433,13 @@ type PanelGeographyView = Pick<
   | 'authViewportListings'
   | 'authViewportListingsLoading'
   | 'isErrorAuthViewport'
+  // Issue #2461 — the committed-POLYGON equivalent. See MapDataSlice's own
+  // doc comment.
+  | 'isPolygonScope'
+  | 'polygonListings'
+  | 'polygonListingsLoading'
+  | 'isErrorPolygonListings'
+  | 'refetchPolygonListings'
 >;
 type PanelGeographyCommands = Pick<
   PanelFields,
@@ -616,6 +631,11 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       authViewportListings,
       authViewportListingsLoading,
       isErrorAuthViewport,
+      isPolygonScope,
+      polygonListings,
+      polygonListingsLoading,
+      isErrorPolygonListings,
+      refetchPolygonListings,
     },
     agri: {
       corridorGroups,
@@ -687,6 +707,11 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       authViewportListings,
       authViewportListingsLoading,
       isErrorAuthViewport,
+      isPolygonScope,
+      polygonListings,
+      polygonListingsLoading,
+      isErrorPolygonListings,
+      refetchPolygonListings,
     },
     regionGuide: { regionGuideRingActive, regionOverviewMarkerKind, regionSelectNonce },
     results: {

@@ -67,6 +67,12 @@ export interface AreaFirstJourneyPanelView {
     | 'isAuthViewport'
     | 'authViewportListings'
     | 'authViewportListingsLoading'
+    // Issue #2461 — the committed-POLYGON (drawn search area) equivalent.
+    | 'isPolygonScope'
+    | 'polygonListings'
+    | 'polygonListingsLoading'
+    | 'isErrorPolygonListings'
+    | 'refetchPolygonListings'
   >;
   filters: Pick<DiscoverPanelSurfaceView['filters'], 'filters'>;
   schools: DiscoverPanelSurfaceView['schools'];
@@ -141,6 +147,11 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
     isAuthViewport,
     authViewportListings,
     authViewportListingsLoading,
+    isPolygonScope,
+    polygonListings,
+    polygonListingsLoading,
+    isErrorPolygonListings,
+    refetchPolygonListings,
   } = view.geography;
   const { filters } = view.filters;
   const { selectedSchool, schools, schoolsQuery, schoolListings } = view.schools;
@@ -255,6 +266,13 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
         isAuthViewport={isAuthViewport}
         authViewportListings={authViewportListings}
         authViewportListingsLoading={authViewportListingsLoading}
+        // Issue #2461 — the committed-POLYGON (drawn search area) signals,
+        // substituted by `AreaLeafListingsSurface` the same way as VIEWPORT.
+        isPolygonScope={isPolygonScope}
+        polygonListings={polygonListings}
+        polygonListingsLoading={polygonListingsLoading}
+        isErrorPolygonListings={isErrorPolygonListings}
+        refetchPolygonListings={refetchPolygonListings}
         // Issue #1956 PR-4 FINAL FIX PASS (regression fix) — the canonical
         // AREA-leaf surface silently dropped the "Add a school in this
         // area" CTA because this call site never supplied `onAddSchool`

@@ -1,0 +1,14 @@
+{
+  "zeroUrl": "http://localhost:5291/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.93347&lon=77.53040&zoom=16&rprev=areas%3AIN%7CKA%7CBengaluru%7CRR+Nagar&rscope=poly&rpoly=12.92900%3A77.52400%3B12.92900%3A77.53650%3B12.93400%3A77.53020&priceMax=300000",
+  "zeroRequest": "http://localhost:8191/api/discover/listings?city=bangalore&page=0&size=50&includeAggregates=true&priceMax=300000&polygon=%5B%5B12.929%2C77.524%5D%2C%5B12.929%2C77.5365%5D%2C%5B12.934%2C77.5302%5D%5D&listingPurpose=sale&scopeFingerprint=%7B%22filters%22%3A%7B%22priceMax%22%3A300000%7D%2C%22listingPurpose%22%3A%22sale%22%2C%22scope%22%3A%7B%22coordinates%22%3A%5B%5B12.929%2C77.524%5D%2C%5B12.929%2C77.5365%5D%2C%5B12.934%2C77.5302%5D%5D%2C%22kind%22%3A%22POLYGON%22%7D%7D",
+  "zeroTotal": 0,
+  "previewCount": 1,
+  "appliedRequest": "http://localhost:8191/api/discover/listings?city=bangalore&page=0&size=50&includeAggregates=true&priceMax=500000&polygon=%5B%5B12.929%2C77.524%5D%2C%5B12.929%2C77.5365%5D%2C%5B12.934%2C77.5302%5D%5D&listingPurpose=sale&scopeFingerprint=%7B%22filters%22%3A%7B%22priceMax%22%3A500000%7D%2C%22listingPurpose%22%3A%22sale%22%2C%22scope%22%3A%7B%22coordinates%22%3A%5B%5B12.929%2C77.524%5D%2C%5B12.929%2C77.5365%5D%2C%5B12.934%2C77.5302%5D%5D%2C%22kind%22%3A%22POLYGON%22%7D%7D",
+  "appliedPriceMax": "500000",
+  "appliedTotal": 1,
+  "appliedIds": [
+    "f1956005-0000-0000-0000-000000000001"
+  ],
+  "cardsAfterApply": 1,
+  "headerAfterApply": 1
+}

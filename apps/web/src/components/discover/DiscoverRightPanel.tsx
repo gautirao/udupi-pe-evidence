@@ -993,6 +993,27 @@ export interface DiscoverRightPanelProps {
    * `isReadyToMoveSupported` already follow on this surface.
    */
   onRetryAuthViewport?: () => void;
+  // ── Committed POLYGON (drawn search area) results (Issue #2461) ───────────
+  /**
+   * Issue #2461 — true for an AUTHENTICATED caller with a committed POLYGON
+   * `resultScope`. Sourced from useDiscoverMapData's `isPolygonScope`; gates
+   * the polygon card-list substitution inside the 'area-selected' switch case
+   * the same way `isAuthViewport` gates VIEWPORT. Polygon search is
+   * signed-in-only for MVP, so there is no anonymous twin.
+   */
+  isPolygonScope?: boolean;
+  /**
+   * Issue #2461 — the committed-POLYGON reconciled listing set, i.e. the SAME
+   * resultScope-aware `discoverListingsPage` (`/api/discover/listings?polygon=`)
+   * the map's markers already share, remapped for `AreaSelectedPanel`.
+   */
+  polygonListings?: DiscoverCityListingItem[];
+  /** True while the committed-POLYGON listings query is in-flight. */
+  polygonListingsLoading?: boolean;
+  /** True once the committed-POLYGON listings query has settled with an error. */
+  isErrorPolygonListings?: boolean;
+  /** Re-issues the failed committed-POLYGON request; omitted renders no Retry button. */
+  onRetryPolygonListings?: () => void;
   // ── Area-group-results panel (Issue #1597) ────────────────────────────────
   /**
    * Issue #1956 PR-6 (final cutover, Step 3) — its only production consumer
@@ -1180,6 +1201,11 @@ export function DiscoverRightPanel({
   authViewportListingsLoading = false,
   isErrorAuthViewport = false,
   onRetryAuthViewport,
+  isPolygonScope = false,
+  polygonListings = [],
+  polygonListingsLoading = false,
+  isErrorPolygonListings = false,
+  onRetryPolygonListings,
   onEnterGroupResults,
   groupResultsListings = [],
   isLoadingGroupResults = false,
@@ -1739,12 +1765,25 @@ export function DiscoverRightPanel({
         const isViewportScope = isAnonViewport || isAuthViewport;
         const viewportListings = isAnonViewport ? anonViewportListings : authViewportListings;
         const viewportListingsLoading = isAnonViewport ? anonViewportListingsLoading : authViewportListingsLoading;
+        // Issue #2461 — a committed POLYGON scope (drawn search area) gets the
+        // SAME substitution: the map/markers/totals are already polygon-scoped
+        // via `resultScope`, but this card list stayed AREA-keyed
+        // (`areaListings`), so cards and markers disagreed on membership and
+        // count. `isPolygonScope`/`polygonListings` come from the same
+        // resultScope-aware `discoverListingsPage` query the markers share.
+        // VIEWPORT keeps priority only nominally — the two kinds are mutually
+        // exclusive on `resultScope.kind`, so at most one flag is ever true.
+        const isScopeSubstituted = isViewportScope || isPolygonScope;
+        const substitutedListings = isViewportScope ? viewportListings : polygonListings;
+        const substitutedListingsLoading = isViewportScope
+          ? viewportListingsLoading
+          : polygonListingsLoading;
         return (
           <AreaSelectedPanel
             selectedArea={selectedArea}
-            areaListings={isViewportScope ? viewportListings : areaListings}
-            areaResultSummaryText={isViewportScope ? undefined : areaResultSummaryText}
-            isLoadingListings={isViewportScope ? viewportListingsLoading : isLoadingListings}
+            areaListings={isScopeSubstituted ? substitutedListings : areaListings}
+            areaResultSummaryText={isScopeSubstituted ? undefined : areaResultSummaryText}
+            isLoadingListings={isScopeSubstituted ? substitutedListingsLoading : isLoadingListings}
             // Issue #2018 requirement A — a failed request renders the
             // explicit request-failure state, or keeps the last good cards
             // behind an inline retry banner, instead of the zero-result
@@ -1761,10 +1800,22 @@ export function DiscoverRightPanel({
             // "Search this area" request failed saw a zero-result state
             // asserting the map area is empty. It is not; the request failed.
             isListingsError={
-              isAnonViewport ? false : isAuthViewport ? isErrorAuthViewport : isListingsError
+              isAnonViewport
+                ? false
+                : isAuthViewport
+                  ? isErrorAuthViewport
+                  : isPolygonScope
+                    ? isErrorPolygonListings
+                    : isListingsError
             }
             onRetryListings={
-              isAnonViewport ? undefined : isAuthViewport ? onRetryAuthViewport : onRetryListings
+              isAnonViewport
+                ? undefined
+                : isAuthViewport
+                  ? onRetryAuthViewport
+                  : isPolygonScope
+                    ? onRetryPolygonListings
+                    : onRetryListings
             }
             isViewportScope={isViewportScope}
             isAuthenticated={isAuthenticated}

@@ -75,6 +75,12 @@ export function LegacyRightPanelBridge({ view, commands }: LegacyRightPanelBridg
     authViewportListings,
     authViewportListingsLoading,
     isErrorAuthViewport,
+    // Issue #2461 — committed-POLYGON (drawn search area) reconciled cards.
+    isPolygonScope,
+    polygonListings,
+    polygonListingsLoading,
+    isErrorPolygonListings,
+    refetchPolygonListings,
   } = view.geography;
   // Issue #2142 SOLID follow-up (commit 3) — the #1808 region-guidance signals
   // moved out of `geography` into their own `regionGuide` view group. Same
@@ -292,6 +298,12 @@ export function LegacyRightPanelBridge({ view, commands }: LegacyRightPanelBridg
       authViewportListings={authViewportListings}
       authViewportListingsLoading={authViewportListingsLoading}
       isErrorAuthViewport={isErrorAuthViewport}
+      // Issue #2461 — committed-POLYGON (drawn search area) card slot.
+      isPolygonScope={isPolygonScope}
+      polygonListings={polygonListings}
+      polygonListingsLoading={polygonListingsLoading}
+      isErrorPolygonListings={isErrorPolygonListings}
+      onRetryPolygonListings={refetchPolygonListings}
       // Issue #1485 — forward area-groups loading state separately for school-first zone cards
       // so school-browse can show skeletons without coupling to the area-first isLoadingAreaGroups.
       isLoadingAreaGroupsForSchool={isLoadingAreaGroups}

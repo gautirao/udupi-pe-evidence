@@ -509,6 +509,139 @@ describe('DiscoverRightPanel', () => {
     );
   });
 
+  // Issue #2461 — with a committed POLYGON scope the map/markers/totals were
+  // polygon-scoped via `resultScope`, but this seam substituted
+  // `viewportListings` for VIEWPORT only, so AreaSelectedPanel kept rendering
+  // the AREA-keyed `areaListings` (observed live: canonical
+  // `/api/discover/listings?polygon=` returned 4, the panel showed "2 shown"
+  // for the previously-selected area). `polygonListings` is that canonical
+  // page in card shape; the panel must render IT — same identities, same count.
+  describe('Issue #2461 — committed POLYGON substitutes polygonListings for the AREA-keyed list', () => {
+    const area = makeArea('IN|KA|Bengaluru|RR Nagar', 'RR Nagar', 2);
+    const areaKeyed: DiscoverCityListingItem[] = [
+      { id: 'area-1', pricePaise: 4_000_000_00, propertyType: 'apartment', locality: 'RR Nagar', primaryImageUrl: null },
+      { id: 'area-2', pricePaise: 4_500_000_00, propertyType: 'apartment', locality: 'RR Nagar', primaryImageUrl: null },
+    ];
+    const polygonScoped: DiscoverCityListingItem[] = [
+      { id: 'poly-1', pricePaise: 5_000_000_00, propertyType: 'apartment', locality: 'Poly Locality 1', primaryImageUrl: null },
+      { id: 'poly-2', pricePaise: 5_100_000_00, propertyType: 'villa', locality: 'Poly Locality 2', primaryImageUrl: null },
+      { id: 'poly-3', pricePaise: 5_200_000_00, propertyType: 'land', locality: 'Poly Locality 3', primaryImageUrl: null },
+      { id: 'poly-4', pricePaise: 5_300_000_00, propertyType: 'apartment', locality: 'Poly Locality 4', primaryImageUrl: null },
+    ];
+
+    it('renders the polygon-scoped cards (4), not the AREA-keyed cards (2) — count and identities follow polygonListings', () => {
+      renderPanel(
+        <DiscoverRightPanel
+          {...baseProps}
+          panelContent="area-selected"
+          areas={[area]}
+          selectedArea={area}
+          areaListings={areaKeyed}
+          isLoadingListings={false}
+          isAuthenticated
+          isPolygonScope
+          polygonListings={polygonScoped}
+          polygonListingsLoading={false}
+        />,
+      );
+      expect(screen.getAllByTestId('listing-card')).toHaveLength(4);
+      expect(screen.getByTestId('area-header-count')).toHaveTextContent('4');
+      for (const l of polygonScoped) {
+        expect(screen.getByText(l.locality as string)).toBeInTheDocument();
+      }
+      // The AREA-keyed set must not leak through — its localities are absent.
+      expect(screen.queryByText('₹40 L')).not.toBeInTheDocument();
+      expect(screen.queryByText('₹45 L')).not.toBeInTheDocument();
+    });
+
+    it('polygon loading state is driven by polygonListingsLoading, not the AREA-keyed isLoadingListings', () => {
+      renderPanel(
+        <DiscoverRightPanel
+          {...baseProps}
+          panelContent="area-selected"
+          areas={[area]}
+          selectedArea={area}
+          areaListings={areaKeyed}
+          isLoadingListings={false}
+          isAuthenticated
+          isPolygonScope
+          polygonListings={[]}
+          polygonListingsLoading
+        />,
+      );
+      expect(screen.queryAllByTestId('listing-card')).toHaveLength(0);
+      expect(screen.queryByTestId('area-header-count')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('area-zero-result-recovery')).not.toBeInTheDocument();
+    });
+
+    it('a failed POLYGON request shows the request-failure state (not the zero-result recovery) and Retry re-issues the polygon query', async () => {
+      const onRetryPolygonListings = vi.fn();
+      const onRetryListings = vi.fn();
+      renderPanel(
+        <DiscoverRightPanel
+          {...baseProps}
+          panelContent="area-selected"
+          areas={[area]}
+          selectedArea={area}
+          areaListings={areaKeyed}
+          isLoadingListings={false}
+          isListingsError={false}
+          onRetryListings={onRetryListings}
+          isAuthenticated
+          isPolygonScope
+          polygonListings={[]}
+          polygonListingsLoading={false}
+          isErrorPolygonListings
+          onRetryPolygonListings={onRetryPolygonListings}
+        />,
+      );
+      expect(screen.getByTestId('area-listings-error')).toBeInTheDocument();
+      expect(screen.queryByTestId('area-zero-result-recovery')).not.toBeInTheDocument();
+      await userEvent.click(screen.getByTestId('area-listings-error-retry'));
+      expect(onRetryPolygonListings).toHaveBeenCalledTimes(1);
+      expect(onRetryListings).not.toHaveBeenCalled();
+    });
+
+    it('control: without a committed POLYGON the AREA-keyed cards render unchanged, even if polygonListings is populated', () => {
+      renderPanel(
+        <DiscoverRightPanel
+          {...baseProps}
+          panelContent="area-selected"
+          areas={[area]}
+          selectedArea={area}
+          areaListings={areaKeyed}
+          isLoadingListings={false}
+          isAuthenticated
+          isPolygonScope={false}
+          polygonListings={polygonScoped}
+        />,
+      );
+      expect(screen.getAllByTestId('listing-card')).toHaveLength(2);
+      expect(screen.getByTestId('area-header-count')).toHaveTextContent('2');
+      expect(screen.getByTestId('area-result-summary-text')).toHaveTextContent('in RR Nagar');
+    });
+
+    it('control: a committed AUTHENTICATED VIEWPORT still substitutes authViewportListings, never polygonListings', () => {
+      renderPanel(
+        <DiscoverRightPanel
+          {...baseProps}
+          panelContent="area-selected"
+          areas={[area]}
+          selectedArea={area}
+          areaListings={areaKeyed}
+          isLoadingListings={false}
+          isAuthenticated
+          isAuthViewport
+          authViewportListings={[polygonScoped[0]]}
+          authViewportListingsLoading={false}
+          polygonListings={polygonScoped}
+        />,
+      );
+      expect(screen.getAllByTestId('listing-card')).toHaveLength(1);
+      expect(screen.getByTestId('area-result-summary-text')).toHaveTextContent('in this area');
+    });
+  });
+
   it('renders listing cards with price and locality', () => {
     const area = makeArea('k1', 'Manipal', 5);
     const listings: DiscoverCityListingItem[] = [{

@@ -140,6 +140,16 @@ public final class DiscoverQueryDsl {
                 q.bbox(),
                 q.q(),
                 q.listingPurpose(),
+                // KNOWN DIVERGENCE (#2461), deliberate while this backend is dormant.
+                // DiscoverListingsService.toFilters — the Postgres mirror of this method — now
+                // stamps CityAreaListingsService.AREA_FIRST_EXCLUDED_PROPERTY_TYPES when a POLYGON
+                // scope is committed, so a Residential shopper who draws a search area is never
+                // offered agricultural_land. This method does NOT, so enabling
+                // discover.opensearch.enabled would re-leak agricultural_land into polygon-scoped
+                // cards and counts. buildBoolQuery below already honours excludePropertyTypes (the
+                // #1541 must_not parity filter), so closing this is a one-line change here — it was
+                // left out of #2461 only because the flag is a literal false repo-wide. Fix this
+                // BEFORE turning that flag on.
                 null,      // excludePropertyTypes — OS responses don't carry this input param
                 q.areaKeys(),
                 q.viewportScope()

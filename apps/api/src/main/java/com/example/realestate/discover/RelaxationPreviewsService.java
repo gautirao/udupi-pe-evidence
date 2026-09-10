@@ -285,16 +285,20 @@ public class RelaxationPreviewsService {
      * client may have left in the filter set (#2016 exclusivity, enforced structurally here as
      * well as at the controllers).
      *
-     * <p><b>Surface parity (#2457).</b> An AREA / AREA_SET preview promises what the area-first
-     * panel ({@code GET /api/discover/cities/{city}/listings?areaKeys=…}, {@link
-     * CityAreaListingsService}) will render, and that panel excludes
-     * {@link CityAreaListingsService#AREA_FIRST_EXCLUDED_PROPERTY_TYPES} unconditionally. The same
-     * exclusion is therefore stamped here — the ONE place the scope is committed — so the
-     * baseline, every candidate (each a verbatim {@code with*} copy of this result) and the
-     * envelope all inherit it, and a preview can never count agricultural inventory the
-     * Residential results panel will not display. POLYGON and VIEWPORT are deliberately NOT
-     * touched: their listings paths go through {@code DiscoverListingPredicateBuilder} with the
-     * caller's own {@code excludePropertyTypes}, which is what {@code f} already carries.
+     * <p><b>Surface parity (#2457, extended by #2461).</b> An AREA / AREA_SET preview promises
+     * what the area-first panel ({@code GET /api/discover/cities/{city}/listings?areaKeys=…},
+     * {@link CityAreaListingsService}) will render, and that panel excludes
+     * {@link CityAreaListingsService#AREA_FIRST_EXCLUDED_PROPERTY_TYPES} unconditionally. A
+     * committed POLYGON carries the same exclusion (#2461): the Residential Discover map markers
+     * already exclude agricultural_land (#1463), and cards/count for a committed polygon are made
+     * to match via {@link DiscoverListingsService#toFilters}, so the recovery/relaxation surface
+     * for that polygon must agree too — otherwise a zero-result relaxation arm could resurrect an
+     * agricultural listing the panel will never show. The same exclusion is therefore stamped
+     * here — the ONE place the scope is committed — so the baseline, every candidate (each a
+     * verbatim {@code with*} copy of this result) and the envelope all inherit it. VIEWPORT is
+     * still deliberately NOT touched: its listings path goes through {@code
+     * DiscoverListingPredicateBuilder} with the caller's own {@code excludePropertyTypes}, which
+     * is what {@code f} already carries.
      */
     private static DiscoverListingPredicateBuilder.Filters withScope(
             DiscoverListingPredicateBuilder.Filters f, RelaxationScope scope) {
@@ -302,7 +306,7 @@ public class RelaxationPreviewsService {
         List<List<Double>> polygon = scope instanceof RelaxationScope.Polygon p ? p.polygon() : null;
         DiscoverListingPredicateBuilder.Bbox viewport =
                 scope instanceof RelaxationScope.Viewport v ? v.bounds() : null;
-        List<String> excludePropertyTypes = areaKeys != null
+        List<String> excludePropertyTypes = areaKeys != null || polygon != null
                 ? CityAreaListingsService.AREA_FIRST_EXCLUDED_PROPERTY_TYPES
                 : f.excludePropertyTypes();
         return new DiscoverListingPredicateBuilder.Filters(
