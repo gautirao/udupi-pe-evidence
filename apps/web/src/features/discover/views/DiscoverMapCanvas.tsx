@@ -1294,12 +1294,18 @@ export function DiscoverMapCanvas({
       {/* Issue #2016 (J3.3) — replace-confirmation for finishing a drawn
           polygon while an AREA_SET/POLYGON scope is already committed.
           AlertDialog renders via a portal, so its position in this tree
-          does not affect layout. */}
+          does not affect layout.
+          Issue #2471 — the portal target is THIS canvas root, not body: on
+          mobile this tree lives inside DiscoverPageShell's `fixed inset-0
+          z-[60]` wrapper and a body-level z-50 portal renders underneath it.
+          Reading `.current` at render is safe here: the dialog can only open
+          after the canvas has mounted, and `open` flipping re-renders us. */}
       <ReplaceResultScopeDialog
         open={isReplaceScopeConfirmOpen}
         outgoingScopeLabel={outgoingScopeLabel}
         onConfirm={handleConfirmReplaceScope ?? (() => {})}
         onCancel={handleCancelReplaceScope ?? (() => {})}
+        container={mapContainerRef.current}
       />
     </div>
   );

@@ -25,12 +25,25 @@ const AlertDialogOverlay = React.forwardRef<
 ));
 AlertDialogOverlay.displayName = AlertDialogPrimitive.Overlay.displayName;
 
+export interface AlertDialogContentProps
+  extends React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content> {
+  /**
+   * Portal target. Defaults to `document.body` (Radix default). Pass an
+   * element to mount the dialog INSIDE a stacking context that would otherwise
+   * sit above a body-level portal — e.g. Discover's mobile `fixed inset-0
+   * z-[60]` map wrapper (Issue #2471; same mechanism as #2017 / MobileClusterSheet).
+   */
+  container?: HTMLElement | null;
+  /** Extra classes for the backdrop, e.g. a z-index matching `className`'s. */
+  overlayClassName?: string;
+}
+
 const AlertDialogContent = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>
->(({ className, ...props }, ref) => (
-  <AlertDialogPortal>
-    <AlertDialogOverlay />
+  AlertDialogContentProps
+>(({ className, container, overlayClassName, ...props }, ref) => (
+  <AlertDialogPortal container={container ?? undefined}>
+    <AlertDialogOverlay className={overlayClassName} />
     <AlertDialogPrimitive.Content
       ref={ref}
       className={cn(

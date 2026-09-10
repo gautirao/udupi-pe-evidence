@@ -34,6 +34,17 @@ export interface ReplaceResultScopeDialogProps {
   onConfirm: () => void;
   /** J3.3 secondary action — "Keep selected areas". */
   onCancel: () => void;
+  /**
+   * Issue #2471 — where to portal the dialog. On mobile the Map view is a
+   * `fixed inset-0 z-[60]` wrapper (DiscoverPageShell.tsx, #1953), and a
+   * Radix portal to `document.body` at z-50 lands BELOW it: the dialog
+   * existed but was invisible and untappable after finishing a valid
+   * polygon. Mounting INSIDE that wrapper — the MobileClusterSheet /
+   * MobileListingPreviewSheet precedent — keeps every z-value in
+   * DiscoverPageShell untouched. Pass the map canvas root; omit for the
+   * Radix default (body).
+   */
+  container?: HTMLElement | null;
 }
 
 export function ReplaceResultScopeDialog({
@@ -41,10 +52,14 @@ export function ReplaceResultScopeDialog({
   outgoingScopeLabel,
   onConfirm,
   onCancel,
+  container,
 }: ReplaceResultScopeDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={(next) => { if (!next) onCancel(); }}>
-      <AlertDialogContent>
+      {/* z-[1200]: inside the map wrapper's stacking context this must clear
+          the map's own chrome (DrawModeOverlay z-[1001], marker popover and
+          mobile sheets z-[1100]); it is a modal, so nothing may sit above it. */}
+      <AlertDialogContent container={container} className="z-[1200]" overlayClassName="z-[1200]">
         <AlertDialogHeader>
           <AlertDialogTitle>Replace selected areas with this boundary?</AlertDialogTitle>
           <AlertDialogDescription>
