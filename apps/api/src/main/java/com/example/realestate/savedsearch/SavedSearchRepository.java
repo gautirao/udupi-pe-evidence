@@ -72,4 +72,14 @@ public interface SavedSearchRepository extends JpaRepository<SavedSearch, UUID> 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = "UPDATE saved_searches SET alert_status = 'ERROR' WHERE id = :id", nativeQuery = true)
     int markAlertError(@Param("id") UUID id);
+
+    /**
+     * #2481: scalar JPQL projection (NOT {@code findById}) so the read bypasses the Hibernate L1
+     * cache and always reflects the current DB state, even when the entity is already managed in
+     * the caller's persistence context from a load minutes earlier. Used to re-check email consent
+     * immediately before the outbound send, since the field on an already-loaded {@link SavedSearch}
+     * can go stale mid-run if the owner opts out concurrently.
+     */
+    @Query("select s.emailAlertsEnabled from SavedSearch s where s.id = :id")
+    Optional<Boolean> findEmailAlertsEnabledById(@Param("id") UUID id);
 }

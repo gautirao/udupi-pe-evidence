@@ -22,6 +22,7 @@ import com.example.realestate.savedsearch.SavedSearchRepository;
 import com.example.realestate.savedsearch.SavedSearchService;
 import com.example.realestate.savedsearch.SavedSearchStatus;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.time.OffsetDateTime;
@@ -46,8 +47,10 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -112,6 +115,7 @@ class SavedSearchAlertDeliveryIT {
     @Autowired SavedSearchAlertDeliveryService deliveryService;
     @Autowired SavedSearchAlertJob job;
     @Autowired SavedAreaRepository savedAreaRepository;
+    @Autowired PlatformTransactionManager transactionManager;
 
     @MockitoBean EmailService emailService;
     @MockitoBean PolygonGeographicSafetyPolicy polygonGeographicSafetyPolicy;
@@ -504,7 +508,7 @@ class SavedSearchAlertDeliveryIT {
             all.add(listing(MANIPAL, 13.3528, 74.7947, "sale", "apartment", 3, 1L, sameInstant));
         }
         SavedSearchAlertDeliveryService capped = new SavedSearchAlertDeliveryService(
-                matcher, bookkeeper, savedAreaRepository, emailService, "", 2);
+                matcher, bookkeeper, savedAreaRepository, savedSearchRepository, emailService, "", 2);
 
         int[] perRun = new int[4];
         for (int run = 0; run < 4; run++) {
@@ -556,6 +560,67 @@ class SavedSearchAlertDeliveryIT {
     }
 
     @Test
+    @DisplayName("MUTATION PROOF (#2481 consent race): with the entity loaded and managed inside an OPEN "
+            + "transaction's shared persistence context (the production shape — SavedSearchAlertJob.runNow's "
+            + "@Transactional load), the owner revokes email-alert consent in a separate, genuinely-committing "
+            + "transaction after the load but before the send -> no email sent, bookkeeping/notification survive, "
+            + "and a second run does not re-deliver")
+    void consentRevokedBetweenBookkeepingCommitAndSend_mutationProof() throws Exception {
+        SavedSearch s = areaSet(USER_A, List.of(MANIPAL), Map.of(), AlertFrequency.INSTANT);
+        UUID searchId = s.getId();
+        UUID first = listing(MANIPAL, 13.3528, 74.7947, "sale", "apartment", 2, 1L, t0.plusMinutes(1));
+
+        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+        transactionTemplate.executeWithoutResult(status -> {
+            // 1. Load INSIDE the open transaction -> genuinely managed in THIS persistence context,
+            //    exactly like the row SavedSearchAlertJob.runNow's @Transactional load hands to
+            //    sendEmail. A plain findById here would be served from the L1 cache on any later
+            //    call within this same transaction, silently masking a concurrent opt-out.
+            SavedSearch managed = savedSearchRepository.findById(searchId).orElseThrow();
+
+            // 2. Owner revokes consent in a genuinely separate, committed transaction (concurrent opt-out).
+            try {
+                revokeConsentInSeparateTransaction(searchId);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+
+            // 3. Send happens inside the SAME transaction/persistence context as the load, using the
+            //    production-wired deliveryService bean, so the projection query for the fresh consent
+            //    value is genuinely issued against the shared persistence context.
+            deliveryService.evaluateAndDeliver(managed, t0.plusMinutes(5));
+        });
+
+        verifyNoInteractions(emailService);
+        assertThat(batchStatuses(searchId)).containsExactly("OPTED_OUT");
+        assertThat(notifications(USER_A)).isEqualTo(1);
+        assertThat(deliveries(searchId)).isEqualTo(1);
+
+        // Idempotency: a second run must not re-deliver or re-notify.
+        int deliveriesAfterFirstRun = deliveries(searchId);
+        deliveryService.evaluateAndDeliver(reload(searchId), t0.plusMinutes(6));
+        assertThat(deliveries(searchId)).isEqualTo(deliveriesAfterFirstRun);
+        verifyNoInteractions(emailService);
+    }
+
+    /**
+     * Commits on a raw JDBC connection with autocommit ON (deliberately NOT the test's own
+     * {@code @Transactional} propagation, which would join the caller's transaction and never
+     * actually commit) to model a genuinely concurrent consent revocation landing between the
+     * bookkeeper's commit and the email send.
+     */
+    private void revokeConsentInSeparateTransaction(UUID searchId) throws Exception {
+        try (Connection c = dataSource.getConnection()) {
+            c.setAutoCommit(true);
+            try (PreparedStatement ps = c.prepareStatement(
+                    "UPDATE saved_searches SET email_alerts_enabled = false WHERE id = ?")) {
+                ps.setObject(1, searchId);
+                ps.executeUpdate();
+            }
+        }
+    }
+
+    @Test
     @DisplayName("MUTATION PROOF (stored-filter guard): a legacy row carrying a non-allowlisted key (excludePropertyTypes) is marked ERROR and never matched as a broadened search — no delivery, no notification, no email")
     void legacyUnsupportedStoredFilter_neverBroadened_mutationProof() {
         SavedSearch s = areaSet(USER_A, List.of(MANIPAL), Map.of(), AlertFrequency.INSTANT);
@@ -585,7 +650,7 @@ class SavedSearchAlertDeliveryIT {
         UUID l2 = listing(MANIPAL, 13.3528, 74.7947, "sale", "apartment", 3, 1L, t0.plusMinutes(2));
         UUID l3 = listing(MANIPAL, 13.3528, 74.7947, "sale", "apartment", 3, 1L, t0.plusMinutes(3));
         SavedSearchAlertDeliveryService capped = new SavedSearchAlertDeliveryService(
-                matcher, bookkeeper, savedAreaRepository, emailService, "", 2);
+                matcher, bookkeeper, savedAreaRepository, savedSearchRepository, emailService, "", 2);
 
         SavedSearchAlertDeliveryService.Outcome first = capped.evaluateAndDeliver(reload(s.getId()), t0.plusMinutes(5));
         assertThat(first.matched()).isEqualTo(2);

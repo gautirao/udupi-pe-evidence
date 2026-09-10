@@ -4,6 +4,7 @@ import com.example.realestate.insights.SavedAreaRepository;
 import com.example.realestate.notification.EmailService;
 import com.example.realestate.savedsearch.AlertFrequency;
 import com.example.realestate.savedsearch.SavedSearch;
+import com.example.realestate.savedsearch.SavedSearchRepository;
 import com.example.realestate.savedsearch.SavedSearchStatus;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -43,6 +44,7 @@ public class SavedSearchAlertDeliveryService {
     private final SavedSearchAlertMatcher matcher;
     private final SavedSearchAlertBookkeeper bookkeeper;
     private final SavedAreaRepository savedAreaRepository;
+    private final SavedSearchRepository savedSearchRepository;
     private final EmailService emailService;
     private final String publicBaseUrl;
     private final int maxMatchesPerRun;
@@ -51,12 +53,14 @@ public class SavedSearchAlertDeliveryService {
             SavedSearchAlertMatcher matcher,
             SavedSearchAlertBookkeeper bookkeeper,
             SavedAreaRepository savedAreaRepository,
+            SavedSearchRepository savedSearchRepository,
             EmailService emailService,
             @Value("${app.saved-search-alerts.public-base-url:}") String publicBaseUrl,
             @Value("${app.saved-search-alerts.max-matches-per-run:" + DEFAULT_MAX_MATCHES_PER_RUN + "}") int maxMatchesPerRun) {
         this.matcher = matcher;
         this.bookkeeper = bookkeeper;
         this.savedAreaRepository = savedAreaRepository;
+        this.savedSearchRepository = savedSearchRepository;
         this.emailService = emailService;
         this.publicBaseUrl = publicBaseUrl;
         this.maxMatchesPerRun = maxMatchesPerRun;
@@ -98,10 +102,35 @@ public class SavedSearchAlertDeliveryService {
     }
 
     private void sendEmail(SavedSearch s, SavedSearchAlertBookkeeper.Batch batch, OffsetDateTime now) {
+        // #2481: re-check consent with a fresh scalar DB read at the last safe point, immediately
+        // before the outbound send. `s.isEmailAlertsEnabled()` is the in-memory field of an entity
+        // loaded (possibly minutes) earlier in this run; findById would return the same stale,
+        // managed instance from the L1 cache, so this deliberately uses a projection query instead.
+        // Fail closed on every branch: false -> opted out (unchanged), empty -> skipped (row gone,
+        // never misreported as an opt-out), thrown -> failed and logged, never silently swallowed
+        // and never allowed to escape uncaught (this method runs outside evaluateAndDeliver's
+        // try/catch, so an uncaught exception here would count toward the job's failed++ and leave
+        // the batch stuck PENDING).
+        Optional<Boolean> currentEmailAlertsEnabled;
+        try {
+            currentEmailAlertsEnabled = savedSearchRepository.findEmailAlertsEnabledById(s.getId());
+        } catch (RuntimeException e) {
+            log.error("Saved-search alert consent check failed savedSearchId={} batchId={}",
+                    s.getId(), batch.batchId(), e);
+            bookkeeper.markEmail(batch.batchId(), SavedSearchAlertBookkeeper.EmailStatus.FAILED, now);
+            return;
+        }
+        if (currentEmailAlertsEnabled.isEmpty()) {
+            bookkeeper.markEmail(batch.batchId(), SavedSearchAlertBookkeeper.EmailStatus.SKIPPED, now);
+            log.info("Saved-search alert email skipped (saved search no longer exists) savedSearchId={} batchId={}",
+                    s.getId(), batch.batchId());
+            return;
+        }
+        boolean emailAlertsEnabled = currentEmailAlertsEnabled.get();
         // Consent gate BEFORE any send: the per-subscription email opt-out (mirrors the
         // user_saved_areas.alerts_enabled precedent — no user-level email preference exists in
         // this app). Bookkeeping + in-app notification are already committed regardless.
-        if (!s.isEmailAlertsEnabled()) {
+        if (!emailAlertsEnabled) {
             bookkeeper.markEmail(batch.batchId(), SavedSearchAlertBookkeeper.EmailStatus.OPTED_OUT, now);
             log.info("Saved-search alert email not sent (owner opted out) savedSearchId={} batchId={}",
                     s.getId(), batch.batchId());
