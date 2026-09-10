@@ -83,6 +83,13 @@ export function AreaSetDraftProvider({ children }: AreaSetDraftProviderProps) {
     nav.filters.dateTo,
   ]);
 
+  // Issue #2456 — the same intent → listingPurpose mapping the listings query
+  // uses (useDiscoverPageContext's intentListingPurpose: 'buy'/absent → 'sale',
+  // 'rent' → 'rent'; never send 'buy'). Duplicated here rather than read via
+  // useDiscoverPageContext because this provider sits above that facade; it
+  // is a total function of nav.intent, so the two cannot drift.
+  const listingPurpose = nav.intent === 'rent' ? 'rent' : 'sale';
+
   // Node-only URL (no `city=` param) leaves nav.city === '', which would
   // silently disable this fetch — fall back to the established
   // `nav.city || DEFAULT_CITY` idiom.
@@ -90,6 +97,7 @@ export function AreaSetDraftProvider({ children }: AreaSetDraftProviderProps) {
     nav.city || DEFAULT_CITY,
     draftView.draftAreaKeys,
     nearbyFilters,
+    { listingPurpose },
   );
 
   const value = useMemo<AreaSetDraftContextValue>(

@@ -163,8 +163,28 @@ describe('AreaZeroResultRecovery', () => {
       'bangalore',
       [JAKKUR, THANISANDRA],
       { priceMax: 5_000_000 },
+      { listingPurpose: 'sale' },
     );
   });
+
+  // Issue #2456 — the recovery rows must carry the same buy/rent purpose the
+  // listings query sends, or the fixture's rent-only rows are counted into a
+  // Buy search's "with matches" list (RR Nagar: Buy 2 → 0 once purpose is sent).
+  it.each([
+    ['buy', 'sale'],
+    ['rent', 'rent'],
+  ] as const)(
+    'nearby rows send the listings query\'s own listingPurpose (intent=%s → %s)',
+    (intent, listingPurpose) => {
+      renderRecovery({ intent });
+      expect(mockUseNearbyAreaCandidates).toHaveBeenCalledWith(
+        'bangalore',
+        [JAKKUR, THANISANDRA],
+        { priceMax: 5_000_000 },
+        { listingPurpose },
+      );
+    },
+  );
 
   it('shows each nearby area with the count its own filters produce', () => {
     renderRecovery();
@@ -237,9 +257,12 @@ describe('AreaZeroResultRecovery', () => {
 
   it('offers nearby alternatives for a single canonical AREA too (issue text over frozen mock)', () => {
     renderRecovery({ scopeAreaKeys: [JAKKUR], fallbackScopeName: 'Jakkur' });
-    expect(mockUseNearbyAreaCandidates).toHaveBeenCalledWith('bangalore', [JAKKUR], {
-      priceMax: 5_000_000,
-    });
+    expect(mockUseNearbyAreaCandidates).toHaveBeenCalledWith(
+      'bangalore',
+      [JAKKUR],
+      { priceMax: 5_000_000 },
+      { listingPurpose: 'sale' },
+    );
     expect(screen.getByTestId(`area-zero-recovery-nearby-${HENNUR}-add`)).toBeInTheDocument();
   });
 
@@ -317,7 +340,12 @@ describe('non-AREA result scopes', () => {
       renderRecovery({ scopeKind });
       // The hook disables itself on an empty city (its own documented guard),
       // so an area-keyed request is never issued for a non-area scope.
-      expect(mockUseNearbyAreaCandidates).toHaveBeenCalledWith('', expect.anything(), expect.anything());
+      expect(mockUseNearbyAreaCandidates).toHaveBeenCalledWith(
+        '',
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+      );
     },
   );
 
@@ -397,6 +425,7 @@ describe('non-AREA result scopes', () => {
       'bangalore',
       [JAKKUR, THANISANDRA],
       { priceMax: 5_000_000 },
+      { listingPurpose: 'sale' },
     );
   });
 });

@@ -179,10 +179,15 @@ export function AreaZeroResultRecovery({
   // rendered for those scopes (see the nearby block below) and firing an
   // area-keyed request for a drawn or visible-map search asks a question the
   // shopper did not.
+  //
+  // Issue #2456 — `listingPurpose` mirrors the listings query's own intent
+  // mapping (same shape as the `useRelaxationPreviews` call below), so rent-only
+  // rows never inflate a Buy search's "with matches" counts.
   const { data: nearbyData, isLoading: nearbyLoading } = useNearbyAreaCandidates(
     scopeKind === 'AREA' ? city : '',
     scopeAreaKeys,
     filters,
+    { listingPurpose: intent === 'rent' ? 'rent' : 'sale' },
   );
 
   // Issue #2018 slice 2. The stale-response guard lives in the hook's query

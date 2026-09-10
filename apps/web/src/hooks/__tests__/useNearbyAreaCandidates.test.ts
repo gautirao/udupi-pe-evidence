@@ -93,7 +93,7 @@ describe('useNearbyAreaCandidates', () => {
   it('appends limit to the request when provided', async () => {
     mockGet.mockResolvedValue(RESPONSE);
     const { result } = renderHook(
-      () => useNearbyAreaCandidates('udupi', [], NO_FILTERS, 6),
+      () => useNearbyAreaCandidates('udupi', [], NO_FILTERS, { limit: 6 }),
       { wrapper: makeWrapper() },
     );
 
@@ -102,7 +102,7 @@ describe('useNearbyAreaCandidates', () => {
     expect(path).toContain('limit=6');
   });
 
-  it('registers a queryKey of [discover-nearby-area-candidates, city, sortedSelected, filters, limit] in live mode', async () => {
+  it('registers a queryKey of [discover-nearby-area-candidates, city, sortedSelected, filters, listingPurpose, limit] in live mode', async () => {
     mockGet.mockResolvedValue(RESPONSE);
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const wrapper = ({ children }: { children: React.ReactNode }) =>
@@ -120,6 +120,7 @@ describe('useNearbyAreaCandidates', () => {
       'udupi',
       ['area:manipal'],
       NO_FILTERS,
+      null,
       null,
     ]);
   });
@@ -151,6 +152,7 @@ describe('useNearbyAreaCandidates', () => {
       ['area:a', 'area:b'],
       NO_FILTERS,
       null,
+      null,
     ]);
   });
 
@@ -166,6 +168,81 @@ describe('useNearbyAreaCandidates', () => {
 
     rerender({ filters: { bedrooms: [2, 3] } });
     await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+  });
+
+  // Issue #2456 — the listings query sends `listingPurpose` (Buy → 'sale', Rent → 'rent'); the
+  // nearby-candidates request must carry the SAME value or `eligibleListingCount` admits rent
+  // listings into a Buy search (the fixture's two ₹0 rent rows at RR Nagar inflated the count).
+  describe('listingPurpose parity with the listings query (#2456)', () => {
+    it.each([
+      ['sale', 'listingPurpose=sale'],
+      ['rent', 'listingPurpose=rent'],
+    ])('forwards listingPurpose=%s to the request', async (purpose, expectedParam) => {
+      mockGet.mockResolvedValue(RESPONSE);
+      const { result } = renderHook(
+        () =>
+          useNearbyAreaCandidates('udupi', ['area:manipal'], { priceMax: 5_000_000 }, {
+            listingPurpose: purpose,
+          }),
+        { wrapper: makeWrapper() },
+      );
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      const [path] = mockGet.mock.calls[0] as [string];
+      expect(path).toContain(expectedParam);
+      expect(path).toContain('priceMax=5000000');
+    });
+
+    it('omits listingPurpose when none is given (unchanged legacy behaviour)', async () => {
+      mockGet.mockResolvedValue(RESPONSE);
+      const { result } = renderHook(
+        () => useNearbyAreaCandidates('udupi', ['area:manipal'], NO_FILTERS),
+        { wrapper: makeWrapper() },
+      );
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      const [path] = mockGet.mock.calls[0] as [string];
+      expect(path).not.toContain('listingPurpose');
+    });
+
+    it('keys the cache on listingPurpose so switching Buy ↔ Rent refetches', async () => {
+      mockGet.mockResolvedValue(RESPONSE);
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const wrapper = ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: queryClient }, children);
+
+      const { result, rerender } = renderHook(
+        ({ purpose }: { purpose: string }) =>
+          useNearbyAreaCandidates('udupi', ['area:manipal'], NO_FILTERS, {
+            listingPurpose: purpose,
+          }),
+        { wrapper, initialProps: { purpose: 'sale' } },
+      );
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockGet).toHaveBeenCalledTimes(1);
+
+      rerender({ purpose: 'rent' });
+      await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+      const [secondPath] = mockGet.mock.calls[1] as [string];
+      expect(secondPath).toContain('listingPurpose=rent');
+
+      const keys = queryClient.getQueryCache().getAll().map((q) => q.queryKey);
+      expect(keys).toContainEqual([
+        'discover-nearby-area-candidates',
+        'udupi',
+        ['area:manipal'],
+        NO_FILTERS,
+        'sale',
+        null,
+      ]);
+      expect(keys).toContainEqual([
+        'discover-nearby-area-candidates',
+        'udupi',
+        ['area:manipal'],
+        NO_FILTERS,
+        'rent',
+        null,
+      ]);
+    });
   });
 
   it('is disabled (idle, no fetch) when city is an empty string', () => {

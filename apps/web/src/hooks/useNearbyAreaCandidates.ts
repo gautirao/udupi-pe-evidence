@@ -19,6 +19,12 @@ export interface NearbyAreaCandidatesResponse {
   candidates: NearbyAreaCandidate[];
 }
 
+/** Options for {@link useNearbyAreaCandidates}; see that hook's doc for each field. */
+export interface NearbyAreaCandidatesOptions {
+  listingPurpose?: string;
+  limit?: number;
+}
+
 /**
  * Issue #2017 code-review Finding 2 (PR #2424) — bounded, filter-aware
  * "nearby area" suggestions for the AREA_SET multi-area chip strip, backed
@@ -36,7 +42,14 @@ export interface NearbyAreaCandidatesResponse {
  * @param filters - Active discover filters (same shape/serialization as
  *   DiscoverListingsController's query, via buildDiscoverSearchParams) —
  *   included in the queryKey so a filter change correctly busts the cache.
- * @param limit - Optional max candidates; server default 6, clamped [1,12].
+ * @param options.listingPurpose - The buy/rent purpose the listings query sends (`'sale'` |
+ *   `'rent'`, via `useDiscoverPageContext().intentListingPurpose`). Issue #2456: the endpoint
+ *   applies it through the same `DiscoverListingPredicateBuilder` as the listings query, so it
+ *   MUST match the listings request or `eligibleListingCount` admits rent listings into a Buy
+ *   search — the fixture's two ₹0 rent rows at RR Nagar inflated the count before this existed.
+ *   Part of the query key so switching Buy ↔ Rent refetches. Same shape as
+ *   `useRelaxationPreviews`' options after PR #2457.
+ * @param options.limit - Optional max candidates; server default 6, clamped [1,12].
  *
  * LIVE MODE ONLY: `NearbyAreaCandidatesController` has no admin
  * city-launch-preview counterpart (unlike the `areas`/`markers`/`listings`
@@ -52,15 +65,24 @@ export function useNearbyAreaCandidates(
   city: string,
   selected: string[],
   filters: PropertyFilters,
-  limit?: number,
+  options: NearbyAreaCandidatesOptions = {},
 ) {
+  const { listingPurpose, limit } = options;
   const source = useDiscoverSource();
   const sortedSelected = [...selected].sort();
 
   return useQuery<NearbyAreaCandidatesResponse>({
-    queryKey: discoverKey(source, 'discover-nearby-area-candidates', city, sortedSelected, filters, limit ?? null),
+    queryKey: discoverKey(
+      source,
+      'discover-nearby-area-candidates',
+      city,
+      sortedSelected,
+      filters,
+      listingPurpose ?? null,
+      limit ?? null,
+    ),
     queryFn: () => {
-      const params = buildDiscoverSearchParams({ city, filters });
+      const params = buildDiscoverSearchParams({ city, filters, listingPurpose });
       sortedSelected.forEach((areaKey) => params.append('selected', areaKey));
       if (limit != null) {
         params.set('limit', String(limit));

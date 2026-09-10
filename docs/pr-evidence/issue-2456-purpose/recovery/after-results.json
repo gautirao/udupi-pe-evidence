@@ -1,0 +1,50 @@
+[
+  {
+    "label": "after",
+    "intent": "buy",
+    "viewport": "1366x768",
+    "rrNagarRow": "(row absent)",
+    "nearbyEmptyNote": true,
+    "nearbyRequests": [
+      "/api/discover/areas/nearby-candidates?city=bangalore&priceMax=100000&listingPurpose=sale",
+      "/api/discover/areas/nearby-candidates?city=bangalore&priceMax=100000&listingPurpose=sale&selected=IN%7CKA%7CBengaluru%7CDeepanjali+Nagar"
+    ],
+    "screenshot": "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/fa8140d3-b2a2-4812-845a-488d7a75b4ea/scratchpad/proof/after-buy-1366x768.png"
+  },
+  {
+    "label": "after",
+    "intent": "buy",
+    "viewport": "390x844",
+    "rrNagarRow": "(row absent)",
+    "nearbyEmptyNote": true,
+    "nearbyRequests": [
+      "/api/discover/areas/nearby-candidates?city=bangalore&priceMax=100000&listingPurpose=sale",
+      "/api/discover/areas/nearby-candidates?city=bangalore&priceMax=100000&listingPurpose=sale&selected=IN%7CKA%7CBengaluru%7CDeepanjali+Nagar"
+    ],
+    "screenshot": "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/fa8140d3-b2a2-4812-845a-488d7a75b4ea/scratchpad/proof/after-buy-390x844.png"
+  },
+  {
+    "label": "after",
+    "intent": "rent",
+    "viewport": "1366x768",
+    "rrNagarRow": "2 listings",
+    "nearbyEmptyNote": false,
+    "nearbyRequests": [
+      "/api/discover/areas/nearby-candidates?city=bangalore&priceMax=100000&listingPurpose=rent",
+      "/api/discover/areas/nearby-candidates?city=bangalore&priceMax=100000&listingPurpose=rent&selected=IN%7CKA%7CBengaluru%7CDeepanjali+Nagar"
+    ],
+    "screenshot": "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/fa8140d3-b2a2-4812-845a-488d7a75b4ea/scratchpad/proof/after-rent-1366x768.png"
+  },
+  {
+    "label": "after",
+    "intent": "rent",
+    "viewport": "390x844",
+    "rrNagarRow": "2 listings",
+    "nearbyEmptyNote": false,
+    "nearbyRequests": [
+      "/api/discover/areas/nearby-candidates?city=bangalore&priceMax=100000&listingPurpose=rent",
+      "/api/discover/areas/nearby-candidates?city=bangalore&priceMax=100000&listingPurpose=rent&selected=IN%7CKA%7CBengaluru%7CDeepanjali+Nagar"
+    ],
+    "screenshot": "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/fa8140d3-b2a2-4812-845a-488d7a75b4ea/scratchpad/proof/after-rent-390x844.png"
+  }
+]
