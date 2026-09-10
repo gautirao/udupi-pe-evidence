@@ -64,6 +64,19 @@ public class CityAreaListingsService {
     // repeated bbox panning. FLAGGED for security-reviewer sign-off on the cap value.
     static final int BBOX_ONLY_MAX_RESULTS = 20;
 
+    /**
+     * The property type the area-first (Residential) journey NEVER shows — applied unconditionally
+     * by both SQL paths in this service. Declared once so that every count that promises what
+     * this panel will render (the AREA / AREA_SET relaxation previews in
+     * {@link RelaxationPreviewsService}, #2457) excludes the SAME type from the SAME constant and
+     * cannot drift from the panel: a preview must never count agricultural inventory the
+     * Residential results panel will not display.
+     */
+    static final String AREA_FIRST_EXCLUDED_PROPERTY_TYPE = PropertyType.AGRICULTURAL_LAND.getValue();
+
+    /** {@link #AREA_FIRST_EXCLUDED_PROPERTY_TYPE} in {@code Filters.excludePropertyTypes} shape. */
+    static final List<String> AREA_FIRST_EXCLUDED_PROPERTY_TYPES = List.of(AREA_FIRST_EXCLUDED_PROPERTY_TYPE);
+
     private final JdbcOperations jdbc;
 
     public CityAreaListingsService(JdbcOperations jdbc) {
@@ -189,7 +202,7 @@ public class CityAreaListingsService {
         }
         // Area-first journey never shows agricultural_land — always excluded unconditionally.
         joinFilterClauses.append("\n                        AND LOWER(pl.property_type) != LOWER('"
-                + PropertyType.AGRICULTURAL_LAND.getValue() + "')");
+                + AREA_FIRST_EXCLUDED_PROPERTY_TYPE + "')");
         if (normQ != null) {
             // FTS clause must be in the LEFT JOIN ON clause (not WHERE) so that areas with
             // zero keyword-matching listings still appear in the response with listings:[].
@@ -529,7 +542,7 @@ public class CityAreaListingsService {
         whereClauses.append("\n              AND pl.geog && ST_MakeEnvelope(?, ?, ?, ?, 4326)::geography");
         // Area-first journey never shows agricultural_land — always excluded unconditionally.
         whereClauses.append("\n              AND LOWER(pl.property_type) != LOWER('"
-                + PropertyType.AGRICULTURAL_LAND.getValue() + "')");
+                + AREA_FIRST_EXCLUDED_PROPERTY_TYPE + "')");
         if (normQ != null) {
             whereClauses.append("\n              AND pl.search_vector @@ websearch_to_tsquery('english', ?)");
         }

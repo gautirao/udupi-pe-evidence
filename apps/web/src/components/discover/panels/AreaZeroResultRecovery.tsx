@@ -7,7 +7,9 @@ import { useAreaSetDraftContext } from '@/features/discover/state/AreaSetDraftCo
 import { useDiscoverShell } from '@/features/discover/context/useDiscoverContext';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import { areaSetProximityLabel, type SelectedAreaGeo } from '@/features/discover/utils/areaSetProximity';
-import { useRelaxationPreviews } from '@/hooks/useRelaxationPreviews';
+import { useRelaxationPreviews, type RelaxationPreviewScope } from '@/hooks/useRelaxationPreviews';
+import { useAuth } from '@/contexts/AuthContext';
+import type { ResultScope } from '@/features/discover/state/resultScope';
 import { summariseActiveFilters } from '../zeroRecoveryCopy';
 import { applyRelaxationPreview, relaxationLabel } from '../relaxationCopy';
 import type { DiscoverEmptyCause } from '../emptyStateCopy';
@@ -104,6 +106,17 @@ export interface AreaZeroResultRecoveryProps {
    */
   scopeKind?: 'AREA' | 'POLYGON' | 'VIEWPORT';
   /**
+   * Issue #2454 (slice 4) — the committed #2016 result scope itself
+   * (`nav.resultScope.active`, passed through by `AreaSelectedPanel` and not
+   * re-derived here), so the relaxation counts can be asked for the SAME
+   * geometry the listings query is scoped to. Only read for POLYGON and
+   * VIEWPORT; an AREA scope keeps using `scopeAreaKeys`. When `scopeKind`
+   * says POLYGON/VIEWPORT but this is absent or of another kind, no
+   * relaxation query is issued and no rows render — a count for a geometry
+   * that cannot be named truthfully is worse than none.
+   */
+  resultScope?: ResultScope;
+  /**
    * Commits an explicit filter change (#2018 slice 2). Threaded from
    * `AreaSelectedPanel`'s existing `onFiltersChange`, so a relaxation row is
    * exactly as much of a state transition as clicking a budget quick chip:
@@ -140,6 +153,7 @@ export function AreaZeroResultRecovery({
   noun,
   cause,
   scopeKind = 'AREA',
+  resultScope = null,
   onAdjustBoundary,
   onApplyFilters,
   onClearFilters,
@@ -148,6 +162,8 @@ export function AreaZeroResultRecovery({
   const shell = useDiscoverShell();
   const { view: draft, commands } = useAreaSetDraftContext();
   const { data: areasData } = useDiscoverAreas(city);
+  const { user } = useAuth();
+  const isSignedIn = user != null;
 
   // Issue #2017's nearby contract, called with THIS surface's committed scope
   // keys rather than read off `useAreaSetDraftContext().data`. The context
@@ -170,30 +186,51 @@ export function AreaZeroResultRecovery({
   );
 
   // Issue #2018 slice 2. The stale-response guard lives in the hook's query
-  // key (filters + sorted scope keys), so a reply computed for older state is
+  // key (filters + scope payload), so a reply computed for older state is
   // cached under a different key and can never be read back here — which is
   // also what makes it exact for `relaxationLabel` to diff a preview against
   // the live `filters` below.
   //
-  // Issue #2018 slice 3 — ALSO disabled for POLYGON/VIEWPORT, and this one is
-  // a real gap rather than a tidy-up. `useRelaxationPreviews(city, areaKeys,
-  // filters)` is area-keyed: its endpoint has no polygon or bbox parameter.
-  // Under a drawn or visible-map scope the only keys available here are the
-  // previously-selected area's, so every "→ N listings" row would be a count
-  // for a DIFFERENT geometry than the one being searched. The issue demands
-  // deterministic count previews; a deterministic count of the wrong thing is
-  // worse than none, so these scopes get no relaxation rows until the
-  // endpoint becomes scope-aware. Raised with the team lead rather than
-  // silently rendering numbers that do not describe the active search.
-  const { data: relaxationData } = useRelaxationPreviews(
-    scopeKind === 'AREA' ? city : '',
-    scopeAreaKeys,
-    filters,
-  );
+  // Issue #2454 (slice 4) — the hook is scope-aware, so the previews are now
+  // asked for the SAME geometry the listings query is scoped to: the
+  // committed AREA/AREA_SET keys, the committed POLYGON, or the committed
+  // VIEWPORT bbox. Slice 3's `isAreaScope` gate is gone for those kinds
+  // because their counts are now truthful. What remains gated is anything
+  // whose count could NOT be truthful: a POLYGON/VIEWPORT `scopeKind` with no
+  // matching `resultScope` to hand over (null scope → the hook asks nothing),
+  // and a signed-out POLYGON (no anonymous polygon path exists; the hook
+  // disables itself, and `canOfferRelaxations` below refuses to render even if
+  // something else supplied data).
+  const previewScope: RelaxationPreviewScope = useMemo(() => {
+    if (scopeKind === 'AREA') return { kind: 'AREA_SET', areaKeys: scopeAreaKeys };
+    if (scopeKind === 'POLYGON' && resultScope?.kind === 'POLYGON') return resultScope;
+    if (scopeKind === 'VIEWPORT' && resultScope?.kind === 'VIEWPORT') return resultScope;
+    return null;
+  }, [scopeKind, scopeAreaKeys, resultScope]);
+
+  // `listingPurpose` mirrors the listings query's own intent mapping (see
+  // DiscoverRightPanel / useDiscoverListings): purpose is part of the server's
+  // never-relaxed envelope, so omitting it counts rent rows for a buy search.
+  const { data: relaxationData } = useRelaxationPreviews(city, previewScope, filters, {
+    listingPurpose: intent === 'rent' ? 'rent' : 'sale',
+  });
+
+  // Issue #2454 — the correctness rule, asserted HERE as well as in the hook's
+  // `enabled`, deliberately: disabling the request is an optimisation, this
+  // gate is what keeps a wrong number off the screen. A reply only counts for
+  // this surface when (a) there is a scope it could truthfully describe, (b) it
+  // is not an anonymous POLYGON (no anonymous polygon path exists), and (c) the
+  // server says it was computed for THAT scope kind — the server half of the
+  // stale-response guard, so an AREA_SET reply can never dress up a POLYGON.
+  const canOfferRelaxations =
+    previewScope != null && (previewScope.kind !== 'POLYGON' || isSignedIn);
+  const relaxationsAreForThisScope =
+    previewScope != null && relaxationData?.scopeKind === previewScope.kind;
 
   // Nothing renders until real counts arrive: an optimistic or placeholder
   // number is precisely the dishonest preview the issue forbids.
-  const relaxations = relaxationData?.previews ?? [];
+  const relaxations =
+    canOfferRelaxations && relaxationsAreForThisScope ? (relaxationData?.previews ?? []) : [];
 
   // Names for the scope line, resolved from the SAME `useDiscoverAreas`
   // payload `AreaSetSelectedHeader` reads (one source for area names on this
@@ -240,6 +277,15 @@ export function AreaZeroResultRecovery({
   );
 
   const isAreaScope = scopeKind === 'AREA';
+
+  // Issue #2454 — the relaxation footnote must name the ACTIVE scope, for the
+  // same reason the scope line below must (FUNCTIONAL_AUDIT §C2).
+  const scopeStaysCopy =
+    scopeKind === 'POLYGON'
+      ? 'Your drawn area stays exactly as it is.'
+      : scopeKind === 'VIEWPORT'
+        ? 'The visible map area stays exactly as it is.'
+        : 'Your selected areas stay exactly as they are.';
 
   // `EPZero` L285's scope-aware heading. The POLYGON and VIEWPORT wordings
   // are the mock's own, verbatim; the `empty` branch is the addition the mock
@@ -331,6 +377,34 @@ export function AreaZeroResultRecovery({
         </p>
       </div>
 
+      {/* Issue #2018 slice 3 — the mock's scope-specific action block
+          (`EPZero` L290-310), placed directly under the banner as the mock
+          orders it (#2454 moved it above the nearby list to match). Only
+          actions backed by a real seam are rendered; a mock action with no
+          working implementation is left out rather than shipped inert, and is
+          recorded as a named dependency in the PR's evidence table instead. */}
+      {scopeKind === 'POLYGON' && onAdjustBoundary && (
+        <div data-testid="area-zero-recovery-scope-actions">
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+            Change your drawn area
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onAdjustBoundary}
+              data-testid="area-zero-recovery-adjust-boundary"
+            >
+              Adjust boundary
+            </Button>
+          </div>
+          <p className="mt-1.5 text-[11.5px] text-muted-foreground">
+            Redrawing starts a new boundary. Your current results stay until you draw and accept a
+            new one.
+          </p>
+        </div>
+      )}
+
       {/* Issue #2018 slice 3 — the nearby list is AREA-shaped and is offered
           only where its relationship to the active scope can be stated
           truthfully, which is the issue's own condition ("nearby canonical-area
@@ -416,14 +490,12 @@ export function AreaZeroResultRecovery({
         new variant. The noun is "listing(s)" to match those adjacent rows and
         the mock, rather than the banner's "homes"/"rentals".
       */}
-      {/* Issue #2018 slice 3 — `isAreaScope` is asserted HERE as well as
-          on the query above, deliberately. Disabling the request is an
-          optimisation; this gate is the correctness rule. The endpoint is
-          area-keyed, so under a drawn or visible-map scope any row it could
-          produce would be a count for a DIFFERENT geometry than the one
-          being searched, and a confidently-wrong number is worse than no
-          row at all. */}
-      {isAreaScope && onApplyFilters && relaxations.length > 0 && (
+      {/* Issue #2454 — rendered for every scope kind whose counts are
+          truthful. `relaxations` is already empty unless `canOfferRelaxations`
+          and `relaxationsAreForThisScope` both hold (see above), so a
+          signed-out POLYGON or a reply for another scope kind never reaches
+          this block. */}
+      {onApplyFilters && relaxations.length > 0 && (
         <div data-testid="area-zero-recovery-relaxations">
           <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
             Change one filter
@@ -450,34 +522,7 @@ export function AreaZeroResultRecovery({
             ))}
           </div>
           <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-            Each option changes one filter only. Your selected areas stay exactly as they are.
-          </p>
-        </div>
-      )}
-
-      {/* Issue #2018 slice 3 — the mock's scope-specific action block
-          (`EPZero` L290-310). Only actions backed by a real seam are
-          rendered; a mock action with no working implementation is left out
-          rather than shipped inert, and is recorded as a named dependency in
-          the PR's evidence table instead. */}
-      {scopeKind === 'POLYGON' && onAdjustBoundary && (
-        <div data-testid="area-zero-recovery-scope-actions">
-          <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-            Change your drawn area
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onAdjustBoundary}
-              data-testid="area-zero-recovery-adjust-boundary"
-            >
-              Adjust boundary
-            </Button>
-          </div>
-          <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-            Redrawing starts a new boundary. Your current results stay until you draw and accept a
-            new one.
+            Each option changes one filter only. {scopeStaysCopy}
           </p>
         </div>
       )}
@@ -506,7 +551,7 @@ export function AreaZeroResultRecovery({
           )}
           <span className="inline-flex items-center gap-1 text-[11.5px] text-muted-foreground">
             <MapPin className="h-3 w-3" aria-hidden="true" />
-            Your selected areas stay exactly as they are.
+            {scopeStaysCopy}
           </span>
         </div>
       )}

@@ -20,12 +20,15 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -147,18 +150,112 @@ class RelaxationPreviewsControllerTest {
         assertThat(filters.getValue().excludePropertyTypes()).isNull();
     }
 
+    // ── #2454: no anonymous polygon path, by construction ─────────────────────────────────
+
     @Test
-    @DisplayName("a malformed polygon is dropped rather than surfaced as a 400")
-    void malformedPolygon_doesNot400() throws Exception {
+    @DisplayName("#2454 a well-formed polygon on the anonymous endpoint is a 400 and never reaches the service")
+    void polygon_rejectedOnAnonymousEndpoint() throws Exception {
         mockMvc.perform(get(PATH)
                         .param("city", "udupi")
-                        .param("polygon", "not-json"))
-                .andExpect(status().isOk());
+                        .param("polygon", "[[13.3,74.7],[13.4,74.8],[13.3,74.8]]"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("polygon_scope_requires_authentication")));
 
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    @DisplayName("#2454 a malformed polygon is rejected the same way — never silently dropped into an area-keyed count")
+    void malformedPolygon_alsoRejected() throws Exception {
+        mockMvc.perform(get(PATH)
+                        .param("city", "udupi")
+                        .param("areaKeys", "IN|KA|Udupi|Manipal")
+                        .param("polygon", "not-json"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("polygon_scope_requires_authentication")));
+
+        verifyNoInteractions(service);
+    }
+
+    // ── #2454: VIEWPORT scope via the #2015 bounds rules ──────────────────────────────────
+
+    @Test
+    @DisplayName("#2454 viewportScope is parsed by BboxParser and handed to the service as a VIEWPORT scope")
+    void viewportScope_passedThroughAsScope() throws Exception {
+        when(service.findPreviewsForScope(anyString(), any(), any(), any())).thenReturn(
+                new RelaxationPreviewsResponse("udupi", RelaxationScope.Kind.VIEWPORT, List.of(), 0L, List.of()));
+
+        mockMvc.perform(get(PATH)
+                        .param("city", "udupi")
+                        .param("viewportScope", "13.0,74.6,13.1,74.8")
+                        .param("priceMax", "5000000"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scopeKind").value("VIEWPORT"))
+                .andExpect(jsonPath("$.areaKeys").isEmpty());
+
+        ArgumentCaptor<RelaxationScope> scope = ArgumentCaptor.forClass(RelaxationScope.class);
         ArgumentCaptor<DiscoverListingPredicateBuilder.Filters> filters =
                 ArgumentCaptor.forClass(DiscoverListingPredicateBuilder.Filters.class);
-        verify(service).findPreviews(eq("udupi"), isNull(), isNull(), filters.capture());
-        assertThat(filters.getValue().polygon()).isNull();
+        verify(service).findPreviewsForScope(eq("udupi"), scope.capture(), isNull(), filters.capture());
+        verify(service, never()).findPreviews(anyString(), any(), any(), any());
+
+        assertThat(scope.getValue()).isInstanceOf(RelaxationScope.Viewport.class);
+        assertThat(((RelaxationScope.Viewport) scope.getValue()).bounds())
+                .isEqualTo(new DiscoverListingPredicateBuilder.Bbox(13.0, 74.6, 13.1, 74.8));
+        assertThat(filters.getValue().viewportScope())
+                .as("the service re-scopes from the validated scope; the controller must not pre-set it")
+                .isNull();
+        assertThat(filters.getValue().priceMaxPaise()).isEqualTo(500_000_000L);
+    }
+
+    @Test
+    @DisplayName("#2454 a malformed viewportScope is a 400 with BboxParser's reason — a scope is never silently repaired")
+    void malformedViewportScope_returns400() throws Exception {
+        mockMvc.perform(get(PATH)
+                        .param("city", "udupi")
+                        .param("viewportScope", "1,2,3"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("bbox_must_have_4_values")));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    @DisplayName("#2454 a viewportScope wider than the #2015 span cap is a 400 with the listings reason")
+    void oversizedViewportScope_returns400() throws Exception {
+        mockMvc.perform(get(PATH)
+                        .param("city", "udupi")
+                        .param("viewportScope", "0,60,20,80"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("viewport_scope_span_exceeds_max")));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    @DisplayName("#2454 areaKeys and viewportScope together violate #2016 exclusivity")
+    void areaKeysAndViewportScope_returns400() throws Exception {
+        mockMvc.perform(get(PATH)
+                        .param("city", "udupi")
+                        .param("areaKeys", "IN|KA|Udupi|Manipal")
+                        .param("viewportScope", "13.0,74.6,13.1,74.8"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("result_scope_must_be_exclusive")));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    @DisplayName("#2454 the area-keyed contract is unchanged: no viewportScope means the area-keyed path, scopeKind AREA_SET")
+    void areaKeyedPath_unchanged() throws Exception {
+        mockMvc.perform(get(PATH)
+                        .param("city", "udupi")
+                        .param("areaKeys", "IN|KA|Udupi|Manipal"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scopeKind").value("AREA_SET"));
+
+        verify(service).findPreviews(eq("udupi"), any(), isNull(), any());
+        verify(service, never()).findPreviewsForScope(anyString(), any(), any(), any());
     }
 
     @Test

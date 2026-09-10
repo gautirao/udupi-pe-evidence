@@ -962,6 +962,7 @@ export function AreaSelectedPanel({
                 noun={intentNoun === 'rent' ? 'rentals' : 'homes'}
                 cause={copy.cause}
                 scopeKind={resultScopeKind}
+                resultScope={activeScope}
                 onAdjustBoundary={onRedrawPolygon}
                 onApplyFilters={onFiltersChange}
                 onClearFilters={onClearFilters}

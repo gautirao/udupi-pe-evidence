@@ -27,6 +27,15 @@ import org.springframework.web.server.ResponseStatusException;
  */
 public final class BboxParser {
 
+    /**
+     * Max lat/lon span (degrees) a bbox or viewportScope may cover (#2015). 10° is ~1,100 km
+     * N–S, far beyond any city/metro-scale "Search this area" viewport, with headroom to spare.
+     * The listings, markers and city-area-listings controllers each carry a private copy of this
+     * rule (a deliberate non-refactor recorded in {@code CityAreaListingsController}); this is
+     * the shared owner for callers added after #2454.
+     */
+    static final double MAX_SPAN_DEGREES = 10.0;
+
     private BboxParser() {}
 
     public static DiscoverListingPredicateBuilder.Bbox parse(String bboxParam) {
@@ -60,5 +69,19 @@ public final class BboxParser {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "bbox_west_must_be_lte_east");
         }
         return new DiscoverListingPredicateBuilder.Bbox(south, west, north, east);
+    }
+
+    /**
+     * Rejects a bbox/viewportScope rectangle whose lat or lon span exceeds
+     * {@link #MAX_SPAN_DEGREES} with 400 {@code errorCode}. No-op when {@code bounds} is null.
+     * Added by #2454, purely additive to the #2455 public widening above.
+     */
+    static void requireSpanWithin(DiscoverListingPredicateBuilder.Bbox bounds, String errorCode) {
+        if (bounds == null) return;
+        double latSpan = bounds.north() - bounds.south();
+        double lonSpan = bounds.east() - bounds.west();
+        if (latSpan > MAX_SPAN_DEGREES || lonSpan > MAX_SPAN_DEGREES) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, errorCode);
+        }
     }
 }

@@ -112,6 +112,16 @@ class DiscoverRateLimitFilterTest {
     @MockitoBean
     private JwtDecoder jwtDecoder;
 
+    // Constructor dependencies the listings/markers controllers acquired after this suite was
+    // written (#2087 NavigationGraphCache, #2420 PolygonGeographicSafetyPolicy). Without them
+    // the @WebMvcTest context fails to load and every test here ERRORs before running — the
+    // suite was silently red on main until #2454 touched the filter's exclusion list.
+    @MockitoBean
+    private com.example.realestate.discover.navigation.NavigationGraphCache navigationGraphCache;
+
+    @MockitoBean
+    private com.example.realestate.discover.PolygonGeographicSafetyPolicy polygonGeographicSafetyPolicy;
+
     private void stubSummaryOk() {
         when(discoverSummaryPort.getSummary(any())).thenReturn(
                 new DiscoverSummaryResponse("udupi", null, "area_group", 0L, List.of(), List.of(), Instant.now()));
@@ -189,6 +199,12 @@ class DiscoverRateLimitFilterTest {
         mockMvc.perform(get("/api/discover/markers").param("city", "udupi").with(fromIp("10.0.1.4")))
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/discover/listings").param("city", "udupi").with(fromIp("10.0.1.4")))
+                .andExpect(status().isUnauthorized());
+        // #2454: the authenticated POLYGON relaxation-previews sibling is paired the same way.
+        // (Its controller is not in this slice; 401 from the real JwtConfig chain — not 429 —
+        // is still the observable proof that the filter excluded the path before dispatch.)
+        mockMvc.perform(get("/api/discover/listings/relaxation-previews").param("city", "udupi")
+                        .with(fromIp("10.0.1.4")))
                 .andExpect(status().isUnauthorized());
     }
 

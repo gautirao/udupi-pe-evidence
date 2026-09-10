@@ -48,11 +48,12 @@ import java.util.TreeSet;
  * The statement is
  * {@code SELECT COUNT(*) FILTER (WHERE <candidate_i>) … FROM property_listings pl WHERE <envelope>},
  * where {@code <envelope>} is the predicate built from ONLY the never-relaxed components
- * (city, listingPurpose, areaKeys — plus the builder's always-on LIVE/not-archived/not-duplicate
- * base clause). Every candidate predicate retains all three of those components and only removes or
- * widens others, so every candidate's row set is a SUBSET of the envelope's: filtering the scan by
- * the envelope cannot drop a row any candidate would have counted. The envelope also keeps the scan
- * index-eligible and bounded to the selected areas rather than the whole city.
+ * (city, listingPurpose and the committed {@link RelaxationScope} — area keys, polygon or viewport
+ * (#2454) — plus the builder's always-on LIVE/not-archived/not-duplicate base clause). Every
+ * candidate predicate retains all three of those components and only removes or widens others, so
+ * every candidate's row set is a SUBSET of the envelope's: filtering the scan by the envelope cannot
+ * drop a row any candidate would have counted. The envelope also keeps the scan index-eligible and
+ * bounded to the committed scope rather than the whole city.
  */
 @Service
 public class RelaxationPreviewsService {
@@ -89,9 +90,9 @@ public class RelaxationPreviewsService {
 
     /**
      * @param rawAreaKeys the committed AREA / AREA_SET canonical keys. Null or empty yields an
-     *                    empty preview list rather than a city-wide answer — a VIEWPORT or POLYGON
-     *                    scope has no area keys, and silently answering for the whole city would be
-     *                    the exact unrequested broadening the issue forbids.
+     *                    empty preview list rather than a city-wide answer — silently answering for
+     *                    the whole city would be the exact unrequested broadening the issue forbids.
+     *                    VIEWPORT and POLYGON scopes use {@link #findPreviewsForScope} (#2454).
      * @param rawLimit    max previews to return; clamped to [{@value #MIN_LIMIT}, {@value #MAX_LIMIT}]
      * @param filters     the ACTIVE discover filters; {@code filters.city()} must equal {@code city}
      */
@@ -102,17 +103,47 @@ public class RelaxationPreviewsService {
             DiscoverListingPredicateBuilder.Filters filters) {
 
         List<String> areaKeys = dedupeAndCap(rawAreaKeys);
-        int limit = clampLimit(rawLimit);
 
         if (areaKeys.isEmpty()) {
-            // Not an error: POLYGON/VIEWPORT scopes legitimately reach this endpoint and get an
-            // honest empty list, which the panel renders as "no single filter change helps here".
+            // Not an error: an area-keyed request with no keys gets an honest empty list, which
+            // the panel renders as "no single filter change helps here" — never a city-wide answer.
             return new RelaxationPreviewsResponse(city, areaKeys, 0L, List.of());
         }
 
-        // The active filters, re-scoped to exactly the committed area keys. This is the baseline
+        return findPreviewsForScope(city, new RelaxationScope.AreaKeys(areaKeys), rawLimit, filters);
+    }
+
+    /**
+     * #2454 — the scope-aware entry point. The area-keyed overload above delegates here; the
+     * POLYGON and VIEWPORT variants call it directly with a scope their controller has already
+     * validated ({@link PolygonGeographicSafetyPolicy} / {@link BboxParser} respectively).
+     *
+     * <p>The parity invariant is unchanged by the scope kind: every count comes from
+     * {@link DiscoverListingPredicateBuilder#build} applied to the active filters re-scoped to
+     * {@code scope} — the same {@code polygon} / {@code viewportScope} / {@code areaKeys} clause the
+     * listings query applies — so a preview under any scope equals what the shopper gets after
+     * applying it.
+     *
+     * @param scope    the committed result scope; never null (a null scope is a caller bug, not a
+     *                 request to answer city-wide)
+     * @param rawLimit max previews to return; clamped to [{@value #MIN_LIMIT}, {@value #MAX_LIMIT}]
+     * @param filters  the ACTIVE discover filters; {@code filters.city()} must equal {@code city}
+     */
+    public RelaxationPreviewsResponse findPreviewsForScope(
+            String city,
+            RelaxationScope scope,
+            Integer rawLimit,
+            DiscoverListingPredicateBuilder.Filters filters) {
+
+        if (scope == null) {
+            throw new IllegalArgumentException("relaxation scope must not be null");
+        }
+        int limit = clampLimit(rawLimit);
+        List<String> areaKeys = scope instanceof RelaxationScope.AreaKeys a ? a.areaKeys() : List.of();
+
+        // The active filters, re-scoped to exactly the committed scope. This is the baseline
         // every candidate is a one-component variation of.
-        DiscoverListingPredicateBuilder.Filters active = withAreaKeys(filters, areaKeys);
+        DiscoverListingPredicateBuilder.Filters active = withScope(filters, scope);
 
         List<Candidate> candidates = buildCandidates(active);
 
@@ -124,7 +155,7 @@ public class RelaxationPreviewsService {
         }
 
         DiscoverListingPredicateBuilder.Sql envelope =
-                DiscoverListingPredicateBuilder.build(envelopeFilters(active, areaKeys));
+                DiscoverListingPredicateBuilder.build(envelopeFilters(active, scope));
 
         StringBuilder select = new StringBuilder("SELECT ");
         List<Object> args = new ArrayList<>();
@@ -172,10 +203,10 @@ public class RelaxationPreviewsService {
                 .limit(limit)
                 .toList();
 
-        log.debug("findPreviews city={} areaKeys={} baseline={} probes={} previews={}",
-                city, areaKeys, baselineCount, candidates.size(), previews.size());
+        log.debug("findPreviews city={} scope={} areaKeys={} baseline={} probes={} previews={}",
+                city, scope.kind(), areaKeys, baselineCount, candidates.size(), previews.size());
 
-        return new RelaxationPreviewsResponse(city, areaKeys, baselineCount, previews);
+        return new RelaxationPreviewsResponse(city, scope.kind(), areaKeys, baselineCount, previews);
     }
 
     /**
@@ -229,14 +260,14 @@ public class RelaxationPreviewsService {
     }
 
     /**
-     * The never-relaxed core: city, purpose and the committed area keys, plus the builder's
-     * always-on base clause. Deliberately built from a Filters with every other component null, so
-     * adding a new relaxable filter later cannot silently narrow the envelope and corrupt the
-     * candidate counts.
+     * The never-relaxed core: city, purpose and the committed scope (area keys, polygon or
+     * viewport), plus the builder's always-on base clause. Deliberately built from a Filters with
+     * every other component null, so adding a new relaxable filter later cannot silently narrow
+     * the envelope and corrupt the candidate counts.
      */
     private static DiscoverListingPredicateBuilder.Filters envelopeFilters(
-            DiscoverListingPredicateBuilder.Filters active, List<String> areaKeys) {
-        return new DiscoverListingPredicateBuilder.Filters(
+            DiscoverListingPredicateBuilder.Filters active, RelaxationScope scope) {
+        return withScope(new DiscoverListingPredicateBuilder.Filters(
                 active.city(),
                 null, null, null, null, null, null, null,
                 null, null, null, null,
@@ -244,8 +275,42 @@ public class RelaxationPreviewsService {
                 null, null,
                 active.listingPurpose(),
                 null,
-                areaKeys,
-                null);
+                null,
+                null), scope);
+    }
+
+    /**
+     * Re-scopes {@code f} to exactly {@code scope}: the matching component is set and the other
+     * two scope components are cleared, so the committed scope is authoritative over anything a
+     * client may have left in the filter set (#2016 exclusivity, enforced structurally here as
+     * well as at the controllers).
+     *
+     * <p><b>Surface parity (#2457).</b> An AREA / AREA_SET preview promises what the area-first
+     * panel ({@code GET /api/discover/cities/{city}/listings?areaKeys=…}, {@link
+     * CityAreaListingsService}) will render, and that panel excludes
+     * {@link CityAreaListingsService#AREA_FIRST_EXCLUDED_PROPERTY_TYPES} unconditionally. The same
+     * exclusion is therefore stamped here — the ONE place the scope is committed — so the
+     * baseline, every candidate (each a verbatim {@code with*} copy of this result) and the
+     * envelope all inherit it, and a preview can never count agricultural inventory the
+     * Residential results panel will not display. POLYGON and VIEWPORT are deliberately NOT
+     * touched: their listings paths go through {@code DiscoverListingPredicateBuilder} with the
+     * caller's own {@code excludePropertyTypes}, which is what {@code f} already carries.
+     */
+    private static DiscoverListingPredicateBuilder.Filters withScope(
+            DiscoverListingPredicateBuilder.Filters f, RelaxationScope scope) {
+        List<String> areaKeys = scope instanceof RelaxationScope.AreaKeys a ? a.areaKeys() : null;
+        List<List<Double>> polygon = scope instanceof RelaxationScope.Polygon p ? p.polygon() : null;
+        DiscoverListingPredicateBuilder.Bbox viewport =
+                scope instanceof RelaxationScope.Viewport v ? v.bounds() : null;
+        List<String> excludePropertyTypes = areaKeys != null
+                ? CityAreaListingsService.AREA_FIRST_EXCLUDED_PROPERTY_TYPES
+                : f.excludePropertyTypes();
+        return new DiscoverListingPredicateBuilder.Filters(
+                f.city(), f.propertyTypes(), f.priceMinPaise(), f.priceMaxPaise(), f.dateFrom(),
+                f.dateTo(), f.bedrooms(), f.sellerTypes(), f.backOnMarket(), f.newToMarket(),
+                f.reraRegistered(), f.readyToMove(), polygon, f.schoolLat(), f.schoolLon(),
+                f.schoolRadiusKm(), f.bbox(), f.q(), f.listingPurpose(), excludePropertyTypes,
+                areaKeys, viewport);
     }
 
     private static long roundToLakh(long rupees) {
@@ -276,16 +341,6 @@ public class RelaxationPreviewsService {
     // ---- single-component copies -------------------------------------------------------------
     // Records have no wither syntax, so each variation is spelled out. Every one of these copies
     // ALL other components verbatim — that is what makes "one change at a time" structural.
-
-    private static DiscoverListingPredicateBuilder.Filters withAreaKeys(
-            DiscoverListingPredicateBuilder.Filters f, List<String> areaKeys) {
-        return new DiscoverListingPredicateBuilder.Filters(
-                f.city(), f.propertyTypes(), f.priceMinPaise(), f.priceMaxPaise(), f.dateFrom(),
-                f.dateTo(), f.bedrooms(), f.sellerTypes(), f.backOnMarket(), f.newToMarket(),
-                f.reraRegistered(), f.readyToMove(), f.polygon(), f.schoolLat(), f.schoolLon(),
-                f.schoolRadiusKm(), f.bbox(), f.q(), f.listingPurpose(), f.excludePropertyTypes(),
-                areaKeys, f.viewportScope());
-    }
 
     private static DiscoverListingPredicateBuilder.Filters withPriceMaxPaise(
             DiscoverListingPredicateBuilder.Filters f, Long priceMaxPaise) {

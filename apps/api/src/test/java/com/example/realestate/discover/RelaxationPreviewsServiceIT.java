@@ -75,6 +75,8 @@ class RelaxationPreviewsServiceIT {
 
     @Autowired private JdbcTemplate jdbc;
     @Autowired private RelaxationPreviewsService service;
+    /** The REAL area-first panel service — the surface an AREA / AREA_SET preview promises (#2457). */
+    @Autowired private CityAreaListingsService panel;
 
     private final List<String> testCitySlugs = new ArrayList<>();
 
@@ -500,5 +502,254 @@ class RelaxationPreviewsServiceIT {
         assertThat(response.previews())
                 .extracting(RelaxationPreview::kind)
                 .containsExactly(RelaxationPreview.Kind.PRICE_MAX, RelaxationPreview.Kind.READY_TO_MOVE);
+    }
+
+    // =========================================================================================
+    // #2454 — scope-aware previews (POLYGON / VIEWPORT). The invariant under test is slice 2's:
+    // a previewed count equals the listings query for the SAME scope + relaxed filters. The
+    // "listings query" half is DiscoverListingPredicateBuilder.build applied as a plain COUNT(*),
+    // i.e. exactly the predicate DiscoverListingsService puts under its own COUNT — so the two
+    // sides cannot drift without this test noticing.
+    // =========================================================================================
+
+    /** Axis-aligned [lat, lon] rectangle in the wire format both the controller and policy use. */
+    private static List<List<Double>> rect(double latMin, double lonMin, double latMax, double lonMax) {
+        return List.of(
+                List.of(latMin, lonMin),
+                List.of(latMin, lonMax),
+                List.of(latMax, lonMax),
+                List.of(latMax, lonMin));
+    }
+
+    private void insertListingAt(String areaKey, String propertyType, String purpose,
+                                 long priceRupees, int bedrooms, String possession,
+                                 double lat, double lon) {
+        OffsetDateTime now = OffsetDateTime.now();
+        jdbc.update(
+                "INSERT INTO public.property_listings "
+                        + "(id, area_key, status, archived_at, is_duplicate, is_valid, "
+                        + " property_type, listing_purpose, price_paise, bedrooms, possession_status, "
+                        + " latitude, longitude, created_at, updated_at) "
+                        + "VALUES (?, ?, 'LIVE', NULL, false, true, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                UUID.randomUUID(), areaKey, propertyType, purpose,
+                priceRupees * 100L, bedrooms, possession, lat, lon, now, now);
+    }
+
+    /** The listings query's own COUNT for {@code filters}: the predicate builder, nothing else. */
+    private long listingsCount(DiscoverListingPredicateBuilder.Filters filters) {
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(filters);
+        Long n = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM property_listings pl WHERE " + sql.whereFragment(),
+                Long.class, sql.params().toArray());
+        return n != null ? n : 0L;
+    }
+
+    /** Active filters (price ceiling only) re-scoped to a POLYGON, as the listings request sends them. */
+    private static DiscoverListingPredicateBuilder.Filters polygonFilters(
+            String city, long priceMaxRupees, List<List<Double>> polygon) {
+        return new DiscoverListingPredicateBuilder.Filters(
+                city, null, null, priceMaxRupees * 100L, null, null, null, null, null, null, null, null,
+                polygon, null, null, null, null, null, "sale", null, null, null);
+    }
+
+    /** Active filters (price ceiling only) re-scoped to a VIEWPORT, as the listings request sends them. */
+    private static DiscoverListingPredicateBuilder.Filters viewportFilters(
+            String city, long priceMaxRupees, DiscoverListingPredicateBuilder.Bbox viewport) {
+        return new DiscoverListingPredicateBuilder.Filters(
+                city, null, null, priceMaxRupees * 100L, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, "sale", null, null, viewport);
+    }
+
+    /**
+     * Seeds two listings that fail ONLY the ₹50L ceiling (both ₹55L, inside the ×1.2 band): one
+     * inside the [13.00–13.10] × [74.60–74.80] rectangle, one well outside it. Returns the area key.
+     */
+    private String seedOneInsideOneOutside(String slug) {
+        int cityId = seedCity(slug);
+        String areaKey = "IN|KA|" + slug + "|area-a";
+        seedArea(cityId, areaKey);
+        insertListingAt(areaKey, "apartment", "sale", 5_500_000L, 3, "READY", 13.05, 74.70);
+        insertListingAt(areaKey, "apartment", "sale", 5_500_000L, 3, "READY", 13.25, 74.95);
+        return areaKey;
+    }
+
+    @Test
+    @DisplayName("#2454 POLYGON: the preview count equals the listings predicate for the same polygon + relaxed filter")
+    void polygonScope_countsEqualTheListingsPredicate() {
+        String slug = "rpx15";
+        seedOneInsideOneOutside(slug);
+        List<List<Double>> polygon = rect(13.00, 74.60, 13.10, 74.80);
+
+        RelaxationPreviewsResponse response = service.findPreviewsForScope(
+                slug, new RelaxationScope.Polygon(polygon), null,
+                polygonFilters(slug, 5_000_000L, polygon));
+
+        assertThat(response.scopeKind()).isEqualTo(RelaxationScope.Kind.POLYGON);
+        assertThat(response.areaKeys()).as("a polygon scope has no area keys").isEmpty();
+        assertThat(response.baselineCount()).as("genuine zero at ₹50L").isZero();
+        assertThat(response.previews()).singleElement().satisfies(p -> {
+            assertThat(p.kind()).isEqualTo(RelaxationPreview.Kind.PRICE_MAX);
+            assertThat(p.priceMax()).isEqualTo(6_000_000L);
+            assertThat(p.resultingCount())
+                    .as("only the listing INSIDE the polygon; the one outside is never counted")
+                    .isEqualTo(1L);
+            // The parity invariant: what the shopper gets after applying the offer.
+            assertThat(p.resultingCount())
+                    .isEqualTo(listingsCount(polygonFilters(slug, p.priceMax(), polygon)));
+        });
+    }
+
+    @Test
+    @DisplayName("#2454 VIEWPORT: the preview count equals the listings predicate for the same bbox + relaxed filter")
+    void viewportScope_countsEqualTheListingsPredicate() {
+        String slug = "rpx16";
+        seedOneInsideOneOutside(slug);
+        DiscoverListingPredicateBuilder.Bbox viewport =
+                new DiscoverListingPredicateBuilder.Bbox(13.00, 74.60, 13.10, 74.80);
+
+        RelaxationPreviewsResponse response = service.findPreviewsForScope(
+                slug, new RelaxationScope.Viewport(viewport), null,
+                viewportFilters(slug, 5_000_000L, viewport));
+
+        assertThat(response.scopeKind()).isEqualTo(RelaxationScope.Kind.VIEWPORT);
+        assertThat(response.areaKeys()).isEmpty();
+        assertThat(response.baselineCount()).isZero();
+        assertThat(response.previews()).singleElement().satisfies(p -> {
+            assertThat(p.kind()).isEqualTo(RelaxationPreview.Kind.PRICE_MAX);
+            assertThat(p.resultingCount()).isEqualTo(1L);
+            assertThat(p.resultingCount())
+                    .isEqualTo(listingsCount(viewportFilters(slug, p.priceMax(), viewport)));
+        });
+    }
+
+    @Test
+    @DisplayName("#2454 the committed scope is authoritative over scope-shaped leftovers in the filter set")
+    void scope_overridesScopeComponentsLeftInFilters() {
+        String slug = "rpx17";
+        String areaKey = seedOneInsideOneOutside(slug);
+        List<List<Double>> polygon = rect(13.00, 74.60, 13.10, 74.80);
+
+        // A client that forgot to clear its previous AREA_SET and VIEWPORT state. Both would
+        // widen or narrow the answer if honoured; the committed POLYGON must win outright.
+        DiscoverListingPredicateBuilder.Filters stale = new DiscoverListingPredicateBuilder.Filters(
+                slug, null, null, 500_000_000L, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, "sale", null,
+                List.of(areaKey),
+                new DiscoverListingPredicateBuilder.Bbox(13.20, 74.90, 13.30, 75.00));
+
+        RelaxationPreviewsResponse response = service.findPreviewsForScope(
+                slug, new RelaxationScope.Polygon(polygon), null, stale);
+
+        assertThat(response.previews()).singleElement()
+                .satisfies(p -> assertThat(p.resultingCount())
+                        .as("the polygon's one listing — not the viewport's, not the area's two")
+                        .isEqualTo(1L));
+    }
+
+    @Test
+    @DisplayName("#2454 the polygon endpoint runs the REAL safety policy before any count: an unprovable polygon never reaches the service")
+    void polygonEndpoint_realPolicyRejectsBeforeAnyCount() {
+        String slug = "rpx18";
+        int cityId = seedCity(slug);
+        seedArea(cityId, "IN|KA|" + slug + "|area-a");
+        // No canonical_boundary_geometry CITY row is seeded, so containment cannot be proven and
+        // the policy fails closed with the SAME reason the listings path gives. The polygon is
+        // ~1.1 km × 1.1 km (~1.2 km²), well under ABSOLUTE_SIZE_CEILING_M2, so it is the
+        // containment rule that fires, not the size backstop.
+
+        RelaxationPreviewsService neverReached = new RelaxationPreviewsService(jdbc) {
+            @Override
+            public RelaxationPreviewsResponse findPreviewsForScope(
+                    String city, RelaxationScope scope, Integer rawLimit,
+                    DiscoverListingPredicateBuilder.Filters filters) {
+                throw new AssertionError("a rejected polygon must never be counted");
+            }
+        };
+        PolygonRelaxationPreviewsController controller = new PolygonRelaxationPreviewsController(
+                neverReached, new com.fasterxml.jackson.databind.ObjectMapper(),
+                new PolygonGeographicSafetyPolicy(jdbc));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> controller.getPolygonRelaxationPreviews(
+                        slug, "[[13.04,74.69],[13.04,74.70],[13.05,74.70],[13.05,74.69]]", null,
+                        null, null, 5_000_000L, null, null, null, null, null, null, null, null,
+                        null, null, null, null, null, "sale"))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("polygon_outside_searchable_city");
+    }
+
+    // =========================================================================================
+    // #2457 — surface parity for AREA / AREA_SET. The panel those previews feed is
+    // GET /api/discover/cities/{city}/listings?areaKeys=… (CityAreaListingsService), which
+    // excludes agricultural_land UNCONDITIONALLY. So here the "what the shopper sees" half is
+    // the REAL panel service, not the bare predicate builder: PREVIEW COUNT == PANEL SHOWN COUNT.
+    // =========================================================================================
+
+    /** Listings the area-first panel actually renders for {@code areaKey} under a ₹ ceiling. */
+    private long panelShownCount(String slug, String areaKey, long priceMaxRupees) {
+        CityAreaListingsResponse shown = panel.getAreaListings(
+                slug, List.of(areaKey), 50, null, priceMaxRupees * 100L,
+                null, null, null, "sale", null, null, false);
+        return shown.areas().stream().mapToLong(a -> a.listings().size()).sum();
+    }
+
+    @Test
+    @DisplayName("#2457 AREA: agricultural inventory the Residential panel will not show is never offered as a relaxation")
+    void areaScope_agriculturalLand_isNeverCounted() {
+        String slug = "rpx20";
+        int cityId = seedCity(slug);
+        String areaKey = "IN|KA|" + slug + "|area-a";
+        seedArea(cityId, areaKey);
+        // Fails ONLY the ₹50L ceiling: the ×1.2 band (₹60L) WOULD rescue it — if the panel showed it.
+        insertListing(areaKey, "agricultural_land", "sale", 5_500_000L, 0, "READY");
+
+        RelaxationPreviewsResponse response = service.findPreviews(
+                slug, List.of(areaKey), null, filters(slug, 5_000_000L, null, null, null, "sale"));
+
+        // The panel at the relaxed ceiling shows nothing …
+        assertThat(panelShownCount(slug, areaKey, 6_000_000L)).isZero();
+        // … so no relaxation may be offered: an offer of "1 listing" here is the #2457 defect.
+        assertThat(response.baselineCount()).isZero();
+        assertThat(response.previews()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("#2457 AREA: with mixed inventory the preview count equals the panel's shown count, not the raw row count")
+    void areaScope_previewCountEqualsPanelShownCount() {
+        String slug = "rpx21";
+        int cityId = seedCity(slug);
+        String areaKey = "IN|KA|" + slug + "|area-a";
+        seedArea(cityId, areaKey);
+        // Both fail ONLY the ₹50L ceiling; the raw predicate would count 2, the panel shows 1.
+        insertListing(areaKey, "agricultural_land", "sale", 5_500_000L, 0, "READY");
+        insertListing(areaKey, "apartment", "sale", 5_500_000L, 2, "READY");
+
+        RelaxationPreviewsResponse response = service.findPreviews(
+                slug, List.of(areaKey), null, filters(slug, 5_000_000L, null, null, null, "sale"));
+
+        assertThat(response.baselineCount()).isZero();
+        assertThat(response.previews()).singleElement().satisfies(p -> {
+            assertThat(p.kind()).isEqualTo(RelaxationPreview.Kind.PRICE_MAX);
+            assertThat(p.resultingCount()).isEqualTo(1L);
+            assertThat(p.resultingCount()).isEqualTo(panelShownCount(slug, areaKey, p.priceMax()));
+        });
+    }
+
+    @Test
+    @DisplayName("#2457 AREA: a non-agricultural area is unaffected — preview 1 → panel shows 1 (Vijayanagar control)")
+    void areaScope_nonAgriculturalControl_unchanged() {
+        String slug = "rpx22";
+        int cityId = seedCity(slug);
+        String areaKey = "IN|KA|" + slug + "|area-a";
+        seedArea(cityId, areaKey);
+        insertListing(areaKey, "apartment", "sale", 5_500_000L, 2, "READY");
+
+        RelaxationPreviewsResponse response = service.findPreviews(
+                slug, List.of(areaKey), null, filters(slug, 5_000_000L, null, null, null, "sale"));
+
+        assertThat(response.previews()).singleElement().satisfies(p -> {
+            assertThat(p.kind()).isEqualTo(RelaxationPreview.Kind.PRICE_MAX);
+            assertThat(p.resultingCount()).isEqualTo(1L);
+            assertThat(p.resultingCount()).isEqualTo(panelShownCount(slug, areaKey, p.priceMax()));
+        });
     }
 }

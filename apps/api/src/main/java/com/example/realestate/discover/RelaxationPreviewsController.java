@@ -1,10 +1,9 @@
 package com.example.realestate.discover;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.CacheControl;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -36,11 +35,24 @@ import java.util.concurrent.TimeUnit;
  * {@code DiscoverRateLimitFilter} like the rest of the public discover GET family.
  *
  * <p>Filter {@code @RequestParam}s mirror {@link NearbyAreaCandidatesController} verbatim so the
- * frontend reuses its existing filter serializer, with one addition: {@code areaKeys}, the
- * committed AREA/AREA_SET scope the counts are computed over. As on the nearby-candidates endpoint,
- * malformed polygon/bbox values are silently normalized away rather than raising a 400 — this is a
- * suggestions strip, not the primary listings query, and must never surface an error into the
- * recovery panel that is already explaining a zero result.
+ * frontend reuses its existing filter serializer, plus the scope params: {@code areaKeys}, the
+ * committed AREA/AREA_SET scope, or (#2454) {@code viewportScope}, a committed VIEWPORT bbox —
+ * mutually exclusive per {@link ResultScopeExclusivity}. As on the nearby-candidates endpoint,
+ * malformed non-scope values ({@code bbox}) are silently normalized away rather than raising a 400
+ * — this is a suggestions strip, not the primary listings query, and must never surface an error
+ * into the recovery panel that is already explaining a zero result. A scope, by contrast, is
+ * validated strictly: a {@code viewportScope} that fails {@link BboxParser}'s rules or the #2015
+ * span cap is a 400 with the same reason the listings query would give, because a silently
+ * "repaired" scope would count a different geometry than the one being searched.
+ *
+ * <p><b>No polygon here, by construction (#2454).</b> Polygon search is signed-in-only for MVP,
+ * so this anonymous endpoint rejects ANY {@code polygon} param with 400
+ * {@code polygon_scope_requires_authentication} and never builds a filter set containing one;
+ * the POLYGON variant lives on the authenticated sibling
+ * {@link PolygonRelaxationPreviewsController} ({@code /api/discover/listings/relaxation-previews}),
+ * which is absent from {@code JwtConfig}'s permitAll list. Before #2454 a polygon was accepted
+ * into the filter set and ANDed with the area keys; that was an anonymous polygon count path
+ * (bounded by the areas, but a path), and it is closed rather than kept.
  */
 @RestController
 @RequestMapping("/api/discover/areas/relaxation-previews")
@@ -48,14 +60,10 @@ public class RelaxationPreviewsController {
 
     private static final Logger log = LoggerFactory.getLogger(RelaxationPreviewsController.class);
 
-    private static final TypeReference<List<List<Double>>> POLYGON_TYPE = new TypeReference<>() {};
-
     private final RelaxationPreviewsService service;
-    private final ObjectMapper objectMapper;
 
-    public RelaxationPreviewsController(RelaxationPreviewsService service, ObjectMapper objectMapper) {
+    public RelaxationPreviewsController(RelaxationPreviewsService service) {
         this.service = service;
-        this.objectMapper = objectMapper;
     }
 
     @GetMapping
@@ -80,12 +88,23 @@ public class RelaxationPreviewsController {
             @RequestParam(name = "schoolRadiusKm", required = false) Double schoolRadiusKm,
             @RequestParam(name = "q", required = false) String q,
             @RequestParam(name = "bbox", required = false) String bboxParam,
-            @RequestParam(name = "listingPurpose", required = false) String listingPurpose
+            @RequestParam(name = "listingPurpose", required = false) String listingPurpose,
+            @RequestParam(name = "viewportScope", required = false) String viewportScopeParam
     ) {
         log.debug("GET /api/discover/areas/relaxation-previews city={} areaKeys={} limit={}",
                 city, areaKeys, limit);
 
-        List<List<Double>> polygon = parsePolygonSilently(polygonJson);
+        // #2454: fail closed on any polygon, well-formed or not — see the class Javadoc.
+        if (polygonJson != null && !polygonJson.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "polygon_scope_requires_authentication");
+        }
+
+        // #2454 VIEWPORT scope: the #2015 bounds rules (BboxParser + span cap), same reason
+        // codes as /api/discover/listings, applied strictly. Exclusive with areaKeys (#2016).
+        DiscoverListingPredicateBuilder.Bbox viewportScope = BboxParser.parse(viewportScopeParam);
+        BboxParser.requireSpanWithin(viewportScope, "viewport_scope_span_exceeds_max");
+        ResultScopeExclusivity.check(areaKeys, null, viewportScope);
+
         DiscoverListingPredicateBuilder.Bbox bbox = parseBboxSilently(bboxParam);
 
         Long priceMinPaise = priceMin != null ? priceMin * 100L : null;
@@ -104,7 +123,7 @@ public class RelaxationPreviewsController {
                 newToMarket,
                 reraRegistered,
                 readyToMove,
-                polygon,
+                null,  // polygon — never accepted on this anonymous endpoint (rejected above)
                 schoolLat,
                 schoolLon,
                 schoolRadiusKm,
@@ -112,26 +131,17 @@ public class RelaxationPreviewsController {
                 q,
                 listingPurpose,
                 null,  // excludePropertyTypes — not applicable to relaxation previews
-                null,  // areaKeys — the service re-scopes to the `areaKeys` param below
-                null   // viewportScope — an AREA/AREA_SET scope is never also a viewport scope
+                null,  // areaKeys — the service re-scopes to the committed scope below
+                null   // viewportScope — likewise
         );
 
-        RelaxationPreviewsResponse response = service.findPreviews(city, areaKeys, limit, filters);
+        RelaxationPreviewsResponse response = viewportScope != null
+                ? service.findPreviewsForScope(city, new RelaxationScope.Viewport(viewportScope), limit, filters)
+                : service.findPreviews(city, areaKeys, limit, filters);
 
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(60, TimeUnit.SECONDS).cachePublic())
                 .body(response);
-    }
-
-    private List<List<Double>> parsePolygonSilently(String polygonJson) {
-        if (polygonJson == null || polygonJson.isBlank()) return null;
-        try {
-            List<List<Double>> polygon = objectMapper.readValue(polygonJson, POLYGON_TYPE);
-            return (polygon == null || polygon.size() < 3) ? null : polygon;
-        } catch (Exception e) {
-            log.debug("Unparseable polygon param on relaxation-previews: {}", polygonJson, e);
-            return null;
-        }
     }
 
     private DiscoverListingPredicateBuilder.Bbox parseBboxSilently(String bboxParam) {

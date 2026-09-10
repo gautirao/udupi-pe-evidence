@@ -78,7 +78,10 @@ public class DiscoverRateLimitFilter extends OncePerRequestFilter {
      * {@code anyRequest().authenticated()} fallthrough for these two paths.
      */
     private static final Set<String> AUTHENTICATED_EXACT_PATHS =
-            Set.of("/api/discover/markers", "/api/discover/listings");
+            Set.of("/api/discover/markers", "/api/discover/listings",
+                    // #2454: authenticated polygon relaxation previews — absent from JwtConfig's
+                    // permitAll list on purpose, so it is authenticated by construction.
+                    "/api/discover/listings/relaxation-previews");
 
     private static final String THROTTLED_COUNTER_NAME = "discover.ratelimit.throttled";
     private static final String RETRY_AFTER_SECONDS = "60";

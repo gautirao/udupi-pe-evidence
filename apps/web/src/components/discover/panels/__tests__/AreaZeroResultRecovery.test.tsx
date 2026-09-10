@@ -37,6 +37,39 @@ vi.mock('@/hooks/useRelaxationPreviews', async (importOriginal) => ({
   useRelaxationPreviews: (...args: unknown[]) => mockUseRelaxationPreviews(...args),
 }));
 
+// Issue #2454 — the component reads auth to refuse relaxation rows under an
+// anonymous POLYGON (no anonymous polygon path exists). Controllable per test;
+// `AuthProvider` is a passthrough so renderWithProviders' tree still mounts.
+const mockUseAuth = vi.hoisted(() => vi.fn());
+vi.mock('@/contexts/AuthContext', () => ({
+  AuthProvider: ({ children }: { children: React.ReactNode }) => children,
+  useAuth: () => mockUseAuth(),
+}));
+const AUTH_BASE = {
+  session: null,
+  isLoading: false,
+  isAdmin: false,
+  isBroker: false,
+  userRole: null,
+  insightsAccessUntil: null,
+  signUp: vi.fn(),
+  signIn: vi.fn(),
+  signOut: vi.fn(),
+  refreshRole: vi.fn(),
+  refreshAuth: vi.fn(),
+};
+const signedOut = () => mockUseAuth.mockReturnValue({ ...AUTH_BASE, user: null });
+const signedIn = () => mockUseAuth.mockReturnValue({ ...AUTH_BASE, user: { id: 'u-1' } });
+
+const POLYGON_COORDS: [number, number][] = [
+  [13.0, 74.6],
+  [13.0, 74.8],
+  [13.1, 74.8],
+  [13.1, 74.6],
+];
+const POLYGON_SCOPE = { kind: 'POLYGON', coordinates: POLYGON_COORDS } as const;
+const VIEWPORT_SCOPE = { kind: 'VIEWPORT', bounds: { s: 13.0, w: 74.6, n: 13.1, e: 74.8 } } as const;
+
 const JAKKUR = 'IN|KA|Bengaluru|Jakkur';
 const THANISANDRA = 'IN|KA|Bengaluru|Thanisandra';
 const HENNUR = 'IN|KA|Bengaluru|Hennur';
@@ -85,6 +118,7 @@ function renderRecovery(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  signedOut();
   mockUseDiscoverAreas.mockReturnValue({
     data: {
       city: 'bangalore',
@@ -288,20 +322,22 @@ describe('non-AREA result scopes', () => {
   );
 
   it.each(['POLYGON', 'VIEWPORT'] as const)(
-    '%s shows no relaxation counts, because the endpoint is area-keyed and would count the wrong geometry',
+    '%s with no committed scope to hand over asks nothing and shows no relaxation counts',
     (scopeKind) => {
+      // Slice 3's rule survives for the one case that is still untruthful: the
+      // panel says POLYGON/VIEWPORT but has no matching resultScope, so there is
+      // no geometry to ask about. A deterministic count of the wrong thing is
+      // worse than none.
       mockUseRelaxationPreviews.mockReturnValue({
         data: {
-          previews: [
-            { kind: 'PRICE_MAX', matchCount: 7, priceMax: 8_000_000 },
-          ],
+          scopeKind: 'AREA_SET',
+          previews: [{ kind: 'PRICE_MAX', resultingCount: 7, priceMax: 8_000_000 }],
         },
       });
 
       renderRecovery({ scopeKind, onApplyFilters: vi.fn() });
 
-      // A deterministic count of the wrong thing is worse than none.
-      expect(mockUseRelaxationPreviews).toHaveBeenCalledWith('', expect.anything(), expect.anything());
+      expect(mockUseRelaxationPreviews).toHaveBeenCalledWith('bangalore', null, expect.anything(), expect.anything());
       expect(screen.queryByTestId('area-zero-recovery-relaxations')).not.toBeInTheDocument();
     },
   );
@@ -313,6 +349,10 @@ describe('non-AREA result scopes', () => {
       'Your search is kept exactly as it is. Nothing here widens it for you.',
     );
     expect(screen.getByTestId('area-zero-recovery-clear-filters')).toBeInTheDocument();
+    // #2454 — the actions row names the ACTIVE scope, not the previous areas.
+    expect(screen.getByTestId('area-zero-recovery-actions')).toHaveTextContent(
+      'Your drawn area stays exactly as it is.',
+    );
   });
 
   it('POLYGON offers Adjust boundary, and it commits nothing', async () => {
@@ -396,9 +436,18 @@ describe('summariseActiveFilters', () => {
 describe('AreaZeroResultRecovery — relaxation previews', () => {
   const ACTIVE_FILTERS = { priceMax: 5_000_000, bedrooms: [3] };
 
-  function withPreviews(previews: unknown[]) {
+  function withPreviews(
+    previews: unknown[],
+    scopeKind: 'AREA_SET' | 'POLYGON' | 'VIEWPORT' = 'AREA_SET',
+  ) {
     mockUseRelaxationPreviews.mockReturnValue({
-      data: { city: 'bangalore', areaKeys: [JAKKUR, THANISANDRA], baselineCount: 0, previews },
+      data: {
+        city: 'bangalore',
+        scopeKind,
+        areaKeys: scopeKind === 'AREA_SET' ? [JAKKUR, THANISANDRA] : [],
+        baselineCount: 0,
+        previews,
+      },
       isLoading: false,
     });
   }
@@ -407,8 +456,9 @@ describe('AreaZeroResultRecovery — relaxation previews', () => {
     renderRecovery({ filters: ACTIVE_FILTERS });
     expect(mockUseRelaxationPreviews).toHaveBeenCalledWith(
       'bangalore',
-      [JAKKUR, THANISANDRA],
+      { kind: 'AREA_SET', areaKeys: [JAKKUR, THANISANDRA] },
       ACTIVE_FILTERS,
+      { listingPurpose: 'sale' },
     );
   });
 
@@ -569,11 +619,145 @@ describe('AreaZeroResultRecovery — relaxation previews', () => {
 
     expect(mockUseRelaxationPreviews).toHaveBeenLastCalledWith(
       'bangalore',
-      [JAKKUR, THANISANDRA],
+      { kind: 'AREA_SET', areaKeys: [JAKKUR, THANISANDRA] },
       NEWER,
+      { listingPurpose: 'sale' },
     );
     // The superseded 7-listing answer is gone rather than lingering under the
     // newer filters it was never computed for.
     expect(screen.queryByTestId('area-zero-recovery-relaxations')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Issue #2454 (slice 4) — scope-aware relaxation previews. The rows now render
+ * under POLYGON (signed in) and VIEWPORT with the numbers the hook returns for
+ * THAT scope, and never under an anonymous POLYGON or for a reply computed for a
+ * different scope kind.
+ */
+describe('AreaZeroResultRecovery — scope-aware relaxation previews (#2454)', () => {
+  const ACTIVE_FILTERS = { priceMax: 5_000_000, bedrooms: [3] };
+
+  function withPreviews(scopeKind: 'AREA_SET' | 'POLYGON' | 'VIEWPORT', previews: unknown[]) {
+    mockUseRelaxationPreviews.mockReturnValue({
+      data: { city: 'bangalore', scopeKind, areaKeys: [], baselineCount: 0, previews },
+      isLoading: false,
+    });
+  }
+
+  it('VIEWPORT: hands the committed viewport to the hook and renders the rows with its numbers, anonymously', () => {
+    signedOut();
+    withPreviews('VIEWPORT', [
+      { kind: 'PRICE_MAX', resultingCount: 4, priceMax: 6_000_000 },
+      { kind: 'BEDROOMS', resultingCount: 9, bedrooms: [2, 3] },
+    ]);
+    renderRecovery({
+      scopeKind: 'VIEWPORT',
+      resultScope: VIEWPORT_SCOPE,
+      filters: ACTIVE_FILTERS,
+      onApplyFilters: vi.fn(),
+    });
+
+    expect(mockUseRelaxationPreviews).toHaveBeenCalledWith('bangalore', VIEWPORT_SCOPE, ACTIVE_FILTERS, {
+      listingPurpose: 'sale',
+    });
+    expect(screen.getByTestId('area-zero-recovery-relaxation-PRICE_MAX-count')).toHaveTextContent('4 listings');
+    expect(screen.getByTestId('area-zero-recovery-relaxation-BEDROOMS-count')).toHaveTextContent('9 listings');
+    expect(screen.getByTestId('area-zero-recovery-relaxations')).toHaveTextContent(
+      'The visible map area stays exactly as it is.',
+    );
+  });
+
+  it('POLYGON (signed in): hands the committed polygon to the hook and renders the rows with its numbers', () => {
+    signedIn();
+    withPreviews('POLYGON', [{ kind: 'PRICE_MAX', resultingCount: 3, priceMax: 6_000_000 }]);
+    renderRecovery({
+      scopeKind: 'POLYGON',
+      resultScope: POLYGON_SCOPE,
+      filters: ACTIVE_FILTERS,
+      onApplyFilters: vi.fn(),
+      onAdjustBoundary: vi.fn(),
+    });
+
+    expect(mockUseRelaxationPreviews).toHaveBeenCalledWith('bangalore', POLYGON_SCOPE, ACTIVE_FILTERS, {
+      listingPurpose: 'sale',
+    });
+    expect(screen.getByTestId('area-zero-recovery-relaxation-PRICE_MAX-count')).toHaveTextContent('3 listings');
+    expect(screen.getByTestId('area-zero-recovery-relaxations')).toHaveTextContent(
+      'Your drawn area stays exactly as it is.',
+    );
+    // Kit order (`EPZero` L290-342): scope actions directly under the banner, then the filter rows.
+    const block = screen.getByTestId('area-zero-result-recovery');
+    const order = Array.from(
+      block.querySelectorAll(
+        '[data-testid="area-zero-recovery-scope-actions"], [data-testid="area-zero-recovery-relaxations"]',
+      ),
+    ).map((el) => el.getAttribute('data-testid'));
+    expect(order).toEqual(['area-zero-recovery-scope-actions', 'area-zero-recovery-relaxations']);
+  });
+
+  it('POLYGON (signed in): applying a row changes exactly one filter and leaves the polygon scope untouched', async () => {
+    signedIn();
+    const user = userEvent.setup();
+    const onApplyFilters = vi.fn();
+    withPreviews('POLYGON', [{ kind: 'PRICE_MAX', resultingCount: 3, priceMax: 6_000_000 }]);
+    renderRecovery({
+      scopeKind: 'POLYGON',
+      resultScope: POLYGON_SCOPE,
+      filters: ACTIVE_FILTERS,
+      onApplyFilters,
+    });
+
+    await user.click(screen.getByTestId('area-zero-recovery-relaxation-PRICE_MAX'));
+
+    expect(onApplyFilters).toHaveBeenCalledTimes(1);
+    expect(onApplyFilters).toHaveBeenCalledWith({ priceMax: 6_000_000, bedrooms: [3] });
+    expect(screen.getByTestId('area-zero-recovery-scope-line')).toHaveTextContent('Drawn area');
+  });
+
+  it('POLYGON (signed OUT): renders NO relaxation rows even if a reply is somehow present — no anonymous polygon path exists', () => {
+    // Mutation proof for the component-side guard: delete
+    // `previewScope.kind !== 'POLYGON' || isSignedIn` from `canOfferRelaxations`
+    // and this test fails (the hook is mocked, so its own `enabled` guard cannot
+    // mask the component's).
+    signedOut();
+    withPreviews('POLYGON', [{ kind: 'PRICE_MAX', resultingCount: 3, priceMax: 6_000_000 }]);
+    renderRecovery({
+      scopeKind: 'POLYGON',
+      resultScope: POLYGON_SCOPE,
+      filters: ACTIVE_FILTERS,
+      onApplyFilters: vi.fn(),
+      onClearFilters: vi.fn(),
+    });
+
+    expect(screen.queryByTestId('area-zero-recovery-relaxations')).not.toBeInTheDocument();
+    expect(screen.queryByText(/3 listings/)).not.toBeInTheDocument();
+    // The rest of the recovery stays: heading, scope line, clear filters.
+    expect(screen.getByTestId('area-zero-recovery-heading')).toHaveTextContent('inside your drawn area');
+    expect(screen.getByTestId('area-zero-recovery-clear-filters')).toBeInTheDocument();
+  });
+
+  it('refuses a reply computed for a DIFFERENT scope kind than the one being shown', () => {
+    // The server half of the stale-response guard: an AREA_SET reply must never
+    // dress up a VIEWPORT zero state.
+    signedOut();
+    withPreviews('AREA_SET', [{ kind: 'PRICE_MAX', resultingCount: 7, priceMax: 6_000_000 }]);
+    renderRecovery({
+      scopeKind: 'VIEWPORT',
+      resultScope: VIEWPORT_SCOPE,
+      filters: ACTIVE_FILTERS,
+      onApplyFilters: vi.fn(),
+    });
+    expect(screen.queryByTestId('area-zero-recovery-relaxations')).not.toBeInTheDocument();
+  });
+
+  it('AREA is unchanged: rows render from an AREA_SET reply as before, with the selected-areas footnote', () => {
+    signedOut();
+    withPreviews('AREA_SET', [{ kind: 'PRICE_MAX', resultingCount: 7, priceMax: 6_000_000 }]);
+    renderRecovery({ filters: ACTIVE_FILTERS, onApplyFilters: vi.fn() });
+    expect(screen.getByTestId('area-zero-recovery-relaxation-PRICE_MAX-count')).toHaveTextContent('7 listings');
+    expect(screen.getByTestId('area-zero-recovery-relaxations')).toHaveTextContent(
+      'Your selected areas stay exactly as they are.',
+    );
   });
 });
