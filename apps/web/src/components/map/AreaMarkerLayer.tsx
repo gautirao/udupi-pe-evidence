@@ -186,12 +186,11 @@ interface AreaMarkerLayerProps {
    * exactly as before, so callers predating it are unaffected.
    */
   areaSetCandidateCounts?: Record<string, number>;
-  /**
-   * Fired when an AREA_SET candidate callout (or its "View homes" line) is
-   * activated by click or keyboard (Enter/Space). Optional; unused unless
-   * areaSetCandidateKeys is also provided.
-   */
-  onAreaSetCandidateSelect?: (areaKey: string) => void;
+  // Issue #2456 (owner ruling) — there is deliberately NO
+  // `onAreaSetCandidateSelect` companion any more. The earlier
+  // click/Enter/Space → add-to-draft path (#2017, kept interactive on
+  // PR #2424 / #2453 owner feedback) is superseded: the map never mutates
+  // the AREA_SET scope; adding an area happens only through the panel.
   /**
    * Issue #2017 (max-3 visual parity, PR #2424) — true when the AREA_SET
    * draft is at its cap (same `atLimit` source of truth `AreaSetChips.tsx`
@@ -2148,7 +2147,6 @@ export function AreaMarkerLayer({
   onMarkersComputed,
   areaSetCandidateKeys,
   areaSetCandidateCounts,
-  onAreaSetCandidateSelect,
   areaSetAtMax = false,
 }: AreaMarkerLayerProps) {
   const map = useMap();
@@ -2235,10 +2233,6 @@ export function AreaMarkerLayer({
       // suggestions) render as the actionable candidate callout instead of
       // their normal marker.
       const isAreaSetCandidate = areaSetCandidateKeys?.includes(area.areaKey) ?? false;
-      // Issue #2017 (max-3 visual parity, PR #2424) — the cap only mutes a
-      // NOT-yet-selected candidate; a candidate that is already a committed
-      // draft member (area.isSelected) keeps its normal interactive state.
-      const isAreaSetCandidateDisabled = isAreaSetCandidate && areaSetAtMax && !(area.isSelected ?? false);
 
       const marker = L.marker(
         [markerLat, markerLon],
@@ -2260,10 +2254,10 @@ export function AreaMarkerLayer({
       // map.fitBounds/flyTo/setView for area navigation.
       marker.on('click', () => {
         if (isAreaSetCandidate) {
-          // Issue #2017 (max-3 visual parity, PR #2424) — a disabled
-          // (at-cap, not-yet-selected) candidate card no-ops on click.
-          if (isAreaSetCandidateDisabled) return;
-          onAreaSetCandidateSelect?.(area.areaKey);
+          // Issue #2456 (owner ruling) — an AREA_SET draft-member card is
+          // inert while the editor is open: it neither adds to the draft
+          // (the panel is the only Add path) nor navigates away from the
+          // draft via onAreaClick/onAreaCameraIntent.
           return;
         }
         onAreaClick?.(area);
@@ -2301,21 +2295,9 @@ export function AreaMarkerLayer({
         });
       }
 
-      // AREA_SET candidate callouts carry the same tabindex/role="button"
-      // keyboard-operable contract — bridge Enter/Space into the marker's own
-      // 'click' handler here too, matching the macro-region/group pattern above.
-      if (isAreaSetCandidate) {
-        const el = marker.getElement()?.querySelector<HTMLElement>('[data-testid="area-set-candidate-marker"]');
-        el?.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            // Issue #2017 (max-3 visual parity, PR #2424) — a disabled
-            // (at-cap, not-yet-selected) candidate card no-ops on Enter/Space too.
-            if (isAreaSetCandidateDisabled) return;
-            el.click();
-          }
-        });
-      }
+      // Issue #2456 (owner ruling) — no Enter/Space → click bridge for the
+      // AREA_SET draft-member card any more: its click is inert (above), so
+      // there is deliberately no keyboard path either.
     }
 
     return () => {
@@ -2328,7 +2310,7 @@ export function AreaMarkerLayer({
   // macro-region compass layout — bumping it rebuilds every marker (cheap:
   // this path only ever renders a handful of navigation markers) with fresh
   // container-point projections.
-  }, [areas, map, onAreaClick, onAreaCameraIntent, focusedGroupAreas, journey, selectedSchool, enableDegradation, regionLayoutTick, areaSetCandidateKeys, areaSetCandidateCounts, onAreaSetCandidateSelect, areaSetAtMax]);
+  }, [areas, map, onAreaClick, onAreaCameraIntent, focusedGroupAreas, journey, selectedSchool, enableDegradation, regionLayoutTick, areaSetCandidateKeys, areaSetCandidateCounts, areaSetAtMax]);
 
   // ── Degraded path (Issue #1798 PR-B, opt-in) ───────────────────────────────
   // Tracks the current zoom so bucketing recomputes on zoom only (pan-invariant,
@@ -2443,9 +2425,6 @@ export function AreaMarkerLayer({
         (searchMatchKeys?.includes(area.areaKey) ?? false);
       // Issue #2017 — same candidate-callout override as the legacy loop above.
       const isAreaSetCandidate = areaSetCandidateKeys?.includes(area.areaKey) ?? false;
-      // Issue #2017 (max-3 visual parity, PR #2424) — same disabled-derivation
-      // as the legacy loop above: only mutes a not-yet-selected candidate.
-      const isAreaSetCandidateDisabled = isAreaSetCandidate && areaSetAtMax && !(area.isSelected ?? false);
       const marker = L.marker([area.geo_center_lat, area.geo_center_lon], {
         icon: isAreaSetCandidate
           ? makeAreaSetCandidateCard(area, 1.0, areaSetAtMax, areaSetCandidateCounts?.[area.areaKey])
@@ -2456,10 +2435,8 @@ export function AreaMarkerLayer({
       // MapController is the sole camera owner.
       marker.on('click', () => {
         if (isAreaSetCandidate) {
-          // Issue #2017 (max-3 visual parity, PR #2424) — no-op on a
-          // disabled (at-cap, not-yet-selected) candidate card.
-          if (isAreaSetCandidateDisabled) return;
-          onAreaSetCandidateSelect?.(area.areaKey);
+          // Issue #2456 (owner ruling) — same inert contract as the legacy
+          // loop above: a draft-member card never mutates or leaves the draft.
           return;
         }
         onAreaClick?.(area);
@@ -2481,20 +2458,8 @@ export function AreaMarkerLayer({
         });
       }
 
-      // Same Enter/Space→click keyboard bridge as the legacy loop's AREA_SET
-      // candidate branch.
-      if (isAreaSetCandidate) {
-        const el = marker.getElement()?.querySelector<HTMLElement>('[data-testid="area-set-candidate-marker"]');
-        el?.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            // Issue #2017 (max-3 visual parity, PR #2424) — no-op on a
-            // disabled (at-cap, not-yet-selected) candidate card.
-            if (isAreaSetCandidateDisabled) return;
-            el.click();
-          }
-        });
-      }
+      // Issue #2456 (owner ruling) — same as the legacy loop: no keyboard
+      // bridge for the inert AREA_SET draft-member card.
     }
 
     // Dots — demoted low-priority areas. Hover/focus reveals the full label
@@ -2610,7 +2575,6 @@ export function AreaMarkerLayer({
     searchMatchKeys,
     areaSetCandidateKeys,
     areaSetCandidateCounts,
-    onAreaSetCandidateSelect,
     areaSetAtMax,
   ]);
 

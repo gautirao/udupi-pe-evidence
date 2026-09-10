@@ -59,6 +59,16 @@ import {
 export const MARKER_SHELL_STYLE =
   'transform:translate(-50%,-100%);font-family:inherit;pointer-events:auto;cursor:pointer;outline:none;';
 
+/**
+ * Issue #2456 (owner ruling C2) — the SAME shell geometry with every
+ * interaction affordance removed, for a marker that is a read-only
+ * annotation of state (an AREA_SET draft member) rather than an action.
+ * Only ever selected via `MarkerShellHtmlOptions.interactive === false`;
+ * every existing caller keeps `MARKER_SHELL_STYLE` byte-for-byte.
+ */
+export const MARKER_SHELL_STYLE_INERT =
+  'transform:translate(-50%,-100%);font-family:inherit;pointer-events:none;cursor:default;outline:none;';
+
 export interface MarkerInteractiveAttrsOptions {
   /** `data-testid` value — literal, not escaped (never carries server data). */
   testId: string;
@@ -216,6 +226,15 @@ export interface MarkerShellHtmlOptions {
    * `.st-selected` rules.
    */
   isSelected: boolean;
+  /**
+   * Issue #2456 (owner ruling C2) — `false` paints the identical card with
+   * `pointer-events:none` and no pointer cursor on the outer shell
+   * (`MARKER_SHELL_STYLE_INERT`), for a marker that must expose no
+   * click/hover/keyboard path (the caller also supplies `shellAttrs`
+   * WITHOUT `tabindex`/`role`). Omitted/`true` = today's interactive shell,
+   * byte-for-byte (asserted by markerPrimitives.byteIdentity.test.ts).
+   */
+  interactive?: boolean;
   /**
    * Optional extra attribute (e.g. `data-journey="schools"`, or `''`) —
    * already assembled by the caller, placed on the OUTER wrapper (the same
@@ -398,6 +417,7 @@ export function markerShellHtml(opts: MarkerShellHtmlOptions): string {
     journey,
     widthPx,
     isSelected,
+    interactive = true,
     journeyAttr,
     fontSansAttr,
     identityHtml,
@@ -405,6 +425,7 @@ export function markerShellHtml(opts: MarkerShellHtmlOptions): string {
     footerLabelText,
   } = opts;
 
+  const shellStyle = interactive ? MARKER_SHELL_STYLE : MARKER_SHELL_STYLE_INERT;
   const palette = resolveMarkerPalette(actionKind, journey);
   const borderColor = palette.borderIsAccentSolid
     ? palette.borderRest
@@ -417,7 +438,7 @@ export function markerShellHtml(opts: MarkerShellHtmlOptions): string {
     : '';
 
   return (
-    `<div ${shellAttrs} data-action-kind="${actionKind}" data-marker-shell="true"${journeyAttr ? ` ${journeyAttr}` : ''} style="${MARKER_SHELL_STYLE}">` +
+    `<div ${shellAttrs} data-action-kind="${actionKind}" data-marker-shell="true"${journeyAttr ? ` ${journeyAttr}` : ''} style="${shellStyle}">` +
     `<div class="rc-shell"${titleAttr ? ` ${titleAttr}` : ''} style="width:${widthPx}px;box-sizing:border-box;border-radius:${RADIUS_LG};overflow:hidden;box-shadow:${shellBoxShadow};border:1.5px solid ${borderColor};${outline}">` +
     `<div class="rc-body" style="padding:9px 14px;background:${palette.bodyBg};color:${palette.bodyFg};display:flex;flex-direction:column;gap:2px;">` +
     identityHtml +

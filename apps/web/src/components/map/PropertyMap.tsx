@@ -28,6 +28,11 @@ import {
 import type { CameraIntent } from '@/hooks/useDiscoverMapData';
 import { SchoolMarkerLayer, SELECTED_SCHOOL_PANE_NAME } from '@/components/map/SchoolMarkerLayer';
 import { SchoolZoneLabelLayer, type ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
+import {
+  AreaSetCandidateCalloutLayer,
+  type AreaSetCandidateCallout,
+  type AreaSetDraftMemberMarker,
+} from '@/components/map/AreaSetCandidateCalloutLayer';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { GROUP_BOUNDS_SYNTHETIC_KEY } from '@/utils/discoverGroupBounds';
@@ -260,13 +265,8 @@ interface PropertyMapProps {
    * this component neither reads nor derives it.
    */
   areaSetCandidateCounts?: Record<string, number>;
-  /**
-   * Issue #2017 — fired when an AREA_SET candidate callout (or its
-   * "View homes" line) is activated by click or keyboard. Passed through to
-   * AreaMarkerLayer unchanged; unused unless areaSetCandidateKeys is also
-   * provided.
-   */
-  onAreaSetCandidateSelect?: (areaKey: string) => void;
+  // Issue #2456 (owner ruling) — no `onAreaSetCandidateSelect` pass-through
+  // any more: no map click/hover/keyboard path may mutate the AREA_SET scope.
   /**
    * Issue #2017 (max-3 visual parity, PR #2424) — true when the AREA_SET
    * draft is at its cap (`useAreaSetDraft`'s `atLimit` — the single source of
@@ -277,6 +277,21 @@ interface PropertyMapProps {
    * every existing caller/test fixture keeps behaving identically.
    */
   areaSetAtMax?: boolean;
+  /**
+   * Issue #2456 — the AREA_SET draft's NEARBY-suggestion candidates, rendered
+   * as non-interactive dashed callouts by `AreaSetCandidateCalloutLayer`
+   * independently of which primary marker layer owns the map and without
+   * entering `AreaMarkerLayer`'s bucketing pass. Absent/empty (the draft is
+   * closed) renders nothing. Pure pass-through: this component neither reads
+   * nor derives it.
+   */
+  areaSetNearbyCandidates?: AreaSetCandidateCallout[];
+  /**
+   * Issue #2456 (owner ruling C2) — the AREA_SET draft's current MEMBERS,
+   * rendered by the same layer as the canonical white selected "View homes"
+   * card, non-interactive. Pure pass-through, same gating as above.
+   */
+  areaSetDraftMembers?: AreaSetDraftMemberMarker[];
   /**
    * Issue #1956 PR 2 (Slice 3, map half) — the ONE `useAreasNavigationJourney`
    * result MapDiscovery resolved (node/levelKind/children/selectNode), threaded
@@ -2748,8 +2763,9 @@ export function PropertyMap({
   onAreaMarkersComputed,
   areaSetCandidateKeys,
   areaSetCandidateCounts,
-  onAreaSetCandidateSelect,
   areaSetAtMax = false,
+  areaSetNearbyCandidates,
+  areaSetDraftMembers,
   areasNavigationJourney = null,
   hoveredNavigationNodeKey = null,
   onNavigationNodeHoverChange,
@@ -3103,14 +3119,24 @@ export function PropertyMap({
               onAreaClusterCameraIntent={onAreaClusterCameraIntent}
               onMarkersComputed={onAreaMarkersComputed}
               areaSetCandidateKeys={areaSetCandidateKeys}
-          areaSetCandidateCounts={areaSetCandidateCounts}
-              onAreaSetCandidateSelect={onAreaSetCandidateSelect}
+              areaSetCandidateCounts={areaSetCandidateCounts}
               areaSetAtMax={areaSetAtMax}
             />
           )
         )}
         {schoolZoneLabels && schoolZoneLabels.length > 0 && (
           <SchoolZoneLabelLayer zones={schoolZoneLabels} onZoneClick={onSelectZone} />
+        )}
+        {/* Issue #2456 — nearby-candidate callouts for the open AREA_SET draft.
+            Deliberately OUTSIDE the primaryMapLayer exclusivity check above:
+            the committed-area state is usually owned by the residential
+            listing layer, and the candidates are outside `areas` anyway. */}
+        {((areaSetNearbyCandidates && areaSetNearbyCandidates.length > 0) ||
+          (areaSetDraftMembers && areaSetDraftMembers.length > 0)) && (
+          <AreaSetCandidateCalloutLayer
+            candidates={areaSetNearbyCandidates ?? []}
+            members={areaSetDraftMembers}
+          />
         )}
         {showSchoolMarkers && (
           <SchoolMarkerLayer

@@ -59,6 +59,18 @@ vi.mock('@/hooks/useNearbyAreaCandidates', () => ({
   }),
 }));
 
+// Issue #2456 (owner ruling C2) — the area records DiscoverMapCanvas resolves
+// draft MEMBERS through (geo centre, label, totals) for the selected card.
+// Hebbal/Jakkur are the committed AREA_SET keys the #2017 tests below use.
+export const DISCOVER_AREAS = [
+  { areaKey: 'IN|KA|Bengaluru|Hebbal', name: 'Hebbal', geoCenterLat: 13.05, geoCenterLon: 77.59, listingCount: 42, schoolCount: 12 },
+  { areaKey: 'IN|KA|Bengaluru|Jakkur', name: 'Jakkur', geoCenterLat: 13.08, geoCenterLon: 77.6, listingCount: 22, schoolCount: 7 },
+];
+
+vi.mock('@/hooks/useDiscoverAreas', () => ({
+  useDiscoverAreas: () => ({ data: { city: 'bangalore', areas: DISCOVER_AREAS }, isLoading: false }),
+}));
+
 vi.mock('@/components/map/PropertyMap', () => ({
   // Issue #1956 PR 2 (Slice 3, pass 4, AC3.9) — captures the two hover-sync
   // props as data attributes so a test can prove DiscoverMapCanvas actually
@@ -91,8 +103,29 @@ vi.mock('@/components/map/PropertyMap', () => ({
     // given the SAME filter-aware count the recovery panel's nearby row
     // shows, rather than the area's filter-blind lifetime total.
     areaSetCandidateCounts?: Record<string, number>;
+    // Issue #2456 (owner ruling) — PropertyMap no longer declares this prop.
+    // It is still captured here (typed loosely) so a test can prove NO select
+    // handler reaches the map in ANY draft state — the structural
+    // no-mutation proof at the canvas → map boundary.
     onAreaSetCandidateSelect?: (areaKey: string) => void;
     areaSetAtMax?: boolean;
+    // Issue #2456 — the nearby-suggestion callouts, 1:1 from the nearby
+    // contract. Captured verbatim so a test can assert exact identity +
+    // filter-aware count equality with the panel's suggestion rows.
+    areaSetNearbyCandidates?: Array<{
+      areaKey: string;
+      label: string;
+      lat: number;
+      lon: number;
+      count: number;
+    }>;
+    // Issue #2456 (owner ruling C2) — draft members for the selected card.
+    areaSetDraftMembers?: Array<{
+      areaKey: string;
+      label: string;
+      lat: number;
+      lon: number;
+    }>;
   }) => (
     <div
       data-testid="property-map-mock"
@@ -114,6 +147,8 @@ vi.mock('@/components/map/PropertyMap', () => ({
       data-area-set-candidate-counts={JSON.stringify(props.areaSetCandidateCounts ?? null)}
       data-has-area-set-candidate-select={String(typeof props.onAreaSetCandidateSelect === 'function')}
       data-area-set-at-max={String(props.areaSetAtMax ?? false)}
+      data-area-set-nearby-candidates={JSON.stringify(props.areaSetNearbyCandidates ?? null)}
+      data-area-set-draft-members={JSON.stringify(props.areaSetDraftMembers ?? null)}
       onClick={() => props.onSelectAgriDestination?.('IN|KA|Udupi|Brahmavar')}
     >
       <button
@@ -706,7 +741,7 @@ describe('DiscoverMapCanvas — Issue #2017 code-review fix: AREA_SET candidate-
     fireEvent.click(screen.getByTestId('property-map-mock-candidate-select'));
   });
 
-  it('editor OPEN (isAreaSetDraftOpen: true): PropertyMap DOES get the committed AREA_SET keys as candidates, plus a real select handler', () => {
+  it('editor OPEN (isAreaSetDraftOpen: true): PropertyMap gets the committed AREA_SET keys as draft-member candidates, and STILL no select handler (#2456 owner ruling)', () => {
     mockUseDiscoverShell.mockReturnValue({ ...defaultShellMock(), isAreaSetDraftOpen: true });
     BASE_NAV.resultScope = COMMITTED_AREA_SET_NAV_OVERRIDE;
 
@@ -719,7 +754,12 @@ describe('DiscoverMapCanvas — Issue #2017 code-review fix: AREA_SET candidate-
     expect(candidateKeys).toEqual(
       expect.arrayContaining(['IN|KA|Bengaluru|Hebbal', 'IN|KA|Bengaluru|Jakkur']),
     );
-    expect(map).toHaveAttribute('data-has-area-set-candidate-select', 'true');
+    // Issue #2456 (owner ruling, reversing #2424/#2453): the map NEVER gets
+    // a scope-mutating handler, even with the editor open. A stray click on
+    // any candidate-shaped marker therefore cannot add to the draft.
+    expect(map).toHaveAttribute('data-has-area-set-candidate-select', 'false');
+    fireEvent.click(screen.getByTestId('property-map-mock-candidate-select'));
+    expect(map).toHaveAttribute('data-has-area-set-candidate-select', 'false');
   });
 
   // ── Issue #2018 slice 3 — map/panel count parity ──────────────────────────
@@ -769,7 +809,11 @@ describe('DiscoverMapCanvas — Issue #2017 code-review fix: AREA_SET candidate-
     BASE_NAV.resultScope = COMMITTED_AREA_SET_NAV_OVERRIDE;
 
     const { rerender } = renderCanvas(<DiscoverMapCanvas {...baseProps()} />);
-    expect(screen.getByTestId('property-map-mock')).toHaveAttribute('data-has-area-set-candidate-select', 'true');
+    // Open-state proof that candidate mode was genuinely active before the
+    // flip: the nearby callouts are published (#2456) and the draft members
+    // are candidate keys. (No select handler exists in any state — #2456.)
+    expect(screen.getByTestId('property-map-mock').getAttribute('data-area-set-nearby-candidates')).not.toBe('null');
+    expect(screen.getByTestId('property-map-mock').getAttribute('data-area-set-candidate-keys')).not.toBe('');
 
     // Simulate Cancel/close: isAreaSetDraftOpen flips back to false.
     mockUseDiscoverShell.mockReturnValue({ ...defaultShellMock(), isAreaSetDraftOpen: false });
@@ -785,5 +829,183 @@ describe('DiscoverMapCanvas — Issue #2017 code-review fix: AREA_SET candidate-
     expect(map).toHaveAttribute('data-area-set-candidate-keys', '');
     expect(map).toHaveAttribute('data-has-area-set-candidate-select', 'false');
     expect(map).toHaveAttribute('data-area-set-at-max', 'false');
+    // Issue #2456 — closing the draft removes every nearby callout: the
+    // layer's input goes to `undefined`, which unmounts it.
+    expect(map).toHaveAttribute('data-area-set-nearby-candidates', 'null');
+  });
+});
+
+// Issue #2456 — nearby-suggestion candidates as NON-INTERACTIVE map callouts.
+//
+// Before this fix, nearby candidates reached the map only as KEYS unioned into
+// `areaSetCandidateKeys`, which AreaMarkerLayer can only turn into a card for
+// an area that is ALSO in its iterated `areas` prop AND survives bucketing as
+// a representative — nearby candidates are outside the committed scope, so
+// the card never rendered (issue body; PR #2453 evidence). They now cross as
+// `areaSetNearbyCandidates`, a 1:1 mapping of the SAME
+// `AreaSetDraftContext.data.candidates` array AreaSetDraftPanel renders its
+// suggestion rows from.
+//
+// OLD-SOURCE-FAILING: against the pre-#2456 source PropertyMap has no
+// `areaSetNearbyCandidates` prop, so the mock's attribute is 'null' and the
+// first assertion below fails. (See the PR for the recorded failing run.)
+describe('DiscoverMapCanvas — Issue #2456: nearby candidates cross to the map 1:1 with the panel, non-interactive', () => {
+  const COMMITTED_AREA_SET_NAV_OVERRIDE = {
+    active: {
+      kind: 'AREA_SET' as const,
+      areaKeys: ['IN|KA|Bengaluru|Hebbal', 'IN|KA|Bengaluru|Jakkur'],
+    },
+    previous: null,
+  };
+
+  afterEach(() => {
+    BASE_NAV.resultScope = undefined;
+  });
+
+  function readNearby(map: HTMLElement) {
+    const raw = map.getAttribute('data-area-set-nearby-candidates');
+    return raw === null || raw === 'null'
+      ? null
+      : (JSON.parse(raw) as Array<{ areaKey: string; label: string; lat: number; lon: number; count: number }>);
+  }
+
+  it('editor OPEN: PropertyMap gets EXACTLY the panel\'s nearby candidates — same identities, same order, same filter-aware counts, own geo centres', () => {
+    mockUseDiscoverShell.mockReturnValue({ ...defaultShellMock(), isAreaSetDraftOpen: true });
+    BASE_NAV.resultScope = COMMITTED_AREA_SET_NAV_OVERRIDE;
+
+    renderCanvas(<DiscoverMapCanvas {...baseProps()} />);
+
+    const nearby = readNearby(screen.getByTestId('property-map-mock'));
+    expect(nearby).not.toBeNull();
+    // Exact equality with the mocked nearby contract — the SAME array the
+    // panel's `suggestions = nearbyData?.candidates ?? []` renders from
+    // (AreaSetDraftPanel.tsx), so map callout count == panel row count and
+    // every count is the panel's `eligibleListingCount`, not `listingCount`.
+    expect(nearby).toEqual(
+      NEARBY_CANDIDATES.map((c) => ({
+        areaKey: c.areaKey,
+        label: c.name,
+        lat: c.geoCenterLat,
+        lon: c.geoCenterLon,
+        count: c.eligibleListingCount,
+      })),
+    );
+    expect(nearby).toHaveLength(NEARBY_CANDIDATES.length);
+  });
+
+  it('editor OPEN: nearby candidates are NOT also unioned into areaSetCandidateKeys (no double render; members only)', () => {
+    mockUseDiscoverShell.mockReturnValue({ ...defaultShellMock(), isAreaSetDraftOpen: true });
+    BASE_NAV.resultScope = COMMITTED_AREA_SET_NAV_OVERRIDE;
+
+    renderCanvas(<DiscoverMapCanvas {...baseProps()} />);
+
+    const map = screen.getByTestId('property-map-mock');
+    const candidateKeys = map.getAttribute('data-area-set-candidate-keys')?.split(',') ?? [];
+    for (const c of NEARBY_CANDIDATES) {
+      expect(candidateKeys).not.toContain(c.areaKey);
+    }
+    expect(candidateKeys).toEqual(
+      expect.arrayContaining(['IN|KA|Bengaluru|Hebbal', 'IN|KA|Bengaluru|Jakkur']),
+    );
+  });
+
+  it('editor CLOSED: no nearby callouts are published (layer input is undefined)', () => {
+    mockUseDiscoverShell.mockReturnValue({ ...defaultShellMock(), isAreaSetDraftOpen: false });
+    BASE_NAV.resultScope = COMMITTED_AREA_SET_NAV_OVERRIDE;
+
+    renderCanvas(<DiscoverMapCanvas {...baseProps()} />);
+
+    expect(readNearby(screen.getByTestId('property-map-mock'))).toBeNull();
+  });
+
+  it('no scope-mutating select handler reaches the map in EITHER draft state (owner ruling: panel is the only Add path)', () => {
+    BASE_NAV.resultScope = COMMITTED_AREA_SET_NAV_OVERRIDE;
+
+    for (const isAreaSetDraftOpen of [true, false]) {
+      mockUseDiscoverShell.mockReturnValue({ ...defaultShellMock(), isAreaSetDraftOpen });
+      const { unmount } = renderCanvas(<DiscoverMapCanvas {...baseProps()} />);
+      expect(screen.getByTestId('property-map-mock')).toHaveAttribute(
+        'data-has-area-set-candidate-select',
+        'false',
+      );
+      unmount();
+    }
+  });
+});
+
+// Issue #2456 (owner ruling C2) — after the panel's Add, a draft MEMBER renders
+// on the map as the app's canonical WHITE selected "View homes" card (the
+// frozen mock's `areaPinHTML` selected branch), non-interactive, resolved
+// through `useDiscoverAreas` for geo centre/label/totals. Add stays
+// draft-only: nothing here derives a command or touches nav.
+describe('DiscoverMapCanvas — Issue #2456 (owner ruling C2): draft members cross to the map as the selected card', () => {
+  const COMMITTED_AREA_SET_NAV_OVERRIDE = {
+    active: {
+      kind: 'AREA_SET' as const,
+      areaKeys: ['IN|KA|Bengaluru|Hebbal', 'IN|KA|Bengaluru|Jakkur'],
+    },
+    previous: null,
+  };
+
+  afterEach(() => {
+    BASE_NAV.resultScope = undefined;
+  });
+
+  function readMembers(map: HTMLElement) {
+    const raw = map.getAttribute('data-area-set-draft-members');
+    return raw === null || raw === 'null'
+      ? null
+      : (JSON.parse(raw) as Array<{ areaKey: string; label: string; lat: number; lon: number }>);
+  }
+
+  it('editor OPEN: every draft member reaches PropertyMap with its OWN area record (geo centre + label, NO count), never a fabricated position', () => {
+    mockUseDiscoverShell.mockReturnValue({ ...defaultShellMock(), isAreaSetDraftOpen: true });
+    BASE_NAV.resultScope = COMMITTED_AREA_SET_NAV_OVERRIDE;
+
+    renderCanvas(<DiscoverMapCanvas {...baseProps()} />);
+
+    const members = readMembers(screen.getByTestId('property-map-mock'));
+    expect(members).not.toBeNull();
+    expect(members).toEqual(
+      expect.arrayContaining(
+        DISCOVER_AREAS.map((a) => ({
+          areaKey: a.areaKey,
+          label: a.name,
+          lat: a.geoCenterLat,
+          lon: a.geoCenterLon,
+        })),
+      ),
+    );
+    expect(members).toHaveLength(DISCOVER_AREAS.length);
+    // Members and nearby candidates are disjoint sets — a key is never both.
+    const nearbyRaw = screen.getByTestId('property-map-mock').getAttribute('data-area-set-nearby-candidates');
+    const nearbyKeys = (JSON.parse(nearbyRaw ?? '[]') as Array<{ areaKey: string }>).map((c) => c.areaKey);
+    for (const m of members ?? []) expect(nearbyKeys).not.toContain(m.areaKey);
+  });
+
+  it('editor CLOSED: no draft members are published', () => {
+    mockUseDiscoverShell.mockReturnValue({ ...defaultShellMock(), isAreaSetDraftOpen: false });
+    BASE_NAV.resultScope = COMMITTED_AREA_SET_NAV_OVERRIDE;
+
+    renderCanvas(<DiscoverMapCanvas {...baseProps()} />);
+
+    expect(readMembers(screen.getByTestId('property-map-mock'))).toBeNull();
+  });
+
+  it('close (open -> closed rerender) removes the members with the callouts', () => {
+    mockUseDiscoverShell.mockReturnValue({ ...defaultShellMock(), isAreaSetDraftOpen: true });
+    BASE_NAV.resultScope = COMMITTED_AREA_SET_NAV_OVERRIDE;
+    const { rerender } = renderCanvas(<DiscoverMapCanvas {...baseProps()} />);
+    expect(readMembers(screen.getByTestId('property-map-mock'))).not.toBeNull();
+
+    mockUseDiscoverShell.mockReturnValue({ ...defaultShellMock(), isAreaSetDraftOpen: false });
+    rerender(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <AreaSetDraftProvider>
+          <DiscoverMapCanvas {...baseProps()} />
+        </AreaSetDraftProvider>
+      </QueryClientProvider>,
+    );
+    expect(readMembers(screen.getByTestId('property-map-mock'))).toBeNull();
   });
 });

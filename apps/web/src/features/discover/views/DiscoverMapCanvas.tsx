@@ -17,7 +17,8 @@ import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
 import type { AreaPoint, AreaMarkerClusterInfo } from '@/components/map/AreaMarkerLayer';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
-import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
+import { useDiscoverAreas, type DiscoverArea } from '@/hooks/useDiscoverAreas';
+import { DEFAULT_CITY } from '@/lib/localityUtils';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
@@ -43,6 +44,10 @@ import type {
 } from '@/features/discover/state/polygonDraftPhase';
 import { AreaSetChips } from '@/features/discover/components/AreaSetChips';
 import { useAreaSetDraftContext } from '@/features/discover/state/AreaSetDraftContext';
+import type {
+  AreaSetCandidateCallout,
+  AreaSetDraftMemberMarker,
+} from '@/components/map/AreaSetCandidateCalloutLayer';
 import { useSearchThisAreaCtaOffset } from '@/features/discover/state/useSearchThisAreaCtaOffset';
 
 /**
@@ -263,12 +268,6 @@ export interface DiscoverMapCanvasProps {
    * active.
    */
   areaSetCandidateKeys?: string[];
-  /**
-   * Issue #2017 — companion click/activate handler for
-   * `areaSetCandidateKeys` above. Threaded straight to `PropertyMap`'s prop
-   * of the same name. Optional for the same reason as `areaSetCandidateKeys`.
-   */
-  onAreaSetCandidateSelect?: (areaKey: string) => void;
   schoolZoneLabels: ZoneLabelPoint[];
   setMapZoom: Dispatch<SetStateAction<number>>;
   handleBoundsChange: (bbox: [number, number, number, number]) => void;
@@ -472,7 +471,6 @@ export function DiscoverMapCanvas({
   autoAdvanceSelectNode,
   buildNavigationNodeHref,
   areaSetCandidateKeys,
-  onAreaSetCandidateSelect,
   schoolZoneLabels,
   setMapZoom,
   handleBoundsChange,
@@ -565,11 +563,10 @@ export function DiscoverMapCanvas({
   // backend already excludes already-selected areas from candidates, so no
   // extra atLimit/duplicate guard is needed here beyond what commands.add()
   // already no-ops on internally).
-  const {
-    view: areaSetDraftView,
-    commands: areaSetDraftCommands,
-    data: nearbyAreaCandidatesData,
-  } = useAreaSetDraftContext();
+  // Issue #2456 (owner ruling) — `commands` is deliberately NOT read here:
+  // the map has no path that mutates the draft. Adding a candidate happens
+  // only through the panel (AreaSetDraftPanel / AreaSetChips).
+  const { view: areaSetDraftView, data: nearbyAreaCandidatesData } = useAreaSetDraftContext();
 
   // Issue #2426 — real-measured clearance so SearchThisAreaCta (rendered
   // below) never overlaps DiscoverMapContextOverlay's breadcrumb or the
@@ -606,13 +603,17 @@ export function DiscoverMapCanvas({
   // here, at the single place these three props reach PropertyMap, is the
   // actual gate; `[]`/`undefined`/`false` fall AreaMarkerLayer straight back
   // onto its normal marker-click path with zero further changes needed there.
+  //
+  // Issue #2456 — narrowed to the draft MEMBERS only. Nearby suggestions used
+  // to be unioned in here too, but AreaMarkerLayer can only turn a key into a
+  // callout for an area that is ALSO in its iterated `areas` prop and that
+  // survives bucketing as a representative — nearby candidates are outside
+  // the committed scope, so the card never rendered (issue body, PR #2453
+  // evidence). They now reach the map through `areaSetNearbyCandidates`
+  // below (a dedicated non-interactive layer); keeping them out of this set
+  // means a candidate can never be drawn twice.
   const computedAreaSetCandidateKeys = shell.isAreaSetDraftOpen
-    ? Array.from(
-        new Set([
-          ...areaSetDraftView.draftAreaKeys,
-          ...(nearbyAreaCandidatesData?.candidates?.map((candidate) => candidate.areaKey) ?? []),
-        ]),
-      )
+    ? Array.from(new Set(areaSetDraftView.draftAreaKeys))
     : [];
   // Issue #2018 slice 3 — the FILTER-AWARE count for each candidate, taken
   // from the very same `nearbyAreaCandidatesData` the recovery panel's nearby
@@ -637,10 +638,51 @@ export function DiscoverMapCanvas({
       )
     : undefined;
 
-  const handleAreaSetCandidateSelect = shell.isAreaSetDraftOpen
-    ? (areaKey: string) => {
-        areaSetDraftCommands.add(areaKey);
-      }
+  // Issue #2456 — the nearby suggestions as non-interactive map callouts,
+  // mapped 1:1 from the SAME `nearbyAreaCandidatesData.candidates` array
+  // AreaSetDraftPanel renders its suggestion rows from (both read one
+  // AreaSetDraftContext), positioned from the contract's own geo centres.
+  // Same-length, same-order, same `eligibleListingCount`: map callout count
+  // equals panel row count by construction. Gated on the draft being open,
+  // like every other candidate-mode signal above; `undefined` unmounts the
+  // layer, so closing/cancelling the draft removes every callout.
+  const areaSetNearbyCandidates: AreaSetCandidateCallout[] | undefined = shell.isAreaSetDraftOpen
+    ? (nearbyAreaCandidatesData?.candidates ?? []).map((candidate) => ({
+        areaKey: candidate.areaKey,
+        label: candidate.name,
+        lat: candidate.geoCenterLat,
+        lon: candidate.geoCenterLon,
+        count: candidate.eligibleListingCount,
+      }))
+    : undefined;
+
+  // Issue #2456 (owner ruling C2) — the draft's current MEMBERS as the
+  // canonical white selected "View homes" card, so the panel's Add turns a
+  // dashed callout into the selected treatment (frozen mock `areaPinHTML`
+  // `selected` branch). Members are resolved through the same
+  // `useDiscoverAreas(city)` record AreaSetDraftPanel/AreaSetChips label
+  // their chips from (cached query; no new fetch), which also supplies the
+  // geo centre. No count crosses (owner ruling: the area's unfiltered total
+  // must not sit beside the panel's filter-aware figure). A member whose
+  // area record is not (yet) loaded is simply not drawn — never placed at a
+  // fabricated position. Gated on the draft being open like the callouts;
+  // `undefined` closes the layer. Read-only: no command is derived here, so
+  // Add stays draft-only and Show/Search remains the commit.
+  const { data: discoverAreasData } = useDiscoverAreas(nav.city || DEFAULT_CITY);
+  const areaSetDraftMembers: AreaSetDraftMemberMarker[] | undefined = shell.isAreaSetDraftOpen
+    ? areaSetDraftView.draftAreaKeys.flatMap((areaKey) => {
+        const area = discoverAreasData?.areas.find((a) => a.areaKey === areaKey);
+        return area
+          ? [
+              {
+                areaKey,
+                label: area.name,
+                lat: area.geoCenterLat,
+                lon: area.geoCenterLon,
+              },
+            ]
+          : [];
+      })
     : undefined;
 
   // Issue #2016 — human-readable label for J3.3's confirmation body (the
@@ -976,13 +1018,14 @@ export function DiscoverMapCanvas({
           // the shared AreaSetDraftContext (see the computed locals above)
           // rather than the incoming props — DiscoverMapCanvas now reads the
           // draft/candidate state directly instead of relying on a caller to
-          // compute and pass it. The `areaSetCandidateKeys`/
-          // `onAreaSetCandidateSelect` props remain on
-          // DiscoverMapCanvasProps for callers/tests that still supply them,
-          // but are no longer used as the map's source of truth.
+          // compute and pass it. The `areaSetCandidateKeys` prop remains on
+          // DiscoverMapCanvasProps for callers/tests that still supply it,
+          // but is no longer used as the map's source of truth.
+          // Issue #2456 (owner ruling) — no `onAreaSetCandidateSelect` is
+          // threaded: the map never mutates the draft; the panel is the only
+          // Add path. Nearby suggestions render via `areaSetNearbyCandidates`.
           areaSetCandidateKeys={computedAreaSetCandidateKeys}
           areaSetCandidateCounts={areaSetCandidateCounts}
-          onAreaSetCandidateSelect={handleAreaSetCandidateSelect}
           // Issue #2017 (max-3 visual parity, PR #2424) — same
           // `atLimit` source of truth AreaSetChips.tsx uses for its own
           // candidate-button disabled styling, read from the shared
@@ -992,6 +1035,10 @@ export function DiscoverMapCanvas({
           // doc above; `false` here is part of the same "editor closed ->
           // no AREA_SET candidate-mode signal reaches the map at all" fix.
           areaSetAtMax={shell.isAreaSetDraftOpen && areaSetDraftView.atLimit}
+          // Issue #2456 — nearby-candidate callouts (see the derivation above).
+          areaSetNearbyCandidates={areaSetNearbyCandidates}
+          // Issue #2456 (owner ruling C2) — draft members as the selected card.
+          areaSetDraftMembers={areaSetDraftMembers}
           areasNavigationJourney={areasNavigationJourney}
           hoveredNavigationNodeKey={hoveredNavigationNodeKey}
           onNavigationNodeHoverChange={onNavigationNodeHoverChange}
