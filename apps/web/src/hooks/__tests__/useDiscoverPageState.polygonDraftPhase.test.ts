@@ -641,4 +641,96 @@ describe('useDiscoverPageState — polygon draft phase machine', () => {
 
     expect(urlActions.commitResultScope).not.toHaveBeenCalled();
   });
+
+  /**
+   * Issue #2419 (PR-3) — the auth gate moves from commit-time to draw-ENTRY
+   * time. Both entry points (`handleRedrawPolygon`, `handleStartDrawPolygon`)
+   * set the same DRAWING phase via the same empty-dep `useCallback`, so this
+   * is the whole bug class: fixing one and leaving the other is the failure
+   * mode this suite exists to catch.
+   */
+  describe('draw-entry gate — Redraw and Draw search area', () => {
+    it.each([
+      ['handleRedrawPolygon' as const],
+      ['handleStartDrawPolygon' as const],
+    ])('anonymous: %s is undefined and never enters DRAWING', (handlerName) => {
+      const { result, urlActions } = renderPageState(
+        makeUrlState({ resultScope: COMMITTED_AREA_SET }),
+        false,
+      );
+
+      expect(result.current[handlerName]).toBeUndefined();
+      expect(result.current.polygonDraftPhase).toEqual({ status: 'IDLE' });
+      expect(result.current.startDrawNonce).toBe(0);
+      expect(urlActions.commitResultScope).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['handleRedrawPolygon' as const],
+      ['handleStartDrawPolygon' as const],
+    ])('signed in: %s is a function that enters DRAWING and increments the nonce', (handlerName) => {
+      const { result } = renderPageState(makeUrlState(), true);
+      const beforeNonce = result.current.startDrawNonce;
+
+      const handler = result.current[handlerName];
+      expect(handler).toBeTypeOf('function');
+      act(() => handler?.());
+
+      expect(result.current.polygonDraftPhase).toEqual({ status: 'DRAWING' });
+      expect(result.current.startDrawNonce).toBe(beforeNonce + 1);
+    });
+
+    // The composition passes `undefined` while auth is still resolving. If
+    // that gated the draw-entry seams too, a signed-in shopper would see
+    // Redraw/"Draw search area" blink out for a moment on every load.
+    it.each([
+      ['handleRedrawPolygon' as const],
+      ['handleStartDrawPolygon' as const],
+    ])('unknown auth state: %s stays wired (permissive-unknown, no blink-out)', (handlerName) => {
+      const { result } = renderPageState(makeUrlState(), undefined);
+      const beforeNonce = result.current.startDrawNonce;
+
+      const handler = result.current[handlerName];
+      expect(handler).toBeTypeOf('function');
+      act(() => handler?.());
+
+      expect(result.current.polygonDraftPhase).toEqual({ status: 'DRAWING' });
+      expect(result.current.startDrawNonce).toBe(beforeNonce + 1);
+    });
+
+    it('anonymous: the previously committed scope is left untouched (no commit, no URL write)', () => {
+      const { result, urlActions } = renderPageState(
+        makeUrlState({ resultScope: COMMITTED_AREA_SET }),
+        false,
+      );
+
+      expect(result.current.handleRedrawPolygon).toBeUndefined();
+      expect(result.current.handleStartDrawPolygon).toBeUndefined();
+      expect(result.current.resultScope.active).toEqual({ kind: 'AREA_SET', areaKeys: ['hebbal'] });
+      expect(urlActions.commitResultScope).not.toHaveBeenCalled();
+    });
+
+    // Signed-in invalid-polygon flow end to end: handlePolygonDrawn -> INVALID
+    // -> handleRedrawPolygon -> back to DRAWING. Guards the interaction of the
+    // #2420 commit-time gate (still in place, line ~526) with the new
+    // entry-time gate.
+    it('signed in: invalid-polygon flow recovers via Redraw back to DRAWING', async () => {
+      mockValidatePolygonScope.mockResolvedValue({
+        outcome: 'rejected',
+        rejection: { reason: 'too_broad' },
+      });
+      const { result } = renderPageState(makeUrlState(), true);
+
+      await act(async () => {
+        result.current.handlePolygonDrawn(POLYGON);
+      });
+      expect(result.current.polygonDraftPhase.status).toBe('INVALID');
+
+      const redraw = result.current.handleRedrawPolygon;
+      expect(redraw).toBeTypeOf('function');
+      act(() => redraw?.());
+
+      expect(result.current.polygonDraftPhase).toEqual({ status: 'DRAWING' });
+    });
+  });
 });

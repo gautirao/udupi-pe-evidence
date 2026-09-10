@@ -152,14 +152,28 @@ export interface UseDiscoverPageStateResult {
   /**
    * "Redraw" — discards any draft and moves to DRAWING, arming the map's draw
    * tool. PR-1 defined the transition; PR-2 makes it act.
+   *
+   * Issue #2419 (PR-3) — `undefined` when `isAuthenticated === false`. Draw
+   * entry (not just commit) is a signed-in capability, and every consumer of
+   * this seam already treats an absent handler as "render no control" — see
+   * ActiveScopeChip's `onRedraw &&` guard. `undefined` while auth is still
+   * loading is NOT gated here; only an explicit `false` blocks, so a
+   * signed-in shopper never sees the control blink out.
    */
-  handleRedrawPolygon: () => void;
+  handleRedrawPolygon: (() => void) | undefined;
 
   // Issue #2419 (PR-2) — the product-native draw-mode seam. The nonces are
   // consumed by `DrawControl`; this hook stays the single decider of WHEN
   // drawing starts, stops, or loses a vertex.
-  /** "Draw search area" — enters DRAWING and arms the map's draw tool. */
-  handleStartDrawPolygon: () => void;
+  /**
+   * "Draw search area" — enters DRAWING and arms the map's draw tool.
+   *
+   * Issue #2419 (PR-3) — `undefined` when `isAuthenticated === false`, same
+   * rationale as `handleRedrawPolygon` above: every consumer down to
+   * `DrawSearchAreaEntry` already treats an absent `onDrawSearchArea` as
+   * "no draw control wired" (`onDrawSearchArea?.()`, `isDrawModeWired`).
+   */
+  handleStartDrawPolygon: (() => void) | undefined;
   /** Cancels point placement, discarding the in-progress shape. Commits nothing. */
   handleCancelDrawPolygon: () => void;
   /** Removes the most recent vertex. Never ends draw mode. */
@@ -814,8 +828,11 @@ export function useDiscoverPageState({
     polygonRejection,
     handleDismissPolygonRejection,
     handleRetryPolygonValidation,
-    handleRedrawPolygon,
-    handleStartDrawPolygon,
+    // Issue #2419 (PR-3) — draw ENTRY (not just commit) is gated on auth.
+    // Only an explicit `false` blocks; `undefined` (auth still loading) stays
+    // permissive so a signed-in shopper never sees the control blink out.
+    handleRedrawPolygon: isAuthenticated === false ? undefined : handleRedrawPolygon,
+    handleStartDrawPolygon: isAuthenticated === false ? undefined : handleStartDrawPolygon,
     handleCancelDrawPolygon,
     handleUndoDrawVertex,
     handleDrawModeExit,
