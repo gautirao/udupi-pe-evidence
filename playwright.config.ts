@@ -52,6 +52,16 @@ export default defineConfig({
       ],
     },
     {
+      // #2446 (Option 2): dedicated real-backend Discover smoke for Udupi, the
+      // product's home city, on the ISOLATED canonical-Udupi fixture profile.
+      // It is NOT in `smoke` or `full`: those run on the default fixture, where
+      // Udupi is deliberately LEGACY, and this spec fails loudly there by design.
+      // Run: E2E_FIXTURE_PROFILE=udupi-canonical bash scripts/run-e2e-local.sh --project=udupi-canonical-smoke
+      name: 'udupi-canonical-smoke',
+      use: { browserName: 'chromium' },
+      testMatch: ['**/discover-udupi-canonical-smoke.spec.ts'],
+    },
+    {
       name: 'journey',
       use: { browserName: 'chromium' },
       testMatch: ['**/e2e/journey/**/*.spec.ts'],
@@ -67,8 +77,10 @@ export default defineConfig({
     },
     {
       name: 'full',
-      // No testMatch — runs all specs under testDir (e2e/**/*.spec.ts).
+      // No testMatch — runs all specs under testDir (e2e/**/*.spec.ts), except
+      // the #2446 canonical-Udupi smoke, which needs its own fixture profile.
       use: { browserName: 'chromium' },
+      testIgnore: ['**/discover-udupi-canonical-smoke.spec.ts'],
     },
   ],
 });

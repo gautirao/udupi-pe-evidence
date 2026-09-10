@@ -53,6 +53,23 @@ NAV_HIERARCHY_LISTINGS_SEED_FILE="${SCRIPT_DIR}/fixtures/navigation-hierarchy-fi
 NAV_HIERARCHY_RENT_LISTINGS_SEED_FILE="${SCRIPT_DIR}/fixtures/navigation-hierarchy-fixture-rent-listings-seed.sql"
 NAV_SCHOOLS_AGRI_SEED_FILE="${SCRIPT_DIR}/fixtures/navigation-hierarchy-schools-agri-fixture-seed.sql"
 
+# #2446 (owner ruling Option 2): OPTIONAL, OPT-IN fixture profile. The default seed list above is
+# deliberately untouched — Udupi stays LEGACY in the default fixture so the six legacy Udupi specs
+# measured in docs/pr-evidence/issue-2427/option-1-blast-radius.md keep their rendering mode.
+# Only when E2E_FIXTURE_PROFILE=udupi-canonical is set does this script ADDITIONALLY apply the
+# canonical-Udupi seed (d:n -> Brahmavar, PROMOTED revision, listings, school) for the dedicated
+# e2e/discover-udupi-canonical-smoke.spec.ts run (playwright project `udupi-canonical-smoke`).
+# Any other non-empty value is rejected below so a typo cannot silently run the default profile.
+E2E_FIXTURE_PROFILE="${E2E_FIXTURE_PROFILE:-}"
+UDUPI_CANONICAL_SEED_FILE="${SCRIPT_DIR}/fixtures/udupi-canonical-smoke-fixture-seed.sql"
+case "${E2E_FIXTURE_PROFILE}" in
+  ""|udupi-canonical) ;;
+  *)
+    echo "ERROR: unknown E2E_FIXTURE_PROFILE='${E2E_FIXTURE_PROFILE}' (supported: unset/empty, udupi-canonical)." >&2
+    exit 1
+    ;;
+esac
+
 PG_PASSWORD="${PG_TEST_PASSWORD:-fixture_test_only}"
 PG_PORT="${PG_TEST_PORT:-5434}"
 # PG_TEST_CONTAINER_NAME lets a caller (e.g. scripts/run-e2e-local.sh) run its
@@ -452,6 +469,35 @@ else
     exit 1
   fi
   echo "==> Bangalore agri_destination_classification count: ${BANGALORE_AGRI_DESTINATION_COUNT}."
+
+  # ---------------------------------------------------------------------------
+  # #2446 opt-in profile: canonical Udupi (isolated smoke only). Applied LAST so
+  # it layers on the Udupi city/broker rows from discover-smoke-seed.sql and
+  # never reorders the default list. Gated like the Bangalore seeds above: the
+  # seed RAISEs internally, and a zero count here still fails the script.
+  # ---------------------------------------------------------------------------
+  if [[ "${E2E_FIXTURE_PROFILE}" == "udupi-canonical" ]]; then
+    if [[ ! -f "${UDUPI_CANONICAL_SEED_FILE}" ]]; then
+      echo "ERROR: E2E_FIXTURE_PROFILE=udupi-canonical but seed file not found: ${UDUPI_CANONICAL_SEED_FILE}" >&2
+      exit 1
+    fi
+    echo "==> [profile=udupi-canonical] Loading canonical Udupi smoke fixture from ${UDUPI_CANONICAL_SEED_FILE}..."
+    PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" \
+      -d "${DB_NAME}" -v ON_ERROR_STOP=1 -f "${UDUPI_CANONICAL_SEED_FILE}"
+
+    UDUPI_PROMOTED_REVISION_COUNT=$(PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" \
+      -d "${DB_NAME}" -t -A \
+      -c "SELECT COUNT(*) FROM city_launch_revision clr
+            JOIN cities c ON c.id = clr.city_id
+            WHERE c.slug = 'udupi' AND clr.lifecycle_status = 'PROMOTED' AND clr.superseded_by IS NULL;" 2>/dev/null || echo "0")
+    if [[ "${UDUPI_PROMOTED_REVISION_COUNT}" -eq 0 ]]; then
+      echo "ERROR: Udupi PROMOTED city_launch_revision count is 0 after loading ${UDUPI_CANONICAL_SEED_FILE} — profile did not land." >&2
+      exit 1
+    fi
+    echo "==> [profile=udupi-canonical] Udupi PROMOTED city_launch_revision count: ${UDUPI_PROMOTED_REVISION_COUNT}."
+  else
+    echo "==> Fixture profile: default (Udupi LEGACY; set E2E_FIXTURE_PROFILE=udupi-canonical for the #2446 canonical-Udupi smoke)."
+  fi
 fi
 
 # ---------------------------------------------------------------------------

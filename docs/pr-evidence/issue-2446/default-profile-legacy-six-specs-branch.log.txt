@@ -1,0 +1,671 @@
+[launcher] cwd=/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke
+[launcher] branch=issue-2446-canonical-udupi-smoke-fixture head=876b50eb
+[launcher] E2E_FIXTURE_PROFILE=<unset>
+[launcher] args: --project=full --reporter=list e2e/discover-area-cards.spec.ts e2e/discover-area-nav-journey.spec.ts e2e/discover-correctness-1064.spec.ts e2e/discover-correctness-1067.spec.ts e2e/discover-viewport.spec.ts e2e/discover-opensearch-parity.spec.ts
+[e2e] Using this worktree's port override: /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/.env.e2e.local
+e2e target: http://localhost:5251
+backend:    http://localhost:8151
+
+[e2e] backend port 8151 is held by this worktree's own process (pid 42872) — stopping to restart with latest code.
+[e2e] backend port 8151 confirmed free.
+[e2e] Starting ephemeral local Postgres/PostGIS fixture (pg-e2e-issue-2446-udupi-canonical-smoke--44797 on port 37057)...
+[e2e] Fixture profile: default
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+==> V0.1 stderr (tolerated):
+psql:/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/apps/api/src/main/resources/db/migration/V0.1__auth_rls_policies.sql:119: ERROR:  publication "supabase_realtime" does not exist
+==> Found 133 Flyway migration file(s) in /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/apps/api/src/main/resources/db/migration
+==> Removing existing test-fixture container (if any)...
+==> Starting PostGIS container (postgis/postgis:15-3.4) on port 37057...
+47f98a68eb970b41671cf49a3f557148116396a31ab5f31ec78d2fa92c626bca
+==> Waiting for Postgres to become ready...
+ ?column? 
+----------
+        1
+(1 row)
+
+==> Postgres is ready.
+==> PostGIS version: 3.4.3
+==> Applying Flyway migrations (image: flyway/flyway:10.20.1)...
+==> Creating Supabase-compatible roles (anon, authenticated, service_role)...
+==> Applying V0 (initial schema) via psql...
+==> Applying V0.1 (auth RLS policies — any errors will be shown below)...
+A more recent version of Flyway is available. Find out more about Flyway 13.5.0 at https://rd.gt/3rXiSlV
+
+Flyway OSS Edition 10.20.1 by Redgate
+
+See release notes here: https://rd.gt/416ObMi
+Database: jdbc:postgresql://host.docker.internal:37057/postgres (PostgreSQL 15.8)
+Schema history table "public"."flyway_schema_history" does not exist yet
+Successfully validated 133 migrations (execution time 00:00.061s)
+Creating Schema History table "public"."flyway_schema_history" with baseline ...
+Successfully baselined schema with version: 0.1
+Current version of schema "public": 0.1
+Migrating schema "public" to version "1 - add processing started at to raw posts"
+Migrating schema "public" to version "2 - create area price weekly"
+Migrating schema "public" to version "3 - add normalized area fields"
+Migrating schema "public" to version "4 - create area stats latest"
+Migrating schema "public" to version "5 - add repost count to property listings"
+Migrating schema "public" to version "6 - add area key to property listings"
+Migrating schema "public" to version "7 - add dealer role and listing status"
+Migrating schema "public" to version "8 - add dealer listing columns"
+Migrating schema "public" to version "9 - create listing images notifications saved areas"
+Migrating schema "public" to version "10 - update rls for mvp roles"
+Migrating schema "public" to version "11 - add missing listing columns"
+Migrating schema "public" to version "12 - add listing images unique constraint"
+Migrating schema "public" to version "13 - add hot query indexes"
+WARNING: DB: relation "idx_property_listings_area_key" already exists, skipping (SQL State: 42P07 - Error Code: 0)
+WARNING: DB: relation "idx_raw_posts_unprocessed" already exists, skipping (SQL State: 42P07 - Error Code: 0)
+WARNING: DB: relation "idx_property_listings_dedupe_hash" already exists, skipping (SQL State: 42P07 - Error Code: 0)
+Migrating schema "public" to version "14 - add phone to profiles"
+Migrating schema "public" to version "15 - create viewing requests"
+Migrating schema "public" to version "16 - add insights access"
+Migrating schema "public" to version "17 - booking index improvements"
+Migrating schema "public" to version "18 - add listing fts vector"
+Migrating schema "public" to version "19 - create admin audit log"
+Migrating schema "public" to version "20 - add alerts enabled to saved areas"
+Migrating schema "public" to version "21 - add property type to rollup tables"
+Migrating schema "public" to version "22 - add price threshold to saved areas"
+Migrating schema "public" to version "23 - add bedrooms to rollup tables"
+Migrating schema "public" to version "24 - create geocode cache"
+WARNING: DB: relation "geocode_cache" already exists, skipping (SQL State: 42P07 - Error Code: 0)
+Migrating schema "public" to version "25 - create listing pois"
+Migrating schema "public" to version "26 - add video url to listings"
+Migrating schema "public" to version "27 - update rls delete policy for rejected"
+Migrating schema "public" to version "28 - extend poi source constraint"
+Migrating schema "public" to version "29 - add listing number"
+Migrating schema "public" to version "30 - add rera number"
+Migrating schema "public" to version "31 - add commercial property types"
+Migrating schema "public" to version "32 - add commercial and rent columns"
+Migrating schema "public" to version "33 - add seller type"
+Migrating schema "public" to version "34 - extend rls for owner role"
+Migrating schema "public" to version "35 - soft delete listings"
+Migrating schema "public" to version "36 - proximity duplicate candidates"
+Migrating schema "public" to version "37 - fix duplicate candidates status casing"
+Migrating schema "public" to version "38 - listing transparency fields"
+Migrating schema "public" to version "39 - price change log paise columns"
+Migrating schema "public" to version "40 - rera possession fields"
+Migrating schema "public" to version "41 - rename dealer to broker expand"
+Migrating schema "public" to version "42 - rename dealer to broker schema"
+Migrating schema "public" to version "43 - create listing status history"
+Migrating schema "public" to version "44 - add last approved snapshot"
+Migrating schema "public" to version "45 - add cancellation reason to viewing requests"
+Migrating schema "public" to version "46 - add trust tier and ranking score"
+Migrating schema "public" to version "47 - create listing verification dimension"
+Migrating schema "public" to version "48 - create authority evidence"
+Migrating schema "public" to version "49 - create listing complaint"
+WARNING: DB: identifier "Authenticated users can file a complaint against a listing they do not own" will be truncated to "Authenticated users can file a complaint against a listing they" (SQL State: 42622 - Error Code: 0)
+Migrating schema "public" to version "50 - add trust columns to profiles"
+Migrating schema "public" to version "51 - create photo hash blocklist"
+Migrating schema "public" to version "52 - add verification asset url"
+Migrating schema "public" to version "53 - add otp lockout columns"
+Migrating schema "public" to version "54 - add location verify rate limit"
+Migrating schema "public" to version "55 - add rejection reason to dimension"
+Migrating schema "public" to version "56 - migrate commercial to granular types"
+Migrating schema "public" to version "57 - add spatial index"
+Migrating schema "public" to version "58 - create schools table"
+Migrating schema "public" to version "59 - expand broker update rls policy"
+Migrating schema "public" to version "60 - convert status enum to varchar"
+Migrating schema "public" to version "61 - convert property type enum to varchar"
+Migrating schema "public" to version "62 - add trust ranking sort index"
+Migrating schema "public" to version "63 - add owner self auth evidence type"
+Migrating schema "public" to version "64 - create identity evidence table"
+Migrating schema "public" to version "66 - extend schools for udise import"
+Migrating schema "public" to version "67 - extend schools add metadata columns"
+Migrating schema "public" to version "68 - add coordinate provenance to schools"
+Migrating schema "public" to version "69 - add prominence tier to schools"
+Migrating schema "public" to version "70 - add area overview stats"
+Migrating schema "public" to version "71 - cities and areas"
+Migrating schema "public" to version "72 - area bbox city slug"
+Migrating schema "public" to version "73 - postgis geog"
+WARNING: DB: extension "postgis" already exists, skipping (SQL State: 42710 - Error Code: 0)
+Migrating schema "public" to version "74 - idx listing area key status created"
+Migrating schema "public" to version "75 - idx schools geog"
+Migrating schema "public" to version "76 - idx schools geog gist"
+Migrating schema "public" to version "77 - area groups schema"
+Migrating schema "public" to version "78 - seed area groups"
+Migrating schema "public" to version "79 - add school area key"
+DB: District 'Udupi': 20 schools, 20 assigned
+DB: Total: 20 schools, 20 assigned
+Migrating schema "public" to version "80 - school area key trigger"
+DB: trigger "trg_school_area_key" for relation "schools" does not exist, skipping
+Migrating schema "public" to version "81 - listing search outbox"
+Migrating schema "public" to version "82 - listing search outbox error column"
+Migrating schema "public" to version "83 - listing search outbox retry"
+Migrating schema "public" to version "84 - add agricultural land fields"
+Migrating schema "public" to version "85 - add listing boundary"
+Migrating schema "public" to version "86 - expand property type constraint agricultural land"
+Migrating schema "public" to version "87 - regional classification schema"
+Migrating schema "public" to version "88 - city regional direction labels"
+Migrating schema "public" to version "89 - add agri structured fields"
+Migrating schema "public" to version "90 - idx property listings agri live"
+Migrating schema "public" to version "91 - normalize agri field values"
+Migrating schema "public" to version "92 - listing quality foundation"
+Migrating schema "public" to version "93 - discover event"
+Migrating schema "public" to version "94 - area intelligence snapshot"
+Migrating schema "public" to version "95 - broker market focus"
+Migrating schema "public" to version "96 - area demand signal"
+Migrating schema "public" to version "97 - broker demand gap state"
+Migrating schema "public" to version "98 - area groups description"
+Migrating schema "public" to version "99 - seed udupi area groups description"
+Migrating schema "public" to version "100 - add area slug to areas"
+Migrating schema "public" to version "101 - restore udupi area groups seed"
+Migrating schema "public" to version "102 - typed listing schema expand and backfill"
+DB: constraint "chk_listing_listing_family" of relation "property_listings" does not exist, skipping
+Migrating schema "public" to version "103 - residential listing fields expand"
+Migrating schema "public" to version "104 - commercial typed write columns"
+WARNING: DB: relation "listing_suitable_uses" already exists, skipping (SQL State: 42P07 - Error Code: 0)
+WARNING: DB: relation "idx_listing_suitable_uses_listing" already exists, skipping (SQL State: 42P07 - Error Code: 0)
+Migrating schema "public" to version "105 - idx property listings purpose live"
+Migrating schema "public" to version "106 - seed bangalore macro region mapping"
+Migrating schema "public" to version "107 - create saved listings"
+Migrating schema "public" to version "108 - fix mukkidipeta north emerging bounds"
+Migrating schema "public" to version "109 - correct bengaluru school area keys"
+DB: V109 udise_code=APIFY-BAN-JAYA-01 : school not present in this environment; no-op.
+DB: V109 udise_code=APIFY-BAN-JAYA-05 : school not present in this environment; no-op.
+DB: V109 udise_code=APIFY-BAN-HEBB-01 : school not present in this environment; no-op.
+DB: V109 udise_code=APIFY-BAN-MARA-04 : school not present in this environment; no-op.
+DB: V109 udise_code=APIFY-BAN-MARA-06 : school not present in this environment; no-op.
+Migrating schema "public" to version "110 - school discover area coverage"
+DB: trigger "trg_sync_school_discover_area_coverage" for relation "public.schools" does not exist, skipping
+DB: trigger "trg_sync_school_discover_area_coverage_insert" for relation "public.schools" does not exist, skipping
+DB: trigger "trg_sync_school_discover_area_coverage_update" for relation "public.schools" does not exist, skipping
+Migrating schema "public" to version "111 - extend school district normalisation"
+Migrating schema "public" to version "112 - resolve thirteen ambiguous school attributions"
+DB: V112 STEP A udise_code=APIFY-BAN-INDI-01 : school not present in this environment; no-op.
+DB: V112 STEP A udise_code=APIFY-BAN-SARJ-01 : school not present in this environment; no-op.
+DB: V112 STEP B: 0 contained coverage row(s) inserted from live-geometry containment (rows already existing as primary/contained for the same school+area are skipped by ON CONFLICT DO NOTHING).
+Migrating schema "public" to version "113 - city region geometry foundation"
+Migrating schema "public" to version "114 - add last confirmed at"
+Migrating schema "public" to version "115 - area onboarding foundation"
+Migrating schema "public" to version "116 - area onboarding apply"
+Migrating schema "public" to version "117 - listing area resolution"
+Migrating schema "public" to version "118 - city launch revision and sandbox"
+Migrating schema "public" to psql:/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/scripts/db/fixtures/discover-smoke-seed.sql:46: NOTICE:  extension "postgis" already exists, skipping
+psql:/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/scripts/db/fixtures/discover-smoke-seed.sql:543: NOTICE:  Seed assertions passed: 12 LIVE [E2E] listings, 4 Manipal, 2 apt, 7 Manipal schools
+psql:/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/scripts/db/fixtures/navigation-hierarchy-fixture-seed.sql:585: NOTICE:  navigation-hierarchy-fixture-seed assertions passed: d:southeast has 3 AREA children, northeast Local Destination cluster has 2 AREA children, full-depth AREA leaf at depth=2, d:southwest has 4 AREA children (including zero-listing Avalahalli), central Local Destination cluster has 2 AREA children at depth 2, root DIRECTION orders [1,2,3,4]
+psql:/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/scripts/db/fixtures/navigation-active-revision-fixture-seed.sql:87: NOTICE:  navigation-active-revision-fixture-seed assertion passed: Bangalore (city_id=1) has PROMOTED city_launch_revision id=1
+psql:/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/scripts/db/fixtures/navigation-hierarchy-fixture-listings-seed.sql:225: NOTICE:  navigation-hierarchy-fixture-listings-seed assertions passed: 4 LIVE listings across d:southeast AREA leaves (2 of which are RR Nagar), 2 LIVE listings across d:northeast Local Destination AREA leaves, 3 LIVE listings across d:southwest AREA leaves, 0 for zero-listing Avalahalli
+psql:/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/scripts/db/fixtures/navigation-hierarchy-fixture-rent-listings-seed.sql:111: WARNING:  navigation-hierarchy-fixture-rent-listings-seed: expected RR Nagar to already carry 1 LIVE sale listing from navigation-hierarchy-fixture-listings-seed.sql, found 2 — run that seed first, or the Buy/Rent count-divergence assertions in e2e/discover/issue-2083-nav-counts-purpose-badge.spec.ts will not hold as documented
+psql:/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/scripts/db/fixtures/navigation-hierarchy-fixture-rent-listings-seed.sql:111: NOTICE:  navigation-hierarchy-fixture-rent-listings-seed assertions passed: RR Nagar has 2 LIVE rent listings (sale sibling count for reference: 2)
+psql:/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/scripts/db/fixtures/navigation-hierarchy-schools-agri-fixture-seed.sql:156: NOTICE:  navigation-hierarchy-schools-agri-fixture-seed: schools resolved area_key IN|KA|Bengaluru|RR Nagar / IN|KA|Bengaluru|Vijayanagar; Koramangala=4 schools, BTM Layout=0 schools
+psql:/Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/scripts/db/fixtures/navigation-hierarchy-schools-agri-fixture-seed.sql:273: NOTICE:  navigation-hierarchy-schools-agri-fixture-seed assertions passed: 2 agri_destination_classification rows for Bangalore, 2 LIVE agri listings for RR Nagar
+version "119 - enforce area group region key disjointness"
+DB: trigger "trg_area_groups_region_key_disjoint" for relation "public.area_groups" does not exist, skipping
+DB: trigger "trg_city_regions_area_group_disjoint" for relation "public.city_regions" does not exist, skipping
+Migrating schema "public" to version "120 - add city launch validation checks"
+Migrating schema "public" to version "121 - navigation nodes and sandbox"
+DB: trigger "trg_navigation_nodes_area_leaf" for relation "public.navigation_nodes" does not exist, skipping
+DB: trigger "trg_sandbox_navigation_nodes_area_leaf" for relation "public.sandbox_navigation_nodes" does not exist, skipping
+Migrating schema "public" to version "122 - navigation overrides"
+Migrating schema "public" to version "123 - navigation direction node type"
+Migrating schema "public" to version "124 - navigation bearing"
+Migrating schema "public" to version "125 - agri destination classification"
+Migrating schema "public" to version "126 - add agri conversion status"
+Migrating schema "public" to version "127 - seed manipal and subordinate locality aliases"
+Migrating schema "public" to version "128 - revoke browser contact column grants"
+DB: function public.admin_find_contact_duplicate_candidates(text,pg_catalog.int4) does not exist, skipping
+Migrating schema "public" to version "129 - deactivate mukkidipeta outlier"
+Migrating schema "public" to version "130 - city launch revision cloned from"
+Migrating schema "public" to version "131 - canonical boundary geometry"
+WARNING: DB: extension "postgis" already exists, skipping (SQL State: 42710 - Error Code: 0)
+Migrating schema "public" to version "132 - create saved searches"
+Successfully applied 131 migrations to schema "public", now at version v132 (execution time 00:01.501s)
+==> Flyway migration complete.
+INSERT 0 1
+==> V65 Java migration record backfilled in flyway_schema_history.
+==> Flyway: 133 rows in flyway_schema_history (expected exactly 133).
+==> PostGIS version (post-migrate): 3.4 USE_GEOS=1 USE_PROJ=1 USE_STATS=1
+==> geog column confirmed on property_listings.
+==> Loading synthetic E2E seed data from /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/scripts/db/fixtures/discover-smoke-seed.sql...
+BEGIN
+CREATE EXTENSION
+INSERT 0 0
+INSERT 0 0
+DO
+INSERT 0 1
+UPDATE 0
+INSERT 0 12
+UPDATE 3
+UPDATE 3
+UPDATE 4
+INSERT 0 3
+DELETE 0
+INSERT 0 26
+INSERT 0 1
+INSERT 0 9
+UPDATE 1
+INSERT 0 2
+DO
+COMMIT
+==> Seed load complete.
+==> Loading Bangalore navigation-hierarchy fixture from /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/scripts/db/fixtures/navigation-hierarchy-fixture-seed.sql...
+BEGIN
+DO
+INSERT 0 1
+INSERT 0 3
+INSERT 0 1
+INSERT 0 1
+INSERT 0 2
+INSERT 0 1
+INSERT 0 4
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 2
+INSERT 0 2
+DO
+INSERT 0 1
+COMMIT
+==> Promoting Bangalore's navigation revision from /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/scripts/db/fixtures/navigation-active-revision-fixture-seed.sql...
+BEGIN
+DO
+INSERT 0 1
+DO
+COMMIT
+==> Loading Bangalore navigation-hierarchy listings from /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/scripts/db/fixtures/navigation-hierarchy-fixture-listings-seed.sql...
+BEGIN
+DO
+INSERT 0 9
+DO
+COMMIT
+==> Bangalore navigation-hierarchy fixture load complete.
+==> Bangalore navigation_nodes count: 20.
+==> Bangalore PROMOTED city_launch_revision count: 1.
+==> Loading Bangalore navigation-hierarchy rent listings from /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/scripts/db/fixtures/navigation-hierarchy-fixture-rent-listings-seed.sql...
+BEGIN
+DO
+INSERT 0 2
+DO
+COMMIT
+==> Loading Bangalore schools + agri-destination fixture from /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/scripts/db/fixtures/navigation-hierarchy-schools-agri-fixture-seed.sql...
+BEGIN
+DO
+INSERT 0 6
+DO
+DO
+INSERT 0 2
+INSERT 0 2
+DO
+COMMIT
+==> Bangalore rent-listings + schools/agri fixture load complete.
+==> Bangalore RR Nagar rent listing count: 2.
+==> Bangalore agri_destination_classification count: 2.
+==> Fixture profile: default (Udupi LEGACY; set E2E_FIXTURE_PROFILE=udupi-canonical for the #2446 canonical-Udupi smoke).
+==> Running row-count validation...
+--- cities ---
+ city_count 
+------------
+          4
+(1 row)
+
+--- areas (Udupi city) ---
+ udupi_area_count 
+------------------
+               12
+(1 row)
+
+--- schools with area_key (Manipal) ---
+ manipal_school_count 
+----------------------
+                    7
+(1 row)
+
+--- LIVE [E2E] listings ---
+ live_e2e_count 
+----------------
+             25
+(1 row)
+
+--- LIVE [E2E] Manipal apartment listings ---
+ manipal_apartment_count 
+-------------------------
+                       2
+(1 row)
+
+--- geog centroid sample (Manipal listings) ---
+         point          
+------------------------
+ POINT(74.7895 13.3545)
+ POINT(74.7852 13.3498)
+(2 rows)
+
+
+==> Fixture ready.
+
+    Container : pg-e2e-issue-2446-udupi-canonical-smoke--44797
+    Port      : 37057
+
+[e2e] Local E2E DB fixture ready (localhost:37057).
+[e2e] Seeding fixture identities (admin / broker / smoke-user)...
+>>> Logging in to Supabase Auth as admin (best-effort)...
+BEGIN
+INSERT 0 1
+INSERT 0 1
+COMMIT
+>>> Local admin identity seeded (auth.users + user_roles 'admin').
+>>> Logging in to Supabase Auth as broker (best-effort)...
+BEGIN
+INSERT 0 1
+INSERT 0 1
+COMMIT
+>>> Local broker identity seeded (auth.users + user_roles 'broker').
+>>> Logging in to Supabase Auth as smoke-user (best-effort)...
+BEGIN
+INSERT 0 1
+INSERT 0 1
+COMMIT
+>>> Local smoke-user identity seeded (auth.users + user_roles 'user').
+[e2e] Starting backend...
+[e2e] Starting frontend...
+[e2e] Waiting for backend on http://localhost:8151...
+[e2e] Backend ready.
+[e2e] Waiting for frontend on http://localhost:5251...
+[e2e] Frontend ready.
+
+[global-setup] Saved storageState for broker: /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/e2e/fixtures/broker-auth.json
+[global-setup] Saved storageState for admin: /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/e2e/fixtures/admin-auth.json
+[global-setup] Saved storageState for user: /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/e2e/fixtures/user-auth.json
+[global-setup] Created DRAFT listing: 34c12436-165f-4dfe-aecb-36f7ed8bfc45
+[global-setup] Set addressConfirmed=true
+[global-setup] Registered 3/3 stub images
+[global-setup] Submitted listing for review (PENDING_REVIEW)
+[global-setup] Listing 34c12436-165f-4dfe-aecb-36f7ed8bfc45 approved — status: LIVE
+[global-setup] Wrote /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/e2e/.test-listing-id (34c12436-165f-4dfe-aecb-36f7ed8bfc45, LIVE)
+
+Running 25 tests using 2 workers
+
+  ✓   1 [full] › e2e/discover-area-cards.spec.ts:42:3 › @integration-ui Discover — area cards (B-switch) › area markers appear on the map for default Udupi city (1.1s)
+  ✓   2 [full] › e2e/discover-area-nav-journey.spec.ts:130:3 › @integration-ui Journey 1 — area marker click → back → forward › clicking area marker pushes areaKey; Back removes it; Forward restores it (1.2s)
+  ✓   4 [full] › e2e/discover-area-nav-journey.spec.ts:206:3 › Journey 2 — bookmarked URL fidelity › J2a: ?city=udupi → instructional panel, area ring markers visible (765ms)
+  ✓   5 [full] › e2e/discover-area-nav-journey.spec.ts:235:3 › Journey 2 — bookmarked URL fidelity › J2b: ?city=udupi&areaKey=... → right panel shows area listings, area markers not visible (631ms)
+  ✓   3 [full] › e2e/discover-area-cards.spec.ts:59:3 › @integration-ui Discover — area cards (B-switch) › clicking an area marker selects the area and shows listing cards in right panel (1.8s)
+  ✓   6 [full] › e2e/discover-area-nav-journey.spec.ts:266:3 › Journey 2 — bookmarked URL fidelity › J2c: ?city=udupi&lat=13.34090&lon=74.74210&zoom=11 → city overview, area markers visible (662ms)
+  ✓   8 [full] › e2e/discover-area-nav-journey.spec.ts:303:3 › Journey 2 — bookmarked URL fidelity › J2d: ?city=udupi&lat=...&zoom=14&areaKey=... → area listings, URL viewport honoured (767ms)
+  ✓   9 [full] › e2e/discover-area-nav-journey.spec.ts:336:3 › Journey 3 — panel Back from bookmarked area URL › panel Back clears areaKey+viewport atomically; ViewportWatcher repopulates lat/lon/zoom (2.0s)
+  ✓  10 [full] › e2e/discover-area-nav-journey.spec.ts:405:3 › Journey 4 — city switch resets area; Back restores prior state › switching city clears areaKey+viewport; browser Back restores Udupi + Manipal selection (769ms)
+  ✘  11 [full] › e2e/discover-correctness-1064.spec.ts:28:3 › @regression-correctness Issue #1064 — Discover correctness (Symptoms 2 + 3) › Spec 2 — Start Over resets URL and viewport to city overview (10.8s)
+  ✘   7 [full] › e2e/discover-area-cards.spec.ts:103:3 › @integration-ui Discover — area cards (B-switch) › switching city replaces area markers with those of the new city (30.1s)
+  ✘  12 [full] › e2e/discover-correctness-1064.spec.ts:62:3 › @regression-correctness Issue #1064 — Discover correctness (Symptoms 2 + 3) › Spec 3 — Malpe school-first deep link renders SchoolsInAreaPanel (16.2s)
+  ✘  13 [full] › e2e/discover-area-cards.spec.ts:215:3 › Discover — right-panel listing cards (#887) › A5 — right panel shows instructional state when no area is selected (8.8s)
+  ✓  15 [full] › e2e/discover-area-cards.spec.ts:233:3 › Discover — right-panel listing cards (#887) › A1 — no teaser strip or floating popup overlays the map (792ms)
+  ✘  14 [full] › e2e/discover-correctness-1067.spec.ts:25:3 › @regression-correctness Issue #1067 — School-first Discover correctness › Spec 1 (AC1+AC2) — Padubidri school-first deep link renders SchoolsInAreaPanel with school names (15.6s)
+  ✘  16 [full] › e2e/discover-area-cards.spec.ts:250:3 › Discover — right-panel listing cards (#887) › A2 — selecting area chip calls city listings endpoint and renders cards in right panel (12.6s)
+  ✘  17 [full] › e2e/discover-correctness-1067.spec.ts:50:3 › @regression-correctness Issue #1067 — School-first Discover correctness › Spec 2 (AC3) — right-panel area card click updates URL AND pans map (10.6s)
+[parity-preflight] Flag OFF — running Postgres baseline path. OpenSearch health check advisory only.
+[parity-preflight] OpenSearch not reachable (advisory for baseline run — not required).
+[parity-preflight] School prefetch OK: id=82d79943-a5b7-4026-a19f-ee4d25454aae lat=13.337 lon=74.795
+  ✓  19 [full] › e2e/discover-opensearch-parity.spec.ts:164:3 › Discover OpenSearch parity [POSTGRES BASELINE PATH] › J1 — area-first anon [POSTGRES BASELINE PATH]: click area marker loads listing cards without auth errors (806ms)
+  ✓  20 [full] › e2e/discover-opensearch-parity.spec.ts:262:3 › Discover OpenSearch parity [POSTGRES BASELINE PATH] › J2 — school-radius anon [POSTGRES BASELINE PATH]: school URL params fire school-radius endpoint and render cards (566ms)
+  -  21 [full] › e2e/discover-opensearch-parity.spec.ts:318:3 › Discover OpenSearch parity [POSTGRES BASELINE PATH] › J3 — school-first auth: RECLASSIFIED justified skip (DEF-D, #1357)
+  ✓  22 [full] › e2e/discover-opensearch-parity.spec.ts:338:3 › Discover OpenSearch parity [POSTGRES BASELINE PATH] › J4 — keyword contextual [POSTGRES BASELINE PATH]: q=apartment filters results; clearing q restores them (2.2s)
+  ✓  23 [full] › e2e/discover-viewport.spec.ts:29:3 › @integration-ui Discover — viewport restoration on browser Back/Forward (#1043) › browser Back restores map viewport from URL state (1.1s)
+  ✓  24 [full] › e2e/discover-viewport.spec.ts:70:3 › @integration-ui Discover — viewport restoration on browser Back/Forward (#1043) › browser Forward reapplies map viewport from URL state (905ms)
+  ✘  18 [full] › e2e/discover-area-cards.spec.ts:286:3 › Discover — right-panel listing cards (#887) › A3 — listing cards show image area, property type, and price gate; anonymous mode expected (13.1s)
+  ✘  25 [full] › e2e/discover-area-cards.spec.ts:323:3 › Discover — right-panel listing cards (#887) › A4 — clicking a listing card navigates to /listing/{id} (12.6s)
+[global-teardown] Admin deleted listing 34c12436-165f-4dfe-aecb-36f7ed8bfc45 (status 204)
+[global-teardown] Removed /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/e2e/.test-listing-id
+
+
+  1) [full] › e2e/discover-area-cards.spec.ts:103:3 › @integration-ui Discover — area cards (B-switch) › switching city replaces area markers with those of the new city 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for locator('[role="combobox"]').filter({ hasText: /udupi/i })
+
+
+      113 |     // ── Step 2: Switch to Kundapur ────────────────────────────────────────────
+      114 |     const cityTrigger = page.locator('[role="combobox"]').filter({ hasText: /udupi/i });
+    > 115 |     await cityTrigger.click();
+          |                       ^
+      116 |     await page.getByRole('option', { name: 'Kundapur', exact: true }).click();
+      117 |
+      118 |     // ── Step 3: URL reflects new city ─────────────────────────────────────────
+        at /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/e2e/discover-area-cards.spec.ts:115:23
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/discover-area-cards--integ-51610--with-those-of-the-new-city-full/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/discover-area-cards--integ-51610--with-those-of-the-new-city-full/error-context.md
+
+  2) [full] › e2e/discover-area-cards.spec.ts:215:3 › Discover — right-panel listing cards (#887) › A5 — right panel shows instructional state when no area is selected 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('discover-right-panel').getByText('Find properties your way')
+    Expected: visible
+    Timeout: 8000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 8000ms
+      - waiting for getByTestId('discover-right-panel').getByText('Find properties your way')
+
+
+      221 |
+      222 |     // Instructional state: GuidedEntryPanel with journey cards
+    > 223 |     await expect(rightPanel.getByText('Find properties your way')).toBeVisible({ timeout: 8_000 });
+          |                                                                    ^
+      224 |     await expect(rightPanel.getByTestId('journey-card-area-first')).toBeVisible();
+      225 |
+      226 |     // No listing cards rendered yet
+        at /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/e2e/discover-area-cards.spec.ts:223:68
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/discover-area-cards-Discov-0bbaa-te-when-no-area-is-selected-full/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/discover-area-cards-Discov-0bbaa-te-when-no-area-is-selected-full/error-context.md
+
+  3) [full] › e2e/discover-area-cards.spec.ts:250:3 › Discover — right-panel listing cards (#887) › A2 — selecting area chip calls city listings endpoint and renders cards in right panel 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.leaflet-marker-icon.area-marker').first()
+    Expected: visible
+    Timeout: 12000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 12000ms
+      - waiting for locator('.leaflet-marker-icon.area-marker').first()
+
+
+      261 |     // Wait for area markers to be visible as the readiness signal
+      262 |     const areaMarker = page.locator(AREA_MARKER).first();
+    > 263 |     await expect(areaMarker).toBeVisible({ timeout: 12_000 });
+          |                              ^
+      264 |
+      265 |     // Capture the city listings request
+      266 |     const listingsRequestPromise = page.waitForRequest(
+        at /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/e2e/discover-area-cards.spec.ts:263:30
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/discover-area-cards-Discov-70c44-enders-cards-in-right-panel-full/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/discover-area-cards-Discov-70c44-enders-cards-in-right-panel-full/error-context.md
+
+  4) [full] › e2e/discover-area-cards.spec.ts:286:3 › Discover — right-panel listing cards (#887) › A3 — listing cards show image area, property type, and price gate; anonymous mode expected 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.leaflet-marker-icon.area-marker').first()
+    Expected: visible
+    Timeout: 12000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 12000ms
+      - waiting for locator('.leaflet-marker-icon.area-marker').first()
+
+
+      295 |
+      296 |     const areaMarker = page.locator(AREA_MARKER).first();
+    > 297 |     await expect(areaMarker).toBeVisible({ timeout: 12_000 });
+          |                              ^
+      298 |     await areaMarker.click({ force: true });
+      299 |
+      300 |     // Wait for cards to render after area selection
+        at /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/e2e/discover-area-cards.spec.ts:297:30
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/discover-area-cards-Discov-e8f70-ate-anonymous-mode-expected-full/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/discover-area-cards-Discov-e8f70-ate-anonymous-mode-expected-full/error-context.md
+
+  5) [full] › e2e/discover-area-cards.spec.ts:323:3 › Discover — right-panel listing cards (#887) › A4 — clicking a listing card navigates to /listing/{id} 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.leaflet-marker-icon.area-marker').first()
+    Expected: visible
+    Timeout: 12000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 12000ms
+      - waiting for locator('.leaflet-marker-icon.area-marker').first()
+
+
+      330 |
+      331 |     const areaMarker = page.locator(AREA_MARKER).first();
+    > 332 |     await expect(areaMarker).toBeVisible({ timeout: 12_000 });
+          |                              ^
+      333 |     await areaMarker.click({ force: true });
+      334 |
+      335 |     // Wait for cards
+        at /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/e2e/discover-area-cards.spec.ts:332:30
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/discover-area-cards-Discov-cf786-rd-navigates-to-listing-id--full/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/discover-area-cards-Discov-cf786-rd-navigates-to-listing-id--full/error-context.md
+
+  6) [full] › e2e/discover-correctness-1064.spec.ts:28:3 › @regression-correctness Issue #1064 — Discover correctness (Symptoms 2 + 3) › Spec 2 — Start Over resets URL and viewport to city overview 
+
+    TimeoutError: locator.waitFor: Timeout 10000ms exceeded.
+    Call log:
+      - waiting for getByTestId('start-over-button').first() to be visible
+
+
+      45 |     // Step 2: click Start Over (right-panel header).
+      46 |     const startOver = page.getByTestId('start-over-button').first();
+    > 47 |     await startOver.waitFor({ state: 'visible', timeout: 10_000 });
+         |                     ^
+      48 |     await startOver.click();
+      49 |
+      50 |     // Step 3a: URL becomes ?city=udupi (areaKey + zoom + lat/lon + journey cleared).
+        at /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/e2e/discover-correctness-1064.spec.ts:47:21
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/discover-correctness-1064--daa11-d-viewport-to-city-overview-full/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/discover-correctness-1064--daa11-d-viewport-to-city-overview-full/error-context.md
+
+  7) [full] › e2e/discover-correctness-1064.spec.ts:62:3 › @regression-correctness Issue #1064 — Discover correctness (Symptoms 2 + 3) › Spec 3 — Malpe school-first deep link renders SchoolsInAreaPanel 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: /Schools in Malpe/i, level: 2 })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 15000ms
+      - waiting for getByRole('heading', { name: /Schools in Malpe/i, level: 2 })
+
+
+      76 |     await expect(
+      77 |       page.getByRole('heading', { name: /Schools in Malpe/i, level: 2 }),
+    > 78 |     ).toBeVisible({ timeout: 15_000 });
+         |       ^
+      79 |
+      80 |     // Assert at least one known Malpe school name is visible (data flowed through
+      81 |     // the panel correctly).
+        at /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/e2e/discover-correctness-1064.spec.ts:78:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/discover-correctness-1064--f6866--renders-SchoolsInAreaPanel-full/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/discover-correctness-1064--f6866--renders-SchoolsInAreaPanel-full/error-context.md
+
+  8) [full] › e2e/discover-correctness-1067.spec.ts:25:3 › @regression-correctness Issue #1067 — School-first Discover correctness › Spec 1 (AC1+AC2) — Padubidri school-first deep link renders SchoolsInAreaPanel with school names 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: /Schools in Padubidri/i, level: 2 })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 15000ms
+      - waiting for getByRole('heading', { name: /Schools in Padubidri/i, level: 2 })
+
+
+      35 |     await expect(
+      36 |       page.getByRole('heading', { name: /Schools in Padubidri/i, level: 2 }),
+    > 37 |     ).toBeVisible({ timeout: 15_000 });
+         |       ^
+      38 |
+      39 |     // AC2: at least one of the three known Padubidri school names is visible.
+      40 |     const knownSchoolPattern = new RegExp(
+        at /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/e2e/discover-correctness-1067.spec.ts:37:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/discover-correctness-1067--2d607-AreaPanel-with-school-names-full/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/discover-correctness-1067--2d607-AreaPanel-with-school-names-full/error-context.md
+
+  9) [full] › e2e/discover-correctness-1067.spec.ts:50:3 › @regression-correctness Issue #1067 — School-first Discover correctness › Spec 2 (AC3) — right-panel area card click updates URL AND pans map 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.leaflet-marker-icon.area-marker').first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 10000ms
+      - waiting for locator('.leaflet-marker-icon.area-marker').first()
+
+
+      53 |
+      54 |     // Wait for area markers — confirms useDiscoverAreas hydrated.
+    > 55 |     await expect(page.locator(AREA_MARKER).first()).toBeVisible({ timeout: 10_000 });
+         |                                                     ^
+      56 |
+      57 |     // Find the Padubidri area card in the right panel. SchoolBrowsePanel renders
+      58 |     // each area as a <button data-testid="area-card"> with the area name as the
+        at /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke/e2e/discover-correctness-1067.spec.ts:55:53
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/discover-correctness-1067--fdb8a-ck-updates-URL-AND-pans-map-full/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/discover-correctness-1067--fdb8a-ck-updates-URL-AND-pans-map-full/error-context.md
+
+  9 failed
+    [full] › e2e/discover-area-cards.spec.ts:103:3 › @integration-ui Discover — area cards (B-switch) › switching city replaces area markers with those of the new city 
+    [full] › e2e/discover-area-cards.spec.ts:215:3 › Discover — right-panel listing cards (#887) › A5 — right panel shows instructional state when no area is selected 
+    [full] › e2e/discover-area-cards.spec.ts:250:3 › Discover — right-panel listing cards (#887) › A2 — selecting area chip calls city listings endpoint and renders cards in right panel 
+    [full] › e2e/discover-area-cards.spec.ts:286:3 › Discover — right-panel listing cards (#887) › A3 — listing cards show image area, property type, and price gate; anonymous mode expected 
+    [full] › e2e/discover-area-cards.spec.ts:323:3 › Discover — right-panel listing cards (#887) › A4 — clicking a listing card navigates to /listing/{id} 
+    [full] › e2e/discover-correctness-1064.spec.ts:28:3 › @regression-correctness Issue #1064 — Discover correctness (Symptoms 2 + 3) › Spec 2 — Start Over resets URL and viewport to city overview 
+    [full] › e2e/discover-correctness-1064.spec.ts:62:3 › @regression-correctness Issue #1064 — Discover correctness (Symptoms 2 + 3) › Spec 3 — Malpe school-first deep link renders SchoolsInAreaPanel 
+    [full] › e2e/discover-correctness-1067.spec.ts:25:3 › @regression-correctness Issue #1067 — School-first Discover correctness › Spec 1 (AC1+AC2) — Padubidri school-first deep link renders SchoolsInAreaPanel with school names 
+    [full] › e2e/discover-correctness-1067.spec.ts:50:3 › @regression-correctness Issue #1067 — School-first Discover correctness › Spec 2 (AC3) — right-panel area card click updates URL AND pans map 
+  1 skipped
+  15 passed (1.5m)
+scripts/run-e2e-local.sh: line 109: 46213 Terminated: 15          "$SCRIPT_DIR/../apps/api/run-local.sh" > "$BACKEND_LOG" 2>&1
+[launcher] EXIT=1

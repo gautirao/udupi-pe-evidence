@@ -1,0 +1,17 @@
+{
+  "profile": "default",
+  "base": "http://localhost:5251",
+  "url_after_load": "http://localhost:5251/discover?city=udupi&scope=",
+  "counts": {
+    "legacy_area_marker": 3,
+    "canonical_area_destination_marker": 0,
+    "canonical_area_single_marker": 0,
+    "canonical_area_visual_cluster_marker": 0
+  },
+  "navigation_resolve_responses": [
+    "404 http://localhost:8151/api/discover/cities/udupi/navigation/resolve?node=root",
+    "404 http://localhost:8151/api/discover/cities/udupi/navigation/resolve?node=root",
+    "404 http://localhost:8151/api/discover/cities/udupi/navigation/resolve?node=root",
+    "404 http://localhost:8151/api/discover/cities/udupi/navigation/resolve?node=root"
+  ]
+}

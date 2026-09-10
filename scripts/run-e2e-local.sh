@@ -156,9 +156,15 @@ E2E_DB_PORT_BASE=$(( (BACKEND_PORT * 7) % 20000 + 20000 ))
 E2E_DB_PORT="$(find_free_port "$E2E_DB_PORT_BASE")"
 
 echo "[e2e] Starting ephemeral local Postgres/PostGIS fixture ($E2E_DB_CONTAINER_NAME on port $E2E_DB_PORT)..."
+# #2446: E2E_FIXTURE_PROFILE (unset = default legacy-Udupi fixture; `udupi-canonical`
+# = the dedicated canonical-Udupi smoke profile) is passed through EXPLICITLY so the
+# selection is visible in this log rather than inherited silently. It only ever
+# changes what is seeded into THIS run's disposable container.
+echo "[e2e] Fixture profile: ${E2E_FIXTURE_PROFILE:-default}"
 PG_TEST_CONTAINER_NAME="$E2E_DB_CONTAINER_NAME" \
 PG_TEST_PORT="$E2E_DB_PORT" \
 PG_TEST_PASSWORD="$E2E_DB_PASSWORD" \
+E2E_FIXTURE_PROFILE="${E2E_FIXTURE_PROFILE:-}" \
 bash "$SCRIPT_DIR/db/restore-test-fixture.sh" | grep -v '^postgresql://'
 RESTORE_EXIT="${PIPESTATUS[0]}"
 if [ "$RESTORE_EXIT" -ne 0 ]; then

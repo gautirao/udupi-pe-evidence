@@ -1,0 +1,28 @@
+# #2446 — live probes against the DEFAULT-profile stack (legacy-run-1), taken while Playwright was running
+# Stack: scripts/run-e2e-local.sh launched from the WORKTREE cwd
+#   /Users/gouthamrao/projects/udupi-property-explorer-worktrees/issue-2446-udupi-canonical-smoke
+#   branch issue-2446-canonical-udupi-smoke-fixture, E2E_FIXTURE_PROFILE unset (default)
+#   frontend :5251, backend :8151, ephemeral container pg-e2e-issue-2446-udupi-canonical-smoke--44797 on :37057
+
+$ curl -s -w "HTTP %{http_code}\n" "http://localhost:8151/api/discover/cities/udupi/navigation/resolve?node=root"
+HTTP 404
+  (body saved as default-profile-resolve-root.json)
+  -> compare canonical profile: HTTP 200 with node.children = [d:n, d:s] (canonical-profile-run-1-resolve-root.json shows the
+     run-1 single-Direction payload; run 2 adds d:s — see the J0 assertion in the spec)
+
+$ psql -h localhost -p 37057 -U postgres -d postgres -t -A \
+    -c "SELECT COUNT(*) FROM navigation_nodes n JOIN cities c ON c.id=n.city_id WHERE c.slug='udupi'" \
+    -c "SELECT COUNT(*) FROM city_launch_revision r JOIN cities c ON c.id=r.city_id WHERE c.slug='udupi' AND r.lifecycle_status='PROMOTED' AND r.superseded_by IS NULL" \
+    -c "SELECT COUNT(*) FROM city_regions r JOIN cities c ON c.id=r.city_id WHERE c.slug='udupi'" \
+    -c "SELECT COUNT(*) FROM navigation_nodes n JOIN cities c ON c.id=n.city_id WHERE c.slug='bangalore'"
+udupi navigation_nodes=0
+udupi PROMOTED revisions=0
+udupi city_regions=0
+bangalore navigation_nodes=20
+
+Reading: on the default profile Udupi has NO canonical hierarchy and NO promoted revision, so
+/navigation/resolve is 404 for udupi and the Discover map takes the LEGACY AreaMarkerLayer path
+(`.leaflet-marker-icon.area-marker`) — exactly the state before this branch. Bangalore's
+canonical rows (20 nodes) are untouched.
+
+404 body: {"error":"City has no active navigation hierarchy"}
