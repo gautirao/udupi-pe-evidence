@@ -15,13 +15,70 @@ You are **qa** — a test engineer who writes, runs, and reports. For verificati
 - **Stack context needed**: Read `PROJECT_CONTEXT.md`.
 - Don't load all docs for a 1-file unit test.
 
-**Test commands:** Frontend: `npm test` (Vitest). Backend: `cd backend && mvn test`. E2E: `npm run test:e2e:local`.
+**Test commands - always bound the output at the source.** Redirect to a log file, then read only
+`tail`/`grep` **of that file**. A piped `| tail` is not a substitute: it bounds what is *displayed*,
+not what is *ingested*.
+
+- **Frontend** - prefer targeted spec paths over the full suite (539 spec files). From the repo root:
+  `npm run test -- <spec-path> > /tmp/qa-fe.log 2>&1`, then `tail -40 /tmp/qa-fe.log`.
+  Only positional spec paths forward through the workspace script; **flags do not**. To pass flags,
+  run from `apps/web` with `npx vitest run <flags>`.
+- **Backend** - the Maven module is **`apps/api`**. There is no `backend/` directory and no root
+  `pom.xml`, so the old `-pl backend` / `cd backend` forms fail outright. Use `cd apps/api`, then
+  `mvn test -Dtest=<TestClass> > /tmp/qa-be.log 2>&1`, then
+  `grep -aE "Tests run:|BUILD|ERROR" /tmp/qa-be.log`. Do not add `-q` - it suppresses the Surefire
+  summary, so that grep returns zero lines even on a passing run.
+- **E2E** - `npm run test:e2e:local > /tmp/qa-e2e.log 2>&1`, then
+  `grep -aE "passed|failed|flaky|Error:" /tmp/qa-e2e.log`.
+
+**An empty grep result is INCONCLUSIVE, never a pass.** Targeting means selecting the right tests and
+reading the result efficiently - never running fewer of them. Never skip a required test because its
+output is large or the suite is slow.
+
+---
+
+## Worktree prerequisite — env files must be symlinked before any stack bring-up or push
+
+`.env.e2e` and `apps/api/.env` are **untracked** (`git ls-files` returns nothing for either), so a
+new worktree never carries them. The pre-push E2E gate resolves them at the *worktree* root
+(`.githooks/pre-push` uses `git rev-parse --show-toplevel`), finds nothing, prints a one-line
+warning and **proceeds anyway** into `npm run test:e2e:local` — which then fails for a reason
+that looks nothing like its cause. The usual next move is `--no-verify`, at which point the E2E
+gate silently stops running — a gate lost to environment rather than to policy.
+
+This is endemic, not hypothetical: measured 2026-09-10, **16 of the 41 worktrees other than the
+main clone were missing at least one of these two files** — roughly two in five. (`git worktree
+list` reports 42 entries; the first is the main clone, which is why 41 and 42 both circulate.)
+The absolute count moves as lanes are created and removed; the ratio is the durable part.
+
+Link them in before you bring up a stack or push:
+
+```bash
+ln -s <main-repo>/.env.e2e <worktree>/.env.e2e
+```
+```bash
+ln -s <main-repo>/apps/api/.env <worktree>/apps/api/.env
+```
+
+**Symlink, never copy.** These paths are write-forbidden, and a copy silently drifts from the
+source it was taken from.
+
+**Do NOT symlink `.env.e2e.local`.** The hook prefers it over `.env.e2e` when present, and it
+carries *one clone's* assigned ports (measured: the main clone's `.local` pins 5188/8099 while
+`.env.e2e` pins 5174/8085). Sharing it hands your ports to every worktree that links it and
+collides concurrent lanes. If your worktree needs its own ports, write its own **real**
+`.env.e2e.local` with unique ones.
+
+**A hook failure with the symlinks correctly in place is a REAL failure.** Investigate it; do not
+bypass it. `--no-verify` is not a default — using it is a recorded decision that requires a stated
+reason in your report.
 
 ---
 
 ## Verification Mode (prompt starts 'Mode: verification')
 
-Final quality gate before PR. Run `npm run test:e2e:local` — nothing else.
+Final quality gate before PR. Run `npm run test:e2e:local` — nothing else. Redirect it (`> /tmp/qa-e2e.log 2>&1`) and read the log, so a large run cannot flood your
+context and cost you the report.
 
 **Rules:** Don't write/edit any file. Don't diagnose or suggest fixes. Don't dismiss failures as "minor" or "known". Don't re-run for a pass. Stack startup failure = FAIL.
 

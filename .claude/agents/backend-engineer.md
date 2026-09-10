@@ -99,12 +99,83 @@ Read existing JWT flow before touching security config. Authentication (valid to
 **New endpoints**: minimum one `@WebMvcTest` happy path + one error path.
 **Service logic**: Mockito unit tests. **Repository**: `@DataJpaTest`.
 
+**Bound every command's output at the source.** Redirect to a log file, then read only
+`tail`/`grep` **of that file**. A piped `| tail` is not a substitute — it bounds what is
+*displayed*, not what is *ingested*.
+
+The Maven module is **`apps/api`**. There is no root `pom.xml`, so `-pl backend` fails with
+"Could not find the selected project in the reactor".
+
+Targeted (default — resolve the covering test classes explicitly):
+
 ```bash
-mvn test -pl backend -Dtest=<TestClass>   # targeted
-mvn test -pl backend                      # full suite
+cd apps/api
+```
+```bash
+mvn test -Dtest=<TestClass> > /tmp/be-test.log 2>&1
+```
+```bash
+tail -40 /tmp/be-test.log
 ```
 
+Full suite — slow, and starts Testcontainers. Run it when the change is cross-cutting (touches
+shared utilities, security/auth config, core domain logic, or more than one package), always
+redirected, and read only the summary. **If unsure, run the full suite.**
+
+```bash
+mvn test > /tmp/be-suite.log 2>&1
+```
+```bash
+grep -aE "Tests run:|BUILD|ERROR" /tmp/be-suite.log
+```
+
+Do **not** add `-q`. Measured 2026-09-10: `mvn -q test` suppresses the Surefire summary entirely, so
+this grep returns **zero lines on a passing run** — indistinguishable from a run that never happened.
+**An empty grep result is INCONCLUSIVE, never a pass.** If it comes back empty, re-run without `-q`
+and read the log again before reporting anything.
+
+**Never skip a required test because the output is large or the suite is slow.** Bound the read;
+do not reduce the run. If you cannot bound something, say so in your report.
+
 Broken existing test + correct change → update test and explain.
+
+---
+
+## Worktree prerequisite — env files must be symlinked before any stack bring-up or push
+
+`.env.e2e` and `apps/api/.env` are **untracked** (`git ls-files` returns nothing for either), so a
+new worktree never carries them. The pre-push E2E gate resolves them at the *worktree* root
+(`.githooks/pre-push` uses `git rev-parse --show-toplevel`), finds nothing, prints a one-line
+warning and **proceeds anyway** into `npm run test:e2e:local` — which then fails for a reason
+that looks nothing like its cause. The usual next move is `--no-verify`, at which point the E2E
+gate silently stops running — a gate lost to environment rather than to policy.
+
+This is endemic, not hypothetical: measured 2026-09-10, **16 of the 41 worktrees other than the
+main clone were missing at least one of these two files** — roughly two in five. (`git worktree
+list` reports 42 entries; the first is the main clone, which is why 41 and 42 both circulate.)
+The absolute count moves as lanes are created and removed; the ratio is the durable part.
+
+Link them in before you bring up a stack or push:
+
+```bash
+ln -s <main-repo>/.env.e2e <worktree>/.env.e2e
+```
+```bash
+ln -s <main-repo>/apps/api/.env <worktree>/apps/api/.env
+```
+
+**Symlink, never copy.** These paths are write-forbidden, and a copy silently drifts from the
+source it was taken from.
+
+**Do NOT symlink `.env.e2e.local`.** The hook prefers it over `.env.e2e` when present, and it
+carries *one clone's* assigned ports (measured: the main clone's `.local` pins 5188/8099 while
+`.env.e2e` pins 5174/8085). Sharing it hands your ports to every worktree that links it and
+collides concurrent lanes. If your worktree needs its own ports, write its own **real**
+`.env.e2e.local` with unique ones.
+
+**A hook failure with the symlinks correctly in place is a REAL failure.** Investigate it; do not
+bypass it. `--no-verify` is not a default — using it is a recorded decision that requires a stated
+reason in your report.
 
 ---
 
