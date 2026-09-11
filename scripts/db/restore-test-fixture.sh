@@ -52,6 +52,13 @@ NAV_HIERARCHY_LISTINGS_SEED_FILE="${SCRIPT_DIR}/fixtures/navigation-hierarchy-fi
 # closed with 503 AGRI_DESTINATIONS_NOT_YET_PROMOTED — see AgriDestinationPortReadinessCheck.
 NAV_HIERARCHY_RENT_LISTINGS_SEED_FILE="${SCRIPT_DIR}/fixtures/navigation-hierarchy-fixture-rent-listings-seed.sql"
 NAV_SCHOOLS_AGRI_SEED_FILE="${SCRIPT_DIR}/fixtures/navigation-hierarchy-schools-agri-fixture-seed.sql"
+# Commercial fixture inventory. DEFAULT list, deliberately NOT an opt-in profile: CI's merge gate
+# never sets E2E_FIXTURE_PROFILE, so an opt-in Commercial profile would have zero blast radius AND
+# deliver nothing — every Commercial assertion in the suite would stay unfalsifiable while looking
+# covered. Adds LISTINGS ONLY (no navigation_nodes row) to the existing, spec-unreferenced AREA leaf
+# IN|KA|Bengaluru|Sanjeevini Nagar, so no parent's child count moves — see the file's own header for
+# the measured placement rationale.
+COMMERCIAL_LISTINGS_SEED_FILE="${SCRIPT_DIR}/fixtures/commercial-listings-seed.sql"
 
 # #2446 (owner ruling Option 2): OPTIONAL, OPT-IN fixture profile. The default seed list above is
 # deliberately untouched — Udupi stays LEGACY in the default fixture so the six legacy Udupi specs
@@ -113,7 +120,8 @@ if [[ ! -f "${SEED_FILE}" ]]; then
 fi
 
 for NAV_FILE in "${NAV_HIERARCHY_SEED_FILE}" "${NAV_ACTIVE_REVISION_SEED_FILE}" "${NAV_HIERARCHY_LISTINGS_SEED_FILE}" \
-    "${NAV_HIERARCHY_RENT_LISTINGS_SEED_FILE}" "${NAV_SCHOOLS_AGRI_SEED_FILE}"; do
+    "${NAV_HIERARCHY_RENT_LISTINGS_SEED_FILE}" "${NAV_SCHOOLS_AGRI_SEED_FILE}" \
+    "${COMMERCIAL_LISTINGS_SEED_FILE}"; do
   if [[ ! -f "${NAV_FILE}" ]]; then
     echo "ERROR: Navigation-hierarchy fixture seed file not found: ${NAV_FILE}" >&2
     exit 1
@@ -469,6 +477,32 @@ else
     exit 1
   fi
   echo "==> Bangalore agri_destination_classification count: ${BANGALORE_AGRI_DESTINATION_COUNT}."
+
+  # ---------------------------------------------------------------------------
+  # Commercial fixture inventory. Applied after the nav-hierarchy seeds because it
+  # reuses the synthetic [E2E] broker from discover-smoke-seed.sql and targets an
+  # AREA leaf that must already exist. Adds NO navigation_nodes row.
+  #
+  # The seed file carries its own three-arm acceptance test (no-filter / Residential
+  # / Commercial) which RAISEs internally. This gate is the same defence-in-depth as
+  # the Bangalore gates above: a SELECT COUNT(*) returning 0 is a successful query,
+  # not a psql error, so `set -e` alone would not catch a future regression that
+  # silently no-ops this seed.
+  # ---------------------------------------------------------------------------
+  echo "==> Loading Commercial fixture inventory from ${COMMERCIAL_LISTINGS_SEED_FILE}..."
+  PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" \
+    -d "${DB_NAME}" -v ON_ERROR_STOP=1 -f "${COMMERCIAL_LISTINGS_SEED_FILE}"
+
+  COMMERCIAL_LISTING_COUNT=$(PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" \
+    -d "${DB_NAME}" -t -A \
+    -c "SELECT COUNT(*) FROM property_listings
+          WHERE status = 'LIVE' AND archived_at IS NULL AND is_duplicate = false
+            AND property_type IN ('commercial','commercial_building','warehouse','commercial_land');" 2>/dev/null || echo "0")
+  if [[ "${COMMERCIAL_LISTING_COUNT}" -eq 0 ]]; then
+    echo "ERROR: LIVE commercial-family listing count is 0 after loading ${COMMERCIAL_LISTINGS_SEED_FILE} — fixture did not land. Every Commercial assertion in the suite would pass vacuously." >&2
+    exit 1
+  fi
+  echo "==> LIVE commercial-family listing count: ${COMMERCIAL_LISTING_COUNT}."
 
   # ---------------------------------------------------------------------------
   # #2446 opt-in profile: canonical Udupi (isolated smoke only). Applied LAST so
