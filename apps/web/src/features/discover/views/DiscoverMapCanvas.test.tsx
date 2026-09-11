@@ -1009,3 +1009,61 @@ describe('DiscoverMapCanvas — Issue #2456 (owner ruling C2): draft members cro
     expect(readMembers(screen.getByTestId('property-map-mock'))).toBeNull();
   });
 });
+
+// Issue #2478 — the floating scope-summary overlay (`ActiveScopeChip`) has
+// been removed entirely (its summary now lives inside AreaSelectedPanel
+// instead); this asserts it is genuinely UNMOUNTED, not merely hidden —
+// `queryByTestId(...)` + `not.toBeInTheDocument()` fails a `display:none` /
+// `hidden` / `opacity:0` regression just as loudly as a real re-mount would,
+// which a `not.toBeVisible()` assertion would NOT.
+describe('DiscoverMapCanvas — Issue #2478: floating ActiveScopeChip overlay removed (unmounted, not hidden)', () => {
+  const COMMITTED_VIEWPORT_NAV_OVERRIDE = {
+    active: {
+      kind: 'VIEWPORT' as const,
+      bounds: { s: 12.9, w: 77.5, n: 13.1, e: 77.7 },
+    },
+    previous: null,
+  };
+  const COMMITTED_POLYGON_NAV_OVERRIDE = {
+    active: {
+      kind: 'POLYGON' as const,
+      coordinates: [
+        [77.5, 12.9],
+        [77.7, 12.9],
+        [77.7, 13.1],
+        [77.5, 13.1],
+        [77.5, 12.9],
+      ] as [number, number][],
+    },
+    previous: null,
+  };
+
+  afterEach(() => {
+    // BASE_NAV is a shared hoisted fixture read by every test in this file —
+    // restore it after any test here that mutates resultScope (same
+    // established pattern as the AREA_SET describe block's own afterEach
+    // above).
+    BASE_NAV.resultScope = undefined;
+  });
+
+  it('renders NO active-scope-chip overlay when a VIEWPORT scope is committed', () => {
+    BASE_NAV.resultScope = COMMITTED_VIEWPORT_NAV_OVERRIDE;
+
+    renderCanvas(<DiscoverMapCanvas {...baseProps()} />);
+
+    // Not-in-document, not merely not-visible — the whole point of this
+    // test is to catch a CSS-hide regression, which a toBeVisible() check
+    // would silently pass.
+    expect(screen.queryByTestId('active-scope-chip-viewport')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('active-scope-chip-polygon')).not.toBeInTheDocument();
+  });
+
+  it('renders NO active-scope-chip overlay when a POLYGON scope is committed', () => {
+    BASE_NAV.resultScope = COMMITTED_POLYGON_NAV_OVERRIDE;
+
+    renderCanvas(<DiscoverMapCanvas {...baseProps()} />);
+
+    expect(screen.queryByTestId('active-scope-chip-viewport')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('active-scope-chip-polygon')).not.toBeInTheDocument();
+  });
+});

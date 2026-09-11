@@ -167,51 +167,40 @@ test.describe('#2419 PR-1 — committed POLYGON scope chip', () => {
       await page.setViewportSize(viewport);
       await page.goto(committedPolygonUrl());
 
-      // The chip lives inside the map canvas, and below the lg breakpoint the
-      // shell does not mount that canvas at all until the shopper opens the
-      // Map view — verified here, not assumed: at 390x844 `.leaflet-container`
-      // is absent from the DOM on load, so this switch must happen BEFORE the
-      // app-loaded check rather than after it.
-      if (viewport.width < 1024) {
-        const mapTrigger = page.getByTestId('control-bar-map-trigger');
-        await expect(mapTrigger.first()).toBeVisible({ timeout: 30_000 });
-        await mapTrigger.first().click();
+      // Issue #2478 moved the scope surface off the map canvas and into the
+      // panel's scope bar. Unlike the retired map-overlay chip, the panel
+      // renders in the default mobile LIST presentation, so — verified here,
+      // not assumed — no Map-view switch is needed to reach it on mobile.
+      // `.leaflet-container` is still absent from the DOM in mobile List view
+      // (panel and map are mutually exclusive below the lg breakpoint), so
+      // assertAppActuallyLoaded (which waits on the map) only applies where
+      // the map is guaranteed to be mounted: desktop, where panel and map
+      // render side-by-side. On mobile the scope-bar assertion below is
+      // itself the load proof — it cannot pass vacuously, since it requires
+      // the element to actually exist and be visible.
+      if (viewport.width >= 1024) {
+        await assertAppActuallyLoaded(page);
       }
 
-      await assertAppActuallyLoaded(page);
+      const scopeBar = page.getByTestId('area-panel-scope-bar-polygon');
+      await expect(scopeBar).toBeVisible({ timeout: 30_000 });
+      await expect(scopeBar).toContainText('Drawn area');
 
-      const chip = page.getByTestId('active-scope-chip-polygon');
-      await expect(chip).toBeVisible({ timeout: 20_000 });
-      await expect(chip).toContainText('Drawn area');
-
-      // The retired MapStatsBar wording must not co-exist with the chip.
+      // The retired MapStatsBar wording must not co-exist with the scope bar.
       await expect(page.getByText('Area search', { exact: true })).toHaveCount(0);
 
-      await expect(chip.getByRole('button', { name: /return to/i })).toBeVisible();
+      const returnButton = page.getByTestId('area-panel-scope-bar-return');
+      await expect(returnButton).toBeVisible();
+      await expect(returnButton).toHaveAccessibleName(/return to/i);
 
-      // #2419's mandatory desktop and mobile rule: the scope surface must not
-      // be obscured by other map chrome. Real-browser evidence at 1366x768
-      // caught this chip rendering in normal flow, landing in the same
-      // top-left slot as DiscoverMapContextOverlay's city chip and becoming
-      // partially unreadable.
-      //
-      // The assertion is positional rather than a pairwise overlap test
-      // against a text locator: "Bangalore" appears in several places on this
-      // page, so matching it by text tested the locator's guesswork more than
-      // the product. What actually matters is that the chip clears the top
-      // row entirely — the row the city chip holds on the left and
-      // SearchThisAreaCta holds in the centre.
-      const chipBox = await chip.boundingBox();
-      const mapBox = await page.locator('.leaflet-container').boundingBox();
-      expect(chipBox).not.toBeNull();
-      expect(mapBox).not.toBeNull();
-      if (chipBox && mapBox) {
-        expect(chipBox.y - mapBox.y).toBeGreaterThanOrEqual(48);
-        // ...and stays inside the map, never bleeding off the narrow viewport.
-        expect(chipBox.x).toBeGreaterThanOrEqual(mapBox.x);
-        expect(chipBox.x + chipBox.width).toBeLessThanOrEqual(mapBox.x + mapBox.width + 1);
-      }
-      await expect(chip).toBeInViewport();
+      // The retired positional/overlap check (chip clearing the map's top
+      // chrome row) no longer applies: the panel scope bar is laid out in
+      // normal panel document flow, not floated over the map, so it cannot
+      // collide with DiscoverMapContextOverlay's city chip or
+      // SearchThisAreaCta. `toBeInViewport()` is kept as a generic "actually
+      // on-screen, not scrolled out of view" check, independent of that
+      // retired map-overlap concern.
+      await expect(scopeBar).toBeInViewport();
 
       await dismissConsentBanner(page);
       await page.screenshot({
@@ -226,12 +215,12 @@ test.describe('#2419 PR-1 — committed POLYGON scope chip', () => {
     await page.goto(committedPolygonUrl());
     await assertAppActuallyLoaded(page);
 
-    const chip = page.getByTestId('active-scope-chip-polygon');
-    await expect(chip).toBeVisible({ timeout: 20_000 });
+    const scopeBar = page.getByTestId('area-panel-scope-bar-polygon');
+    await expect(scopeBar).toBeVisible({ timeout: 20_000 });
 
     const historyBefore = await page.evaluate(() => window.history.length);
 
-    await chip.getByRole('button', { name: /return to/i }).click();
+    await page.getByTestId('area-panel-scope-bar-return').click();
 
     // The prior scope is restored BY NAME from rprev, not re-derived from the camera.
     await expect(page).toHaveURL(/rscope=areas/, { timeout: 10_000 });
@@ -243,7 +232,7 @@ test.describe('#2419 PR-1 — committed POLYGON scope chip', () => {
     // A scope-boundary transition is undoable — exactly one PUSH.
     expect(await page.evaluate(() => window.history.length)).toBe(historyBefore + 1);
 
-    await expect(page.getByTestId('active-scope-chip-polygon')).toHaveCount(0);
+    await expect(page.getByTestId('area-panel-scope-bar-polygon')).toHaveCount(0);
 
     await page.screenshot({
       path: 'docs/pr-evidence/issue-2419/pr1/return-to-previous-scope-1366x768.png',
@@ -313,7 +302,7 @@ test.describe('#2419 PR-1 — an unobtainable verdict never commits', () => {
       expect(await page.evaluate(() => window.history.length)).toBe(historyBefore);
 
       await expect(page.locator('.leaflet-container')).toBeVisible();
-      await expect(page.getByTestId('active-scope-chip-polygon')).toHaveCount(0);
+      await expect(page.getByTestId('area-panel-scope-bar-polygon')).toHaveCount(0);
     });
   }
 });
@@ -365,7 +354,7 @@ test.describe('#2419 PR-1 — anonymous draw is refused before any request', () 
     expect(urlAfter.searchParams.get('rprev')).toBeNull();
     expect(await page.evaluate(() => window.history.length)).toBe(historyBefore);
 
-    await expect(page.getByTestId('active-scope-chip-polygon')).toHaveCount(0);
+    await expect(page.getByTestId('area-panel-scope-bar-polygon')).toHaveCount(0);
 
     await dismissConsentBanner(page);
     await page.screenshot({
@@ -431,9 +420,9 @@ test.describe('#2419 PR-1 — #2420 rejection preserves the previous scope', () 
       expect(urlAfter.searchParams.get('rprev')).toBeNull();
       expect(await page.evaluate(() => window.history.length)).toBe(historyBefore);
 
-      // Positive counterpart: the map is still alive and no POLYGON chip appeared.
+      // Positive counterpart: the map is still alive and no POLYGON scope bar appeared.
       await expect(page.locator('.leaflet-container')).toBeVisible();
-      await expect(page.getByTestId('active-scope-chip-polygon')).toHaveCount(0);
+      await expect(page.getByTestId('area-panel-scope-bar-polygon')).toHaveCount(0);
 
       await page.screenshot({
         path: `docs/pr-evidence/issue-2419/pr1/rejection-${reason}-1366x768.png`,

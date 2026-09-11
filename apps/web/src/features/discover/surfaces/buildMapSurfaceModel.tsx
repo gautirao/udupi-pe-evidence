@@ -90,7 +90,7 @@ type MapLayersView = Pick<
   | 'areaRestoreArea'
 > &
   Pick<DiscoverMapCanvasProps, 'selectedRegion' | 'selectedMaxKm' | 'filteredAgriListings' | 'agriDestinationMarkers'> &
-  Pick<DiscoverMapCanvasProps, 'overviewAreas' | 'discoverAreas' | 'areaSearchMatchKeys' | 'hoveredAreaKeyForMap'> &
+  Pick<DiscoverMapCanvasProps, 'overviewAreas' | 'areaSearchMatchKeys' | 'hoveredAreaKeyForMap'> &
   Pick<DiscoverMapCanvasProps, 'schoolZoneLabels'> &
   Pick<DiscoverMapCanvasProps, 'isRegionOverview' | 'regionOverviewShortLabel'>;
 type MapDrawingCommands = Pick<
@@ -275,7 +275,6 @@ type MapCameraSlice = Pick<
 type MapLayerSlice = Pick<
   ReturnType<typeof useDiscoverMapLayerController>,
   | 'overviewAreas'
-  | 'discoverAreas'
   | 'areaSearchMatchKeys'
   | 'resolvedRegionLabel'
   | 'regionOverviewMarkerKind'
@@ -314,7 +313,6 @@ export type BuildMapSurfaceViewParams = Omit<
   | 'agriGroupFocusBounds'
   | 'isColdNavigate'
   | 'overviewAreas'
-  | 'discoverAreas'
   | 'handleOverviewAreaClick'
   | 'areaSearchMatchKeys'
   | 'hoveredAreaKeyForMap'
@@ -643,7 +641,6 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
     },
     mapLayerController: {
       overviewAreas,
-      discoverAreas,
       areaSearchMatchKeys,
       resolvedRegionLabel,
       regionOverviewMarkerKind,
@@ -686,7 +683,6 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
       filters,
       isLandingState,
       overviewAreas,
-      discoverAreas,
       focusedGroupAreas,
       areaLayerMaxZoom,
       selectedArea,

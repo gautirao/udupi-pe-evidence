@@ -18,6 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
+import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import { PropertyCard } from '../PropertyCard';
 import { AreaFirstBreadcrumb } from '../AreaFirstBreadcrumb';
 import type { DiscoverJourney, DiscoverIntent } from '@/hooks/useDiscoverUrlState';
@@ -27,7 +28,9 @@ import { StartOverButton } from '../StartOverButton';
 import { useDiscoverActions, useDiscoverNav, useDiscoverShell } from '@/features/discover/context/useDiscoverContext';
 import { AreaSetSelectedHeader, AreaSetTwoTileRow, DrawSearchAreaEntry } from './AreaSetSelectedExtras';
 import { AreaZeroResultRecovery } from './AreaZeroResultRecovery';
+import { AreaSelectedPanelScopeBar } from './AreaSelectedPanelScopeBar';
 import { DEFAULT_CITY } from '@/lib/localityUtils';
+import { SCOPE_TITLE } from '@/features/discover/presentation/scopeTitles';
 
 // Quick filter options (hardcoded MVP). 'All' is a virtual chip that clears the
 // property-type selection — it is not a property_type value.
@@ -373,6 +376,81 @@ export function AreaSelectedPanel({
       ? 'POLYGON'
       : 'AREA';
 
+  // Issue #2478 (step 1) — panel-side scope bar for a committed VIEWPORT or
+  // POLYGON result scope, mirroring ActiveScopeChip's "Return to <Area>"
+  // logic verbatim (see that component's doc comment for the full
+  // reasoning).
+  //
+  // AREA_SET `previous` area-name resolution (`previousAreas` below) comes
+  // from a dedicated `useDiscoverAreas` call keyed on
+  // `city || nav.city || DEFAULT_CITY` — the same idiom already used twice
+  // further down (AreaSetSelectedHeader, AreaZeroResultRecovery); see that
+  // doc comment for why `||` (not `??`) is required. This was previously
+  // hardcoded to `[]`, which silently fell back to the generic "Return to
+  // previous area" label for every AREA_SET previous scope — the exact bug
+  // class #2015 MUST-HAVE #3 fixed in ActiveScopeChip. This closes the
+  // panel-side regression to match.
+  //
+  // Camera-fit on Return (ActiveScopeChip's `publishCameraIntent` /
+  // `computeGroupBounds` branch) is intentionally still NOT ported:
+  //   - `previous.kind === 'VIEWPORT' | 'POLYGON'`: ActiveScopeChip's own
+  //     `handleReturn` has no camera-fit branch for these kinds either —
+  //     this is reference parity, not a gap.
+  //   - `previous.kind === 'AREA_SET'` with 2+ areas: already covered
+  //     ambiently by useDiscoverMapDataController's multi-area AREA_SET
+  //     auto-fit effect, which re-fires on any `resultScope` change
+  //     regardless of which UI triggered it.
+  //   - `previous.kind === 'AREA_SET'` with exactly 1 area: genuinely
+  //     unresolved. No ambient/state-driven camera trigger exists for a
+  //     single-area AREA_SET today (only the click-driven `selectArea()`
+  //     flow fits the camera). Fitting this case would require either (a)
+  //     extending the ambient effect in useDiscoverMapDataController to
+  //     also fire for a single-area AREA_SET result, or (b) calling
+  //     `shell.focusAreaSetMember`/`shell.fitAreaSet` from
+  //     `handleReturnToPreviousScope` below and proving it does not race
+  //     the `commitResultScope` state update that drives the ambient
+  //     effects. Left as a known, reported limitation rather than faked.
+  const resolvedAreasCity = city || nav.city || DEFAULT_CITY;
+  const { data: discoverAreasData } = useDiscoverAreas(resolvedAreasCity);
+  const previousResultScope = nav.resultScope?.previous ?? null;
+  const previousAreas: AreaPoint[] =
+    previousResultScope?.kind === 'AREA_SET'
+      ? previousResultScope.areaKeys
+          .map((key) => discoverAreasData?.areas.find((area) => area.areaKey === key))
+          .filter((area): area is NonNullable<typeof area> => area != null)
+          .map((area) => ({
+            areaKey: area.areaKey,
+            areaLabel: area.name,
+            geo_center_lat: area.geoCenterLat,
+            geo_center_lon: area.geoCenterLon,
+            bbox:
+              area.minLat != null && area.minLon != null && area.maxLat != null && area.maxLon != null
+                ? ([
+                    [area.minLat, area.minLon],
+                    [area.maxLat, area.maxLon],
+                  ] as [[number, number], [number, number]])
+                : null,
+            listingCount: area.listingCount,
+          }))
+      : [];
+  const returnLabel = previousResultScope
+    ? previousResultScope.kind === 'AREA_SET'
+      ? previousAreas.length === 1
+        ? `Return to ${previousAreas[0].areaLabel}`
+        : previousAreas.length > 1
+          ? `Return to ${previousAreas.map((area) => area.areaLabel).join(', ')}`
+          : 'Return to previous area'
+      : previousResultScope.kind === 'POLYGON'
+        ? 'Return to previous search area'
+        : 'Return to previous area'
+    : null;
+  const handleReturnToPreviousScope = useCallback(() => {
+    // Per #2015 AC7, a scope-boundary restore is a PUSH transition (browser
+    // back stays undoable) — intentionally no `{ history: 'replace' }`.
+    actions.commitResultScope(previousResultScope);
+    // NOTE: camera-fit intentionally omitted — see comment above.
+  }, [actions, previousResultScope]);
+
   // "Edit areas" / "Add nearby areas" open the AREA_SET draft (Issue #2017;
   // desktop rework owner-directed) — `openAreaSetDraft()` is the single
   // cross-tree open signal both surfaces read: on mobile it drives
@@ -564,7 +642,7 @@ export function AreaSelectedPanel({
               <div className="min-w-0">
                 <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
                   {isViewportScope
-                    ? 'Result scope — Search this area'
+                    ? `Result scope — ${SCOPE_TITLE.VIEWPORT}`
                     : resultScopeKind === 'POLYGON'
                       ? 'Result scope — Drawn area'
                       : 'Result scope — Selected area'}
@@ -576,7 +654,7 @@ export function AreaSelectedPanel({
                       area. Keyed off the same `resultScopeKind` the
                       zero-result recovery already reads. */}
                   {isViewportScope
-                    ? 'Properties in this area'
+                    ? 'On screen right now'
                     : resultScopeKind === 'POLYGON'
                       ? 'Properties in your drawn area'
                       : `Properties in ${areaLabel}`}
@@ -601,6 +679,12 @@ export function AreaSelectedPanel({
                   ? 'Explore verified listings inside the area you drew, with map context and area-first filters.'
                   : `Explore verified listings around ${areaLabel}, with map context and area-first filters.`}
             </p>
+            <AreaSelectedPanelScopeBar
+              resultScopeKind={resultScopeKind}
+              returnLabel={returnLabel}
+              onReturn={handleReturnToPreviousScope}
+              onRedrawPolygon={onRedrawPolygon}
+            />
           </>
         )}
 

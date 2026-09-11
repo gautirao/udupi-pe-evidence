@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeAll, afterEach, vi } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
-import { useRef, useState } from 'react';
+import { render, screen } from '@testing-library/react';
+import { useRef } from 'react';
 import { useSearchThisAreaCtaOffset } from '../useSearchThisAreaCtaOffset';
 
 /**
@@ -17,13 +17,16 @@ import { useSearchThisAreaCtaOffset } from '../useSearchThisAreaCtaOffset';
  * positioned child does not resize the container — so nothing re-measured and
  * the CTA landed on the chip again on the ordinary path.
  *
- * These render REAL elements through the hook's own refs rather than assigning
- * `.current` by hand. The previous version of this file did assign it, before
- * the layout effect ran, which modelled chip-present-at-setup — the case that
- * already worked — and is exactly why it missed the mount-later bug.
+ * Issue #2478 removed the floating scope chip entirely (its summary now lives
+ * in `AreaSelectedPanel` instead), collapsing this from a three-rung stack
+ * (chip, CTA, draw overlay) to two (CTA, draw overlay). The `a409692b` /
+ * `1ac34643` chip-mount-timing and chip-ordering regressions this file used
+ * to cover went with the chip — there is no scope-chip ref or offset left to
+ * measure. The two properties below are NOT chip-specific — they hold for
+ * any offset stack, chip or no chip — so they are restored here against the
+ * current two-rung shape.
  */
 
-const CHIP_HEIGHT = 40;
 const CONTAINER_HEIGHT = 800;
 
 beforeAll(() => {
@@ -57,113 +60,44 @@ beforeAll(() => {
 
 afterEach(() => vi.restoreAllMocks());
 
-/**
- * Mirrors the real composition: a map container, a chips row present from the
- * start but zero-height (AreaSetChips renders null whenever the scope chip is
- * up), and a scope chip that mounts only when the scope commits.
- */
+/** Mirrors the real composition: a map container and a chips row. */
 function Harness() {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [showChip, setShowChip] = useState(false);
-  const { ctaTopOffsetPx, scopeChipTopOffsetPx, drawOverlayTopOffsetPx, chipsRowRef, scopeChipRef } =
-    useSearchThisAreaCtaOffset(containerRef);
+  const { ctaTopOffsetPx, drawOverlayTopOffsetPx, chipsRowRef } = useSearchThisAreaCtaOffset(containerRef);
 
   return (
     <div ref={containerRef} data-h={CONTAINER_HEIGHT}>
       <div ref={chipsRowRef} data-h={0} />
-      {showChip && <div ref={scopeChipRef} data-h={CHIP_HEIGHT} data-testid="scope-chip" />}
-      <button type="button" onClick={() => setShowChip(true)} data-testid="commit-polygon">
-        commit
-      </button>
-      <button type="button" onClick={() => setShowChip(false)} data-testid="clear-polygon">
-        clear
-      </button>
-      <output data-testid="offsets">
-        {JSON.stringify({ scopeChipTopOffsetPx, ctaTopOffsetPx, drawOverlayTopOffsetPx })}
-      </output>
+      <output data-testid="offsets">{JSON.stringify({ ctaTopOffsetPx, drawOverlayTopOffsetPx })}</output>
     </div>
   );
 }
 
 function readOffsets() {
   return JSON.parse(screen.getByTestId('offsets').textContent ?? '{}') as {
-    scopeChipTopOffsetPx: number;
     ctaTopOffsetPx: number;
     drawOverlayTopOffsetPx: number;
   };
 }
 
 describe('useSearchThisAreaCtaOffset — overlay stacking chain', () => {
-  /**
-   * THE regression from the `1ac34643` review: no chip at setup, chip mounts
-   * afterwards, and NOTHING resizes the container — because an absolutely
-   * positioned child never does.
-   */
-  it('measures a scope chip that mounts AFTER setup, with no container resize', async () => {
+  it('places the draw overlay below the CTA', () => {
     render(<Harness />);
-
-    const before = readOffsets();
-    expect(before.ctaTopOffsetPx).toBe(before.scopeChipTopOffsetPx);
-
-    await act(async () => {
-      screen.getByTestId('commit-polygon').click();
-    });
-
-    const after = readOffsets();
-    expect(after.ctaTopOffsetPx).toBeGreaterThanOrEqual(after.scopeChipTopOffsetPx + CHIP_HEIGHT);
-    expect(after.ctaTopOffsetPx).toBeGreaterThan(before.ctaTopOffsetPx);
-  });
-
-  // The mirror case: clearing the scope must give the row back rather than
-  // stranding the CTA below a chip that is no longer there.
-  it('releases the reserved row when the chip unmounts', async () => {
-    render(<Harness />);
-    await act(async () => {
-      screen.getByTestId('commit-polygon').click();
-    });
-    const withChip = readOffsets();
-
-    await act(async () => {
-      screen.getByTestId('clear-polygon').click();
-    });
-
-    const withoutChip = readOffsets();
-    expect(withoutChip.ctaTopOffsetPx).toBeLessThan(withChip.ctaTopOffsetPx);
-    expect(withoutChip.ctaTopOffsetPx).toBe(withoutChip.scopeChipTopOffsetPx);
-  });
-
-  it('gives the scope chip a rung ABOVE the CTA', async () => {
-    render(<Harness />);
-    await act(async () => {
-      screen.getByTestId('commit-polygon').click();
-    });
-
-    const { scopeChipTopOffsetPx, ctaTopOffsetPx } = readOffsets();
-    expect(scopeChipTopOffsetPx).toBeLessThan(ctaTopOffsetPx);
-  });
-
-  it('places the draw overlay below the CTA', async () => {
-    render(<Harness />);
-    await act(async () => {
-      screen.getByTestId('commit-polygon').click();
-    });
 
     const { ctaTopOffsetPx, drawOverlayTopOffsetPx } = readOffsets();
     expect(drawOverlayTopOffsetPx).toBeGreaterThan(ctaTopOffsetPx);
   });
 
-  // All three can be up together: redrawing a COMMITTED polygon shows the
-  // overlay while the chip still reads COMMITTED, and the viewport can be
-  // dirty at the same time. Strictly increasing rungs is what makes that safe.
-  it('keeps every rung strictly ordered so all three can co-render', async () => {
+  // The chip that used to make this a three-rung stack was removed by
+  // #2478; the property under test — that the offset stack is strictly
+  // ordered so every rung can co-render without overlapping — still holds
+  // for the two rungs that remain.
+  it('keeps the offset rungs strictly ordered so the CTA and draw overlay can co-render', () => {
     render(<Harness />);
-    await act(async () => {
-      screen.getByTestId('commit-polygon').click();
-    });
 
-    const { scopeChipTopOffsetPx, ctaTopOffsetPx, drawOverlayTopOffsetPx } = readOffsets();
-    const rungs = [scopeChipTopOffsetPx, ctaTopOffsetPx, drawOverlayTopOffsetPx];
+    const { ctaTopOffsetPx, drawOverlayTopOffsetPx } = readOffsets();
+    const rungs = [ctaTopOffsetPx, drawOverlayTopOffsetPx];
     expect(rungs).toEqual([...rungs].sort((a, b) => a - b));
-    expect(new Set(rungs).size).toBe(3);
+    expect(new Set(rungs).size).toBe(2);
   });
 });

@@ -36,7 +36,6 @@ import type { DiscoverBadgeResult } from '@/features/discover/presentation/disco
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import { ReplaceResultScopeDialog } from '@/features/discover/components/ReplaceResultScopeDialog';
 import { SearchThisAreaCta } from '@/features/discover/components/map/SearchThisAreaCta';
-import { ActiveScopeChip } from '@/features/discover/components/map/ActiveScopeChip';
 import { DrawModeOverlay } from '@/features/discover/components/map/DrawModeOverlay';
 import type {
   PolygonDraftBlock,
@@ -167,15 +166,6 @@ export interface DiscoverMapCanvasProps {
   cityCenter: [number, number] | undefined;
   cityZoom: number | undefined;
   overviewAreas: AreaPoint[];
-  /**
-   * Issue #2015 MUST-HAVE #3 (PR review 5085561270) — root-level all-areas
-   * list (`useDiscoverMapLayerController`'s `discoverAreas` passthrough),
-   * threaded to `ActiveScopeChip` for its "Return to <Area>" label lookup.
-   * Deliberately separate from `overviewAreas`, which is nav-state-derived
-   * and goes empty once an area is selected — see ActiveScopeChip's doc
-   * comment for the full root-cause explanation.
-   */
-  discoverAreas: AreaPoint[];
   handleOverviewAreaClick: (area: AreaPoint) => void;
   publishCameraIntent: (area: AreaPoint) => void;
   cameraIntent: CameraIntent | null;
@@ -449,7 +439,6 @@ export function DiscoverMapCanvas({
   cityCenter,
   cityZoom,
   overviewAreas,
-  discoverAreas,
   handleOverviewAreaClick,
   publishCameraIntent,
   cameraIntent,
@@ -573,11 +562,9 @@ export function DiscoverMapCanvas({
   // AreaSetChips strip beneath it. See useSearchThisAreaCtaOffset's own doc.
   const {
     ctaTopOffsetPx,
-    scopeChipTopOffsetPx,
     drawOverlayTopOffsetPx,
     onBreadcrumbHeightChange,
     chipsRowRef,
-    scopeChipRef,
   } = useSearchThisAreaCtaOffset(mapContainerRef);
 
   // Issue #2419 (PR-2) — touch vs pointer wording for the draw instructions.
@@ -858,17 +845,6 @@ export function DiscoverMapCanvas({
         isDirty={viewportSearchIsDirty}
         onActivate={onActivateViewportSearch ?? (() => {})}
         topOffsetPx={ctaTopOffsetPx}
-      />
-      <ActiveScopeChip
-        discoverAreas={discoverAreas}
-        publishCameraIntent={publishCameraIntent}
-        // Its OWN rung, above the CTA. An earlier revision handed it
-        // `ctaTopOffsetPx` verbatim, which put the chip and the CTA on the
-        // same row — see useSearchThisAreaCtaOffset for why nothing else in
-        // the stack was reserving space for the chip.
-        topOffsetPx={scopeChipTopOffsetPx}
-        measureRef={scopeChipRef}
-        onRedraw={handleRedrawPolygon}
       />
       {/* Issue #2419 (PR-2) — draw-mode instructions with Cancel/Undo, and
           the blocked-draft surface for a #2420 rejection or an unobtainable
@@ -1302,7 +1278,8 @@ export function DiscoverMapCanvas({
           "Area search" against the chip's "Drawn area", and this mount gated
           it on `isAuthenticated` by accident of ownership rather than policy,
           so anonymous shoppers saw no indicator while signed-in ones saw two.
-          ActiveScopeChip above is now the single surface. */}
+          Its replacement, the panel-side scope summary (AreaSelectedPanel),
+          is now the single surface — see Issue #2478. */}
 
       <MarkersTruncationNotice
         truncated={markersTruncated}

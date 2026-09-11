@@ -81,6 +81,21 @@ describe('useSearchThisAreaCtaOffset', () => {
     expect(latestResult?.ctaTopOffsetPx).toBeGreaterThan(0);
   });
 
+  // Issue #2478 — the floating scope chip that used to occupy the rung
+  // between the breadcrumb/chips row and the CTA has been removed, so with
+  // no breadcrumb/chips measurement yet landed, ctaTopOffsetPx now resolves
+  // to exactly FALLBACK_TOP_OFFSET_PX (16) + CLEARANCE_GAP_PX (12) = 28, and
+  // drawOverlayTopOffsetPx to ctaTopOffsetPx (28) + CTA_ROW_HEIGHT_PX (32) +
+  // CLEARANCE_GAP_PX (12) = 72. Pinning the exact values (not just a `> 0` /
+  // `>=` threshold) proves the chip's removal didn't leave a stale gap or a
+  // permanently-zero measurement in the offset chain — the fallback still
+  // resolves to a real, non-degenerate value for both rungs.
+  it('resolves the exact fallback offsets for the CTA and draw overlay now that the scope chip rung is gone', () => {
+    render(<Harness />);
+    expect(latestResult?.ctaTopOffsetPx).toBe(28);
+    expect(latestResult?.drawOverlayTopOffsetPx).toBe(72);
+  });
+
   it('clears the breadcrumb alone when AreaSetChips renders empty (zero height)', () => {
     const { getByTestId } = render(<Harness />);
     mockRect(getByTestId('map-container'), { top: 100 });
