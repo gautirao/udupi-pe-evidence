@@ -355,7 +355,43 @@ export default defineConfig({
     // FRONTEND ONLY — see module docstring. Never add a backend start command here.
     // Port derived from PLAYWRIGHT_BASE_URL (see PREVIEW_PORT above), not
     // hardcoded, so each slice's own selected_ports is honoured.
-    command: `npm run preview -- --port ${PREVIEW_PORT} --strictPort`,
+    // #2511: `npm run preview` is a workspace hop
+    // (root package.json: "preview": "npm run preview --workspace=apps/web").
+    // Passing `-- --port N --strictPort` through it does NOT reach vite: the
+    // outer npm consumes --port/--strictPort as its OWN cli config (it warns
+    // `Unknown cli config "--port"`) and forwards only the bare value, so the
+    // inner script ran `vite preview N`. `vite preview` reads its first
+    // POSITIONAL argument as the ROOT DIRECTORY -- so N was consumed as a
+    // directory name, vite fell back to its DEFAULT port 4173, and served from
+    // a directory named e.g. "5251" that does not exist.
+    //
+    // What you actually see when debugging this depends on which port you
+    // look at, and it is NOT a 404 on the port you asked for:
+    //   - the requested port (e.g. CI's 5251): CONNECTION REFUSED -- nothing
+    //     is listening there at all, because vite went to 4173;
+    //   - port 4173: HTTP 404 / 0 bytes -- vite is listening, but its root
+    //     does not exist.
+    // Playwright polls the configured URL, so it sees connection-refused
+    // unless the configured port happens to BE 4173, and fails with
+    // "Timed out waiting 60000ms from config.webServer" -- zero tests run.
+    // CI passes 5251 and fails identically.
+    //
+    // Addressing the workspace directly removes the hop, so --port/--strictPort
+    // reach vite. Preferred over a second `--` (which also works) because npm
+    // already warns that the arg parsing this would rely on "will stop working
+    // in the next major version of npm".
+    //
+    // Verified on 4173 (the port the broken command actually binds, chosen so
+    // both arms are observable at the same address): the old command served
+    // HTTP 404 / 0 bytes; this one serves HTTP 200 / 3167 bytes, exactly the
+    // size of apps/web/dist/index.html -- demonstrably the real built app
+    // rather than merely *a* 200 from some other listener on a busy machine.
+    //
+    // NOTE: vite resolves from apps/web/node_modules/.bin/vite? No -- vite is
+    // hoisted to the ROOT node_modules/.bin. This command works because npm's
+    // PATH walk reaches the ancestor .bin while cwd stays apps/web. Correct
+    // here, but it depends on this repo's hoisting layout.
+    command: `npm --prefix apps/web run preview -- --port ${PREVIEW_PORT} --strictPort`,
     url: PLAYWRIGHT_BASE_URL,
     reuseExistingServer: false,
     timeout: 60_000,
