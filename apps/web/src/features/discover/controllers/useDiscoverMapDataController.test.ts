@@ -57,6 +57,15 @@ vi.mock('@/lib/api', () => ({
 // suite renders the controller standalone (no <DiscoverProvider> above it —
 // see makeWrapper below, QueryClientProvider only), so useDiscoverShell must
 // be mocked or the real hook throws "must be used within a <DiscoverProvider>".
+// Issue #2480 — mutable box simulating the shell's one-shot camera restore
+// request, since a plain vi.fn(() => null) can't reflect what a prior
+// setAreaSetCameraRestoreRequest() call recorded within the same test.
+let mockRestoreRequest: {
+  areaKey: string;
+  bounds: [[number, number], [number, number]] | null;
+  center: [number, number];
+} | null = null;
+
 vi.mock('@/features/discover/context/useDiscoverContext', () => ({
   useDiscoverShell: () => ({
     mobileView: 'LIST',
@@ -68,6 +77,12 @@ vi.mock('@/features/discover/context/useDiscoverContext', () => ({
     fitAreaSet: vi.fn(),
     focusAreaSetMember: vi.fn(),
     registerAreaSetCameraActions: mockRegisterAreaSetCameraActions,
+    getAreaSetCameraRestoreRequest: () => mockRestoreRequest,
+    setAreaSetCameraRestoreRequest: (
+      r: { areaKey: string; bounds: [[number, number], [number, number]] | null; center: [number, number] } | null,
+    ) => {
+      mockRestoreRequest = r;
+    },
   }),
 }));
 
@@ -202,6 +217,7 @@ function findPanelCall() {
 beforeEach(() => {
   vi.clearAllMocks();
   setupDefaultMocks();
+  mockRestoreRequest = null;
 });
 
 describe('useDiscoverMapDataController — canonical AREA-leaf marker scope (Issue #2185 S2)', () => {
@@ -728,5 +744,314 @@ describe('useDiscoverMapDataController — Issue #2017 (Fit all / focus-one) cam
       (JP_NAGAR.minLat + HEBBAL.maxLat) / 2,
       (JP_NAGAR.minLon + WHITEFIELD.maxLon) / 2,
     ]);
+  });
+});
+
+// Issue #2480 — returning from a committed VIEWPORT/POLYGON result scope to
+// a previously-committed single-area (N=1) AREA_SET scope committed the
+// scope but did NOT re-fit the camera (a silent no-op — the N>1 case above
+// already worked via the ambient union-fit effect). AreaSelectedPanel's
+// Return handler now records a one-shot restore request
+// (shell.setAreaSetCameraRestoreRequest({ areaKey })) before committing the
+// scope; a post-commit effect in the controller reads that request and, iff
+// the newly committed AREA_SET is exactly [request.areaKey], publishes a
+// 'leaf'-framed camera intent and clears the request. The request is the
+// discriminator that keeps this from double-firing on the ordinary
+// selectArea() flow (#2017 no-regression) — ONLY the Return action sets it.
+//
+// `cameraIntent.seq` is strictly monotonic, so "exactly one publish" is
+// asserted via the seq delta across the render transition, never via a
+// "was called" check — a double-fire advances seq by 2 even when
+// bounds/center happen to coincide.
+describe('useDiscoverMapDataController — Issue #2480 (Return-to-scope camera restore)', () => {
+  const AREA_X = {
+    areaKey: 'IN|KA|Bengaluru|Indiranagar',
+    name: 'Indiranagar',
+    geoCenterLat: 12.97,
+    geoCenterLon: 77.64,
+    minLat: 12.96,
+    minLon: 77.63,
+    maxLat: 12.98,
+    maxLon: 77.65,
+    listingCount: 6,
+    schoolCount: 1,
+  };
+  const AREA_Y = {
+    areaKey: 'IN|KA|Bengaluru|Koramangala',
+    name: 'Koramangala',
+    geoCenterLat: 12.93,
+    geoCenterLon: 77.62,
+    minLat: 12.92,
+    minLon: 77.61,
+    maxLat: 12.94,
+    maxLon: 77.63,
+    listingCount: 9,
+    schoolCount: 2,
+  };
+  const VIEWPORT_BOUNDS = { s: 12.9, w: 77.55, n: 13.05, e: 77.7 };
+  // Issue #2480 — the request now carries its target pre-resolved (as
+  // AreaSelectedPanel would resolve it from its own already-loaded
+  // `previousAreas`), not just an `areaKey` for the controller to look up.
+  const AREA_X_BOUNDS: [[number, number], [number, number]] = [
+    [AREA_X.minLat, AREA_X.minLon],
+    [AREA_X.maxLat, AREA_X.maxLon],
+  ];
+  const AREA_X_CENTER: [number, number] = [AREA_X.geoCenterLat, AREA_X.geoCenterLon];
+
+  function setupAreasMock(areas: Array<typeof AREA_X>) {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url.includes('/api/discover/markers')) return Promise.resolve(MARKERS_RESPONSE);
+      if (url.includes('/listings')) return Promise.resolve({ city: 'bangalore', limitPerArea: 5, areas: [] });
+      return Promise.resolve({ city: 'bangalore', areas });
+    });
+  }
+
+  function renderController(nav: DiscoverNavContextValue) {
+    return renderHook(
+      (currentNav: DiscoverNavContextValue) =>
+        useDiscoverMapDataController({
+          ...BASE_CONTROLLER_PARAMS,
+          nav: currentNav,
+          effectiveSelectedArea: null,
+          areasNavigationJourney: makeAreasNavigationJourney(),
+        }),
+      { wrapper: makeWrapper(), initialProps: nav },
+    );
+  }
+
+  it('N=1 restore: returning to a previously-committed single area re-fits the camera on that area (framing=leaf), publishing exactly once', async () => {
+    setupAreasMock([AREA_X]);
+
+    const preCommitNav = makeNav({
+      journey: 'area-first',
+      resultScope: {
+        active: { kind: 'VIEWPORT', bounds: VIEWPORT_BOUNDS },
+        previous: { kind: 'AREA_SET', areaKeys: [AREA_X.areaKey] },
+      },
+    });
+    const { result, rerender } = renderController(preCommitNav);
+
+    await waitFor(() => {
+      expect(result.current.discoverAreasData?.areas.length).toBe(1);
+    });
+    const seqBefore = result.current.cameraIntent?.seq ?? 0;
+
+    // AreaSelectedPanel's Return handler: record the one-shot request, THEN
+    // commit the previous AREA_SET scope.
+    mockRestoreRequest = { areaKey: AREA_X.areaKey, bounds: AREA_X_BOUNDS, center: AREA_X_CENTER };
+    const postCommitNav = makeNav({
+      journey: 'area-first',
+      resultScope: {
+        active: { kind: 'AREA_SET', areaKeys: [AREA_X.areaKey] },
+        previous: { kind: 'VIEWPORT', bounds: VIEWPORT_BOUNDS },
+      },
+    });
+    rerender(postCommitNav);
+
+    await waitFor(() => {
+      expect(result.current.cameraIntent?.framing).toBe('leaf');
+    });
+
+    expect(result.current.cameraIntent?.center).toEqual([AREA_X.geoCenterLat, AREA_X.geoCenterLon]);
+    expect(result.current.cameraIntent?.bounds).toEqual([
+      [AREA_X.minLat, AREA_X.minLon],
+      [AREA_X.maxLat, AREA_X.maxLon],
+    ]);
+    // Exactly one publish from this effect — a double-fire would advance
+    // seq by 2 even if bounds/center happen to match.
+    expect((result.current.cameraIntent?.seq ?? 0) - seqBefore).toBe(1);
+    // Mobile follow-up (#2480): the publish is ALSO marked never-delivered, so
+    // a map that is not mounted right now — the normal case on mobile, where
+    // Return is only reachable in List view — delivers it when it next mounts
+    // instead of absorbing it via MapController's adopt-on-mount guard. Pinned
+    // to the exact published seq, not merely non-null: the marker only works
+    // because it identifies THIS intent.
+    expect(result.current.pendingRemountCameraIntentSeqRef.current).toBe(
+      result.current.cameraIntent?.seq,
+    );
+  });
+
+  it('Issue #2017 no-regression: committing the same N=1 AREA_SET via the ordinary selectArea() flow (no restore request) publishes NO camera intent', async () => {
+    setupAreasMock([AREA_X]);
+
+    const initialNav = makeNav({
+      journey: 'area-first',
+      resultScope: { active: null, previous: null },
+    });
+    const { result, rerender } = renderController(initialNav);
+
+    await waitFor(() => {
+      expect(result.current.discoverAreasData?.areas.length).toBe(1);
+    });
+    const seqBefore = result.current.cameraIntent?.seq ?? 0;
+
+    // No restore request set — this is the ordinary selectArea() commit
+    // path, not a Return-to-scope action.
+    expect(mockRestoreRequest).toBeNull();
+    const committedNav = makeNav({
+      journey: 'area-first',
+      resultScope: { active: { kind: 'AREA_SET', areaKeys: [AREA_X.areaKey] }, previous: null },
+    });
+    rerender(committedNav);
+
+    // Give effects a chance to run. The naive "await waitFor(condition)"
+    // here would be checking a condition (`areas.length === 1`) that was
+    // ALREADY true before this rerender, so it could resolve without ever
+    // yielding to a later microtask/tick — making the "seq delta 0"
+    // assertion below pass vacuously even if a publish were merely queued
+    // rather than genuinely absent. Force a real subsequent tick by
+    // rerendering again with the SAME committed scope (a no-op commit) and
+    // letting the areas query settle again before asserting.
+    await waitFor(() => {
+      expect(result.current.discoverAreasData?.areas.length).toBe(1);
+    });
+    rerender(committedNav);
+    await waitFor(() => {
+      expect(result.current.areasLoading).toBe(false);
+    });
+    expect((result.current.cameraIntent?.seq ?? 0) - seqBefore).toBe(0);
+    // Mobile follow-up (#2480): selectArea() must not arm the deliver-on-remount
+    // marker either. If it did, its own (correct) camera intent would be
+    // re-delivered on the next mobile Map open — the #2017 double-fire
+    // resurrected one mount later, which a seq-delta check at THIS instant
+    // cannot see.
+    expect(result.current.pendingRemountCameraIntentSeqRef.current).toBeNull();
+  });
+
+  it('N>1 unchanged: a multi-area commit still fires the existing ambient union fit (framing=overview) exactly once', async () => {
+    setupAreasMock([AREA_X, AREA_Y]);
+
+    const initialNav = makeNav({
+      journey: 'area-first',
+      resultScope: { active: null, previous: null },
+    });
+    const { result, rerender } = renderController(initialNav);
+
+    await waitFor(() => {
+      expect(result.current.discoverAreasData?.areas.length).toBe(2);
+    });
+    const seqBefore = result.current.cameraIntent?.seq ?? 0;
+
+    expect(mockRestoreRequest).toBeNull();
+    const committedNav = makeNav({
+      journey: 'area-first',
+      resultScope: {
+        active: { kind: 'AREA_SET', areaKeys: [AREA_X.areaKey, AREA_Y.areaKey] },
+        previous: null,
+      },
+    });
+    rerender(committedNav);
+
+    await waitFor(() => {
+      expect(result.current.cameraIntent?.framing).toBe('overview');
+    });
+
+    expect(result.current.cameraIntent?.bounds).toEqual([
+      [AREA_Y.minLat, AREA_Y.minLon],
+      [AREA_X.maxLat, AREA_X.maxLon],
+    ]);
+    // Only the pre-existing ambient effect fires — the new #2480 effect
+    // does not add a second publish.
+    expect((result.current.cameraIntent?.seq ?? 0) - seqBefore).toBe(1);
+  });
+
+  it('stale request dropped: a restore request for area X is discarded (and cleared) when the committed scope resolves to a different area Y', async () => {
+    setupAreasMock([AREA_X, AREA_Y]);
+
+    const initialNav = makeNav({
+      journey: 'area-first',
+      resultScope: { active: null, previous: null },
+    });
+    const { result, rerender } = renderController(initialNav);
+
+    await waitFor(() => {
+      expect(result.current.discoverAreasData?.areas.length).toBe(2);
+    });
+    const seqBefore = result.current.cameraIntent?.seq ?? 0;
+
+    // Request recorded for X, but the scope that actually ends up committed
+    // (e.g. browser Back landed elsewhere) is the unrelated area Y.
+    mockRestoreRequest = { areaKey: AREA_X.areaKey, bounds: AREA_X_BOUNDS, center: AREA_X_CENTER };
+    const committedNav = makeNav({
+      journey: 'area-first',
+      resultScope: { active: { kind: 'AREA_SET', areaKeys: [AREA_Y.areaKey] }, previous: null },
+    });
+    rerender(committedNav);
+
+    await waitFor(() => {
+      expect(mockRestoreRequest).toBeNull();
+    });
+    expect((result.current.cameraIntent?.seq ?? 0) - seqBefore).toBe(0);
+  });
+
+  // Issue #2480 fix — pins the deferred #2017 double-fire this fix removes.
+  // The OLD design left a cold (areas-not-loaded) restore request pending so
+  // it could "retry" once `discoverAreasData` arrived. But nothing consumed
+  // it in the meantime, so an unrelated flow that recommitted the SAME
+  // areaKey before data loaded left the request looking exactly as valid as
+  // when it was issued — and when `discoverAreasData` finally changed
+  // identity, the effect fired a second, spurious camera intent on top of
+  // that unrelated flow's own already-correct publish. The fix resolves the
+  // camera target at issue time (in the panel) and clears the request on
+  // EVERY effect run, so `discoverAreasData` is no longer even a dependency
+  // of this effect — it cannot be woken by a later, unrelated data arrival.
+  it('deferred double-fire (fixed): a restore request consumed immediately at commit is not re-fired when discoverAreasData later resolves after an unrelated same-areaKey commit', async () => {
+    let resolveAreas: (value: { city: string; areas: Array<typeof AREA_X> }) => void = () => {};
+    const areasPromise = new Promise<{ city: string; areas: Array<typeof AREA_X> }>((resolve) => {
+      resolveAreas = resolve;
+    });
+    mockApiGet.mockImplementation((url: string) => {
+      if (url.includes('/api/discover/markers')) return Promise.resolve(MARKERS_RESPONSE);
+      if (url.includes('/listings')) return Promise.resolve({ city: 'bangalore', limitPerArea: 5, areas: [] });
+      return areasPromise;
+    });
+
+    // AreaSelectedPanel's Return handler resolves the target from its OWN
+    // (separately-loaded) `previousAreas` — so the request is fully
+    // actionable even though this controller's `discoverAreasData` (a
+    // DIFFERENT query instance) is still cold, unlike the old design where
+    // the controller had to compute the target itself from that same query.
+    mockRestoreRequest = { areaKey: AREA_X.areaKey, bounds: AREA_X_BOUNDS, center: AREA_X_CENTER };
+    const nav = makeNav({
+      journey: 'area-first',
+      resultScope: { active: { kind: 'AREA_SET', areaKeys: [AREA_X.areaKey] }, previous: null },
+    });
+    const { result, rerender } = renderController(nav);
+
+    // The committed AREA_SET already matches on mount, so the restore
+    // effect fires and clears the request on its very first run — no
+    // waiting on `discoverAreasData` at all.
+    await waitFor(() => {
+      expect(result.current.cameraIntent?.framing).toBe('leaf');
+    });
+    expect(result.current.cameraIntent?.center).toEqual(AREA_X_CENTER);
+    expect(result.current.cameraIntent?.bounds).toEqual(AREA_X_BOUNDS);
+    const seqAfterFirstPublish = result.current.cameraIntent?.seq ?? 0;
+    expect(seqAfterFirstPublish).toBeGreaterThan(0);
+    expect(mockRestoreRequest).toBeNull();
+
+    // An unrelated flow recommits the SAME areaKey (e.g. an ordinary
+    // selectArea() on the already-selected area) — no new restore request,
+    // matching `committedAreaSetSignature` so this effect would not re-run
+    // even under the old design's own guard.
+    const sameAreaRecommitNav = makeNav({
+      journey: 'area-first',
+      resultScope: { active: { kind: 'AREA_SET', areaKeys: [AREA_X.areaKey] }, previous: null },
+    });
+    rerender(sameAreaRecommitNav);
+
+    // `discoverAreasData` finally resolves — under the OLD design this was
+    // exactly the trigger that re-ran the effect against the still-matching
+    // stale request and fired a second camera intent. Under the fix, this
+    // query identity is no longer in the effect's dependency array at all.
+    await act(async () => {
+      resolveAreas({ city: 'bangalore', areas: [AREA_X] });
+    });
+    await waitFor(() => {
+      expect(result.current.discoverAreasData?.areas.length).toBe(1);
+    });
+
+    expect((result.current.cameraIntent?.seq ?? 0) - seqAfterFirstPublish).toBe(0);
+    expect(mockRestoreRequest).toBeNull();
   });
 });

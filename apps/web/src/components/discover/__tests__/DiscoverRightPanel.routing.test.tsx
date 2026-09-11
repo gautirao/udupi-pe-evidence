@@ -145,6 +145,8 @@ vi.mock('@/features/discover/context/useDiscoverContext', () => ({
     fitAreaSet: vi.fn(),
     focusAreaSetMember: vi.fn(),
     registerAreaSetCameraActions: vi.fn(),
+    getAreaSetCameraRestoreRequest: vi.fn(() => null),
+    setAreaSetCameraRestoreRequest: vi.fn(),
   }),
   useDiscoverActions: () => ({
     selectArea: vi.fn(),

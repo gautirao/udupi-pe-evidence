@@ -15,6 +15,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useDiscoverSource } from '@/features/discover/state/DiscoverDataSourceContext';
 import type {
   AreaSetCameraActions,
+  AreaSetCameraRestoreRequest,
   DiscoverActionsContextValue,
   DiscoverNavContextValue,
   DiscoverShellContextValue,
@@ -306,6 +307,25 @@ export function DiscoverProvider({ children }: DiscoverProviderProps) {
     cameraActionsRef.current = actions;
   }, []);
 
+  // Issue #2480 — one-shot camera-restore request, ref-backed for the same
+  // reason as `cameraActionsRef` above: it must be settable/readable without
+  // forcing a re-render of this provider (a re-render here would defeat the
+  // point of the four-way context split), and `shell.getAreaSetCameraRestoreRequest`
+  // needs to see the LATEST value when it's called from inside an effect,
+  // not a stale render-time snapshot. See the EDGE-vs-level doc on
+  // `DiscoverShellContextValue.getAreaSetCameraRestoreRequest` in types.ts.
+  const cameraRestoreRequestRef = useRef<AreaSetCameraRestoreRequest | null>(null);
+  const getAreaSetCameraRestoreRequest = useCallback(
+    () => cameraRestoreRequestRef.current,
+    [],
+  );
+  const setAreaSetCameraRestoreRequest = useCallback(
+    (request: AreaSetCameraRestoreRequest | null) => {
+      cameraRestoreRequestRef.current = request;
+    },
+    [],
+  );
+
   const shell = useMemo<DiscoverShellContextValue>(
     () => ({
       mobileView,
@@ -318,6 +338,8 @@ export function DiscoverProvider({ children }: DiscoverProviderProps) {
       focusAreaSetMember,
       startDrawSearchArea,
       registerAreaSetCameraActions,
+      getAreaSetCameraRestoreRequest,
+      setAreaSetCameraRestoreRequest,
     }),
     [
       mobileView,
@@ -329,6 +351,8 @@ export function DiscoverProvider({ children }: DiscoverProviderProps) {
       focusAreaSetMember,
       startDrawSearchArea,
       registerAreaSetCameraActions,
+      getAreaSetCameraRestoreRequest,
+      setAreaSetCameraRestoreRequest,
     ],
   );
 

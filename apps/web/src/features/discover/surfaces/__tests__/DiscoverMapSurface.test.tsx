@@ -397,6 +397,8 @@ function mockShell(overrides: Partial<DiscoverShellContextValue> = {}): void {
     // Issue #2419 (PR-2) — new required shell member (see context/types.ts).
     startDrawSearchArea: vi.fn(),
     registerAreaSetCameraActions: vi.fn(),
+    getAreaSetCameraRestoreRequest: vi.fn(() => null),
+    setAreaSetCameraRestoreRequest: vi.fn(),
     ...overrides,
   });
 }

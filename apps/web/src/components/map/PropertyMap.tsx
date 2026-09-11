@@ -222,6 +222,13 @@ interface PropertyMapProps {
    */
   cameraIntent?: CameraIntent | null;
   /**
+   * Issue #2480 (mobile) — forwarded verbatim to MapController, where its full
+   * contract is documented. Set only by the panel-side Return restore publish,
+   * so an intent issued while this map was unmounted (mobile List view) is
+   * delivered when it next mounts instead of being absorbed by adopt-on-mount.
+   */
+  pendingRemountCameraIntentSeqRef?: MutableRefObject<number | null>;
+  /**
    * When set, area markers NOT in this array are rendered at 0.3 opacity (dimmed).
    * Markers in the array remain at full opacity. Absent = all markers full opacity.
    * Passed through to AreaMarkerLayer unchanged.
@@ -2318,6 +2325,7 @@ function MapController({
   cityZoom,
   resetMapTick,
   cameraIntent,
+  pendingRemountCameraIntentSeqRef,
   isDestinationClusterLevel,
   isClusterDrillIntentRef,
 }: {
@@ -2327,6 +2335,35 @@ function MapController({
   cityZoom?: number;
   resetMapTick?: number;
   cameraIntent?: CameraIntent | null;
+  /**
+   * Issue #2480 (mobile) — carries the `cameraIntent.seq` of an intent that was
+   * published while NO map was mounted and has therefore never been delivered
+   * to any MapController. Owned by `useDiscoverMapData` (above
+   * DiscoverMapMount's real-unmount boundary, alongside `cameraIntent` itself)
+   * and set ONLY by the #2480 Return-to-previous-scope restore publish.
+   *
+   * It exists because `lastHandledSeqRef`'s adopt-on-mount below cannot, on its
+   * own, tell the two things a non-zero seq on a first render can mean apart:
+   *   - the PREVIOUS mount already consumed this seq → must NOT re-fire (#1953)
+   *   - no mount has ever seen this seq            → MUST fire (this issue)
+   * It assumed the first for both, which is correct for every intent published
+   * from the map surface (they cannot be published while the map is unmounted)
+   * but wrong for the panel-side Return: mobile Discover is panel-first, its
+   * scope bar's "Return to <area>" is reachable ONLY in List view, and Leaflet
+   * is not mounted there at all. The restore intent was published into state
+   * that survives, then silently absorbed by the next mount.
+   *
+   * Read-then-reset on the first effect run that matches it — the same strict
+   * one-shot discipline as `isClusterDrillIntentRef` above, so reopening Map a
+   * second time cannot replay the move. Because `cameraIntentSeqRef` is
+   * strictly monotonic, a marker superseded before delivery can never match a
+   * later seq: a stale marker is inert rather than dangerous, so no
+   * "pending request" window is opened by persisting it across the mount.
+   *
+   * Optional: PropertyMap's non-Discover consumers (ListingDetailBoundaryMap,
+   * CityLaunchPreview) pass nothing and keep exactly today's behaviour.
+   */
+  pendingRemountCameraIntentSeqRef?: MutableRefObject<number | null>;
   /**
    * Issue #1943 (Stage-B rework, TASK 2 "Option B") — true only while the
    * canonical Areas hierarchy is showing its 'clusters'/'directions' level
@@ -2435,13 +2472,28 @@ function MapController({
     // remount can observe a non-zero seq on this very first run, and adopting
     // it silently (instead of re-firing) is precisely the fix.
     const seq = cameraIntent?.seq ?? 0;
+    // Issue #2480 (mobile) — see `pendingRemountCameraIntentSeqRef`'s doc on the
+    // prop above. `seq !== 0` is belt-and-braces: the marker is only ever set to
+    // a published (>=1) seq, so it can never coincide with the null-intent
+    // sentinel, but pinning it makes that independent of the producer.
+    const isUndelivered =
+      seq !== 0 && pendingRemountCameraIntentSeqRef?.current === seq;
+    if (isUndelivered && pendingRemountCameraIntentSeqRef) {
+      // Read-then-reset, before any early return below can skip it.
+      pendingRemountCameraIntentSeqRef.current = null;
+    }
     if (lastHandledSeqRef.current === null) {
       lastHandledSeqRef.current = seq;
-      return;
+      // Adopt-on-mount absorbs an already-consumed seq. An UNDELIVERED one is
+      // not that: fall through and deliver it, exactly once (this run has just
+      // seeded lastHandledSeqRef to `seq`, so later runs in this same mount hit
+      // the `<=` guard, and the marker is now cleared for later mounts).
+      if (!isUndelivered) return;
+    } else {
+      if (seq <= lastHandledSeqRef.current) return;
+      lastHandledSeqRef.current = seq;
     }
     if (!cameraIntent) return;
-    if (seq <= lastHandledSeqRef.current) return;
-    lastHandledSeqRef.current = seq;
     if (cameraIntent.framing === 'leaf') {
       suppressForSeqRef.current = cameraIntent.seq;
       suppressArmedAtRef.current = Date.now();
@@ -2753,6 +2805,7 @@ export function PropertyMap({
   onAreaClick,
   onAreaCameraIntent,
   cameraIntent,
+  pendingRemountCameraIntentSeqRef,
   focusedGroupAreas,
   enableAreaMarkerDegradation,
   selectedAreaKey,
@@ -2975,6 +3028,7 @@ export function PropertyMap({
           cityZoom={cityZoom}
           resetMapTick={resetMapTick}
           cameraIntent={cameraIntent}
+          pendingRemountCameraIntentSeqRef={pendingRemountCameraIntentSeqRef}
           isDestinationClusterLevel={
             areasNavigationJourney?.levelKind === 'clusters' ||
             areasNavigationJourney?.levelKind === 'directions' ||

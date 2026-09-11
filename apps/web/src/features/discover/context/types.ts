@@ -53,6 +53,32 @@ export interface AreaSetCameraActions {
   startDrawSearchArea: () => void;
 }
 
+/**
+ * Issue #2480 — a one-shot "restore camera to this single committed AREA_SET
+ * area" request. Bound to the `areaKey` it was issued for so a consumer can
+ * detect (and drop) a request whose committed scope has since changed out
+ * from under it (e.g. browser Back after the Return-PUSH per #2015 AC7, or
+ * an immediate second `selectArea()`/Return).
+ *
+ * `bounds`/`center` are RESOLVED AT ISSUE TIME (by `AreaSelectedPanel`, from
+ * its own already-loaded `previousAreas` geometry) rather than recomputed
+ * later against whatever `discoverAreasData` happens to be current when the
+ * consuming effect runs. This closes a deferred #2017 no-double-fire hole:
+ * a request left pending because areas hadn't loaded yet used to be retried
+ * on every later `discoverAreasData` identity change, including one caused
+ * by an unrelated intervening commit that happened to land on the same
+ * `areaKey` — producing a second, spurious camera snap after that flow's
+ * own (correct) camera intent had already published. Resolving the target
+ * up front means the request is always immediately actionable: the
+ * consumer clears it unconditionally on every run, so it can never survive
+ * to collide with a later unrelated commit.
+ */
+export interface AreaSetCameraRestoreRequest {
+  areaKey: string;
+  bounds: [[number, number], [number, number]] | null;
+  center: [number, number];
+}
+
 export interface DiscoverShellContextValue {
   mobileView: MobileView;
   setMobileView: (view: MobileView) => void;
@@ -101,4 +127,33 @@ export interface DiscoverShellContextValue {
   startDrawSearchArea: () => void;
   /** Registers (or, with `null`, clears) the live camera-action implementations. */
   registerAreaSetCameraActions: (actions: AreaSetCameraActions | null) => void;
+  /**
+   * Issue #2480 — the "Return to previous scope" fix for the single-area
+   * (N=1) AREA_SET case. `AreaSelectedPanel`'s `handleReturnToPreviousScope`
+   * cannot safely call `focusAreaSetMember`/`fitAreaSet` above synchronously
+   * right after `commitResultScope(previous)`: those stable delegates call
+   * through to whatever `AreaSetCameraActions` was registered as of the
+   * LAST render before the commit, i.e. they still close over the PRE-commit
+   * `resultScope` — so a synchronous call reads the old scope and silently
+   * no-ops. Calling them is explicitly wrong here for that reason.
+   *
+   * Instead, Return records a one-shot request here, and a POST-COMMIT
+   * effect in `useDiscoverMapDataController` (which only re-runs once the
+   * committed scope has actually changed) consumes it and publishes the
+   * camera intent directly.
+   *
+   * DELIBERATELY an EDGE (one-shot, explicitly consumed/cleared via
+   * `setAreaSetCameraRestoreRequest(null)`), NOT a level like
+   * `isAreaSetDraftOpen` above. `isAreaSetDraftOpen` must be a level because
+   * its mobile consumer (`AreaSetChips`) mounts lazily, AFTER the level is
+   * already set — an edge would be missed by that late mount. That race does
+   * not exist here: `useDiscoverMapDataController` (the sole consumer of
+   * this request) is already mounted before Return is ever clickable. Using
+   * a level here would instead cause the camera to re-fire on every
+   * subsequent scope change, not just the one Return issued it for — the
+   * `areaKey` binding plus one-shot consumption is what prevents that.
+   */
+  getAreaSetCameraRestoreRequest: () => AreaSetCameraRestoreRequest | null;
+  /** Sets (or, with `null`, clears) the pending restore request above. */
+  setAreaSetCameraRestoreRequest: (request: AreaSetCameraRestoreRequest | null) => void;
 }

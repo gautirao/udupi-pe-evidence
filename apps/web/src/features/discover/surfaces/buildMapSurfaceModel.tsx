@@ -65,6 +65,7 @@ type MapCameraView = Pick<
   | 'cityCenter'
   | 'cityZoom'
   | 'cameraIntent'
+  | 'pendingRemountCameraIntentSeqRef'
   | 'panToArea'
   | 'mapZoom'
 > &
@@ -363,6 +364,7 @@ export type BuildMapSurfaceViewParams = Omit<
   | 'cityCenter'
   | 'cityZoom'
   | 'cameraIntent'
+  | 'pendingRemountCameraIntentSeqRef'
   | 'areaMarkerListings'
   | 'schoolRadiusHasMore'
   | 'markersTruncated'
@@ -486,6 +488,7 @@ export type BuildMapSurfaceViewParams = Omit<
     | 'cityCenter'
     | 'cityZoom'
     | 'cameraIntent'
+    | 'pendingRemountCameraIntentSeqRef'
     | 'areaMarkerListings'
     | 'schoolRadiusHasMore'
     | 'markersTruncated'
@@ -609,7 +612,7 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
   const {
     pageContextController: { isAuthenticated, isAgriJourney },
     pageStateController: { showLoader, filters, selectedSchool, panToArea, mapZoom, mapReady, city, resolvedPanelContent, effectiveSelectedArea: selectedArea },
-    mapDataController: { error, activeFocusBounds, cityCenter, cityZoom, cameraIntent, areaMarkerListings, schoolRadiusHasMore, markersTruncated, markersReturnedElements, markersTotalFilteredElements, isLoading },
+    mapDataController: { error, activeFocusBounds, cityCenter, cityZoom, cameraIntent, pendingRemountCameraIntentSeqRef, areaMarkerListings, schoolRadiusHasMore, markersTruncated, markersReturnedElements, markersTotalFilteredElements, isLoading },
     areaGroupsController: { focusedGroupAreas, focusedGroup },
     badgeController: { announcedBadgeText, discoverBadge, areaResultSummaryText, groupSelectedBadgeCopy, fallbackBadgeCopy, schoolRadiusActive, schoolRadiusPillNoun, cityTotal, hasActiveAnonFilter },
     journeyChromeController: { isLandingState, showSchoolMarkers, showSchoolBreadcrumb, schoolRadiusOverlay, isSelectedGroupState, isAreaFirstSelectedAreaState },
@@ -668,6 +671,7 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
       cityCenter,
       cityZoom,
       cameraIntent,
+      pendingRemountCameraIntentSeqRef,
       panToArea,
       bottomOcclusionPx,
       previewOcclusionPx,

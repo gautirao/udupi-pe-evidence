@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import type { ReactNode, RefObject, Dispatch, SetStateAction } from 'react';
+import type { ReactNode, RefObject, MutableRefObject, Dispatch, SetStateAction } from 'react';
 import { useDiscoverActions, useDiscoverNav, useDiscoverShell, useDiscoverViewport } from '@/features/discover/context/useDiscoverContext';
 import { PropertyMap, type PropertyListingWithImages } from '@/components/map/PropertyMap';
 import { Card } from '@/components/ui/card';
@@ -169,6 +169,13 @@ export interface DiscoverMapCanvasProps {
   handleOverviewAreaClick: (area: AreaPoint) => void;
   publishCameraIntent: (area: AreaPoint) => void;
   cameraIntent: CameraIntent | null;
+  /**
+   * Issue #2480 (mobile) — forwarded verbatim to PropertyMap → MapController,
+   * which owns the contract. Lets a restore intent published from the panel
+   * while this map was unmounted (mobile List view) be delivered on the next
+   * mount instead of being absorbed by adopt-on-mount.
+   */
+  pendingRemountCameraIntentSeqRef: MutableRefObject<number | null>;
   focusedGroupAreas: string[] | undefined;
   /** AREA_LAYER_MAX_ZOOM — stays a page module-const; passed through as a prop. */
   areaLayerMaxZoom: number;
@@ -442,6 +449,7 @@ export function DiscoverMapCanvas({
   handleOverviewAreaClick,
   publishCameraIntent,
   cameraIntent,
+  pendingRemountCameraIntentSeqRef,
   focusedGroupAreas,
   areaLayerMaxZoom,
   selectedArea,
@@ -955,6 +963,7 @@ export function DiscoverMapCanvas({
           // camera before this issue, regardless of which branch fires.
           onAreaCameraIntent={publishCameraIntent}
           cameraIntent={cameraIntent}
+          pendingRemountCameraIntentSeqRef={pendingRemountCameraIntentSeqRef}
           focusedGroupAreas={mapZoom <= areaLayerMaxZoom ? focusedGroupAreas : undefined}
           // Issue #1798 PR-B — area-marker density degradation. Gated on the SAME
           // condition as focusedGroupAreas above (a dense group of member areas is

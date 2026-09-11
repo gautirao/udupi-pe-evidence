@@ -389,3 +389,136 @@ describe('Issue #1953 (RH1, sixth site) — lastHandledSeqRef survives a real Di
     expect(totalCameraCalls()).toBe(1);
   });
 });
+
+/**
+ * Issue #2480 (mobile) — the adopt-on-mount guard above is CONSERVATIVE: on its
+ * first run for a new instance it cannot tell "this seq was already consumed by
+ * the previous mount" (must not re-fire — #1953) from "this seq has never been
+ * delivered to any map at all" (must fire — this defect). It assumed the former
+ * for both, so an intent published while the map was unmounted was swallowed.
+ *
+ * That is exactly the mobile Return journey. Mobile Discover is panel-first:
+ * `/discover` opens in List view with Leaflet NOT mounted, and the panel scope
+ * bar's "Return to <area>" is reachable ONLY there. The #2480 restore intent is
+ * therefore published into `cameraIntent` (state in useDiscoverMapData, ABOVE
+ * DiscoverMapMount's unmount boundary, so it survives) at a moment when no
+ * MapController exists to consume it — and the next mount adopted it silently.
+ *
+ * `pendingRemountCameraIntentSeqRef` supplies the missing bit: it is set ONLY by
+ * the #2480 Return publish, lives above the unmount boundary alongside the
+ * intent itself, and is read-then-reset here (the same one-shot discipline as
+ * `isClusterDrillIntentRef`). Because `cameraIntentSeqRef` is strictly
+ * monotonic, a request that is superseded before delivery can never match a
+ * later seq — a stale marker is inert rather than dangerous.
+ */
+describe('Issue #2480 (mobile) — an intent published while the map was UNMOUNTED is delivered on the next mount', () => {
+  beforeEach(() => {
+    mapStub.fitBounds.mockClear();
+    mapStub.flyTo.mockClear();
+    mapStub.setView.mockClear();
+    mapStub.getBoundsZoom.mockClear();
+    mapStub.getBoundsZoom.mockReturnValue(14);
+  });
+
+  function clearCameraCalls() {
+    mapStub.fitBounds.mockClear();
+    mapStub.flyTo.mockClear();
+    mapStub.setView.mockClear();
+  }
+
+  // Bounds standing in for the previous AREA_SET area the user Returns to.
+  // The mocked L.latLngBounds getCenter() averages the corners, so the camera
+  // target is checkable: [12.93, 77.53].
+  const RESTORE_BOUNDS: [[number, number], [number, number]] = [[12.90, 77.50], [12.96, 77.56]];
+
+  it('Return published in List view (map unmounted) → opening Map restores the camera exactly once, and reopening Map does not replay it', () => {
+    // A genuine first mount that consumes seq 1 — an ordinary area click while
+    // the map was open. This establishes a non-zero already-consumed seq, which
+    // is what made the pre-fix guard swallow everything that followed a remount.
+    const first = render(<PropertyMap {...baseProps} cameraIntent={null} focusBounds={null} />);
+    first.rerender(<PropertyMap {...baseProps} cameraIntent={leafIntent(1)} focusBounds={null} />);
+    expect(totalCameraCalls()).toBe(1);
+    clearCameraCalls();
+
+    // Mobile switches to List view — DiscoverMapMount returns null, a true
+    // unmount (not hidden/display:none).
+    first.unmount();
+
+    // While unmounted, the panel's "Return to <area>" fires. #2480's post-commit
+    // effect publishes a restore intent (seq 2) and marks it undelivered.
+    const pendingSeqRef: React.MutableRefObject<number | null> = { current: 2 };
+    const restoreIntent = leafIntent(2, RESTORE_BOUNDS);
+
+    // The user taps Map — remount.
+    const second = render(
+      <PropertyMap
+        {...baseProps}
+        cameraIntent={restoreIntent}
+        focusBounds={null}
+        pendingRemountCameraIntentSeqRef={pendingSeqRef}
+      />,
+    );
+
+    // Exactly one camera fire...
+    expect(totalCameraCalls()).toBe(1);
+    // ...and it landed on the RETURNED-TO area, not merely "something happened".
+    // A silent no-op is the failure mode, so the target itself is asserted.
+    expect(mapStub.setView).toHaveBeenCalledTimes(1);
+    const [center, zoom] = mapStub.setView.mock.calls[0];
+    expect(center).toEqual({ lat: 12.93, lng: 77.53 });
+    expect(zoom).toBe(14);
+    // Consumed: strictly one-shot.
+    expect(pendingSeqRef.current).toBeNull();
+    clearCameraCalls();
+
+    // Back to List, then Map again. The intent object is unchanged (state above
+    // the boundary is never reset after consumption) — it MUST NOT fire twice.
+    // This is the #1953 hazard the adopt-on-mount guard exists for.
+    second.unmount();
+    render(
+      <PropertyMap
+        {...baseProps}
+        cameraIntent={restoreIntent}
+        focusBounds={null}
+        pendingRemountCameraIntentSeqRef={pendingSeqRef}
+      />,
+    );
+    expect(totalCameraCalls()).toBe(0);
+  });
+
+  it('a marker whose seq has been superseded before delivery is inert — the newer intent is still adopted, not fired', () => {
+    // Return publishes seq 2 while unmounted, then something else publishes
+    // seq 3 before the map is ever opened. seq is strictly monotonic, so the
+    // stale marker cannot match — and the newer intent, which no Return issued,
+    // must still be adopted silently rather than fired on mount.
+    const pendingSeqRef: React.MutableRefObject<number | null> = { current: 2 };
+    render(
+      <PropertyMap
+        {...baseProps}
+        cameraIntent={leafIntent(3, RESTORE_BOUNDS)}
+        focusBounds={null}
+        pendingRemountCameraIntentSeqRef={pendingSeqRef}
+      />,
+    );
+    expect(totalCameraCalls()).toBe(0);
+  });
+
+  it('with no pending marker, a mount carrying an already-consumed intent still does not fire (#1953 unchanged)', () => {
+    // The absent-prop case: every non-Discover PropertyMap consumer
+    // (ListingDetailBoundaryMap, CityLaunchPreview) passes nothing, and must
+    // keep exactly today's adopt-on-mount behaviour.
+    const pendingSeqRef: React.MutableRefObject<number | null> = { current: null };
+    render(
+      <PropertyMap
+        {...baseProps}
+        cameraIntent={leafIntent(7)}
+        focusBounds={null}
+        pendingRemountCameraIntentSeqRef={pendingSeqRef}
+      />,
+    );
+    expect(totalCameraCalls()).toBe(0);
+
+    render(<PropertyMap {...baseProps} cameraIntent={leafIntent(9)} focusBounds={null} />);
+    expect(totalCameraCalls()).toBe(0);
+  });
+});

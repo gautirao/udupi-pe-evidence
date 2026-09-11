@@ -450,6 +450,8 @@ function defaultShellMock() {
     fitAreaSet: vi.fn(),
     focusAreaSetMember: vi.fn(),
     registerAreaSetCameraActions: vi.fn(),
+    getAreaSetCameraRestoreRequest: vi.fn(() => null),
+    setAreaSetCameraRestoreRequest: vi.fn(),
   };
 }
 

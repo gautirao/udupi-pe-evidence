@@ -1,0 +1,97 @@
+{
+  "mode": "desktop",
+  "arm": "before",
+  "viewport": {
+    "w": 1366,
+    "h": 768
+  },
+  "guards": {
+    "innerWidth": 1366,
+    "innerHeight": 768,
+    "mq820": false,
+    "consent": "denied"
+  },
+  "initialCam": {
+    "lat": 12.94995,
+    "lon": 77.5249,
+    "zoom": 16,
+    "rscope": "vp",
+    "rareas": null,
+    "rprev": "areas:IN|KA|Bengaluru|RR Nagar"
+  },
+  "stagedCam": {
+    "lat": 12.97149,
+    "lon": 77.54701,
+    "zoom": 16,
+    "rscope": "vp",
+    "rareas": null,
+    "rprev": "areas:IN|KA|Bengaluru|RR Nagar"
+  },
+  "returnLabel": "Return to RR Nagar",
+  "preReturn": {
+    "lat": 12.97149,
+    "lon": 77.54701,
+    "zoom": 16,
+    "rscope": "vp",
+    "rareas": null,
+    "rprev": "areas:IN|KA|Bengaluru|RR Nagar"
+  },
+  "postReturn": {
+    "lat": 12.97149,
+    "lon": 77.54701,
+    "zoom": 16,
+    "rscope": "areas",
+    "rareas": "IN|KA|Bengaluru|RR Nagar",
+    "rprev": "vp:12.95,77.72,12.99,77.78"
+  },
+  "mapToggleControl": null,
+  "apiSample": [
+    "http://localhost:8281/api/discover/areas?city=bangalore",
+    "http://localhost:8281/api/discover/areas/nearby-candidates?city=bangalore&listingPurpose=sale",
+    "http://localhost:8281/api/discover/area-groups?city=bangalore",
+    "http://localhost:8281/api/discover/regional-area-groups?city=bangalore&propertyType=agricultural_land&listingPurpose=sale",
+    "http://localhost:8281/api/discover/agri-destinations?city=bangalore&listingPurpose=sale",
+    "http://localhost:8281/api/discover/cities/bangalore/regions?listingPurpose=sale"
+  ],
+  "apiHost": [
+    "http://localhost:8281"
+  ],
+  "steps": [
+    {
+      "name": "before-desktop-1366x768-01-staged-panned-away",
+      "file": "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/fa8140d3-b2a2-4812-845a-488d7a75b4ea/scratchpad/unfixed/before-desktop-1366x768-01-staged-panned-away.png",
+      "url": "http://localhost:5381/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.97149&lon=77.54701&zoom=16&rscope=vp&rvp=12.95%2C77.72%2C12.99%2C77.78&rprev=areas%3AIN%7CKA%7CBengaluru%7CRR+Nagar",
+      "cam": {
+        "lat": 12.97149,
+        "lon": 77.54701,
+        "zoom": 16,
+        "rscope": "vp",
+        "rareas": null,
+        "rprev": "areas:IN|KA|Bengaluru|RR Nagar"
+      },
+      "tiles": {
+        "all": 30,
+        "ok": 30
+      },
+      "tilesSettled": true
+    },
+    {
+      "name": "before-desktop-1366x768-02-after-return",
+      "file": "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/fa8140d3-b2a2-4812-845a-488d7a75b4ea/scratchpad/unfixed/before-desktop-1366x768-02-after-return.png",
+      "url": "http://localhost:5381/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.97149&lon=77.54701&zoom=16&rprev=vp%3A12.95%2C77.72%2C12.99%2C77.78&rscope=areas&rareas=IN%7CKA%7CBengaluru%7CRR+Nagar",
+      "cam": {
+        "lat": 12.97149,
+        "lon": 77.54701,
+        "zoom": 16,
+        "rscope": "areas",
+        "rareas": "IN|KA|Bengaluru|RR Nagar",
+        "rprev": "vp:12.95,77.72,12.99,77.78"
+      },
+      "tiles": {
+        "all": 30,
+        "ok": 30
+      },
+      "tilesSettled": true
+    }
+  ]
+}

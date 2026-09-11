@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { PropertyFilters, PropertyListing, PropertyImage, clampSchoolRadiusKm } from '@/hooks/usePropertyListings';
 import { useDiscoverListings } from '@/hooks/useDiscoverListings';
 import { useDiscoverFilteredMarkers } from '@/hooks/useDiscoverFilteredMarkers';
@@ -560,12 +560,27 @@ export interface UseDiscoverMapDataResult {
    * caller-supplied (`'leaf'` for a resolved AREA node, `'overview'`
    * otherwise) rather than hardcoded, since Recenter can be pressed at any
    * hierarchy level.
+   *
+   * Issue #2480 (mobile) — `options.deliverOnRemount` additionally marks the
+   * published seq on `pendingRemountCameraIntentSeqRef` below, so an intent
+   * published while NO map is mounted survives to be delivered when one next
+   * mounts. Set it ONLY for the panel-side Return restore: every other producer
+   * is reachable only from the map surface, so it cannot publish while
+   * unmounted and must keep being absorbed by adopt-on-mount (#1953).
    */
   publishRecenterCameraIntent: (
     bounds: CameraIntent['bounds'],
     center: [number, number],
     framing: CameraIntent['framing'],
+    options?: { deliverOnRemount?: boolean },
   ) => void;
+  /**
+   * Issue #2480 (mobile) — the `cameraIntent.seq` of a published-but-never-
+   * delivered restore intent, or null. Threaded down to `MapController`, which
+   * owns the full contract on its `pendingRemountCameraIntentSeqRef` prop and
+   * read-then-resets this on the first mount that matches it.
+   */
+  pendingRemountCameraIntentSeqRef: MutableRefObject<number | null>;
   /**
    * Issue #1956 PR 1 (FE-3, item 2) — THE shared visible-member set for the
    * current destination scope, derived once here and handed to
@@ -1012,6 +1027,14 @@ export function useDiscoverMapData({
   // publishing never itself triggers a re-render beyond the setCameraIntent below.
   const cameraIntentSeqRef = useRef(0);
   const [cameraIntent, setCameraIntent] = useState<CameraIntent | null>(null);
+  // Issue #2480 (mobile) — the seq of a published intent that no map has yet
+  // consumed, or null. Lives HERE, next to `cameraIntent` itself and therefore
+  // above DiscoverMapMount's real-unmount boundary, because that is the only
+  // level that survives the mobile List→Map remount the marker exists to cross.
+  // Set only via `publishRecenterCameraIntent`'s `deliverOnRemount` option (the
+  // Return-to-previous-scope restore); read-then-reset by MapController, whose
+  // prop doc carries the full contract.
+  const pendingRemountCameraIntentSeqRef = useRef<number | null>(null);
   const publishCameraIntent = useCallback(
     (area: AreaPoint) => {
       // Issue #1882 (Track A PR2 Slice S4) — route the area's bbox/centroid
@@ -1103,13 +1126,25 @@ export function useDiscoverMapData({
   // Issue #2088 (commit 6) — Recenter producer. See the CameraIntent.bypassSuppression
   // and UseDiscoverMapDataResult.publishRecenterCameraIntent doc comments above.
   const publishRecenterCameraIntent = useCallback(
-    (bounds: CameraIntent['bounds'], center: [number, number], framing: CameraIntent['framing']) => {
+    (
+      bounds: CameraIntent['bounds'],
+      center: [number, number],
+      framing: CameraIntent['framing'],
+      options?: { deliverOnRemount?: boolean },
+    ) => {
       const framed = resolveCameraFraming({
         bbox: bounds,
         centroid: center,
         cityCentre: cityCenter,
       });
       cameraIntentSeqRef.current += 1;
+      if (options?.deliverOnRemount) {
+        // Issue #2480 (mobile) — see the ref's doc comment above. Overwrites any
+        // earlier marker rather than accumulating: only the newest undelivered
+        // restore can ever be the one worth delivering, and `seq` is strictly
+        // monotonic so the overwritten value could never have matched again.
+        pendingRemountCameraIntentSeqRef.current = cameraIntentSeqRef.current;
+      }
       setCameraIntent({
         seq: cameraIntentSeqRef.current,
         bounds: framed.bounds,
@@ -1232,6 +1267,7 @@ export function useDiscoverMapData({
     publishClusterCameraIntent,
     publishMarkerClusterCameraIntent,
     publishRecenterCameraIntent,
+    pendingRemountCameraIntentSeqRef,
     visibleMemberSet,
   };
 }

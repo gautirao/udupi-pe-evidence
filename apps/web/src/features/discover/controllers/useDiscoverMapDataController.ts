@@ -346,6 +346,78 @@ export function useDiscoverMapDataController({
   // matching `publishRecenterCameraIntent`'s documented framing convention
   // for a single resolved area.
   const shell = useDiscoverShell();
+
+  // Issue #2480 (Return-to-scope camera restore) — restores camera framing
+  // when the user Returns from a committed VIEWPORT/POLYGON result scope
+  // back to a previous SINGLE-area (N=1) AREA_SET scope. The N>1 case is
+  // already covered by the ambient effect above; N=1 needs its own path
+  // because `handleReturnToPreviousScope` (AreaSelectedPanel.tsx) cannot
+  // safely call `shell.focusAreaSetMember` synchronously right after
+  // `commitResultScope(previous)` — that delegate closes over the
+  // `resultScope` snapshot captured at the LAST registration of the effect
+  // below, i.e. the PRE-commit scope, so it would silently no-op. Instead,
+  // `handleReturnToPreviousScope` records a one-shot restore request via
+  // `shell.setAreaSetCameraRestoreRequest` (DiscoverShellContextValue),
+  // bound to the areaKey it was issued for, and THIS effect — which re-runs
+  // only AFTER the commit lands, once `committedAreaSetSignature` reflects
+  // it — consumes that request and publishes the camera intent directly
+  // (never through `shell.focusAreaSetMember`, which would reintroduce the
+  // same stale-closure bug this effect exists to avoid).
+  //
+  // Deliberately does NOT reuse/extend the N>1 effect above: that effect's
+  // own doc requires it never fire alongside the ordinary single-area
+  // `selectArea()` flow (#2017 no-regression) — gating merely on "committed
+  // scope is now an N=1 AREA_SET" would double-fire on top of that flow's
+  // own camera-intent publish (see useDiscoverNavigationController.ts:224).
+  // The one-shot request is the discriminator: it is set ONLY by Return.
+  //
+  // The request carries its camera target PRE-RESOLVED (by the panel, at
+  // issue time — see `AreaSetCameraRestoreRequest`'s doc in context/types.ts)
+  // rather than being recomputed here against `mapData.discoverAreasData`.
+  // That is deliberate: this effect now clears the request on EVERY path,
+  // so it can never survive to be re-consumed by a later, unrelated commit
+  // that happens to land on the same `areaKey` — which is exactly how a
+  // previous "leave the cold request pending and retry" design produced a
+  // deferred #2017 double-fire (a spurious second camera snap once
+  // `discoverAreasData` finally changed identity, on top of an intervening
+  // flow's own already-correct publish).
+  useEffect(() => {
+    const request = shell.getAreaSetCameraRestoreRequest();
+    if (!request) return;
+    // Always clear immediately — this is a strictly one-shot request no
+    // matter which branch below is taken.
+    shell.setAreaSetCameraRestoreRequest(null);
+    // Bound to the scope it was issued for — if the committed AREA_SET no
+    // longer matches (the user navigated away again, e.g. browser Back
+    // after a Return-PUSH per #2015 AC7, or an immediate second
+    // selectArea()/Return), drop the request rather than firing against
+    // whatever is committed now.
+    if (committedAreaSetKeys.length !== 1 || committedAreaSetKeys[0] !== request.areaKey) {
+      return;
+    }
+    // `deliverOnRemount` (issue #2480 mobile follow-up) — on mobile this effect
+    // very often runs while NO map is mounted at all. Discover is panel-first
+    // there: `/discover` opens in List view with Leaflet not mounted
+    // (`.leaflet-container` count is 0), Map is a mutually-exclusive
+    // full-screen overlay, and the panel scope bar's "Return to <area>" is
+    // reachable ONLY in List. So the genuine shopper journey publishes this
+    // intent with no consumer alive, and `MapController`'s adopt-on-mount
+    // guard (PropertyMap.tsx, issue #1953 RH1) then absorbed it silently on the
+    // next Map open — a non-zero seq on a first render being indistinguishable
+    // from one the previous mount had already consumed.
+    //
+    // The option marks this seq as never-delivered, on a ref that lives beside
+    // `cameraIntent` itself and therefore above DiscoverMapMount's real-unmount
+    // boundary, so the next mount delivers it exactly once instead of adopting
+    // it. It opens no pending-request window: the shell request is still
+    // cleared unconditionally above, and the marker is a strictly monotonic
+    // seq, so one superseded before delivery can never match a later intent.
+    mapData.publishRecenterCameraIntent(request.bounds, request.center, 'leaf', {
+      deliverOnRemount: true,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [committedAreaSetSignature, mapData.publishRecenterCameraIntent, shell]);
+
   useEffect(() => {
     shell.registerAreaSetCameraActions({
       fitAreaSet: () => {

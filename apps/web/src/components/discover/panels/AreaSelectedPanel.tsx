@@ -392,7 +392,7 @@ export function AreaSelectedPanel({
   // panel-side regression to match.
   //
   // Camera-fit on Return (ActiveScopeChip's `publishCameraIntent` /
-  // `computeGroupBounds` branch) is intentionally still NOT ported:
+  // `computeGroupBounds` branch):
   //   - `previous.kind === 'VIEWPORT' | 'POLYGON'`: ActiveScopeChip's own
   //     `handleReturn` has no camera-fit branch for these kinds either —
   //     this is reference parity, not a gap.
@@ -400,16 +400,20 @@ export function AreaSelectedPanel({
   //     ambiently by useDiscoverMapDataController's multi-area AREA_SET
   //     auto-fit effect, which re-fires on any `resultScope` change
   //     regardless of which UI triggered it.
-  //   - `previous.kind === 'AREA_SET'` with exactly 1 area: genuinely
-  //     unresolved. No ambient/state-driven camera trigger exists for a
-  //     single-area AREA_SET today (only the click-driven `selectArea()`
-  //     flow fits the camera). Fitting this case would require either (a)
-  //     extending the ambient effect in useDiscoverMapDataController to
-  //     also fire for a single-area AREA_SET result, or (b) calling
-  //     `shell.focusAreaSetMember`/`shell.fitAreaSet` from
-  //     `handleReturnToPreviousScope` below and proving it does not race
-  //     the `commitResultScope` state update that drives the ambient
-  //     effects. Left as a known, reported limitation rather than faked.
+  //   - `previous.kind === 'AREA_SET'` with exactly 1 area: Issue #2480.
+  //     `handleReturnToPreviousScope` below CANNOT safely call
+  //     `shell.focusAreaSetMember`/`shell.fitAreaSet` synchronously right
+  //     after `actions.commitResultScope(previous)` — those stable delegates
+  //     close over whatever `AreaSetCameraActions` was registered as of the
+  //     LAST render before the commit, i.e. they still read the PRE-commit
+  //     `resultScope`, so a synchronous call would silently no-op against
+  //     stale state. Instead, Return records a one-shot restore request via
+  //     `shell.setAreaSetCameraRestoreRequest` (bound to the single areaKey
+  //     it was issued for), which a POST-COMMIT effect in
+  //     `useDiscoverMapDataController` consumes once the committed scope has
+  //     actually changed, publishing the camera intent directly. See that
+  //     effect's doc, and `DiscoverShellContextValue.getAreaSetCameraRestoreRequest`
+  //     in context/types.ts, for the full reasoning.
   const resolvedAreasCity = city || nav.city || DEFAULT_CITY;
   const { data: discoverAreasData } = useDiscoverAreas(resolvedAreasCity);
   const previousResultScope = nav.resultScope?.previous ?? null;
@@ -448,8 +452,33 @@ export function AreaSelectedPanel({
     // Per #2015 AC7, a scope-boundary restore is a PUSH transition (browser
     // back stays undoable) — intentionally no `{ history: 'replace' }`.
     actions.commitResultScope(previousResultScope);
-    // NOTE: camera-fit intentionally omitted — see comment above.
-  }, [actions, previousResultScope]);
+    // Issue #2480 — single-area (N=1) AREA_SET camera restore. Cannot call
+    // `shell.focusAreaSetMember`/`shell.fitAreaSet` synchronously here — see
+    // the doc comment above. Instead, record a one-shot request that the
+    // post-commit effect in useDiscoverMapDataController will consume once
+    // the commit above has actually landed. N>1 AREA_SET and non-AREA_SET
+    // previous scopes are intentionally left alone (see doc comment above).
+    //
+    // The target is resolved HERE, from `previousAreas` (already loaded by
+    // this panel for the Return label above), not left for the consuming
+    // effect to recompute later — see `AreaSetCameraRestoreRequest`'s doc in
+    // context/types.ts for why that matters (deferred #2017 double-fire).
+    // If the single area doesn't actually resolve in `previousAreas` (e.g.
+    // areas data not loaded here either), issue no request at all — an
+    // honest degradation, since the Return label already falls back to the
+    // generic "Return to previous area" in that case too.
+    if (
+      previousResultScope?.kind === 'AREA_SET' &&
+      previousResultScope.areaKeys.length === 1 &&
+      previousAreas.length === 1
+    ) {
+      shell.setAreaSetCameraRestoreRequest({
+        areaKey: previousAreas[0].areaKey,
+        bounds: previousAreas[0].bbox,
+        center: [previousAreas[0].geo_center_lat, previousAreas[0].geo_center_lon],
+      });
+    }
+  }, [actions, previousAreas, previousResultScope, shell]);
 
   // "Edit areas" / "Add nearby areas" open the AREA_SET draft (Issue #2017;
   // desktop rework owner-directed) — `openAreaSetDraft()` is the single

@@ -1,0 +1,244 @@
+{
+  "neutralityControl": {
+    "build": "08e84394 (fixed)",
+    "staged": {
+      "lat": 12.97148,
+      "lon": 77.54702,
+      "zoom": 16,
+      "rscope": "vp",
+      "rareas": null,
+      "rprev": "areas:IN|KA|Bengaluru|RR Nagar"
+    },
+    "before": {
+      "lat": 12.97148,
+      "lon": 77.54702,
+      "zoom": 16,
+      "rscope": "vp",
+      "rareas": null,
+      "rprev": "areas:IN|KA|Bengaluru|RR Nagar"
+    },
+    "inList": {
+      "lat": 12.97148,
+      "lon": 77.54702,
+      "zoom": 16,
+      "rscope": "vp",
+      "rareas": null,
+      "rprev": "areas:IN|KA|Bengaluru|RR Nagar"
+    },
+    "backInMap": {
+      "lat": 12.97148,
+      "lon": 77.54702,
+      "zoom": 16,
+      "rscope": "vp",
+      "rareas": null,
+      "rprev": "areas:IN|KA|Bengaluru|RR Nagar"
+    },
+    "cameraNeutral": true
+  },
+  "userReachable": {
+    "staged": {
+      "lat": 12.97148,
+      "lon": 77.54702,
+      "zoom": 16,
+      "rscope": "vp",
+      "rareas": null,
+      "rprev": "areas:IN|KA|Bengaluru|RR Nagar"
+    },
+    "returnLabel": "Return to RR Nagar",
+    "afterReturnInList": {
+      "lat": 12.97148,
+      "lon": 77.54702,
+      "zoom": 16,
+      "rscope": "areas",
+      "rareas": "IN|KA|Bengaluru|RR Nagar",
+      "rprev": "vp:12.95,77.72,12.99,77.78"
+    },
+    "mapAfterReturn": {
+      "lat": 12.93169,
+      "lon": 77.52932,
+      "zoom": 16,
+      "rscope": "areas",
+      "rareas": "IN|KA|Bengaluru|RR Nagar",
+      "rprev": "vp:12.95,77.72,12.99,77.78"
+    },
+    "cameraRestored": true,
+    "secondOpen": {
+      "lat": 12.93169,
+      "lon": 77.52932,
+      "zoom": 16,
+      "rscope": "areas",
+      "rareas": "IN|KA|Bengaluru|RR Nagar",
+      "rprev": "vp:12.95,77.72,12.99,77.78"
+    },
+    "noReplayOnSecondMount": true
+  },
+  "mapMounted": {
+    "staged": {
+      "lat": 12.97148,
+      "lon": 77.54702,
+      "zoom": 16,
+      "rscope": "vp",
+      "rareas": null,
+      "rprev": "areas:IN|KA|Bengaluru|RR Nagar"
+    },
+    "after": {
+      "lat": 12.93169,
+      "lon": 77.52932,
+      "zoom": 16,
+      "rscope": "areas",
+      "rareas": "IN|KA|Bengaluru|RR Nagar",
+      "rprev": "vp:12.95,77.72,12.99,77.78"
+    },
+    "cameraRestored": true
+  },
+  "desktopRegression": {
+    "staged": {
+      "lat": 12.97149,
+      "lon": 77.54701,
+      "zoom": 16,
+      "rscope": "vp",
+      "rareas": null,
+      "rprev": "areas:IN|KA|Bengaluru|RR Nagar"
+    },
+    "returnLabel": "Return to RR Nagar",
+    "after": {
+      "lat": 12.9317,
+      "lon": 77.52933,
+      "zoom": 16,
+      "rscope": "areas",
+      "rareas": "IN|KA|Bengaluru|RR Nagar",
+      "rprev": "vp:12.95,77.72,12.99,77.78"
+    },
+    "cameraRestored": true,
+    "guards": {
+      "innerWidth": 1366,
+      "innerHeight": 768,
+      "mq820": false
+    }
+  },
+  "meta": {
+    "build": "08e84394 fix + 1362cbdc docs",
+    "worktree": "issue-2480-reshoot",
+    "ports": {
+      "vite": 5391,
+      "backend": 8291,
+      "pg": 5462
+    },
+    "expectedFit": {
+      "lat": 12.93169,
+      "lon": 77.52932
+    },
+    "apiOrigins": [
+      "http://localhost:8291"
+    ],
+    "mobileGuards": {
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "mq820": true
+    },
+    "steps": [
+      {
+        "name": "fixed-mobile-390x844-01-map-staged-panned-away",
+        "url": "http://localhost:5391/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.97148&lon=77.54702&zoom=16&rscope=vp&rvp=12.95%2C77.72%2C12.99%2C77.78&rprev=areas%3AIN%7CKA%7CBengaluru%7CRR+Nagar",
+        "cam": {
+          "lat": 12.97148,
+          "lon": 77.54702,
+          "zoom": 16,
+          "rscope": "vp",
+          "rareas": null,
+          "rprev": "areas:IN|KA|Bengaluru|RR Nagar"
+        },
+        "tiles": {
+          "all": 29,
+          "ok": 29
+        },
+        "tilesSettled": true
+      },
+      {
+        "name": "fixed-mobile-390x844-02-list-after-return",
+        "url": "http://localhost:5391/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.97148&lon=77.54702&zoom=16&rprev=vp%3A12.95%2C77.72%2C12.99%2C77.78&rscope=areas&rareas=IN%7CKA%7CBengaluru%7CRR+Nagar",
+        "cam": {
+          "lat": 12.97148,
+          "lon": 77.54702,
+          "zoom": 16,
+          "rscope": "areas",
+          "rareas": "IN|KA|Bengaluru|RR Nagar",
+          "rprev": "vp:12.95,77.72,12.99,77.78"
+        },
+        "tiles": {
+          "all": 0,
+          "ok": 0
+        },
+        "tilesSettled": false
+      },
+      {
+        "name": "fixed-mobile-390x844-03-map-camera-RESTORED",
+        "url": "http://localhost:5391/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.93169&lon=77.52932&zoom=16&rprev=vp%3A12.95%2C77.72%2C12.99%2C77.78&rscope=areas&rareas=IN%7CKA%7CBengaluru%7CRR+Nagar",
+        "cam": {
+          "lat": 12.93169,
+          "lon": 77.52932,
+          "zoom": 16,
+          "rscope": "areas",
+          "rareas": "IN|KA|Bengaluru|RR Nagar",
+          "rprev": "vp:12.95,77.72,12.99,77.78"
+        },
+        "tiles": {
+          "all": 10,
+          "ok": 10
+        },
+        "tilesSettled": true
+      },
+      {
+        "name": "fixed-mobile-390x844-04-second-open-no-replay",
+        "url": "http://localhost:5391/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.93169&lon=77.52932&zoom=16&rprev=vp%3A12.95%2C77.72%2C12.99%2C77.78&rscope=areas&rareas=IN%7CKA%7CBengaluru%7CRR+Nagar",
+        "cam": {
+          "lat": 12.93169,
+          "lon": 77.52932,
+          "zoom": 16,
+          "rscope": "areas",
+          "rareas": "IN|KA|Bengaluru|RR Nagar",
+          "rprev": "vp:12.95,77.72,12.99,77.78"
+        },
+        "tiles": {
+          "all": 10,
+          "ok": 10
+        },
+        "tilesSettled": true
+      },
+      {
+        "name": "fixed-mobile-390x844-05-map-mounted-control",
+        "url": "http://localhost:5391/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.93169&lon=77.52932&zoom=16&rprev=vp%3A12.95%2C77.72%2C12.99%2C77.78&rscope=areas&rareas=IN%7CKA%7CBengaluru%7CRR+Nagar",
+        "cam": {
+          "lat": 12.93169,
+          "lon": 77.52932,
+          "zoom": 16,
+          "rscope": "areas",
+          "rareas": "IN|KA|Bengaluru|RR Nagar",
+          "rprev": "vp:12.95,77.72,12.99,77.78"
+        },
+        "tiles": {
+          "all": 13,
+          "ok": 13
+        },
+        "tilesSettled": true
+      },
+      {
+        "name": "fixed-desktop-1366x768-01-after-return",
+        "url": "http://localhost:5391/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.93170&lon=77.52933&zoom=16&rprev=vp%3A12.95%2C77.72%2C12.99%2C77.78&rscope=areas&rareas=IN%7CKA%7CBengaluru%7CRR+Nagar",
+        "cam": {
+          "lat": 12.9317,
+          "lon": 77.52933,
+          "zoom": 16,
+          "rscope": "areas",
+          "rareas": "IN|KA|Bengaluru|RR Nagar",
+          "rprev": "vp:12.95,77.72,12.99,77.78"
+        },
+        "tiles": {
+          "all": 16,
+          "ok": 16
+        },
+        "tilesSettled": true
+      }
+    ]
+  }
+}

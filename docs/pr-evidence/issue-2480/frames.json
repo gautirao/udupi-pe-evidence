@@ -1,0 +1,459 @@
+{
+  "note": "Sidecar for the frames added by the capture lane. url_at_shot is page.url() read in the same step that wrote the image. The annotation strip burned into each JPEG reproduces these values and is NOT browser chrome.",
+  "stack": {
+    "fixture_container": "pg-test-fixture-2480b",
+    "pg_port": 5452,
+    "backend_port": 8281,
+    "vite_port": 5381,
+    "cors_verified_header": "Access-Control-Allow-Origin: http://localhost:5381"
+  },
+  "pixel_diff": {
+    "method": "Crop the map pane from each frame, convert to RGB, take the per-channel absolute difference. mean_abs_diff is over all channels; pct_pixels_changed_gt8 is the share of pixels whose max channel delta exceeds 8/255. Computed from the COMMITTED JPEGs in this directory, not from the source PNGs, so re-derivation reproduces these values exactly.",
+    "rows": [
+      {
+        "row": "unfixed desktop",
+        "frame_a": "before-desktop-1366x768-01-staged-panned-away.jpg",
+        "frame_b": "before-desktop-1366x768-02-after-return-camera-NOT-restored.jpg",
+        "crop_box": [
+          0,
+          114,
+          1366,
+          1536
+        ],
+        "mean_abs_diff": 2.127,
+        "pct_pixels_changed_gt8": 2.31
+      },
+      {
+        "row": "fixed desktop (round 2)",
+        "frame_a": "before-desktop-1366x768-01-staged-panned-away.jpg",
+        "frame_b": "after-desktop-1366x768-r2-02-return-camera-restored.jpg",
+        "crop_box": [
+          0,
+          114,
+          1366,
+          1536
+        ],
+        "mean_abs_diff": 32.371,
+        "pct_pixels_changed_gt8": 84.7
+      },
+      {
+        "row": "mobile user-reachable",
+        "frame_a": "mobile-390x844-01-map-staged-panned-away.jpg",
+        "frame_b": "mobile-390x844-03-map-after-return-camera-NOT-restored.jpg",
+        "crop_box": [
+          0,
+          300,
+          780,
+          1560
+        ],
+        "mean_abs_diff": 2.571,
+        "pct_pixels_changed_gt8": 3.53
+      },
+      {
+        "row": "mobile map-mounted",
+        "frame_a": "mobile-390x844-01-map-staged-panned-away.jpg",
+        "frame_b": "mobile-390x844-04-map-mounted-return-camera-restored.jpg",
+        "crop_box": [
+          0,
+          300,
+          780,
+          1560
+        ],
+        "mean_abs_diff": 33.672,
+        "pct_pixels_changed_gt8": 88.01
+      },
+      {
+        "row": "round 3 - mobile user-reachable, NOW RESTORES",
+        "frame_a": "fixed-mobile-390x844-01-map-staged-panned-away.jpg",
+        "frame_b": "fixed-mobile-390x844-03-map-camera-RESTORED.jpg",
+        "crop_box": [
+          0,
+          300,
+          780,
+          1560
+        ],
+        "mean_abs_diff": 33.672,
+        "pct_pixels_changed_gt8": 88.01
+      },
+      {
+        "row": "round 3 - second Map open, no replay",
+        "frame_a": "fixed-mobile-390x844-03-map-camera-RESTORED.jpg",
+        "frame_b": "fixed-mobile-390x844-04-second-open-no-replay.jpg",
+        "crop_box": [
+          0,
+          300,
+          780,
+          1560
+        ],
+        "mean_abs_diff": 0.822,
+        "pct_pixels_changed_gt8": 1.95
+      }
+    ]
+  },
+  "staging_identity": {
+    "claim": "The unfixed and round-2 fixed arms were staged identically. Proof: their staged screenshots are byte-identical, so one file serves as both arms' \"before\" frame in the pixel_diff table above.",
+    "shared_before_frame": "before-desktop-1366x768-01-staged-panned-away.jpg",
+    "source_png_mean_abs_diff": 0.0,
+    "why": "The fix is inert until the Return action fires, so at the staged state both builds render the same DOM over the same cached tiles at the same camera (12.97149, 77.54701, z16) and the same device pixel ratio."
+  },
+  "metas": {
+    "meta-mobile.json": "mobile run: both phases, and the List->Map->List camera-neutrality control",
+    "meta-desktop-before.json": "unfixed desktop run (controller reverted to parent 17b9ab1c)",
+    "meta-desktop-after-r2.json": "round-2 fixed desktop run (harness self-test against the documented round-1 numbers)",
+    "meta-reshoot.json": "round-3 re-shoot against the fixed build: neutrality control, user-reachable journey, second-open replay check, map-mounted control, desktop regression check"
+  },
+  "frames": [
+    {
+      "file": "after-desktop-1366x768-01-staged-panned-away.jpg",
+      "round": 1,
+      "sha256": "4264f120bba62540f41eca3016f2cc8c86328d674c2fa390716b29922cfaf237",
+      "bytes": 200264,
+      "size": [
+        1512,
+        794
+      ],
+      "url_at_shot": null,
+      "note": "Round-1 capture (Chrome extension, 1512x794). No per-frame URL sidecar was recorded by that lane, and the scale does not match the DSF2 round-2 frames, so this pair is NOT used in the pixel-diff table. The round-2 fixed pair (after-...-r2-01/02) supersedes it for that purpose. Numbers for this pair are in the README result table and were reproduced by round 2 to within 1e-5 deg."
+    },
+    {
+      "file": "after-desktop-1366x768-02-return-camera-restored.jpg",
+      "round": 1,
+      "sha256": "9fc4f2deb3997e3381ed9da0a08b379edeab45b00cbf44f54cd81b79eb348adf",
+      "bytes": 173417,
+      "size": [
+        1512,
+        794
+      ],
+      "url_at_shot": null,
+      "note": "Round-1 capture (Chrome extension, 1512x794). No per-frame URL sidecar was recorded by that lane, and the scale does not match the DSF2 round-2 frames, so this pair is NOT used in the pixel-diff table. The round-2 fixed pair (after-...-r2-01/02) supersedes it for that purpose. Numbers for this pair are in the README result table and were reproduced by round 2 to within 1e-5 deg."
+    },
+    {
+      "file": "after-desktop-1366x768-r2-02-return-camera-restored.jpg",
+      "round": 2,
+      "sha256": "fba23f0ee000e7d7d44efc8008e7436372bc20fbb7834fc43a068f90a49b1f4c",
+      "bytes": 470269,
+      "url_at_shot": "http://localhost:5381/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.93170&lon=77.52933&zoom=16&rprev=vp%3A12.95%2C77.72%2C12.99%2C77.78&rscope=areas&rareas=IN%7CKA%7CBengaluru%7CRR+Nagar",
+      "cam": {
+        "lat": 12.9317,
+        "lon": 77.52933,
+        "zoom": 16,
+        "rscope": "areas",
+        "rareas": "IN|KA|Bengaluru|RR Nagar",
+        "rprev": "vp:12.95,77.72,12.99,77.78"
+      },
+      "tiles": {
+        "all": 16,
+        "ok": 16
+      },
+      "tiles_settled": true
+    },
+    {
+      "file": "before-desktop-1366x768-01-staged-panned-away.jpg",
+      "sha256": "9d9515e7a6f581fdf9a7d1d94424e43979c5de04a838e004ffd9e5114a12a86a",
+      "bytes": 545571,
+      "url_at_shot": "http://localhost:5381/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.97149&lon=77.54701&zoom=16&rscope=vp&rvp=12.95%2C77.72%2C12.99%2C77.78&rprev=areas%3AIN%7CKA%7CBengaluru%7CRR+Nagar",
+      "cam": {
+        "lat": 12.97149,
+        "lon": 77.54701,
+        "zoom": 16,
+        "rscope": "vp",
+        "rareas": null,
+        "rprev": "areas:IN|KA|Bengaluru|RR Nagar"
+      },
+      "tiles": {
+        "all": 30,
+        "ok": 30
+      },
+      "tiles_settled": true,
+      "round": 2
+    },
+    {
+      "file": "before-desktop-1366x768-02-after-return-camera-NOT-restored.jpg",
+      "sha256": "db936b84e7c254c7666de161b8e19d2edeab9d07133526d69949f2153684e6cf",
+      "bytes": 556541,
+      "url_at_shot": "http://localhost:5381/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.97149&lon=77.54701&zoom=16&rprev=vp%3A12.95%2C77.72%2C12.99%2C77.78&rscope=areas&rareas=IN%7CKA%7CBengaluru%7CRR+Nagar",
+      "cam": {
+        "lat": 12.97149,
+        "lon": 77.54701,
+        "zoom": 16,
+        "rscope": "areas",
+        "rareas": "IN|KA|Bengaluru|RR Nagar",
+        "rprev": "vp:12.95,77.72,12.99,77.78"
+      },
+      "tiles": {
+        "all": 30,
+        "ok": 30
+      },
+      "tiles_settled": true,
+      "round": 2
+    },
+    {
+      "file": "fixed-desktop-1366x768-01-after-return.jpg",
+      "round": 3,
+      "build": "08e84394 (mobile fix)",
+      "sha256": "fba23f0ee000e7d7d44efc8008e7436372bc20fbb7834fc43a068f90a49b1f4c",
+      "bytes": 470269,
+      "url_at_shot": "http://localhost:5391/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.93170&lon=77.52933&zoom=16&rprev=vp%3A12.95%2C77.72%2C12.99%2C77.78&rscope=areas&rareas=IN%7CKA%7CBengaluru%7CRR+Nagar",
+      "cam": {
+        "lat": 12.9317,
+        "lon": 77.52933,
+        "zoom": 16,
+        "rscope": "areas",
+        "rareas": "IN|KA|Bengaluru|RR Nagar",
+        "rprev": "vp:12.95,77.72,12.99,77.78"
+      },
+      "tiles": {
+        "all": 16,
+        "ok": 16
+      },
+      "tiles_settled": true
+    },
+    {
+      "file": "fixed-mobile-390x844-01-map-staged-panned-away.jpg",
+      "round": 3,
+      "build": "08e84394 (mobile fix)",
+      "sha256": "eaae90cb64980007951920b8e2d6738d8a41ffc51745e9fb8f285bf0cf686489",
+      "bytes": 250324,
+      "url_at_shot": "http://localhost:5391/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.97148&lon=77.54702&zoom=16&rscope=vp&rvp=12.95%2C77.72%2C12.99%2C77.78&rprev=areas%3AIN%7CKA%7CBengaluru%7CRR+Nagar",
+      "cam": {
+        "lat": 12.97148,
+        "lon": 77.54702,
+        "zoom": 16,
+        "rscope": "vp",
+        "rareas": null,
+        "rprev": "areas:IN|KA|Bengaluru|RR Nagar"
+      },
+      "tiles": {
+        "all": 29,
+        "ok": 29
+      },
+      "tiles_settled": true
+    },
+    {
+      "file": "fixed-mobile-390x844-02-list-after-return.jpg",
+      "round": 3,
+      "build": "08e84394 (mobile fix)",
+      "sha256": "5e56ec5e3ea3369c35629cc204e3279b84a01a1f8e7aae60e096bff4911de85d",
+      "bytes": 125047,
+      "url_at_shot": "http://localhost:5391/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.97148&lon=77.54702&zoom=16&rprev=vp%3A12.95%2C77.72%2C12.99%2C77.78&rscope=areas&rareas=IN%7CKA%7CBengaluru%7CRR+Nagar",
+      "cam": {
+        "lat": 12.97148,
+        "lon": 77.54702,
+        "zoom": 16,
+        "rscope": "areas",
+        "rareas": "IN|KA|Bengaluru|RR Nagar",
+        "rprev": "vp:12.95,77.72,12.99,77.78"
+      },
+      "tiles": {
+        "all": 0,
+        "ok": 0
+      },
+      "tiles_settled": false
+    },
+    {
+      "file": "fixed-mobile-390x844-03-map-camera-RESTORED.jpg",
+      "round": 3,
+      "build": "08e84394 (mobile fix)",
+      "sha256": "a7d047c1c4058f462db68560ea2f419834c4f0837a6ce2e821c419cff875f2c4",
+      "bytes": 189348,
+      "url_at_shot": "http://localhost:5391/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.93169&lon=77.52932&zoom=16&rprev=vp%3A12.95%2C77.72%2C12.99%2C77.78&rscope=areas&rareas=IN%7CKA%7CBengaluru%7CRR+Nagar",
+      "cam": {
+        "lat": 12.93169,
+        "lon": 77.52932,
+        "zoom": 16,
+        "rscope": "areas",
+        "rareas": "IN|KA|Bengaluru|RR Nagar",
+        "rprev": "vp:12.95,77.72,12.99,77.78"
+      },
+      "tiles": {
+        "all": 10,
+        "ok": 10
+      },
+      "tiles_settled": true
+    },
+    {
+      "file": "fixed-mobile-390x844-04-second-open-no-replay.jpg",
+      "round": 3,
+      "build": "08e84394 (mobile fix)",
+      "sha256": "b3fecdbc106150eb159073611a2459616dedfc72e38c019d12277df2903258cc",
+      "bytes": 187886,
+      "url_at_shot": "http://localhost:5391/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.93169&lon=77.52932&zoom=16&rprev=vp%3A12.95%2C77.72%2C12.99%2C77.78&rscope=areas&rareas=IN%7CKA%7CBengaluru%7CRR+Nagar",
+      "cam": {
+        "lat": 12.93169,
+        "lon": 77.52932,
+        "zoom": 16,
+        "rscope": "areas",
+        "rareas": "IN|KA|Bengaluru|RR Nagar",
+        "rprev": "vp:12.95,77.72,12.99,77.78"
+      },
+      "tiles": {
+        "all": 10,
+        "ok": 10
+      },
+      "tiles_settled": true
+    },
+    {
+      "file": "mobile-390x844-01-map-staged-panned-away.jpg",
+      "sha256": "eaae90cb64980007951920b8e2d6738d8a41ffc51745e9fb8f285bf0cf686489",
+      "bytes": 250324,
+      "url_at_shot": "http://localhost:5381/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.97148&lon=77.54702&zoom=16&rscope=vp&rvp=12.95%2C77.72%2C12.99%2C77.78&rprev=areas%3AIN%7CKA%7CBengaluru%7CRR+Nagar",
+      "cam": {
+        "lat": 12.97148,
+        "lon": 77.54702,
+        "zoom": 16,
+        "rscope": "vp",
+        "rareas": null,
+        "rprev": "areas:IN|KA|Bengaluru|RR Nagar"
+      },
+      "tiles": {
+        "all": 29,
+        "ok": 29
+      },
+      "tiles_settled": true,
+      "round": 2
+    },
+    {
+      "file": "mobile-390x844-02-list-after-return-scope-committed.jpg",
+      "sha256": "5e56ec5e3ea3369c35629cc204e3279b84a01a1f8e7aae60e096bff4911de85d",
+      "bytes": 125047,
+      "url_at_shot": "http://localhost:5381/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.97148&lon=77.54702&zoom=16&rprev=vp%3A12.95%2C77.72%2C12.99%2C77.78&rscope=areas&rareas=IN%7CKA%7CBengaluru%7CRR+Nagar",
+      "cam": {
+        "lat": 12.97148,
+        "lon": 77.54702,
+        "zoom": 16,
+        "rscope": "areas",
+        "rareas": "IN|KA|Bengaluru|RR Nagar",
+        "rprev": "vp:12.95,77.72,12.99,77.78"
+      },
+      "tiles": {
+        "all": 0,
+        "ok": 0
+      },
+      "tiles_settled": false,
+      "round": 2
+    },
+    {
+      "file": "mobile-390x844-03-map-after-return-camera-NOT-restored.jpg",
+      "sha256": "ee83b2fb951ffb09c66026fc033dd85a4453c9ee8c6831dda421b915252ae7e0",
+      "bytes": 252605,
+      "url_at_shot": "http://localhost:5381/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.97148&lon=77.54702&zoom=16&rprev=vp%3A12.95%2C77.72%2C12.99%2C77.78&rscope=areas&rareas=IN%7CKA%7CBengaluru%7CRR+Nagar",
+      "cam": {
+        "lat": 12.97148,
+        "lon": 77.54702,
+        "zoom": 16,
+        "rscope": "areas",
+        "rareas": "IN|KA|Bengaluru|RR Nagar",
+        "rprev": "vp:12.95,77.72,12.99,77.78"
+      },
+      "tiles": {
+        "all": 8,
+        "ok": 8
+      },
+      "tiles_settled": true,
+      "round": 2
+    },
+    {
+      "file": "mobile-390x844-04-map-mounted-return-camera-restored.jpg",
+      "sha256": "a7d047c1c4058f462db68560ea2f419834c4f0837a6ce2e821c419cff875f2c4",
+      "bytes": 189348,
+      "url_at_shot": "http://localhost:5381/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CRR+Nagar&lat=12.93169&lon=77.52932&zoom=16&rprev=vp%3A12.95%2C77.72%2C12.99%2C77.78&rscope=areas&rareas=IN%7CKA%7CBengaluru%7CRR+Nagar",
+      "cam": {
+        "lat": 12.93169,
+        "lon": 77.52932,
+        "zoom": 16,
+        "rscope": "areas",
+        "rareas": "IN|KA|Bengaluru|RR Nagar",
+        "rprev": "vp:12.95,77.72,12.99,77.78"
+      },
+      "tiles": {
+        "all": 13,
+        "ok": 13
+      },
+      "tiles_settled": true,
+      "round": 2
+    }
+  ],
+  "round3_outcomes": {
+    "neutrality_control_rerun_on_this_build": true,
+    "user_reachable_camera_restored": true,
+    "no_replay_on_second_mount": true,
+    "map_mounted_control_restored": true,
+    "desktop_no_regression": true
+  },
+  "byte_identity": [
+    {
+      "claim": "Both desktop arms were staged identically.",
+      "files": [
+        "before-desktop-1366x768-01-staged-panned-away.jpg"
+      ],
+      "note": "The unfixed and round-2 fixed arms share this one staged frame; their captures were byte-identical."
+    },
+    {
+      "claim": "Round 3: the mobile USER-REACHABLE journey and the MAP-MOUNTED control land on byte-identical output, so the destination was always correct and only delivery changed.",
+      "files": [
+        "fixed-mobile-390x844-03-map-camera-RESTORED.jpg"
+      ],
+      "sha256": "a7d047c1c4058f462db68560ea2f419834c4f0837a6ce2e821c419cff875f2c4",
+      "note": "Phase C (map mounted at publish time) produced a screenshot byte-identical to phase B's frame 03 (user-reachable journey). Only one file is committed; the hash identity is the proof. Frame 04 from the same view differs (mean 0.604 on the source PNGs), so this is genuine convergence, not \"all map frames look alike\"."
+    },
+    {
+      "claim": "Desktop is unchanged by 08e84394 - byte-identical, not merely equivalent.",
+      "files": [
+        "after-desktop-1366x768-r2-02-return-camera-restored.jpg",
+        "fixed-desktop-1366x768-01-after-return.jpg"
+      ],
+      "sha256": "fba23f0ee000e7d7d44efc8008e7436372bc20fbb7834fc43a068f90a49b1f4c",
+      "note": "The first was captured on the pre-fix build (5737760c), the second on the post-fix build (08e84394). Same hash: the mobile fix produced no desktop difference at all, down to the pixel. Both are committed because they carry different claims; the hash equality between them IS the regression result."
+    },
+    {
+      "claim": "The camera target never moved - across builds, not just across code paths.",
+      "files": [
+        "mobile-390x844-04-map-mounted-return-camera-restored.jpg",
+        "fixed-mobile-390x844-03-map-camera-RESTORED.jpg"
+      ],
+      "sha256": "a7d047c1c4058f462db68560ea2f419834c4f0837a6ce2e821c419cff875f2c4",
+      "note": "Pre-fix map-mounted arm vs post-fix user-reachable journey. Two builds, two code paths, identical bytes. 08e84394 changed only whether the intent survives to a map that mounts later, not where the camera goes."
+    }
+  ],
+  "determinism": {
+    "question": "Four round-3 frames hash-match earlier ones. On pixels alone that is indistinguishable from recycled files, so it was challenged. Settled by re-capture.",
+    "conclusion": "The Playwright capture is deterministic at a fixed camera with cached tiles and no animation - across sessions and across builds. A recycled file cannot be regenerated by a live browser run; T3 regenerated the committed bytes exactly.",
+    "tests": [
+      {
+        "id": "T1",
+        "what": "same page, two screenshots 3s apart of one settled state",
+        "result": "identical",
+        "sha256": "67131cf72041c308f64ca62331cbafa86e162c66eaacec85cd742f3e728037bb"
+      },
+      {
+        "id": "T2",
+        "what": "independent browser session, same staged state",
+        "result": "identical to T1",
+        "sha256": "67131cf72041c308f64ca62331cbafa86e162c66eaacec85cd742f3e728037bb"
+      },
+      {
+        "id": "T3",
+        "what": "live re-run of the map-mounted arm, end to end",
+        "result": "reproduced the committed frame; annotated -> a7d047c1c4058f462db68560ea2f419834c4f0837a6ce2e821c419cff875f2c4, byte-for-byte the committed JPEG",
+        "sha256": "d119159895a8ab4a2a297d00d01aa3d8c258f29cbc8d539adb6ec8ba77b06d55"
+      },
+      {
+        "id": "T4",
+        "what": "live re-run of the user-reachable journey, real click on \"Return to RR Nagar\"",
+        "result": "identical to T3 - two different journeys, identical bytes, which demonstrates journey-blindness",
+        "sha256": "d119159895a8ab4a2a297d00d01aa3d8c258f29cbc8d539adb6ec8ba77b06d55"
+      }
+    ],
+    "non_discriminating_checks": [
+      "distinct inode + nlink 1 + fresh mtime - exactly what cp produces; attests a file was written, not that a capture produced its bytes",
+      "a cross-harness control - round-1 (Chrome extension, 1512x794) vs round-2 (Playwright, 2732x1758 DSF2) differ in bytes because they are different instruments at 4x the pixel count, not because the pipeline wanders"
+    ],
+    "guard_note": "Do NOT add a guard that fails when a frame sha256 appears in a prior commit: under determinism it fires on every honest re-shoot of an unchanged state, and the pressure fix is to perturb the capture, destroying the reproducibility that is the actual proof. Sound version: assert the capture log wrote each committed path in this run, and require any prior-commit hash match to be explained by re-capture or labelled reused-."
+  },
+  "evidence_roles": {
+    "coordinates": "carry which-path claims (URL-bound, in meta-*.json)",
+    "frames": "corroborate the destination / final state; journey-blind by construction under a deterministic renderer",
+    "byte_identity": "meaningful for same-state comparisons and deliberately shared staged inputs; uninformative between outcomes",
+    "publish_counting": "owns the no-replay claim - useDiscoverMapDataController.test.ts via CameraIntent.seq; pixels cannot separate \"did not re-fire\" from \"re-fired to the same place\""
+  }
+}
