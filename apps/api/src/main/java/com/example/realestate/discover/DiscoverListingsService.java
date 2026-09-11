@@ -355,14 +355,17 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                 q.bbox(),
                 q.q(),
                 q.listingPurpose(),
-                // #2461: a committed POLYGON must exclude agricultural_land from the
-                // shopper-visible result set so cards+count converge with markers
-                // (#1463) and relaxation (#2457). ResultScopeExclusivity guarantees
-                // polygon != null implies no areaKeys/viewportScope are active, so
-                // this cannot leak into AREA_SET or VIEWPORT. VIEWPORT stays
-                // unrestricted; AREA_SET is excluded independently via
-                // CityAreaListingsService itself.
-                q.polygon() != null ? CityAreaListingsService.AREA_FIRST_EXCLUDED_PROPERTY_TYPES : null,
+                // #2461/#2475: a committed POLYGON or VIEWPORT must exclude agricultural_land
+                // from the shopper-visible result set so cards+count converge with markers
+                // (#1463) and relaxation (#2457). ResultScopeExclusivity guarantees polygon and
+                // viewportScope cannot both be set, and neither can coexist with areaKeys, so
+                // this cannot leak into AREA_SET. Signed-in VIEWPORT is served by this service,
+                // while anonymous VIEWPORT is served by CityAreaListingsService's bbox-only path,
+                // which already excludes the same type unconditionally — the two audiences must
+                // agree because RelaxationPreviewsService publishes ONE public cached preview
+                // (#2475). AREA_SET is excluded independently via CityAreaListingsService itself.
+                q.polygon() != null || q.viewportScope() != null
+                        ? CityAreaListingsService.AREA_FIRST_EXCLUDED_PROPERTY_TYPES : null,
                 q.areaKeys(),
                 q.viewportScope()
         );

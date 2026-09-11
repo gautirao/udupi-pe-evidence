@@ -132,6 +132,9 @@ class DiscoverListingsMarkersConsistencyTest {
             List.of(13.35, 74.75)
     );
 
+    private static final DiscoverListingPredicateBuilder.Bbox SAMPLE_VIEWPORT =
+            new DiscoverListingPredicateBuilder.Bbox(12.8, 74.7, 12.9, 74.8);
+
     @Test
     @DisplayName("#2461: a committed POLYGON scope excludes agricultural_land, matching markers")
     void toFilters_polygonScope_excludesAgriculturalLand() {
@@ -145,13 +148,16 @@ class DiscoverListingsMarkersConsistencyTest {
     }
 
     @Test
-    @DisplayName("AC4: VIEWPORT scope is unaffected — no property-type exclusion is added")
-    void toFilters_viewportScope_noExclusion() {
-        DiscoverListingsQuery q = queryWithScope(
-                null, null, new DiscoverListingPredicateBuilder.Bbox(12.8, 74.7, 12.9, 74.8));
+    @DisplayName("#2475: a committed VIEWPORT scope excludes agricultural_land, matching the anonymous "
+            + "bbox-only path so the one public relaxation preview stays truthful for both audiences")
+    void toFilters_viewportScope_excludesAgriculturalLand() {
+        DiscoverListingsQuery q = queryWithScope(null, null, SAMPLE_VIEWPORT);
 
-        assertNull(DiscoverListingsService.toFilters(q).excludePropertyTypes(),
-                "VIEWPORT scope must not gain a new agricultural_land exclusion — AC4 non-regression");
+        List<String> excluded = DiscoverListingsService.toFilters(q).excludePropertyTypes();
+
+        assertEquals(CityAreaListingsService.AREA_FIRST_EXCLUDED_PROPERTY_TYPES, excluded,
+                "VIEWPORT-scoped toFilters() must exclude the same property types as "
+                        + "CityAreaListingsService's anonymous bbox-only path (#2475 convergence)");
     }
 
     @Test

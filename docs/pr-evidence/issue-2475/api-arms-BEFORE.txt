@@ -1,0 +1,47 @@
+==============================================================
+FIXTURE GROUND TRUTH — what is actually inside the rectangle
+==============================================================
+id|property_type|listing_purpose|latitude|longitude|rupees
+f1713004-0000-0000-0000-000000000001|agricultural_land|sale|12.9316|77.5292|350000
+f1713004-0000-0000-0000-000000000002|agricultural_land|sale|12.9313|77.5289|420000
+f1956005-0000-0000-0000-000000000001|apartment|sale|12.9314733|77.5290964|500000
+f1956005-0000-0000-0000-000000000009|house|sale|12.9314733|77.5318614|720000
+(4 rows)
+
+==============================================================
+ARM A — ANON relaxation preview (public cached), viewportScope
+==============================================================
+--- cache/vary headers (MUST stay: max-age=60, public) ---
+HTTP/1.1 200 
+Vary: Origin
+Vary: Access-Control-Request-Method
+Vary: Access-Control-Request-Headers
+Cache-Control: max-age=60, public
+--- baselineCount ---
+{"baselineCount":4,"previews":[]}
+
+==============================================================
+ARM C — ANON shopper-visible panel (CityAreaListingsService bbox)
+==============================================================
+HTTP/1.1 200 
+Cache-Control: max-age=60, public
+--- anon rows BY ID + type ---
+[{"id":"f1956005-0000-0000-0000-000000000001","propertyType":"apartment"},{"id":"f1956005-0000-0000-0000-000000000009","propertyType":"house"}]
+--- anon count ---
+2
+
+==============================================================
+ARM E — ANON hitting the signed-in endpoint (expect 401)
+==============================================================
+HTTP 401
+
+==============================================================
+ARM D — SIGNED-IN shopper-visible panel (viewportScope)
+==============================================================
+token acquired (len 802)
+HTTP/1.1 200 
+Cache-Control: no-store
+--- signed-in rows BY ID + type ---
+[{"id":"f1713004-0000-0000-0000-000000000001","propertyType":"agricultural_land"},{"id":"f1713004-0000-0000-0000-000000000002","propertyType":"agricultural_land"},{"id":"f1956005-0000-0000-0000-000000000001","propertyType":"apartment"},{"id":"f1956005-0000-0000-0000-000000000009","propertyType":"house"}]
+--- signed-in totalElements ---
+4

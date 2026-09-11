@@ -295,10 +295,16 @@ public class RelaxationPreviewsService {
      * for that polygon must agree too — otherwise a zero-result relaxation arm could resurrect an
      * agricultural listing the panel will never show. The same exclusion is therefore stamped
      * here — the ONE place the scope is committed — so the baseline, every candidate (each a
-     * verbatim {@code with*} copy of this result) and the envelope all inherit it. VIEWPORT is
-     * still deliberately NOT touched: its listings path goes through {@code
-     * DiscoverListingPredicateBuilder} with the caller's own {@code excludePropertyTypes}, which
-     * is what {@code f} already carries.
+     * verbatim {@code with*} copy of this result) and the envelope all inherit it. A committed
+     * VIEWPORT carries the same exclusion too (#2475): this preview is a single publicly-cached
+     * response (max-age=60, no auth distinction) shared by both shopper audiences, but they are
+     * served by two different listings paths — anonymous shoppers hit
+     * {@link CityAreaListingsService#getAreaListings} which already excludes
+     * {@code AREA_FIRST_EXCLUDED_PROPERTY_TYPES} unconditionally for the bbox-only/VIEWPORT
+     * branch, while signed-in shoppers hit {@link DiscoverListingsService#toFilters}, which is
+     * made to apply the same exclusion for a committed viewport in the same change. For the one
+     * cached preview to stay truthful to both audiences, VIEWPORT must therefore be stamped with
+     * the exclusion here exactly like AREA and POLYGON.
      */
     private static DiscoverListingPredicateBuilder.Filters withScope(
             DiscoverListingPredicateBuilder.Filters f, RelaxationScope scope) {
@@ -306,7 +312,7 @@ public class RelaxationPreviewsService {
         List<List<Double>> polygon = scope instanceof RelaxationScope.Polygon p ? p.polygon() : null;
         DiscoverListingPredicateBuilder.Bbox viewport =
                 scope instanceof RelaxationScope.Viewport v ? v.bounds() : null;
-        List<String> excludePropertyTypes = areaKeys != null || polygon != null
+        List<String> excludePropertyTypes = areaKeys != null || polygon != null || viewport != null
                 ? CityAreaListingsService.AREA_FIRST_EXCLUDED_PROPERTY_TYPES
                 : f.excludePropertyTypes();
         return new DiscoverListingPredicateBuilder.Filters(

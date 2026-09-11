@@ -521,18 +521,20 @@ class RelaxationPreviewsServiceIT {
                 List.of(latMax, lonMin));
     }
 
-    private void insertListingAt(String areaKey, String propertyType, String purpose,
+    private UUID insertListingAt(String areaKey, String propertyType, String purpose,
                                  long priceRupees, int bedrooms, String possession,
                                  double lat, double lon) {
         OffsetDateTime now = OffsetDateTime.now();
+        UUID id = UUID.randomUUID();
         jdbc.update(
                 "INSERT INTO public.property_listings "
                         + "(id, area_key, status, archived_at, is_duplicate, is_valid, "
                         + " property_type, listing_purpose, price_paise, bedrooms, possession_status, "
                         + " latitude, longitude, created_at, updated_at) "
                         + "VALUES (?, ?, 'LIVE', NULL, false, true, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                UUID.randomUUID(), areaKey, propertyType, purpose,
+                id, areaKey, propertyType, purpose,
                 priceRupees * 100L, bedrooms, possession, lat, lon, now, now);
+        return id;
     }
 
     /** The listings query's own COUNT for {@code filters}: the predicate builder, nothing else. */
@@ -552,7 +554,16 @@ class RelaxationPreviewsServiceIT {
                 polygon, null, null, null, null, null, "sale", null, null, null);
     }
 
-    /** Active filters (price ceiling only) re-scoped to a VIEWPORT, as the listings request sends them. */
+    /**
+     * Active filters (price ceiling only) re-scoped to a VIEWPORT, mirroring exactly what
+     * {@code RelaxationPreviewsController} and {@code DiscoverListingsService} construct in
+     * production: {@code excludePropertyTypes} is left {@code null} here. The agricultural_land
+     * exclusion for a committed VIEWPORT scope is stamped on downstream — by
+     * {@code RelaxationPreviewsService#withScope} for the preview path, and by
+     * {@code DiscoverListingsService#toFilters} for the signed-in listings path — never by this
+     * helper. Pre-setting the exclusion here would mask a regression in either of those methods,
+     * since {@code withScope}'s else-branch simply preserves whatever was already set.
+     */
     private static DiscoverListingPredicateBuilder.Filters viewportFilters(
             String city, long priceMaxRupees, DiscoverListingPredicateBuilder.Bbox viewport) {
         return new DiscoverListingPredicateBuilder.Filters(
@@ -671,6 +682,112 @@ class RelaxationPreviewsServiceIT {
             assertThat(p.resultingCount())
                     .isEqualTo(listingsCount(viewportFilters(slug, p.priceMax(), viewport)));
         });
+    }
+
+    @Test
+    @DisplayName("#2475 VIEWPORT: agricultural inventory inside the committed bbox is never counted in a relaxation preview")
+    void viewportScope_agriculturalLand_isNeverCounted() {
+        String slug = "rpx19";
+        int cityId = seedCity(slug);
+        String areaKey = "IN|KA|" + slug + "|area-a";
+        seedArea(cityId, areaKey);
+        DiscoverListingPredicateBuilder.Bbox viewport =
+                new DiscoverListingPredicateBuilder.Bbox(13.00, 74.60, 13.10, 74.80);
+        // Both fail ONLY the ₹50L ceiling; the ×1.2 band (₹60L) would rescue either one.
+        insertListingAt(areaKey, "agricultural_land", "sale", 5_500_000L, 0, "READY", 13.05, 74.70);
+        insertListingAt(areaKey, "apartment", "sale", 5_500_000L, 3, "READY", 13.05, 74.70);
+
+        RelaxationPreviewsResponse response = service.findPreviewsForScope(
+                slug, new RelaxationScope.Viewport(viewport), null,
+                viewportFilters(slug, 5_000_000L, viewport));
+
+        assertThat(response.baselineCount()).as("genuine zero at ₹50L").isZero();
+        assertThat(response.previews()).singleElement().satisfies(p -> {
+            assertThat(p.kind()).isEqualTo(RelaxationPreview.Kind.PRICE_MAX);
+            assertThat(p.resultingCount())
+                    .as("only the apartment; agricultural_land inside the same viewport is never counted")
+                    .isEqualTo(1L);
+        });
+        // Sanity check: the raw predicate (no property-type exclusion applied — viewportFilters
+        // itself never sets one) counts BOTH rows, proving the drop above is the #2475
+        // exclusion applied by findPreviewsForScope/withScope, not mere scope emptiness.
+        assertThat(listingsCount(viewportFilters(slug, 6_000_000L, viewport)))
+                .as("sanity: without the #2475 exclusion the raw predicate counts both rows")
+                .isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("#2475 VIEWPORT: the shopper-visible result set matches for both anonymous and signed-in "
+            + "audiences over the same viewport, with agricultural inventory excluded from both")
+    void viewportScope_previewCountEqualsBothAudiencesShopperVisibleCount() {
+        String slug = "rpx31";
+        int cityId = seedCity(slug);
+        String areaKey = "IN|KA|" + slug + "|area-a";
+        seedArea(cityId, areaKey);
+        DiscoverListingPredicateBuilder.Bbox viewport =
+                new DiscoverListingPredicateBuilder.Bbox(13.00, 74.60, 13.10, 74.80);
+        long priceMaxRupees = 60_000_000L; // wide enough that only property type excludes anything
+
+        UUID agriId = insertListingAt(
+                areaKey, "agricultural_land", "sale", 55_000_000L, 0, "READY", 13.05, 74.70);
+        UUID apartmentId = insertListingAt(
+                areaKey, "apartment", "sale", 55_000_000L, 3, "READY", 13.05, 74.70);
+        UUID houseId = insertListingAt(
+                areaKey, "house", "sale", 55_000_000L, 3, "READY", 13.05, 74.70);
+
+        // Signed-in path: routed through the REAL production method,
+        // DiscoverListingsService.toFilters(DiscoverListingsQuery), not through this file's own
+        // viewportFilters(...) helper. Calling the helper directly would only prove the
+        // predicate is self-consistent — it applies no exclusion of its own (see viewportFilters's
+        // Javadoc) — and would silently stop exercising edit site 2 (#2475's toFilters ternary)
+        // the moment that helper stopped hardcoding the agricultural_land exclusion.
+        DiscoverListingsQuery signedInQuery = new DiscoverListingsQuery(
+                slug, null, null, priceMaxRupees * 100L, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, 0, 50, false, "sale", null, viewport);
+        DiscoverListingPredicateBuilder.Filters signedInFilters = DiscoverListingsService.toFilters(signedInQuery);
+        long signedInCount = listingsCount(signedInFilters);
+        List<String> signedInIds = jdbc.queryForList(
+                "SELECT id FROM property_listings pl WHERE "
+                        + DiscoverListingPredicateBuilder.build(signedInFilters).whereFragment(),
+                String.class,
+                DiscoverListingPredicateBuilder.build(signedInFilters).params().toArray());
+
+        // Anonymous path: CityAreaListingsService's public bbox-only entry point (areaKeys null).
+        CityAreaListingsResponse anonResponse = panel.getAreaListings(
+                slug, null, null, null, priceMaxRupees * 100L, null, null, null, "sale", null,
+                viewport, false);
+        long anonCount = anonResponse.areas().stream().mapToLong(a -> a.listings().size()).sum();
+        List<String> anonIds = anonResponse.areas().stream()
+                .flatMap(a -> a.listings().stream())
+                .map(AreaListingCard::id)
+                .map(UUID::toString)
+                .toList();
+
+        // Public cached preview: RelaxationPreviewsService over the same viewport. The preview
+        // count must come from the response the shopper actually receives — baselineCount() —
+        // never from re-running listingsCount() on the same Filters, which would only prove the
+        // predicate is self-consistent and stay green even if withScope's exclusion regressed.
+        RelaxationPreviewsResponse previewResponse = service.findPreviewsForScope(
+                slug, new RelaxationScope.Viewport(viewport), null,
+                viewportFilters(slug, priceMaxRupees, viewport));
+        long previewCount = previewResponse.baselineCount();
+
+        assertThat(signedInCount)
+                .as("signed-in shopper-visible count")
+                .isEqualTo(2L)
+                .as("anon shopper-visible count must equal signed-in")
+                .isEqualTo(anonCount)
+                .as("preview count must equal both shopper-visible counts")
+                .isEqualTo(previewCount);
+
+        assertThat(signedInIds)
+                .as("signed-in survivors are exactly apartment + house, never agricultural_land")
+                .containsExactlyInAnyOrder(apartmentId.toString(), houseId.toString())
+                .doesNotContain(agriId.toString());
+        assertThat(anonIds)
+                .as("anon survivors are exactly apartment + house, never agricultural_land")
+                .containsExactlyInAnyOrder(apartmentId.toString(), houseId.toString())
+                .doesNotContain(agriId.toString());
     }
 
     @Test
