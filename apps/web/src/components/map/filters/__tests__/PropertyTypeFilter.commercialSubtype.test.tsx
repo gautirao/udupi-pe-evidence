@@ -21,17 +21,25 @@ function renderFilter(filters: PropertyFilters = {}) {
   return { onFiltersChange };
 }
 
-describe('#2431 — Shop/Office affordance', () => {
-  it('offers exactly Shop and Office, and not the other commercial subtypes', () => {
+describe('#2458 — five-peer Commercial affordance', () => {
+  // #2458 — DELIBERATE REVERSAL of the #2431 assertion this replaced. It asserted that BUILDING and
+  // LAND were NOT offered, reasoning that they are addressable as property types and that offering
+  // them in both places would give a buyer two ways to ask the same question.
+  //
+  // That reasoning holds only if property_type alone can express every buyer selection. Under the
+  // approved #2429 model it cannot: a MIXED selection (Shop + Warehouse/Godown) needs one predicate
+  // spanning both axes, which the old ANDed shape made unreachable. The five are peers.
+  //
+  // The "two ways to ask one question" concern is ANSWERED rather than overridden: there remains
+  // exactly one query spelling. The buyer emits a single `subtype=` axis for all five, and the
+  // server derives the property type via DiscoverFilterNormalizer.impliedPropertyTypes.
+  it('offers all five peer subtypes', () => {
     renderFilter();
 
     expect(screen.getByLabelText('Shop')).toBeInTheDocument();
     expect(screen.getByLabelText('Office')).toBeInTheDocument();
-
-    // BUILDING/WAREHOUSE/LAND are addressable as property types, not as subtypes. Offering them
-    // in both places would give a buyer two ways to ask the same question.
-    expect(screen.queryByLabelText('Commercial building')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Commercial land')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Commercial building')).toBeInTheDocument();
+    expect(screen.getByLabelText('Commercial land')).toBeInTheDocument();
   });
 
   it('reflects a restored selection, so a shared link shows which subtype is active', () => {

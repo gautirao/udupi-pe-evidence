@@ -168,18 +168,47 @@ export const COMMERCIAL_SUBTYPE_OPTIONS = [
 ] as const;
 
 /**
- * Issue #2431 — the subtypes a BUYER can filter Discover by.
+ * The FIVE subtypes a BUYER can filter Discover by (#2458). THE single vocabulary declaration.
  *
- * Deliberately a strict subset of COMMERCIAL_SUBTYPE_OPTIONS above, and DERIVED from it rather
- * than retyped, so the two cannot drift on labels or casing. SHOP and OFFICE are the only pair
- * that `propertyType='commercial'` is ambiguous between; BUILDING, WAREHOUSE and LAND are each
- * already reachable through their own property type (`commercial_building`, `warehouse`,
- * `commercial_land`), so offering them here would give a buyer two different ways to ask the
- * same question. The backend rejects them on this filter with a 400 for the same reason.
+ * Mirrors `DiscoverFilterNormalizer.ALLOWED_COMMERCIAL_SUBTYPES` on the server, and is kept in
+ * step with it by the #2458 cross-language mapping parity test — two implementations of one
+ * mapping is unavoidable across the language boundary, so it is pinned rather than trusted.
  *
- * Mirrors DiscoverFilterNormalizer.ALLOWED_COMMERCIAL_SUBTYPES on the server.
+ * `BUYER_COMMERCIAL_SUBTYPES` in propertyTypeConfig.ts is an ALIAS of this binding, not a copy,
+ * and `resolveBuyerCommercialSubtype` is the identity resolver over this same vocabulary.
+ * **Do not introduce a second list** — an earlier revision of #2458 did exactly that, and the
+ * parity test did not catch it because it pins TS against Java, not TS against TS.
+ *
+ * ── SUPERSEDED (#2431), preserved for the argument, NOT current behaviour ────────────────────
+ *
+ * Everything in this section describes the PREVIOUS two-value contract. It is retained because a
+ * future reader who reaches for "just narrow it back" deserves the original reasoning and the
+ * answer to it — not a silent deletion. None of it describes the code below.
+ *
+ *   #2431 held this list to SHOP and OFFICE only: "SHOP and OFFICE are the only pair that
+ *   propertyType='commercial' is ambiguous between; BUILDING, WAREHOUSE and LAND are each already
+ *   reachable through their own property type, so offering them here would give a buyer two
+ *   different ways to ask the same question. The backend rejects them on this filter with a 400
+ *   for the same reason."
+ *
+ *   NO LONGER TRUE: the backend ACCEPTS all five as of #2458, so the 400 sentence above describes
+ *   behaviour that no longer exists.
+ *
+ * WHY IT WAS REVERSED: that argument holds only if `property_type` alone can express every buyer
+ * selection. Under the approved #2429 model it cannot — a MIXED selection (Shop + Warehouse/Godown)
+ * needs ONE predicate spanning both axes, which the previously ANDed shape made unreachable.
+ *
+ * AND THE OBJECTION IS ANSWERED, NOT OVERRIDDEN: there is still exactly one way to ask the
+ * question. The buyer emits a single `subtype=` axis for all five, and the server derives the
+ * property type via `DiscoverFilterNormalizer.impliedPropertyTypes`.
  */
-export const DISCOVER_COMMERCIAL_SUBTYPES = ['SHOP', 'OFFICE'] as const;
+export const DISCOVER_COMMERCIAL_SUBTYPES = [
+  'SHOP',
+  'OFFICE',
+  'BUILDING',
+  'WAREHOUSE',
+  'LAND',
+] as const;
 
 export type CommercialSubtype = (typeof DISCOVER_COMMERCIAL_SUBTYPES)[number];
 

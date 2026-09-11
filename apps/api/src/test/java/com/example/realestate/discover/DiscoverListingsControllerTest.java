@@ -86,7 +86,7 @@ class DiscoverListingsControllerTest {
                 "abc", "L-001", "house", "Test title", "Malpe", "IN|KA|Udupi|Malpe",
                 5_000_000L, null, null, 100.0, "sq m", 3, 13.3, 74.7,
                 null, OffsetDateTime.now(), null, null, null, null,
-                5, false, null, null, "A", null, "OWNER", "sale", "LIVE", null
+                5, false, null, null, "A", null, "OWNER", "sale", "LIVE", null, null
         );
         DiscoverListingsPage page = new DiscoverListingsPage(
                 List.of(listing), 0, 20, 1L, 1, null);
@@ -804,7 +804,7 @@ class DiscoverListingsControllerTest {
                 "abc", "L-001", "commercial", "Shop unit", "Malpe", "IN|KA|Udupi|Malpe",
                 5_000_000L, null, null, 100.0, "sq m", null, 13.3, 74.7,
                 null, OffsetDateTime.now(), null, null, null, null,
-                5, false, null, null, "A", null, "OWNER", "sale", "LIVE", "SHOP");
+                5, false, null, null, "A", null, "OWNER", "sale", "LIVE", "SHOP", null);
         when(service.getListings(any())).thenReturn(
                 new DiscoverListingsPage(List.of(shop), 0, 20, 1L, 1, null));
 
@@ -821,7 +821,7 @@ class DiscoverListingsControllerTest {
                 "abc", "L-001", "commercial", "Legacy commercial", "Malpe", "IN|KA|Udupi|Malpe",
                 5_000_000L, null, null, 100.0, "sq m", null, 13.3, 74.7,
                 null, OffsetDateTime.now(), null, null, null, null,
-                5, false, null, null, "A", null, "OWNER", "sale", "LIVE", null);
+                5, false, null, null, "A", null, "OWNER", "sale", "LIVE", null, null);
         when(service.getListings(any())).thenReturn(
                 new DiscoverListingsPage(List.of(legacy), 0, 20, 1L, 1, null));
 

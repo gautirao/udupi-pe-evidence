@@ -105,24 +105,132 @@ public final class DiscoverFilterNormalizer {
     static final Set<String> ALLOWED_SELLER_TYPES = Set.of("owner", "dealer", "broker", "builder");
 
     /**
-     * The Discover-facing {@code commercial_subtype} vocabulary (#2431): the two values that
-     * {@code property_type = 'commercial'} is ambiguous between.
+     * The Discover-facing buyer subtype vocabulary (#2458): the five Commercial peers the approved
+     * #2429 buyer model exposes.
      *
-     * <p><b>Deliberately narrower than {@link
-     * com.example.realestate.listing.api.CommercialFieldOptions#VALID_COMMERCIAL_SUBTYPES}</b>,
-     * which additionally contains BUILDING/WAREHOUSE/LAND. Those three are not ambiguous and are
-     * already addressable through their own {@code property_type} tokens
-     * ({@code commercial_building} / {@code warehouse} / {@code commercial_land}) — the write path
-     * DERIVES their subtype from the property type rather than accepting it
-     * ({@code ListingController#resolveCommercialSubtype}). Offering them again as a Discover
-     * subtype filter would create two spellings of one query and a second place for the taxonomy
-     * to drift. Shop and Office are the only pair that {@code property_type} alone cannot separate,
-     * which is the whole reason this filter exists.
+     * <h2>#2458 — DELIBERATE REVERSAL of the #2431 narrowing. Read this before narrowing it again.</h2>
+     *
+     * <p>This set previously held only {@code SHOP} and {@code OFFICE}, and the reasoning was
+     * recorded here as: BUILDING/WAREHOUSE/LAND "are not ambiguous and are already addressable
+     * through their own {@code property_type} tokens", so offering them again as a Discover subtype
+     * filter "would create two spellings of one query and a second place for the taxonomy to drift".
+     *
+     * <p><b>That argument holds only if {@code property_type} alone can express every buyer
+     * selection. Under #2429 it cannot.</b> An approved MIXED selection — Shop + Warehouse/Godown —
+     * needs ONE predicate spanning BOTH axes. While the two lists were ANDed, the Warehouse row
+     * passed {@code property_type IN (...)} and was then eliminated by
+     * {@code UPPER(commercial_subtype) IN ('SHOP')}, because it has no Shop/Office projection. The
+     * approved selection was therefore unexpressible, which is what #2458 exists to correct.
+     *
+     * <p><b>The original objection is answered, not overridden.</b> There is still exactly ONE query
+     * spelling — a single predicate in {@link DiscoverListingPredicateBuilder#build}, mirrored once
+     * in {@code DiscoverQueryDsl} — and ONE vocabulary declaration, this one. The subtype axis is
+     * not a second addressing scheme; it is the disambiguator for the property types that need it,
+     * which is precisely what {@link #SUBTYPE_BEARING_PROPERTY_TYPES} names.
      *
      * <p>Stored UPPER-case by the write path; the predicate normalises the column with
      * {@code UPPER()} rather than trusting that, since no CHECK constraint enforces it.
+     *
+     * @see #SUBTYPE_BEARING_PROPERTY_TYPES
      */
-    static final Set<String> ALLOWED_COMMERCIAL_SUBTYPES = Set.of("SHOP", "OFFICE");
+    static final Set<String> ALLOWED_COMMERCIAL_SUBTYPES =
+            Set.of("SHOP", "OFFICE", "BUILDING", "WAREHOUSE", "LAND");
+
+    /**
+     * The {@code property_type} values whose subtype is SUPPLIED by the author rather than DERIVED
+     * from the property type — i.e. the types the subtype axis must disambiguate (#2458).
+     *
+     * <p>This is the read-side projection of a distinction the WRITE path already makes:
+     * {@code ListingController#resolveCommercialSubtype} DERIVES the subtype for
+     * {@code commercial_building}/{@code warehouse}/{@code commercial_land} and ACCEPTS it only for
+     * {@code commercial}. This set is exactly that ACCEPTS branch. It is NOT a second source of
+     * truth — {@code DiscoverFilterNormalizerAuthorityParityTest} asserts the two agree, and fails
+     * the build if a type becomes subtype-bearing on the write path without entering this set.
+     *
+     * <p><b>Cardinality is not assumed anywhere.</b> {@link DiscoverListingPredicateBuilder#build}
+     * is written against this SET, not against the literal {@code 'commercial'}, so introducing a
+     * second subtype-bearing type is a one-line addition here with NO predicate change. An earlier
+     * draft of #2458 encoded "commercial is the unique ambiguous token" into the predicate and
+     * merely documented the liability; PLAN_REVIEW correctly rejected that, on the grounds that a
+     * disclosed liability is still a liability.
+     *
+     * <p><b>lcsd is NOT authoritative for all five peers — a correction worth stating.</b> It is the
+     * read-model source for the SHOP/OFFICE discrimination WITHIN {@code property_type='commercial'},
+     * and for nothing else. BUILDING, WAREHOUSE and LAND are discriminated by {@code property_type}
+     * ITSELF: those rows have no {@code listing_commercial_space_details} row at all, because their
+     * detail lives in their own child tables, which carry no {@code commercial_subtype} column. A
+     * predicate that resolved subtype through the lcsd join alone would silently miss exactly those
+     * three — which is why the non-bearing branch never consults it.
+     *
+     * <p><b>Failure direction, by construction:</b> a subtype-bearing type missing from this set is
+     * matched by {@code property_type} alone and ignores subtype narrowing — OVER-inclusive and
+     * visible, never silently under-inclusive. A filter that shows too much is a visible bug; one
+     * that quietly hides inventory is the harm #2458 exists to remove.
+     *
+     * <p><b>Public deliberately</b>, unlike most constants here: {@code DiscoverQueryDsl} lives in
+     * the {@code .opensearch} subpackage and is the OpenSearch half of this contract. Both engines
+     * MUST split bearing from non-bearing identically or membership diverges, which is #2458's HOLD
+     * condition — so they share this one declaration rather than each keeping a copy. Narrowing it
+     * back to package-private would force the DSL to duplicate the set, which is the exact drift
+     * this contract exists to prevent.
+     */
+    public static final Set<String> SUBTYPE_BEARING_PROPERTY_TYPES = Set.of("commercial");
+
+    /**
+     * The canonical buyer-subtype → stored {@code property_type} mapping (#2458). The SINGLE
+     * declaration of the Commercial taxonomy on the server; every other use derives from it.
+     *
+     * <p>Read in the forward direction it answers "which stored type does this buyer peer live in";
+     * inverted it answers "which peer does this row belong to". Those are the query direction and
+     * the display direction of ONE function, which is why they must not be declared twice — the
+     * whole point of #2458 is that the storage taxonomy is translated exactly once.
+     *
+     * <p>SHOP and OFFICE both map to {@code commercial} because that is the one stored type the
+     * subtype axis has to disambiguate; the other three are self-describing, which is precisely the
+     * asymmetry {@link #SUBTYPE_BEARING_PROPERTY_TYPES} names.
+     */
+    static final java.util.Map<String, String> BUYER_SUBTYPE_TO_PROPERTY_TYPE = java.util.Map.of(
+            "SHOP", "commercial",
+            "OFFICE", "commercial",
+            "BUILDING", "commercial_building",
+            "WAREHOUSE", "warehouse",
+            "LAND", "commercial_land");
+
+    /**
+     * The property types implied by a buyer subtype selection, for the case where a request carries
+     * subtypes but NO explicit property types (#2458).
+     *
+     * <p>Not reachable from the UI — the frontend adds the family token whenever a subtype is
+     * picked — but reachable from a hand-edited URL, which is exactly why it needs a defined answer
+     * rather than whatever falls out. The two wrong answers are both silent:
+     *
+     * <ul>
+     *   <li>leaving the property type unconstrained WIDENS the result to every type, which #2458's
+     *       AC11 forbids ("unknown URL values must never widen results silently");</li>
+     *   <li>matching on the subtype axis alone DROPS the legacy Building/Warehouse/Land rows, which
+     *       carry no {@code listing_commercial_space_details} row — the exact defect this contract
+     *       exists to remove.</li>
+     * </ul>
+     *
+     * <p>Deriving the implied types avoids both: {@code ?subtype=WAREHOUSE} means the same set of
+     * rows as {@code ?type=warehouse&subtype=WAREHOUSE}, legacy rows included.
+     *
+     * <p>Returns a deduped, sorted list so the emitted SQL and its bind order are deterministic —
+     * two requests naming the same subtypes must produce one cache key, not several.
+     */
+    public static List<String> impliedPropertyTypes(List<String> commercialSubtypes) {
+        if (commercialSubtypes == null || commercialSubtypes.isEmpty()) {
+            return List.of();
+        }
+        return commercialSubtypes.stream()
+                .map(s -> s == null ? null : BUYER_SUBTYPE_TO_PROPERTY_TYPE.get(
+                        s.trim().toUpperCase(Locale.ROOT)))
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
 
     /** Smallest MEANINGFUL bedroom count: {@code 0} = studio. Values below this are nonsensical and
      *  are dropped — this is a validity floor, NOT a clamp target (see
@@ -148,7 +256,9 @@ public final class DiscoverFilterNormalizer {
     /** Likewise for the seller-type vocabulary. */
     public static final int MAX_SELLER_TYPE_VALUES = ALLOWED_SELLER_TYPES.size();
 
-    /** Likewise for the Discover commercial-subtype vocabulary (#2431) — SHOP and OFFICE, so 2. */
+    /** Likewise for the Discover buyer subtype vocabulary (#2458) — derived from the set, never
+     *  hardcoded, so widening the vocabulary raises the cap automatically (it went 2 -> 5 with the
+     *  #2431 reversal without this line changing). */
     public static final int MAX_COMMERCIAL_SUBTYPE_VALUES = ALLOWED_COMMERCIAL_SUBTYPES.size();
 
     /**

@@ -2,6 +2,7 @@ package com.example.realestate.discover.citylaunch;
 
 import com.example.realestate.discover.AreaListingCard;
 import com.example.realestate.discover.DiscoverListingResponse;
+import com.example.realestate.discover.DiscoverListingsService;
 import com.example.realestate.discover.DiscoverMarker;
 
 import java.nio.charset.StandardCharsets;
@@ -208,6 +209,16 @@ public final class SimulatedListingFactory {
                 // city-launch listings carry no typed commercial detail row, so there is no
                 // subtype to report; guessing SHOP or OFFICE here would put invented data in
                 // front of a launch reviewer.
-                null);
+                null,
+                // buyerCommercialSubtype (#2458) -- DERIVED, and deliberately not an "honest
+                // null" like its siblings above. The other nulls here withhold data the
+                // factory does not have; this one is a pure restatement of propertyType,
+                // which it DOES have, through the same shared resolver the real read path
+                // uses. Passing null instead would make a simulated commercial_building
+                // render as generic "Commercial" while the real one renders as Building --
+                // a launch reviewer would be shown a preview that misrepresents production.
+                // Nothing is fabricated: a simulated listing with no commercial property
+                // type still resolves to null.
+                DiscoverListingsService.resolveBuyerCommercialSubtype(listing.propertyType(), null));
     }
 }

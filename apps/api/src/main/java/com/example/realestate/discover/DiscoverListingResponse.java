@@ -51,5 +51,30 @@ public record DiscoverListingResponse(
          * rather than guessing. The record is {@code NON_NULL}-serialised, so the field is simply
          * absent from the JSON in those cases.
          */
-        String commercialSubtype
+        String commercialSubtype,
+
+        /**
+         * The resolved buyer peer this listing belongs to (#2458):
+         * {@code SHOP | OFFICE | BUILDING | WAREHOUSE | LAND}, or {@code null}.
+         *
+         * <p>The DISPLAY direction of the same mapping the Discover predicate uses in the QUERY
+         * direction. Projected here so consumers do not each re-derive the taxonomy -- a second
+         * translation next to this one is the drift #2458 exists to prevent.
+         *
+         * <p><b>Not a second source of truth.</b> It is a pure function of {@code propertyType} and
+         * {@code commercialSubtype}, both already on this record, computed server-side in the ONE
+         * shared funnel. No client can desynchronise it -- which is the difference between a
+         * derived RESPONSE field and an asserted REQUEST field.
+         *
+         * <p><b>{@code null} is honest absence, never a guess</b>, and carries TWO distinct cases
+         * that the consumer separates using {@code propertyType} (NOT NULL, always correct):
+         * {@code propertyType='commercial'} with null here is a LEGACY generic commercial row --
+         * render the generic "Commercial" branch; any other {@code propertyType} with null is not
+         * a commercial row at all. Do NOT mint a sixth value to distinguish them: storage has no
+         * such value.
+         *
+         * <p>Legacy Building/Warehouse/Land rows carry no subtype on any axis, so this resolves
+         * from {@code propertyType} alone for them and they are never lost.
+         */
+        String buyerCommercialSubtype
 ) {}

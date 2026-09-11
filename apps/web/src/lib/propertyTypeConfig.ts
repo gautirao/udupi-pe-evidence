@@ -31,7 +31,11 @@
  * issue (#2429) had not landed when this was written; when it does, the labels
  * are a one-place change in PROPERTY_TYPE_VISUAL_MAP / COMMERCIAL_SUBTYPE_LABELS.
  */
-import { COMMERCIAL_TYPES } from '@/lib/listing-constants';
+import {
+  COMMERCIAL_TYPES,
+  DISCOVER_COMMERCIAL_SUBTYPES,
+  type CommercialSubtype,
+} from '@/lib/listing-constants';
 
 export type PropertyTypeGlyph = 'building' | 'home' | 'landplot';
 
@@ -292,4 +296,119 @@ export function getPropertyTypeLabel(
  */
 export function getPropertyTypePluralLabel(type: string | null | undefined): string {
   return getPropertyTypeVisual(resolveTypeKey(type)).pluralLabel;
+}
+
+// ── Issue #2458 — canonical buyer subtype identity ───────────────────────────
+
+/**
+ * The five Commercial peers the approved #2429 buyer model exposes.
+ *
+ * Mirrors `DiscoverFilterNormalizer.ALLOWED_COMMERCIAL_SUBTYPES` on the server.
+ * The two are held in step by the #2458 cross-language mapping parity test — a
+ * Java authority and a TypeScript resolver are two implementations of ONE
+ * mapping, which is unavoidable across the boundary and therefore pinned rather
+ * than trusted.
+ */
+/**
+ * Alias of the ONE vocabulary declaration, `DISCOVER_COMMERCIAL_SUBTYPES` in listing-constants.
+ *
+ * An earlier revision of #2458 declared a SECOND five-value literal here. That was the exact
+ * cross-file drift this contract exists to prevent, reproduced inside it: two independent `as const`
+ * arrays with nothing holding them in step, and a parity test that pinned TS against Java rather
+ * than TS against TS — so one could move and the suite would stay green.
+ *
+ * Re-exporting the same binding makes that drift **structurally impossible** rather than
+ * test-detectable, which is the stronger fix. The buyer-facing NAME is kept because the resolver
+ * reads in the display direction and callers import it that way; it is an alias, not a copy.
+ */
+export const BUYER_COMMERCIAL_SUBTYPES = DISCOVER_COMMERCIAL_SUBTYPES;
+
+export type BuyerCommercialSubtype = CommercialSubtype;
+
+/**
+ * The stored `property_type` each buyer peer lives in. Mirrors
+ * `DiscoverFilterNormalizer.BUYER_SUBTYPE_TO_PROPERTY_TYPE`.
+ *
+ * SHOP and OFFICE both map to `commercial` because that is the one stored type
+ * the subtype axis has to disambiguate; the other three are self-describing.
+ */
+export const BUYER_SUBTYPE_TO_PROPERTY_TYPE: Record<BuyerCommercialSubtype, string> = {
+  SHOP: 'commercial',
+  OFFICE: 'commercial',
+  BUILDING: 'commercial_building',
+  WAREHOUSE: 'warehouse',
+  LAND: 'commercial_land',
+};
+
+/**
+ * Resolves a row's two raw storage axes to the single buyer peer it belongs to
+ * (#2458). The DISPLAY direction of the same mapping the Discover predicate uses
+ * in the QUERY direction — one function, two directions, one declaration.
+ *
+ * Takes the RAW AXES, not a precomputed value, so any surface holding a row can
+ * resolve it without needing the Discover DTO's `buyerCommercialSubtype`
+ * projection. `ListingResponse` carries both axes today, so listing-detail and
+ * broker surfaces can call this directly.
+ *
+ * ⚠️ **`null` is honest absence, never a guess**, and it carries TWO distinct
+ * cases which the caller separates using `propertyType` — which is NOT NULL and
+ * always correct:
+ *
+ *   - `propertyType === 'commercial'` with a null result → a LEGACY generic
+ *     commercial row whose subtype was never recorded. Render the generic
+ *     "Commercial" branch. V102 hardcodes NULL for every such row precisely
+ *     because Shop vs Office cannot be recovered from legacy data.
+ *   - any other `propertyType` with a null result → not a commercial row at all.
+ *
+ * Do NOT mint a sixth enum value to distinguish them: storage has no such value,
+ * and inventing one would fabricate a distinction the data does not carry.
+ *
+ * ⚠️ **PRECONDITION — the two-case reading above holds ONLY if `commercialSubtype`
+ * was actually FETCHED.** Passing `undefined` because a DTO omits the field is a
+ * THIRD case this function cannot distinguish, and it degrades silently into the
+ * first: a recorded Shop resolves to `null` and renders as a legacy row whose
+ * subtype "was never recorded". That is a false claim about the DATA, made
+ * confidently — the precise failure this resolver's honest-absence rule exists to
+ * prevent, arriving through the caller rather than through storage.
+ *
+ * `AreaListingCard` (the anonymous `/api/discover/cities/{city}/listings` DTO)
+ * carries `propertyType` but NOT `commercialSubtype`, so it does not currently
+ * satisfy this precondition for `property_type='commercial'` rows. The three
+ * self-describing types are unaffected, since they resolve from `propertyType`
+ * alone. Tracked with the anon subtype gap (#2509); until it is closed, do not
+ * call this with a subtype the surface never had.
+ *
+ * Legacy Building/Warehouse/Land rows carry NO subtype on any axis — V102
+ * backfilled `listing_commercial_space_details` only for
+ * `property_type = 'commercial'`. They still resolve correctly here, because the
+ * property-type branch is consulted first and does not depend on the subtype.
+ */
+export function resolveBuyerCommercialSubtype(
+  propertyType: string | null | undefined,
+  commercialSubtype: string | null | undefined,
+): BuyerCommercialSubtype | null {
+  const type = propertyType?.trim().toLowerCase();
+  if (!type) return null;
+
+  // Self-describing types first: correct for legacy rows, which have no subtype
+  // to consult on any axis.
+  switch (type) {
+    case 'commercial_building':
+      return 'BUILDING';
+    case 'warehouse':
+      return 'WAREHOUSE';
+    case 'commercial_land':
+      return 'LAND';
+    default:
+      break;
+  }
+
+  // Only `commercial` is ambiguous, and only between SHOP and OFFICE.
+  if (type !== 'commercial') return null;
+
+  const subtype = commercialSubtype?.trim().toUpperCase();
+  if (subtype === 'SHOP' || subtype === 'OFFICE') return subtype;
+
+  // Legacy generic commercial: honest absence. Never inferred.
+  return null;
 }

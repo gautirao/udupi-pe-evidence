@@ -1,0 +1,96 @@
+{
+  "$comment": [
+    "#2458 — THE shared cross-language parity fixture for the Commercial buyer-subtype mapping.",
+    "",
+    "Two implementations exist because the mapping is needed on both sides of the language",
+    "boundary: DiscoverListingsService.resolveBuyerCommercialSubtype (Java) and",
+    "resolveBuyerCommercialSubtype in apps/web/src/lib/propertyTypeConfig.ts (TypeScript).",
+    "That duplication is unavoidable; leaving it UNCHECKED is not.",
+    "",
+    "Both sides assert against THIS file. A change to either implementation alone makes that",
+    "side's test fail, which is the whole point — neither side's own suite can detect one-sided",
+    "drift, because each proves only that it is self-consistent.",
+    "",
+    "INPUTS ARE CANONICAL BY CONTRACT. propertyType is the stored lower-case token; subtype is",
+    "the stored UPPER-case value or null. Casing normalisation is a SEPARATE concern and is",
+    "covered separately on each side — Java by normalizeCommercialSubtype in the shared",
+    "buildListing funnel plus UPPER() on the column in the predicate, TypeScript inside the",
+    "resolver itself. Mixing it in here would put two different contracts under one fixture.",
+    "",
+    "null expected values are HONEST ABSENCE, never a guess, and carry two distinct cases the",
+    "caller separates using propertyType — which is NOT NULL and always correct. See the",
+    "resolver docstrings on both sides."
+  ],
+  "cases": [
+    {
+      "name": "shop",
+      "propertyType": "commercial",
+      "commercialSubtype": "SHOP",
+      "expected": "SHOP",
+      "why": "the ambiguous family, disambiguated by the subtype axis"
+    },
+    {
+      "name": "office",
+      "propertyType": "commercial",
+      "commercialSubtype": "OFFICE",
+      "expected": "OFFICE",
+      "why": "the other half of the only pair property_type alone cannot separate"
+    },
+    {
+      "name": "legacy-generic-commercial",
+      "propertyType": "commercial",
+      "commercialSubtype": null,
+      "expected": null,
+      "why": "V102 hardcodes NULL because shop-vs-office is unrecoverable from legacy data; inferring either would fabricate it. Renders the generic Commercial branch, selected by propertyType."
+    },
+    {
+      "name": "commercial-building-self-describing",
+      "propertyType": "commercial_building",
+      "commercialSubtype": null,
+      "expected": "BUILDING",
+      "why": "self-describing types resolve from propertyType ALONE — this is what keeps legacy Building rows visible despite carrying no subtype on any read axis"
+    },
+    {
+      "name": "warehouse-self-describing",
+      "propertyType": "warehouse",
+      "commercialSubtype": null,
+      "expected": "WAREHOUSE",
+      "why": "same; a subtype-only resolver would return null here and lose the row"
+    },
+    {
+      "name": "commercial-land-self-describing",
+      "propertyType": "commercial_land",
+      "commercialSubtype": null,
+      "expected": "LAND",
+      "why": "same"
+    },
+    {
+      "name": "self-describing-type-ignores-a-conflicting-subtype",
+      "propertyType": "warehouse",
+      "commercialSubtype": "SHOP",
+      "expected": "WAREHOUSE",
+      "why": "property_type is NOT NULL and authoritative for the self-describing types; a stray subtype value must not override it, or the two sides could disagree on precedence"
+    },
+    {
+      "name": "non-commercial",
+      "propertyType": "apartment",
+      "commercialSubtype": null,
+      "expected": null,
+      "why": "not a commercial row at all — the OTHER null case, separated by propertyType"
+    },
+    {
+      "name": "non-commercial-with-stray-subtype",
+      "propertyType": "apartment",
+      "commercialSubtype": "SHOP",
+      "expected": null,
+      "why": "an apartment is not a shop; neither side may promote a stray subtype into a peer"
+    },
+    {
+      "name": "null-property-type",
+      "propertyType": null,
+      "commercialSubtype": null,
+      "expected": null,
+      "why": "defensive: the column is NOT NULL, but both implementations accept nullable input and must agree on it"
+    }
+  ]
+}

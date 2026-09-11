@@ -64,9 +64,25 @@ describe('#2431 — reading `subtype` from the URL', () => {
     expect(result.current.urlState[0].filters.commercialSubtypes).toEqual(['SHOP']);
   });
 
-  it('drops BUILDING/WAREHOUSE/LAND — they are property types here, not subtypes', () => {
+  // #2458 — DELIBERATE REVERSAL of the #2431 assertion this replaced. It asserted these three were
+  // DROPPED, on the reasoning that they are property types here rather than subtypes. That holds
+  // only if property_type alone can express every buyer selection; under the approved #2429 model
+  // it cannot, because a MIXED selection (Shop + Warehouse/Godown) needs one predicate spanning
+  // both axes. The five are peers in the buyer model, so the URL layer must round-trip all five.
+  //
+  // The allowlist ITSELF is unchanged in purpose — only its membership moved. Unknown values are
+  // still dropped (see the RESTAURANT cases above), because the server answers an unrecognised
+  // subtype with a 400 rather than an empty result, so a stale link must degrade to "no subtype
+  // filter" rather than breaking the page.
+  it('keeps BUILDING/WAREHOUSE/LAND — they are peer subtypes in the approved buyer model', () => {
     const { result } = renderFacade('/discover?city=bangalore&subtype=BUILDING,WAREHOUSE,LAND');
-    expect(result.current.urlState[0].filters.commercialSubtypes).toBeUndefined();
+    expect(result.current.urlState[0].filters.commercialSubtypes)
+      .toEqual(['BUILDING', 'WAREHOUSE', 'LAND']);
+  });
+
+  it('still drops an unrecognised value when mixed with the newly-valid three', () => {
+    const { result } = renderFacade('/discover?city=bangalore&subtype=WAREHOUSE,RESTAURANT');
+    expect(result.current.urlState[0].filters.commercialSubtypes).toEqual(['WAREHOUSE']);
   });
 });
 

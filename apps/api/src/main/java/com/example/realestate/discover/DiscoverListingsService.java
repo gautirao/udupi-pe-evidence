@@ -303,7 +303,53 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                 heroImageUrl, createdAt, updatedAt, firstPublishedAt, lastUpdatedAt, confirmedAt,
                 daysOnMarket, backOnMarket, reraNumber, reraValid, TrustBadge.publicBadge(rawTrustTier),
                 possessionStatus, sellerType, listingPurpose, status,
-                normalizeCommercialSubtype(commercialSubtype));
+                normalizeCommercialSubtype(commercialSubtype),
+                resolveBuyerCommercialSubtype(
+                        propertyType, normalizeCommercialSubtype(commercialSubtype)));
+    }
+
+    /**
+     * Resolves the two raw storage axes to the single buyer peer (#2458) -- the server half of the
+     * contract whose client half is {@code resolveBuyerCommercialSubtype} in
+     * {@code propertyTypeConfig.ts}. The two are held in step by the cross-language mapping parity
+     * test; they are two implementations of ONE mapping, which is unavoidable across the boundary
+     * and therefore pinned rather than trusted.
+     *
+     * <p>Computed in the SHARED funnel, so the Postgres row-mapper and {@code OpenSearchHitMapper}
+     * cannot emit different peers for the same listing -- the identical reason
+     * {@code normalizeCommercialSubtype} and {@code TrustBadge.publicBadge} live here.
+     *
+     * <p><b>Adds no join and touches no new table.</b> Both inputs are already in hand at this
+     * point, so this projection cannot be filtered away by a grant or row-level policy on the
+     * commercial detail tables -- a hazard that matters because {@code V128} revokes grants on
+     * exactly those tables, and a join that eliminates the outer row fails as an empty 200 rather
+     * than as a SQL error.
+     *
+     * <p>Self-describing property types are consulted FIRST, which is what keeps legacy
+     * Building/Warehouse/Land rows resolvable: V102 backfilled
+     * {@code listing_commercial_space_details} only for {@code property_type = 'commercial'}, so
+     * those rows have no subtype on any axis to consult.
+     */
+    public static String resolveBuyerCommercialSubtype(String propertyType, String normalisedSubtype) {
+        if (propertyType == null) {
+            return null;
+        }
+        String type = propertyType.trim().toLowerCase(Locale.ROOT);
+        switch (type) {
+            case "commercial_building":
+                return "BUILDING";
+            case "warehouse":
+                return "WAREHOUSE";
+            case "commercial_land":
+                return "LAND";
+            case "commercial":
+                // The ONLY ambiguous type, and only between SHOP and OFFICE. A legacy row whose
+                // subtype was never recorded stays null -- honest absence, never inferred.
+                return ("SHOP".equals(normalisedSubtype) || "OFFICE".equals(normalisedSubtype))
+                        ? normalisedSubtype : null;
+            default:
+                return null;
+        }
     }
 
     /**

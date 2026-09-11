@@ -192,33 +192,81 @@ public final class DiscoverQueryDsl {
             must.add(multiMatch(normQ));
         }
 
-        // propertyTypes
-        if (f.propertyTypes() != null && !f.propertyTypes().isEmpty()) {
-            filter.add(terms("property_type", f.propertyTypes()));
+        // propertyTypes + commercialSubtypes (#2458) -- the OpenSearch twin of the Postgres union
+        // in DiscoverListingPredicateBuilder#appendFamilySubtypeUnion.
+        //
+        // MEMBERSHIP IS IDENTICAL ON BOTH ENGINES, which is #2458's HOLD condition:
+        //   * property_type and commercial_subtype are both `keyword` fields, so `terms` is an
+        //     exact non-analysed match -- the same comparison the SQL side performs.
+        //   * Both sides receive values from the SAME DiscoverFilterNormalizer.normalize call and
+        //     the SAME SUBTYPE_BEARING_PROPERTY_TYPES / impliedPropertyTypes helpers, so neither
+        //     the vocabulary nor the bearing/non-bearing split can drift between engines.
+        //   * A document with NO commercial_subtype (non-commercial listings, and legacy
+        //     property_type='commercial' rows whose subtype was never recorded) does not match a
+        //     `terms` clause -- mirroring `NULL IN (...)` being NULL rather than TRUE in Postgres.
+        //     Neither engine can fabricate a Shop/Office classification for a NULL row.
+        //   * Legacy Building/Warehouse/Land rows carry no subtype on any axis, so BOTH engines
+        //     match them through the property_type branch, never the subtype branch.
+        //
+        // The OR is a NESTED bool/should with minimum_should_match=1 -- the DSL equivalent of the
+        // SQL parentheses. Nesting rather than adding `should` to the OUTER bool is what keeps it
+        // isolated from sibling filters; a bare outer `should` would not constrain results the same
+        // way, which is the DSL-side shape of the #2461/#2475 parenthesisation hazard.
+        boolean dslHasTypes = f.propertyTypes() != null && !f.propertyTypes().isEmpty();
+        boolean dslHasSubtypes = f.commercialSubtypes() != null && !f.commercialSubtypes().isEmpty();
+
+        if (!dslHasSubtypes) {
+            // Byte-identical to the pre-#2458 clause: every Residential, Agricultural and
+            // broad-Commercial query takes this branch.
+            if (dslHasTypes) {
+                filter.add(terms("property_type", f.propertyTypes()));
+            }
+        } else {
+            List<String> dslEffective = dslHasTypes
+                    ? f.propertyTypes()
+                    : DiscoverFilterNormalizer.impliedPropertyTypes(f.commercialSubtypes());
+            List<String> dslNamed =
+                    DiscoverFilterNormalizer.impliedPropertyTypes(f.commercialSubtypes());
+
+            List<String> dslBearing = dslEffective.stream()
+                    .filter(DiscoverFilterNormalizer.SUBTYPE_BEARING_PROPERTY_TYPES::contains)
+                    .toList();
+            List<String> dslNonBearing = dslEffective.stream()
+                    .filter(t -> !DiscoverFilterNormalizer.SUBTYPE_BEARING_PROPERTY_TYPES.contains(t))
+                    .filter(dslNamed::contains)
+                    .toList();
+
+            List<Map<String, Object>> unionShould = new ArrayList<>();
+            if (!dslNonBearing.isEmpty()) {
+                unionShould.add(terms("property_type", dslNonBearing));
+            }
+            if (!dslBearing.isEmpty()) {
+                Map<String, Object> bearingBool = new LinkedHashMap<>();
+                bearingBool.put("filter", List.of(
+                        terms("property_type", dslBearing),
+                        terms("commercial_subtype", f.commercialSubtypes())));
+                Map<String, Object> bearingClause = new LinkedHashMap<>();
+                bearingClause.put("bool", bearingBool);
+                unionShould.add(bearingClause);
+            }
+
+            if (unionShould.isEmpty()) {
+                // Neither branch satisfiable -- match nothing, rather than omitting the clause and
+                // silently widening to every property type.
+                filter.add(terms("property_type", List.of()));
+            } else {
+                Map<String, Object> unionBool = new LinkedHashMap<>();
+                unionBool.put("should", unionShould);
+                unionBool.put("minimum_should_match", 1);
+                Map<String, Object> unionClause = new LinkedHashMap<>();
+                unionClause.put("bool", unionBool);
+                filter.add(unionClause);
+            }
         }
 
         // sellerTypes
         if (f.sellerTypes() != null && !f.sellerTypes().isEmpty()) {
             filter.add(terms("seller_type", f.sellerTypes()));
-        }
-
-        // commercialSubtypes (#2431) — SHOP/OFFICE narrowing, the OpenSearch twin of the Postgres
-        // EXISTS predicate in DiscoverListingPredicateBuilder#build.
-        //
-        // MEMBERSHIP IS IDENTICAL ON BOTH ENGINES, which is the issue's HOLD condition:
-        //   * commercial_subtype is a `keyword` field (see ListingIndexDocument), so `terms` is an
-        //     exact non-analysed match — the same comparison the SQL side performs.
-        //   * Both sides receive the value from the SAME DiscoverFilterNormalizer.normalize call
-        //     above, canonicalised to the stored UPPER-case form, so no casing drift is possible.
-        //   * A document with NO commercial_subtype (non-commercial listings, and legacy
-        //     property_type='commercial' rows whose subtype was never recorded) does not match a
-        //     `terms` clause — mirroring `NULL IN (...)` being NULL rather than TRUE in Postgres.
-        //     Neither engine can fabricate a Shop/Office classification for a NULL row.
-        //
-        // The one residual difference is which documents EXIST in the index at all, which is the
-        // pre-existing indexing-freshness contract (#1734) and not specific to this filter.
-        if (f.commercialSubtypes() != null && !f.commercialSubtypes().isEmpty()) {
-            filter.add(terms("commercial_subtype", f.commercialSubtypes()));
         }
 
         // priceMin / priceMax

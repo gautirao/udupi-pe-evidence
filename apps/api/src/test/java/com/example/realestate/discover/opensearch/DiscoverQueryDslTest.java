@@ -1091,15 +1091,186 @@ class DiscoverQueryDslTest {
     // value from the SAME DiscoverFilterNormalizer.normalize call.
     // -----------------------------------------------------------------------
 
-    /** Extracts the values of the {@code terms(commercial_subtype, ...)} clause, or null if absent. */
+    // ─────────────────────────────────────────────────────────────────────────
+    // #2458 — the FAMILY/SUBTYPE UNION on the OpenSearch side
+    // ─────────────────────────────────────────────────────────────────────────
+    //
+    // The recursive extractor below preserves the #2431 VALUE assertions, but preserving them
+    // proves nothing about the union this issue introduces. These tests assert the new structure
+    // directly: the nested bool/should, minimum_should_match=1, and which terms land in which
+    // branch. Without them the two engines can diverge on exactly the semantics #2458 adds while
+    // the older assertions stay green -- the gap an exact-head review caught on this PR.
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> unionBool(List<Object> filter) {
+        for (Object f : filter) {
+            if (!(f instanceof Map<?, ?> m)) continue;
+            Object boolObj = m.get("bool");
+            if (boolObj instanceof Map<?, ?> b && b.get("should") instanceof List<?> should) {
+                // Keyed on a property_type terms clause, NOT merely on the presence of `should`.
+                // bedrooms and newToMarket also emit bool/should, so returning the FIRST such bool
+                // would silently assert against an unrelated clause -- passing, but for the wrong
+                // reason, which is worse than failing.
+                boolean isUnion = should.stream()
+                        .anyMatch(c -> termsIn(c, "property_type") != null);
+                if (isUnion) {
+                    return (Map<String, Object>) b;
+                }
+            }
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<String> termsIn(Object clause, String field) {
+        if (!(clause instanceof Map<?, ?> m)) return null;
+        if (m.get("terms") instanceof Map<?, ?> t && t.get(field) instanceof List<?> vals) {
+            return (List<String>) vals;
+        }
+        if (m.get("bool") instanceof Map<?, ?> b && b.get("filter") instanceof List<?> inner) {
+            for (Object c : inner) {
+                List<String> found = termsIn(c, field);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    @Test
+    void union_mixedShopAndWarehouse_emitsBothBranchesUnderMinimumShouldMatchOne() {
+        Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(
+                filtersWith("udupi", List.of("commercial", "warehouse"),
+                        List.of("SHOP", "WAREHOUSE")),
+                ANY_ACTIVE_AREA_KEYS);
+
+        Map<String, Object> union = unionBool(getFilter(getBool(body)));
+        assertThat(union)
+                .as("a mixed selection must emit the union as a NESTED bool, which is the DSL "
+                        + "equivalent of the SQL parentheses — adding `should` to the OUTER bool "
+                        + "would not constrain results the same way")
+                .isNotNull();
+
+        assertThat(union.get("minimum_should_match"))
+                .as("without minimum_should_match=1 a `should` is a scoring hint, not a filter — "
+                        + "the query would stop excluding anything")
+                .isEqualTo(1);
+
+        List<Object> should = (List<Object>) union.get("should");
+        assertThat(should)
+                .as("cardinality > 1: one branch per axis. A single-branch union does not prove a "
+                        + "union at all — it is indistinguishable from the pre-#2458 single clause")
+                .hasSize(2);
+
+        // Non-bearing branch: matched on property_type ALONE, never consulting commercial_subtype.
+        // This is what keeps legacy Warehouse rows visible — they carry no subtype on any axis.
+        Object nonBearing = should.stream()
+                .filter(c -> termsIn(c, "commercial_subtype") == null)
+                .findFirst().orElse(null);
+        assertThat(nonBearing).as("the non-bearing branch must exist").isNotNull();
+        assertThat(termsIn(nonBearing, "property_type"))
+                .as("warehouse is self-describing, so it is matched by property_type and must NOT "
+                        + "be constrained by the Shop/Office projection")
+                .containsExactly("warehouse");
+
+        // Bearing branch: property_type AND subtype together.
+        Object bearing = should.stream()
+                .filter(c -> termsIn(c, "commercial_subtype") != null)
+                .findFirst().orElse(null);
+        assertThat(bearing).as("the bearing branch must exist").isNotNull();
+        assertThat(termsIn(bearing, "property_type")).containsExactly("commercial");
+        assertThat(termsIn(bearing, "commercial_subtype"))
+                .containsExactlyInAnyOrder("SHOP", "WAREHOUSE");
+    }
+
+    @Test
+    void union_subtypeOnlyWarehouse_derivesItsPropertyTypeRatherThanWidening() {
+        Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(
+                filtersWith("udupi", null, List.of("WAREHOUSE")), ANY_ACTIVE_AREA_KEYS);
+
+        List<Object> filter = getFilter(getBool(body));
+        Map<String, Object> union = unionBool(filter);
+
+        // With no bearing type named, the union collapses to the single non-bearing branch. It may
+        // be emitted as a one-branch bool or flattened; either is correct, so the assertion is on
+        // MEMBERSHIP INPUTS rather than on shape.
+        List<String> propertyTypes = union != null
+                ? termsIn(((List<Object>) union.get("should")).get(0), "property_type")
+                : filter.stream().map(c -> termsIn(c, "property_type"))
+                        .filter(java.util.Objects::nonNull).findFirst().orElse(null);
+
+        assertThat(propertyTypes)
+                .as("a subtype-only request must DERIVE its property type rather than leaving the "
+                        + "type unconstrained — leaving it open would widen to every property type, "
+                        + "which #2458's AC11 forbids")
+                .containsExactly("warehouse");
+    }
+
+    @Test
+    void union_subtypeOnlyShop_constrainsBothAxes() {
+        Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(
+                filtersWith("udupi", null, List.of("SHOP")), ANY_ACTIVE_AREA_KEYS);
+
+        List<Object> filter = getFilter(getBool(body));
+
+        assertThat(commercialSubtypeTermsValues(filter))
+                .as("SHOP is ambiguous within property_type='commercial', so it must still be "
+                        + "constrained on the subtype axis")
+                .containsExactly("SHOP");
+
+        Map<String, Object> union = unionBool(filter);
+        Object branch = union != null
+                ? ((List<Object>) union.get("should")).get(0)
+                : filter.stream().filter(c -> termsIn(c, "commercial_subtype") != null)
+                        .findFirst().orElse(null);
+        assertThat(termsIn(branch, "property_type"))
+                .as("and its implied property type derived, so the subtype is not evaluated "
+                        + "against unrelated families")
+                .containsExactly("commercial");
+    }
+
+    private static DiscoverListingPredicateBuilder.Filters filtersWith(
+            String city, List<String> propertyTypes, List<String> commercialSubtypes) {
+        return new DiscoverListingPredicateBuilder.Filters(
+                city, propertyTypes, commercialSubtypes, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+    }
+
+    /**
+     * Extracts the values of the {@code terms(commercial_subtype, ...)} clause, or null if absent.
+     *
+     * <p>#2458 moved this clause ONE LEVEL DEEPER. It used to sit directly in the outer
+     * {@code filter} array; the family/subtype union now nests it inside
+     * {@code bool.should[].bool.filter[]}, which is the DSL equivalent of the SQL parentheses.
+     * This helper therefore recurses.
+     *
+     * <p><b>Only the search location changed — every value assertion in the tests below is
+     * unchanged.</b> The subtype clause still carries exactly the canonicalised values, still
+     * cannot match a document lacking the field, and still does not collapse when both Shop and
+     * Office are selected. Rewriting those assertions instead of this traversal would have quietly
+     * weakened the contract they exist to pin.
+     */
     @SuppressWarnings("unchecked")
     private static List<String> commercialSubtypeTermsValues(List<Object> filter) {
         for (Object f : filter) {
             if (!(f instanceof Map<?, ?> m)) continue;
+
             Object termsObj = m.get("terms");
-            if (!(termsObj instanceof Map<?, ?> t)) continue;
-            Object vals = t.get("commercial_subtype");
-            if (vals instanceof List<?> list) return (List<String>) list;
+            if (termsObj instanceof Map<?, ?> t) {
+                Object vals = t.get("commercial_subtype");
+                if (vals instanceof List<?> list) return (List<String>) list;
+            }
+
+            // #2458: descend into a nested bool (the union's should-branches and their filters).
+            Object boolObj = m.get("bool");
+            if (boolObj instanceof Map<?, ?> b) {
+                for (String key : List.of("should", "filter", "must")) {
+                    Object nested = b.get(key);
+                    if (nested instanceof List<?> nestedList) {
+                        List<String> found = commercialSubtypeTermsValues((List<Object>) nestedList);
+                        if (found != null) return found;
+                    }
+                }
+            }
         }
         return null;
     }

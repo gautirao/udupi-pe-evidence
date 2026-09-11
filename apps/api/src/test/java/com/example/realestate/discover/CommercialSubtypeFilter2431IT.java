@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
@@ -393,24 +394,537 @@ class CommercialSubtypeFilter2431IT {
     }
 
     @Test
-    @DisplayName("AC: BUILDING/WAREHOUSE/LAND are rejected as Discover subtypes — they are "
-            + "addressable through their own property types, not through this filter")
-    void nonAmbiguousSubtypes_areRejected() {
+    @DisplayName("AC (#2458 reversal): BUILDING/WAREHOUSE/LAND are ACCEPTED as Discover subtypes — "
+            + "they are peers of Shop and Office in the approved #2429 buyer model")
+    void nonAmbiguousSubtypes_areAccepted() {
+        // DELIBERATE REVERSAL of the #2431 assertion this test previously made. It asserted these
+        // three were REJECTED, on the reasoning that they are addressable through their own
+        // property_type tokens so exposing them again would create two spellings of one query.
+        //
+        // That argument holds only if property_type alone can express every buyer selection. Under
+        // #2429 it cannot: an approved MIXED selection (Shop + Warehouse/Godown) needs ONE
+        // predicate spanning both axes, which the old ANDed shape made unreachable. See
+        // DiscoverFilterNormalizer#ALLOWED_COMMERCIAL_SUBTYPES for the full supersession.
+        //
+        // Accepting the value is all this test claims. Which ROWS each subtype matches — including
+        // that legacy Building/Warehouse/Land rows carry no subtype and must still be found via
+        // property_type — is pinned separately by the #2458 membership matrix.
         for (String value : List.of("BUILDING", "WAREHOUSE", "LAND")) {
-            assertThatThrownBy(() -> listings(List.of(value)))
-                    .as("%s is not one of the two values property_type='commercial' is ambiguous "
-                            + "between, so it must not be a valid Discover subtype filter", value)
-                    .isInstanceOf(ResponseStatusException.class);
+            assertThatCode(() -> listings(List.of(value)))
+                    .as("%s is a peer subtype in the approved buyer model and must not 400", value)
+                    .doesNotThrowAnyException();
         }
     }
 
     @Test
     @DisplayName("AC: a present-but-empty param and an over-long list are both rejected with 400")
     void malformedSubtypeParams_rejectedWith400() {
+        // Unchanged by #2458: an empty param is still malformed.
         assertThatThrownBy(() -> listings(List.of()))
                 .isInstanceOf(ResponseStatusException.class);
-        assertThatThrownBy(() -> listings(List.of("SHOP", "OFFICE", "SHOP")))
+
+        // The over-long guard is PRESERVED, not dropped — only its threshold moved. The cap is
+        // MAX_COMMERCIAL_SUBTYPE_VALUES, derived from the vocabulary, so the #2458 reversal
+        // widened it 2 -> 5 automatically. The old list of three values is now UNDER the cap and
+        // legitimately accepted, so the case is re-expressed with a list that genuinely exceeds
+        // it. Deleting this assertion instead would have silently removed the repetition guard
+        // that exists because these are public, unauthenticated, cache-key-bearing params.
+        assertThatThrownBy(() -> listings(
+                List.of("SHOP", "OFFICE", "BUILDING", "WAREHOUSE", "LAND", "SHOP")))
                 .isInstanceOf(ResponseStatusException.class);
+    }
+
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // T11 (#2458) — dual-source discriminator
+    // ─────────────────────────────────────────────────────────────────────────
+    //
+    // `commercial_subtype` exists in TWO columns in TWO tables:
+    //   * V102 listing_commercial_space_details.commercial_subtype  (the READ-MODEL source)
+    //   * V104 property_listings.commercial_subtype                 (the WRITE-MODEL source)
+    //
+    // Every Discover read surface -- the union predicate, the listings DTO projection, markers, and
+    // ListingIndexDocument -- reads V102. V104 is the write model, from which refreshTypedProjections
+    // derives V102 in the same transaction. Nothing in the MIGRATIONS enforces that; the enforcement
+    // is application-side and only covers writes routed through ListingCrudService.
+    //
+    // WHY THIS TEST EXISTS. If any one surface were switched to V104 while the others stayed on V102,
+    // a row could be MATCHED by a Shop filter and then RENDER as generic Commercial -- a same-row
+    // self-contradiction, and exactly the class of quiet wrongness #2458 exists to remove. On every
+    // fixture that populates both columns identically, that switch is INVISIBLE. It is only
+    // detectable against rows where the two sources DISAGREE.
+    //
+    // The rows below disagree deliberately, in both directions. A test that merely asserted "both
+    // columns are present and the query works" would pass against a broken predicate.
+
+    /** V102 populated (SHOP), V104 flat NULL. The shape a correctly-projected row has. */
+    private static final UUID DUAL_V102_ONLY_ID = UUID.fromString("24580001-0000-0000-0000-000000000001");
+    /** V104 flat populated (SHOP), V102 projection row ABSENT. The mirror image. */
+    private static final UUID DUAL_V104_ONLY_ID = UUID.fromString("24580002-0000-0000-0000-000000000002");
+
+    private void seedDualSourceRows() {
+        insertLiveListing(DUAL_V102_ONLY_ID, "commercial");
+        insertCommercialDetail(DUAL_V102_ONLY_ID, "SHOP");
+        // V104 flat column deliberately left NULL.
+
+        insertLiveListing(DUAL_V104_ONLY_ID, "commercial");
+        jdbcTemplate.update(
+                "UPDATE public.property_listings SET commercial_subtype = 'SHOP' WHERE id = ?",
+                DUAL_V104_ONLY_ID);
+        // V102 projection row deliberately NOT created.
+
+        // Fixture authenticity, asserted before anything under test runs. Without these, a fixture
+        // that silently populated both columns would make every assertion below vacuous -- the test
+        // would pass while proving nothing, which is the failure mode it is designed against.
+        assertThat(storedSubtype(DUAL_V102_ONLY_ID))
+                .as("precondition: V102 must carry the subtype for the V102-only row")
+                .isEqualTo("SHOP");
+        assertThat(flatSubtype(DUAL_V102_ONLY_ID))
+                .as("precondition: V104 must be NULL for the V102-only row, or the sources agree "
+                        + "and the row discriminates nothing")
+                .isNull();
+
+        assertThat(hasDetailRow(DUAL_V104_ONLY_ID))
+                .as("precondition: the V104-only row must have NO V102 projection row")
+                .isFalse();
+        assertThat(flatSubtype(DUAL_V104_ONLY_ID))
+                .as("precondition: V104 must carry the subtype for the V104-only row")
+                .isEqualTo("SHOP");
+    }
+
+    /**
+     * A WAREHOUSE row: subtype lives ONLY in the V104 flat column, and there is no
+     * listing_commercial_space_details row AT ALL -- warehouse detail lives in its own child table,
+     * which carries no commercial_subtype column.
+     *
+     * <p>This is a THIRD shape of absence, distinct from the V102/V104 pair above: not "the other
+     * column is NULL" but "the joined row does not exist". A predicate that resolved subtype through
+     * the lcsd join alone would silently miss it -- and it would miss exactly the peers
+     * (BUILDING / WAREHOUSE / LAND) that no amount of SHOP/OFFICE fixture data can discriminate.
+     */
+    private static final UUID WAREHOUSE_ID = UUID.fromString("24580003-0000-0000-0000-000000000003");
+
+    private void seedWarehouseRow() {
+        insertLiveListing(WAREHOUSE_ID, "warehouse");
+        jdbcTemplate.update(
+                "UPDATE public.property_listings SET commercial_subtype = 'WAREHOUSE' WHERE id = ?",
+                WAREHOUSE_ID);
+
+        assertThat(hasDetailRow(WAREHOUSE_ID))
+                .as("precondition: a warehouse row must have NO listing_commercial_space_details "
+                        + "row -- if it had one, this fixture would silently collapse into the "
+                        + "V104-only case and stop discriminating the join-absence shape")
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("T11: a WAREHOUSE row is matched by subtype=WAREHOUSE although it has no "
+            + "commercial-space-details row to join to")
+    void warehouse_matchedWithoutAnyProjectionRow() {
+        seedWarehouseRow();
+
+        assertThat(idsOf(listings(List.of("WAREHOUSE"))))
+                .as("WAREHOUSE routes through impliedPropertyTypes -> [warehouse] -> the NON-BEARING "
+                        + "branch, which matches on property_type and never consults lcsd. A "
+                        + "subtype-only predicate through the join would return nothing here")
+                .containsExactly(WAREHOUSE_ID.toString());
+    }
+
+    @Test
+    @DisplayName("T11: the WAREHOUSE peer resolves from property_type, not from a subtype column")
+    void warehouse_resolvesPeerFromPropertyTypeAlone() {
+        seedWarehouseRow();
+
+        DiscoverListingResponse card = listings(List.of("WAREHOUSE")).get(0);
+
+        assertThat(card.commercialSubtype())
+                .as("lcsd carries nothing for this row -- the read model reports that honestly "
+                        + "rather than reaching into the V104 write-model column")
+                .isNull();
+        assertThat(card.buyerCommercialSubtype())
+                .as("the peer is still WAREHOUSE: self-describing property types resolve FIRST, "
+                        + "which is what keeps legacy Building/Warehouse/Land rows visible despite "
+                        + "carrying no subtype on any read axis")
+                .isEqualTo("WAREHOUSE");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // T1-T10 (#2458) — the membership matrix, against all four storage families
+    // ─────────────────────────────────────────────────────────────────────────
+    //
+    // The Commercial family spans FOUR property_type values, with commercial_subtype
+    // discriminating SHOP vs OFFICE only within `commercial`. The five buyer peers therefore map
+    // across four storage families, which is what impliedPropertyTypes exists to translate.
+
+    private static final UUID BUILDING_ID = UUID.fromString("24580004-0000-0000-0000-000000000004");
+    private static final UUID LAND_ID = UUID.fromString("24580005-0000-0000-0000-000000000005");
+
+    /**
+     * Seeds one row per remaining storage family. Together with SHOP_ID / OFFICE_ID / the legacy
+     * rows from the #2431 fixture and WAREHOUSE_ID above, this covers all four.
+     */
+    private void seedAllCommercialFamilies() {
+        seedWarehouseRow();
+
+        insertLiveListing(BUILDING_ID, "commercial_building");
+        insertLiveListing(LAND_ID, "commercial_land");
+
+        // Neither gets a listing_commercial_space_details row: their detail lives in their own
+        // child tables, which carry no commercial_subtype column at all.
+        assertThat(hasDetailRow(BUILDING_ID)).isFalse();
+        assertThat(hasDetailRow(LAND_ID)).isFalse();
+    }
+
+    @Test
+    @DisplayName("T1: each of the five buyer subtypes selects exactly its own storage family")
+    void eachPeerSelectsItsOwnFamily() {
+        seedAllCommercialFamilies();
+
+        // LOWERCASE_SHOP_ID is included deliberately: the predicate applies UPPER() to the
+        // COLUMN, so a row stored as 'shop' IS a shop. Omitting it here would have asserted the
+        // opposite of the case-insensitivity #2431 pinned.
+        assertThat(idsOf(listings(List.of("SHOP"))))
+                .containsExactlyInAnyOrder(SHOP_ID.toString(), LOWERCASE_SHOP_ID.toString());
+        assertThat(idsOf(listings(List.of("OFFICE")))).containsExactly(OFFICE_ID.toString());
+        assertThat(idsOf(listings(List.of("BUILDING")))).containsExactly(BUILDING_ID.toString());
+        assertThat(idsOf(listings(List.of("WAREHOUSE")))).containsExactly(WAREHOUSE_ID.toString());
+        assertThat(idsOf(listings(List.of("LAND")))).containsExactly(LAND_ID.toString());
+    }
+
+    @Test
+    @DisplayName("T2: Shop + Warehouse/Godown — THE defect #2458 exists to fix")
+    void mixedSelection_shopPlusWarehouse() {
+        seedAllCommercialFamilies();
+
+        // PRE-#2458 CONTRACT, for anyone reading this later: this selection did not return a
+        // wrong subset — the API rejected it with HTTP 400, because WAREHOUSE was not an accepted
+        // Discover subtype value at all. The flip from 400 to membership is the DELIBERATE
+        // post-#2458 contract, not a regression in validation strictness.
+        //
+        // And once accepted, the ANDed predicate still could not express it: the warehouse row
+        // passed property_type IN (...) and was then eliminated by
+        // UPPER(commercial_subtype) IN ('SHOP'), because it carries no Shop/Office projection.
+        assertThat(idsOf(listings(List.of("SHOP", "WAREHOUSE"))))
+                .as("a mixed selection spanning two storage families must return BOTH, which is "
+                        + "unreachable while the two axes are ANDed")
+                .containsExactlyInAnyOrder(
+                        SHOP_ID.toString(), LOWERCASE_SHOP_ID.toString(), WAREHOUSE_ID.toString());
+    }
+
+    @Test
+    @DisplayName("T3: Office + Commercial Land — the same union across a different pair")
+    void mixedSelection_officePlusLand() {
+        seedAllCommercialFamilies();
+
+        assertThat(idsOf(listings(List.of("OFFICE", "LAND"))))
+                .containsExactlyInAnyOrder(OFFICE_ID.toString(), LAND_ID.toString());
+    }
+
+    @Test
+    @DisplayName("T4: Shop + Office stays within one family and still excludes the legacy NULL row")
+    void mixedSelection_shopPlusOffice_doesNotReadmitLegacy() {
+        seedAllCommercialFamilies();
+
+        assertThat(idsOf(listings(List.of("SHOP", "OFFICE"))))
+                .as("selecting BOTH subtypes must not collapse to 'no subtype filter' and readmit "
+                        + "rows the buyer explicitly narrowed away (#2431 no-collapse, preserved)")
+                .containsExactlyInAnyOrder(
+                        SHOP_ID.toString(), LOWERCASE_SHOP_ID.toString(), OFFICE_ID.toString())
+                .doesNotContain(LEGACY_NULL_SUBTYPE_ID.toString(), LEGACY_NO_ROW_ID.toString());
+    }
+
+    @Test
+    @DisplayName("T5: all five subtypes returns every peer but NOT the legacy un-subtyped rows")
+    void allFivePeers_excludeLegacyUnsubtyped() {
+        seedAllCommercialFamilies();
+
+        assertThat(idsOf(listings(List.of("SHOP", "OFFICE", "BUILDING", "WAREHOUSE", "LAND"))))
+                .as("'all five subtypes' is NOT the same question as 'all commercial' — a legacy "
+                        + "row whose subtype was never recorded is none of the five, so excluding "
+                        + "it is the honest answer rather than an omission")
+                .containsExactlyInAnyOrder(
+                        SHOP_ID.toString(), LOWERCASE_SHOP_ID.toString(), OFFICE_ID.toString(),
+                        BUILDING_ID.toString(), WAREHOUSE_ID.toString(), LAND_ID.toString())
+                .doesNotContain(LEGACY_NULL_SUBTYPE_ID.toString());
+    }
+
+    @Test
+    @DisplayName("T6: broad Commercial must name all four storage families — naming only "
+            + "'commercial' silently returns a strict subset")
+    void broadCommercial_requiresAllFourStorageFamilies() {
+        seedAllCommercialFamilies();
+
+        List<String> onlyGenericToken = idsOf(listings(null, List.of("commercial")));
+        List<String> allFourTokens = idsOf(listings(
+                null, List.of("commercial", "commercial_building", "warehouse", "commercial_land")));
+
+        assertThat(allFourTokens)
+                .as("the Commercial FAMILY is a four-value union in storage; a buyer asking for "
+                        + "'all commercial' must receive all four")
+                .containsAll(onlyGenericToken)
+                .contains(BUILDING_ID.toString(), WAREHOUSE_ID.toString(), LAND_ID.toString());
+
+        assertThat(onlyGenericToken)
+                .as("MEASURED, not argued: propertyType='commercial' alone is a STRICT SUBSET. It "
+                        + "hides the newest and most structured inventory behind a result set that "
+                        + "looks complete — failing in the worst direction. This is why the buyer "
+                        + "surface must emit the subtype axis rather than a single family token.")
+                .doesNotContain(BUILDING_ID.toString(), WAREHOUSE_ID.toString(), LAND_ID.toString());
+        assertThat(onlyGenericToken.size()).isLessThan(allFourTokens.size());
+    }
+
+    @Test
+    @DisplayName("T7: legacy un-subtyped rows are included by broad Commercial and never inferred")
+    void legacyRows_includedBroadly_neverInferred() {
+        seedAllCommercialFamilies();
+
+        assertThat(idsOf(listings(null, List.of("commercial"))))
+                .as("a legacy commercial row is still Commercial inventory and must not vanish "
+                        + "from a broad query just because its subtype was never recorded")
+                .contains(LEGACY_NULL_SUBTYPE_ID.toString(), LEGACY_NO_ROW_ID.toString());
+
+        for (String peer : List.of("SHOP", "OFFICE", "BUILDING", "WAREHOUSE", "LAND")) {
+            assertThat(idsOf(listings(List.of(peer))))
+                    .as("no subtype selection may EVER infer a peer for a row whose subtype was "
+                            + "not recorded — V102 hardcodes NULL precisely because shop-vs-office "
+                            + "is unrecoverable from legacy data; guessing would fabricate it")
+                    .doesNotContain(LEGACY_NULL_SUBTYPE_ID.toString(), LEGACY_NO_ROW_ID.toString());
+        }
+    }
+
+    @Test
+    @DisplayName("T8: Residential is untouched — the union reduces to the pre-#2458 clause")
+    void residential_unaffectedByTheUnion() {
+        seedAllCommercialFamilies();
+
+        assertThat(idsOf(listings(null, List.of("apartment"))))
+                .as("with no subtypes selected the second branch vanishes and the emitted SQL is "
+                        + "byte-identical to the pre-#2458 clause, so Residential membership is "
+                        + "unchanged BY CONSTRUCTION rather than by care")
+                .containsExactly(APARTMENT_ID.toString());
+    }
+
+    @Test
+    @DisplayName("T9: list and marker membership agree across every mixed selection")
+    void listAndMarkerParity_acrossMixedSelections() {
+        seedAllCommercialFamilies();
+
+        List<List<String>> selections = List.of(
+                List.of("SHOP"), List.of("WAREHOUSE"), List.of("BUILDING"), List.of("LAND"),
+                List.of("SHOP", "WAREHOUSE"), List.of("OFFICE", "LAND"),
+                List.of("SHOP", "OFFICE", "BUILDING", "WAREHOUSE", "LAND"));
+
+        for (List<String> selection : selections) {
+            List<String> cards = idsOf(listings(selection));
+            assertThat(markerIds(selection))
+                    .as("map and list share ONE predicate, so they cannot disagree for %s", selection)
+                    .containsExactlyInAnyOrderElementsOf(cards);
+            assertThat(cards)
+                    .as("guard: %s must actually match something, or the comparison above is two "
+                            + "empty lists agreeing with each other", selection)
+                    .isNotEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("T10: the union is PARENTHESISED, so a sibling NOT IN cannot bind to one branch")
+    void unionIsParenthesised_soExclusionCannotLeak() {
+        // Asserted on the emitted SQL rather than through a query, because the hazard is operator
+        // precedence: excludePropertyTypes (#2461/#2475) emits a sibling
+        // `AND pl.property_type NOT IN (...)` that removes agricultural_land from committed
+        // POLYGON/VIEWPORT scopes. Unparenthesised, that NOT IN would bind to the RIGHT-HAND OR
+        // branch only and agricultural land would leak back in — silently re-breaking both issues.
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(
+                new DiscoverListingPredicateBuilder.Filters(
+                        CITY_SLUG,
+                        List.of("commercial", "warehouse"),
+                        List.of("SHOP", "WAREHOUSE"),
+                        null, null, null, null, null, null, null, null, null, null, null, null,
+                        null, null, null, null, null,
+                        List.of("agricultural_land"),
+                        null, null));
+
+        // Asserts the WRAPPING directly. An earlier version used `.contains(" AND (")` plus
+        // `.contains(" OR ")` and a `\\) AND .*NOT IN` pattern -- all three of which the
+        // unparenthesised mutant also satisfies, so none of them discriminated. This pattern
+        // matches only when the left disjunct sits INSIDE the opening parenthesis.
+        assertThat(sql.whereFragment())
+                .as("the union must be wrapped, so every clause emitted after it binds to the "
+                        + "WHOLE union rather than to the right-hand disjunct alone")
+                .containsPattern("AND \\(pl\\.property_type IN \\([?,]+\\) OR \\(");
+    }
+
+    @Test
+    @DisplayName("T10 (query form): a post-union clause binds to the WHOLE union — an unparenthesised "
+            + "union readmits rows through its bare left disjunct")
+    void postUnionClause_bindsToTheWholeUnion() {
+        seedAllCommercialFamilies();
+
+        // SUPERSEDES an earlier version of this test that was TAUTOLOGICAL, and the reason is worth
+        // keeping: it seeded an agricultural_land row and asserted the exclusion kept it out. But
+        // the union restricts property_type to the Commercial family, so that row matched NEITHER
+        // branch and was gone before excludePropertyTypes was ever consulted. Deleting the
+        // exclusion entirely left the test passing, and so did removing the parentheses -- the
+        // actual mutant. Its "falsifiability control" did not rescue it either: that arm issued a
+        // structurally DIFFERENT query (no subtypes -> no union at all), so it proved the row was
+        // reachable under a plain type filter, not that the exclusion was load-bearing here.
+        //
+        // agricultural_land can NEVER enter this union: nonBearing is intersected with
+        // impliedPropertyTypes(commercialSubtypes), which only ever yields Commercial-family
+        // tokens. Exclusion x union is an unreachable interaction, so no test built on it can
+        // discriminate.
+        //
+        // What the parentheses ACTUALLY protect is every clause emitted AFTER the union -- price,
+        // bbox, listingPurpose, excludePropertyTypes, areaKeys, viewportScope. The price bound is
+        // used here as the REPRESENTATIVE post-union clause: they all bind at the same point in the
+        // emitted SQL, so proving one proves the property for all of them, and a viewportScope or
+        // polygon arm would be a near-duplicate rather than additional coverage. Stated because the
+        // hazard is named for POLYGON/VIEWPORT (#2461/#2475) and a reader will otherwise go looking
+        // for scope coverage that is deliberately absent.
+        //
+        // NOTE: exclusivity between polygon and viewportScope is enforced in ResultScopeExclusivity
+        // at the CONTROLLER layer; these tests call the predicate builder directly and bypass it.
+        // So a separate polygon arm is possible here -- it would simply prove nothing new.
+        // Unparenthesised,
+        // `AND (A OR B) AND price<=?` degrades to `AND A OR (B AND price<=?)`, so the bare left
+        // disjunct readmits every LIVE warehouse in the city regardless of price, viewport or
+        // purpose. That is the reachable hazard, and this test is built on it.
+        jdbcTemplate.update(
+                "UPDATE public.property_listings SET price_paise = 9000000 WHERE id = ?",
+                WAREHOUSE_ID);
+
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(
+                new DiscoverListingPredicateBuilder.Filters(
+                        CITY_SLUG,
+                        List.of("commercial", "warehouse"),
+                        List.of("SHOP", "WAREHOUSE"),
+                        null,
+                        6_000_000L,           // priceMax: below the warehouse, above the shop
+                        null, null, null, null, null, null, null, null, null, null, null, null,
+                        null, null, null, null, null, null));
+
+        List<String> matched = jdbcTemplate.queryForList(
+                "SELECT pl.id::text FROM property_listings pl WHERE " + sql.whereFragment(),
+                String.class, sql.params().toArray());
+
+        assertThat(matched)
+                .as("the warehouse is admitted BY the union (so the clause is reachable) and then "
+                        + "excluded by a post-union price bound. Unparenthesised, the bare left "
+                        + "disjunct `property_type IN ('warehouse')` readmits it regardless of "
+                        + "price -- which is the defect this test exists to catch")
+                .doesNotContain(WAREHOUSE_ID.toString());
+
+        assertThat(matched)
+                .as("guard: the union must still be matching through its BEARING branch, or this "
+                        + "test passes merely because the query returned nothing")
+                .contains(SHOP_ID.toString());
+
+        // REACHABILITY ARM -- the identical query with the price bound REMOVED.
+        //
+        // Without it, the green run above cannot distinguish "admitted by the union, then excluded
+        // by the price bound" from "never admitted at all": doesNotContain is satisfied either way.
+        // The mutant proves reachability, but only under a mutation -- this proves it in the green
+        // state, which is when a future reader will be looking.
+        //
+        // Crucially it issues the SAME query shape, changing exactly one filter. The control arm
+        // this replaces got that wrong: it changed the subtype selection too, which took the
+        // no-union branch entirely and therefore compared two different predicates.
+        DiscoverListingPredicateBuilder.Sql withoutPriceBound = DiscoverListingPredicateBuilder.build(
+                new DiscoverListingPredicateBuilder.Filters(
+                        CITY_SLUG,
+                        List.of("commercial", "warehouse"),
+                        List.of("SHOP", "WAREHOUSE"),
+                        null,
+                        null,                 // the ONLY difference: no price bound
+                        null, null, null, null, null, null, null, null, null, null, null, null,
+                        null, null, null, null, null, null));
+
+        List<String> admitted = jdbcTemplate.queryForList(
+                "SELECT pl.id::text FROM property_listings pl WHERE "
+                        + withoutPriceBound.whereFragment(),
+                String.class, withoutPriceBound.params().toArray());
+
+        assertThat(admitted)
+                .as("the union DOES admit the warehouse -- so its absence above is the post-union "
+                        + "price bound doing its job, not the union never reaching it")
+                .contains(WAREHOUSE_ID.toString());
+    }
+
+    private String flatSubtype(UUID listingId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT commercial_subtype FROM property_listings WHERE id = ?",
+                String.class, listingId);
+    }
+
+    @Test
+    @DisplayName("T11: filter membership and DTO projection never contradict each other on a row "
+            + "whose two subtype sources disagree")
+    void dualSource_filterAndProjectionCannotContradict() {
+        seedDualSourceRows();
+
+        List<DiscoverListingResponse> shops = listings(List.of("SHOP"));
+
+        // THE INVARIANT. Stated over the whole result set rather than over named ids, so it holds
+        // for any row the predicate returns -- including rows a future change introduces. If the
+        // predicate were switched to V104 while the projection stayed on V102, the V104-only row
+        // would appear here carrying a null subtype and this assertion would fire.
+        assertThat(shops)
+                .as("every row matched by a SHOP filter must also REPORT SHOP; a row that is "
+                        + "matched but renders as generic Commercial is a same-row self-contradiction")
+                .allSatisfy(card -> {
+                    assertThat(card.commercialSubtype()).isEqualTo("SHOP");
+                    assertThat(card.buyerCommercialSubtype()).isEqualTo("SHOP");
+                });
+
+        // And the converse: the row whose subtype lives ONLY in the write-model column must not be
+        // matched, because V102 is the declared read-model source and it is absent there.
+        assertThat(idsOf(shops))
+                .as("V102 is the single declared read-model source; a row carrying the value only "
+                        + "in V104 must not be matched by a read-path filter")
+                .contains(DUAL_V102_ONLY_ID.toString())
+                .doesNotContain(DUAL_V104_ONLY_ID.toString());
+    }
+
+    @Test
+    @DisplayName("T11: the V104-only row reports honest absence rather than the write-model value")
+    void dualSource_projectionReportsHonestAbsence() {
+        seedDualSourceRows();
+
+        DiscoverListingResponse v104Only = listings(null, List.of("commercial")).stream()
+                .filter(c -> DUAL_V104_ONLY_ID.toString().equals(c.id()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(
+                        "the V104-only row must still be visible under a broad Commercial query — "
+                                + "it is a commercial listing, it simply has no projected subtype"));
+
+        assertThat(v104Only.commercialSubtype())
+                .as("the read model does not consult V104, so the subtype is absent here — "
+                        + "reporting SHOP would mean a second source of truth had been introduced")
+                .isNull();
+        assertThat(v104Only.buyerCommercialSubtype())
+                .as("null is honest absence: propertyType='commercial' with a null peer is the "
+                        + "generic Commercial branch, never an inferred Shop")
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("T11: markers and cards resolve the SAME peer for dual-source rows")
+    void dualSource_markersAndCardsAgree() {
+        seedDualSourceRows();
+
+        List<String> cardIds = idsOf(listings(List.of("SHOP")));
+        List<String> pinIds = markerIds(List.of("SHOP"));
+
+        assertThat(pinIds)
+                .as("markers and cards share one predicate, so a dual-source row cannot appear on "
+                        + "the map and be missing from the list, or vice versa")
+                .containsExactlyInAnyOrderElementsOf(cardIds);
+
+        // Non-vacuous: the comparison above is only meaningful if the discriminating row is present.
+        assertThat(cardIds)
+                .as("guard: the dual-source fixture must actually be in the compared set, or this "
+                        + "test passes by comparing two empty lists")
+                .contains(DUAL_V102_ONLY_ID.toString());
     }
 
     // ─────────────────────────────────────────────────────────────────────────

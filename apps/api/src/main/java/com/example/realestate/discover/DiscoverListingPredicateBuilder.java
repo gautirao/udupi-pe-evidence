@@ -126,6 +126,123 @@ public class DiscoverListingPredicateBuilder {
      * {@code AreaCountQuery}'s compact constructor, using the SAME helpers). See
      * {@link DiscoverFilterNormalizer}'s class javadoc for the four divergences this closes.
      */
+    /**
+     * Emits the #2458 family/subtype union as ONE parenthesised clause.
+     *
+     * <pre>
+     *   AND ( pl.property_type IN (&lt;non-bearing selected&gt;)
+     *         OR ( pl.property_type IN (&lt;bearing selected&gt;)
+     *              AND EXISTS (SELECT 1 FROM listing_commercial_space_details lcsd
+     *                          WHERE lcsd.listing_id = pl.id
+     *                            AND UPPER(lcsd.commercial_subtype) IN (&lt;subtypes&gt;)) ) )
+     * </pre>
+     *
+     * <h2>Why a union and not an AND (#2458)</h2>
+     *
+     * <p>The previous shape ANDed the two lists, so an approved MIXED selection such as
+     * Shop + Warehouse/Godown was unexpressible: the Warehouse row passed
+     * {@code property_type IN ('commercial','warehouse')} and was then eliminated by
+     * {@code UPPER(commercial_subtype) IN ('SHOP')}, because it carries no Shop/Office projection.
+     * Splitting on {@link DiscoverFilterNormalizer#SUBTYPE_BEARING_PROPERTY_TYPES} lets each
+     * selected type be matched the only way it CAN be matched: bearing types by subtype, everything
+     * else by {@code property_type}, which is {@code NOT NULL} and always correct.
+     *
+     * <p><b>This is what keeps legacy inventory visible.</b> Legacy Building/Warehouse/Land rows
+     * have NO {@code listing_commercial_space_details} row at all (V102 inserts only
+     * {@code WHERE property_type = 'commercial'}), so a subtype-only filter would silently drop
+     * every one of them. They are matched here by the left branch instead.
+     *
+     * <h2>THE PARENTHESES ARE LOAD-BEARING (#2461/#2475)</h2>
+     *
+     * <p>{@code excludePropertyTypes} emits a sibling {@code AND pl.property_type NOT IN (...)} that
+     * removes {@code agricultural_land} from committed POLYGON and VIEWPORT scopes. If this union
+     * were emitted unparenthesised, that {@code NOT IN} would bind to the right-hand OR branch only
+     * and agricultural land would leak back into those scopes — silently re-breaking #2461 and
+     * #2475. The wrapping parentheses are asserted by test, not left to review.
+     *
+     * <h2>Properties preserved verbatim from #2431</h2>
+     *
+     * <ol>
+     *   <li>A legacy {@code property_type='commercial'} row with {@code commercial_subtype} NULL is
+     *       NEVER classified as SHOP or OFFICE — {@code NULL IN ('SHOP')} is NULL, not TRUE. V102
+     *       hardcodes NULL precisely because shop-vs-office cannot be recovered from legacy data;
+     *       guessing would fabricate it.</li>
+     *   <li>{@code UPPER()} on the COLUMN, not on a bind: the write path stamps canonical
+     *       upper-case, but no CHECK constraint enforces it, so a lower-case row is representable.</li>
+     *   <li>Correlated EXISTS rather than a JOIN, because this fragment is shared verbatim by five
+     *       callers whose FROM clauses this builder does not control.</li>
+     * </ol>
+     *
+     * @param hasTypes whether the caller supplied an explicit property-type selection. When it did
+     *                 not, the selection is DERIVED from the subtypes via
+     *                 {@link DiscoverFilterNormalizer#impliedPropertyTypes} rather than left
+     *                 unconstrained — a subtype-only URL must not widen to every property type,
+     *                 nor silently drop the legacy rows of the types it names.
+     */
+    private static void appendFamilySubtypeUnion(
+            StringBuilder sb, List<Object> params, Filters f, boolean hasTypes) {
+
+        List<String> effectiveTypes = hasTypes
+                ? f.propertyTypes()
+                : DiscoverFilterNormalizer.impliedPropertyTypes(f.commercialSubtypes());
+
+        // Types the SUBTYPE SELECTION actually names. A non-bearing type may pass on property_type
+        // alone ONLY if it is one of these.
+        //
+        // Without this intersection the union silently drops the subtype constraint for any
+        // unrelated type: propertyTypes=[apartment] + subtypes=[SHOP] would emit
+        // `property_type IN ('apartment')` and hand the shopper the city's whole apartment
+        // inventory presented as though it matched a Shop filter. That is the exact quiet-wrongness
+        // #2458 exists to remove, and the pre-#2458 AND happened to prevent it — so the union has
+        // to prevent it deliberately rather than inherit it.
+        List<String> namedBySubtypes =
+                DiscoverFilterNormalizer.impliedPropertyTypes(f.commercialSubtypes());
+
+        List<String> bearing = effectiveTypes.stream()
+                .filter(DiscoverFilterNormalizer.SUBTYPE_BEARING_PROPERTY_TYPES::contains)
+                .toList();
+        List<String> nonBearing = effectiveTypes.stream()
+                .filter(t -> !DiscoverFilterNormalizer.SUBTYPE_BEARING_PROPERTY_TYPES.contains(t))
+                .filter(namedBySubtypes::contains)
+                .toList();
+
+        // Neither branch satisfiable — the selection names no type that could match. Literal FALSE
+        // rather than an empty "( )", which is a syntax error, or a bare TRUE, which would widen.
+        if (bearing.isEmpty() && nonBearing.isEmpty()) {
+            sb.append(" AND FALSE");
+            return;
+        }
+
+        sb.append(" AND (");
+
+        if (!nonBearing.isEmpty()) {
+            sb.append("pl.property_type IN (");
+            for (int i = 0; i < nonBearing.size(); i++) {
+                sb.append(i == 0 ? "?" : ",?");
+                params.add(nonBearing.get(i));
+            }
+            sb.append(")");
+        }
+
+        if (!bearing.isEmpty()) {
+            if (!nonBearing.isEmpty()) {
+                sb.append(" OR ");
+            }
+            sb.append("(pl.property_type IN (");
+            for (int i = 0; i < bearing.size(); i++) {
+                sb.append(i == 0 ? "?" : ",?");
+                params.add(bearing.get(i));
+            }
+            sb.append(") AND EXISTS (SELECT 1 FROM listing_commercial_space_details lcsd")
+              .append(" WHERE lcsd.listing_id = pl.id AND UPPER(lcsd.commercial_subtype) IN (")
+              .append(String.join(", ", Collections.nCopies(f.commercialSubtypes().size(), "?")))
+              .append(")))");
+            params.addAll(f.commercialSubtypes());
+        }
+
+        sb.append(")");
+    }
+
     public static Sql build(Filters rawFilters) {
         Filters f = DiscoverFilterNormalizer.normalize(rawFilters);
         StringBuilder sb = new StringBuilder();
@@ -143,11 +260,18 @@ public class DiscoverListingPredicateBuilder {
         // Same answer, but Postgres plans it as a One-Time Filter and scans NOTHING, instead of
         // scanning the city's listings to prove the obvious (#1956 PR1 AC1.15 #8). No binds either,
         // so a long garbage list cannot push the statement toward the 65535-parameter ceiling.
-        if (f.propertyTypes() != null && !f.propertyTypes().isEmpty()) {
-            if (DiscoverFilterNormalizer.isUnsatisfiable(
-                    f.propertyTypes(), DiscoverFilterNormalizer.ALLOWED_PROPERTY_TYPES)) {
-                sb.append(" AND FALSE");
-            } else {
+        boolean hasTypes = f.propertyTypes() != null && !f.propertyTypes().isEmpty();
+        boolean hasSubtypes = f.commercialSubtypes() != null && !f.commercialSubtypes().isEmpty();
+
+        if (hasTypes && DiscoverFilterNormalizer.isUnsatisfiable(
+                f.propertyTypes(), DiscoverFilterNormalizer.ALLOWED_PROPERTY_TYPES)) {
+            sb.append(" AND FALSE");
+        } else if (!hasSubtypes) {
+            // NO SUBTYPE FILTER — byte-identical to the pre-#2458 clause. This is the branch every
+            // Residential, Agricultural and broad-Commercial query takes, which is why the #2458
+            // union cannot regress them: with no subtypes selected the SQL is character-for-
+            // character what it was before, so existing tests exercise unchanged text.
+            if (hasTypes) {
                 sb.append(" AND pl.property_type IN (");
                 for (int i = 0; i < f.propertyTypes().size(); i++) {
                     sb.append(i == 0 ? "?" : ",?");
@@ -155,52 +279,11 @@ public class DiscoverListingPredicateBuilder {
                 }
                 sb.append(")");
             }
+        } else {
+            appendFamilySubtypeUnion(sb, params, f, hasTypes);
         }
 
-        // commercialSubtypes (#2431) — narrows the generic Commercial family to SHOP or OFFICE.
-        //
-        // Expressed as a CORRELATED EXISTS against the typed projection table rather than a JOIN,
-        // because this fragment is shared verbatim by five callers (listings SELECT, listings
-        // COUNT, listings aggregates, markers, navigation area counts) whose FROM clauses this
-        // builder does not control. An EXISTS is drop-in for all of them; a JOIN would not be.
-        // listing_id is the PK of listing_commercial_space_details, so the subquery is a single
-        // index seek per candidate row.
-        //
-        // THREE properties this predicate must have, all of which fall out of EXISTS semantics:
-        //
-        //   1. A legacy property_type='commercial' row with commercial_subtype NULL is NEVER
-        //      classified as SHOP or OFFICE. `NULL IN ('SHOP')` is NULL (not TRUE), so the row
-        //      is excluded — the honest answer, and exactly what the issue requires. V102's
-        //      backfill hardcodes NULL for every legacy commercial row precisely because shop
-        //      vs office cannot be recovered from legacy data; guessing here would fabricate it.
-        //
-        //   2. A row with NO projection row at all (non-commercial property types) is excluded
-        //      too. That is deliberate: `commercialSubtypes=SHOP` asks for shops, and an
-        //      apartment is not one. Combining it with `propertyTypes=apartment` therefore
-        //      yields zero rather than silently ignoring the subtype and handing the shopper the
-        //      whole apartment inventory presented as if it matched — the exact class of
-        //      quiet-wrongness DiscoverFilterNormalizer's javadoc exists to prevent. The
-        //      frontend clears subtype state when the buyer leaves the Commercial family, so
-        //      that contradictory combination is not reachable through the UI.
-        //
-        //   3. UPPER() on the column, not on a bind: the write path stamps canonical upper-case
-        //      (ListingController#resolveCommercialSubtype), but the column carries no CHECK
-        //      constraint (V102 L82-92), so a lower-case row is representable. Normalising the
-        //      column defends against that without a second source of truth for the vocabulary.
-        //      Cost is nil — the row is already located by primary key before UPPER() is applied.
-        //
-        // No unsatisfiable short-circuit here (unlike propertyTypes/sellerTypes above): without a
-        // CHECK constraint, an out-of-vocabulary value is not PROVABLY empty, so it must be run,
-        // not assumed. See DiscoverFilterNormalizer#isProvablyEmpty for why that distinction
-        // matters (it is the same reason `bedrooms` is excluded there).
-        if (f.commercialSubtypes() != null && !f.commercialSubtypes().isEmpty()) {
-            List<String> placeholders = Collections.nCopies(f.commercialSubtypes().size(), "?");
-            sb.append(" AND EXISTS (SELECT 1 FROM listing_commercial_space_details lcsd")
-              .append(" WHERE lcsd.listing_id = pl.id AND UPPER(lcsd.commercial_subtype) IN (")
-              .append(String.join(", ", placeholders))
-              .append("))");
-            params.addAll(f.commercialSubtypes());
-        }
+        // (the subtype clause is emitted by appendFamilySubtypeUnion above — see #2458)
 
         // price range
         if (f.priceMinPaise() != null) {
