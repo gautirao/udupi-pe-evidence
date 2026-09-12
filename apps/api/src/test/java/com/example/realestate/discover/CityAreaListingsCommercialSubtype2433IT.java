@@ -463,7 +463,7 @@ class CityAreaListingsCommercialSubtype2433IT {
         DiscoverListingsPage page = listingsController.getListings(
                 CITY_SLUG, null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null,
-                0, 50, false, null, null, null, null, null).getBody();
+                0, 50, false, null, null, null, null, null, null, null).getBody();
         assertThat(page).isNotNull();
         return page.content();
     }
