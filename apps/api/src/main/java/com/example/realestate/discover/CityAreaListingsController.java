@@ -78,6 +78,8 @@ public class CityAreaListingsController {
      *   <li>{@code maxPrice} — maximum price in paise (inclusive)</li>
      *   <li>{@code bedrooms} — exact bedroom count (values &ge; 4 treated as "4 or more")</li>
      *   <li>{@code propertyType} — property type string (case-insensitive)</li>
+     *   <li>{@code commercialSubtypes} — Commercial buyer subtype narrowing (#2509), repeatable;
+     *       unknown values are rejected with a 400 rather than ignored</li>
      *   <li>{@code q} — full-text keyword search (max 500 chars); matched against
      *       {@code search_vector} via {@code websearch_to_tsquery}</li>
      * </ul>
@@ -123,6 +125,13 @@ public class CityAreaListingsController {
             // into a single cross-layer PR. Do not "fix" that asymmetry without reading this.
             @RequestParam(required = false) List<Integer> bedrooms,
             @RequestParam(required = false) List<String> propertyType,
+            // #2509 — the anon path could not express a Commercial subtype AT ALL: an unknown query
+            // param is silently discarded by Spring, so the control responded and the results
+            // ignored it. Named with the sibling endpoints' plural spelling (commercialSubtypes)
+            // because this param is NEW here — there is no existing frontend request shape or saved
+            // URL to preserve, which is exactly the constraint that forced propertyType to keep its
+            // singular name above.
+            @RequestParam(required = false) List<String> commercialSubtypes,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) String listingPurpose,
             @RequestParam(required = false) Boolean readyToMove,
@@ -153,6 +162,7 @@ public class CityAreaListingsController {
         if (bedrooms != null && bedrooms.size() > MAX_RAW_FILTER_VALUES) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "too_many_bedroom_values");
         }
+        validateCommercialSubtypes(commercialSubtypes);
 
         // #2015 — anon "Search this area" viewport narrowing. Reuses BboxParser (shared with
         // DiscoverListingsController/DiscoverMarkersController) so the parsing/validation contract
@@ -173,9 +183,13 @@ public class CityAreaListingsController {
                 city, areaKeys != null ? areaKeys.size() : 0, limitPerArea, minPrice, maxPrice, bedrooms, propertyType,
                 q != null ? "[present]" : null, parsedBbox != null ? "[present]" : null, isAuthenticated);
 
+        // #2509 — the 13-ARGUMENT form, deliberately. The 12-argument overload exists for callers
+        // that genuinely apply no subtype narrowing; repointing this call at it would drop every
+        // subtype selection silently and COMPILE CLEANLY, which is the #2553/#2023 allowlist-discard
+        // shape. CityAreaListingsControllerTest pins this call's subtype argument for that reason.
         CityAreaListingsResponse response = service.getAreaListings(
-                city, areaKeys, limitPerArea, minPrice, maxPrice, bedrooms, propertyType, q, listingPurpose,
-                readyToMove, parsedBbox, isAuthenticated);
+                city, areaKeys, limitPerArea, minPrice, maxPrice, bedrooms, propertyType,
+                commercialSubtypes, q, listingPurpose, readyToMove, parsedBbox, isAuthenticated);
 
         // Cache-control split by auth state:
         //   anon  → coarsened response; safe to share via public cache (maxAge 60s)
@@ -187,6 +201,72 @@ public class CityAreaListingsController {
         return ResponseEntity.ok()
                 .cacheControl(cacheControl)
                 .body(response);
+    }
+
+    /**
+     * Boundary validation for {@code commercialSubtypes} on THIS endpoint (#2509).
+     *
+     * <h2>Why this does not call {@link CommercialSubtypeParam#validate}</h2>
+     *
+     * <p>That shared validator rejects on {@code raw.size() > MAX_COMMERCIAL_SUBTYPE_VALUES}, and
+     * that constant is declared as {@code ALLOWED_COMMERCIAL_SUBTYPES.size()} — a cache-cardinality
+     * bound derived from the TAXONOMY size, which is the coupling tracked in #2523. Calling it here
+     * would carry that coupling onto a THIRD public unauthenticated endpoint, and at 5 it is
+     * strictly tighter than {@link #MAX_RAW_FILTER_VALUES}, so it would silently BECOME this
+     * endpoint's effective cache bound. Describing the result as decoupled would then be false.
+     *
+     * <p>So the two questions are answered by two constants, one each:
+     * <ul>
+     *   <li><b>How many repetitions before we stop minting cache keys</b> —
+     *       {@link #MAX_RAW_FILTER_VALUES}, a literal with its own rationale, unchanged from #2533.
+     *       On this endpoint that bound is doing ALL the work: the response is cached with
+     *       {@code Cache-Control: public, max-age=60}, and an HTTP shared cache is keyed on the
+     *       request URL, which the CLIENT chooses. No server-side dedupe or sort can collapse
+     *       {@code ?commercialSubtypes=SHOP&commercialSubtypes=SHOP} and {@code ?commercialSubtypes=SHOP}
+     *       into one entry — normalisation makes those entries hold identical BODIES, it does not
+     *       stop them existing. Canonicalisation downstream bounds bind count, placeholder count
+     *       and plan-cache entries; it does not bound this.</li>
+     *   <li><b>Which values are meaningful</b> — {@link DiscoverFilterNormalizer#ALLOWED_COMMERCIAL_SUBTYPES},
+     *       the single declaration, reused rather than reimplemented. Sharing the SET is what makes
+     *       vocabulary drift structurally impossible, which is the objection
+     *       {@link CommercialSubtypeParam}'s javadoc raises against a second validator; only the
+     *       coupled integer is declined. {@code CityAreaListingsSubtypeVocabularyParityTest} asserts
+     *       both validators accept and reject the same values.</li>
+     * </ul>
+     *
+     * <p>Unknown values 400 rather than being preserved, matching the authenticated endpoints: this
+     * param is new here, so no live URL carries an unrecognised value — the reason
+     * {@code propertyTypes} must instead preserve them.
+     *
+     * <p>Splitting the shared validator into a vocabulary check plus a caller-supplied cap is the
+     * better permanent fix and is recorded on #2523 as its preferred direction; it is declined here
+     * on scope, because it edits a class shared by two controllers this change otherwise leaves
+     * alone.
+     */
+    private static void validateCommercialSubtypes(List<String> raw) {
+        if (raw == null) {
+            return;
+        }
+        // Present-but-empty is a client bug, not "no filter" — same treatment as areaKeys.
+        if (raw.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "commercial_subtypes_must_not_be_empty");
+        }
+        if (raw.size() > MAX_RAW_FILTER_VALUES) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "too_many_commercial_subtype_values");
+        }
+        for (String value : raw) {
+            if (value == null || value.isBlank()
+                    || DiscoverFilterNormalizer.ALLOWED_COMMERCIAL_SUBTYPES.stream()
+                            .noneMatch(allowed -> allowed.equalsIgnoreCase(value.trim()))) {
+                // The rejected value is NOT echoed into the reason phrase: it is unvalidated client
+                // input on a public endpoint, and the allowed set alone tells the caller how to fix
+                // the request.
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST, "commercial_subtypes_invalid_value");
+            }
+        }
     }
 
     // Mirrors the identical helper duplicated in DiscoverListingsController and

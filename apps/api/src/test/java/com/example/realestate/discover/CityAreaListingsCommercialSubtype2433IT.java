@@ -106,6 +106,15 @@ class CityAreaListingsCommercialSubtype2433IT {
     private static final UUID LOWERCASE_SHOP_ID = UUID.fromString("24330006-0000-0000-0000-000000000006");
     /** A self-describing Commercial family type, which carries no subtype on any axis. */
     private static final UUID WAREHOUSE_ID = UUID.fromString("24330007-0000-0000-0000-000000000007");
+    /**
+     * #2509 — an ARCHIVED commercial row carrying a genuine SHOP subtype. It exists solely to make
+     * the union's wrapping parentheses testable as BEHAVIOUR rather than as captured text: {@code OR}
+     * has the lowest precedence in SQL, so an unparenthesised union would regroup the LEFT JOIN ON
+     * clause into {@code (… AND status='LIVE' AND leftBranch) OR (rightBranch AND agriExclusion)},
+     * detaching {@code status} and {@code area_key} from the right branch entirely — and this row,
+     * which satisfies the right branch alone, would leak into an anon buyer's results.
+     */
+    private static final UUID ARCHIVED_SHOP_ID = UUID.fromString("25090001-0000-0000-0000-000000000001");
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -138,6 +147,12 @@ class CityAreaListingsCommercialSubtype2433IT {
         insertCommercialDetail(LEGACY_NULL_SUBTYPE_ID, null);
         insertCommercialDetail(LOWERCASE_SHOP_ID, "shop");
         // LEGACY_NO_ROW_ID, APARTMENT_ID and WAREHOUSE_ID deliberately get NO projection row.
+
+        // #2509 — the parentheses fixture. Deliberately NOT live, so every existing arm above is
+        // unaffected (they all read through the status='LIVE' predicate and therefore cannot see
+        // it), while the subtype-filter arms below can prove it never leaks.
+        insertArchivedListing(ARCHIVED_SHOP_ID, "commercial");
+        insertCommercialDetail(ARCHIVED_SHOP_ID, "SHOP");
 
         // Fixture-authenticity preconditions, asserted BEFORE anything under test runs, so a broken
         // fixture fails here rather than as a misleading assertion further down.
@@ -261,7 +276,178 @@ class CityAreaListingsCommercialSubtype2433IT {
                 .isEqualTo(3L);
     }
 
+    // ── #2509: the query direction — this endpoint can now be FILTERED by subtype ────
+    // The arms above prove the subtype is PROJECTED onto the card. These prove it can be used to
+    // narrow, which is the half #2509 tracked as still open. A mocked JdbcTemplate cannot reach
+    // any of this: every claim below is a claim about what Postgres does with the emitted SQL.
+
+    @Test
+    @DisplayName("#2509: a SHOP filter returns exactly the Shop rows — case-insensitively on the "
+            + "stored column — and never classifies a legacy NULL or missing projection row as SHOP")
+    void subtypeFilter_returnsOnlyShops_andNeverGuessesLegacyRows() {
+        List<AreaListingCard> cards = areaCardsFiltered(null, List.of("SHOP"));
+
+        assertThat(cards.stream().map(AreaListingCard::id))
+                .as("both genuinely-Shop rows, including the one stored lower-case — UPPER() is "
+                        + "applied to the COLUMN precisely because no CHECK constraint enforces case")
+                .containsExactlyInAnyOrder(SHOP_ID, LOWERCASE_SHOP_ID);
+
+        // Stated as explicit exclusions rather than left to the containsExactly above, because each
+        // is a DIFFERENT reason and a future change could reintroduce any one of them alone.
+        assertThat(cards.stream().map(AreaListingCard::id))
+                .as("OFFICE is a different subtype; NULL IN ('SHOP') is NULL, not TRUE; a row with "
+                        + "no projection row satisfies no EXISTS; an apartment is not commercial")
+                .doesNotContain(OFFICE_ID, LEGACY_NULL_SUBTYPE_ID, LEGACY_NO_ROW_ID, APARTMENT_ID);
+    }
+
+    @Test
+    @DisplayName("#2509 (the reason the clause is a UNION): Shop + Warehouse returns BOTH, which an "
+            + "AND of the two axes could not express at all")
+    void mixedSelection_spansBearingAndSelfDescribingTypes() {
+        List<AreaListingCard> cards = areaCardsFiltered(null, List.of("SHOP", "WAREHOUSE"));
+
+        // The Warehouse row has NO listing_commercial_space_details row whatsoever — V102 inserts
+        // only WHERE property_type = 'commercial'. Under the pre-#2458 AND it passed
+        // property_type IN (...) and was then eliminated by UPPER(commercial_subtype) IN ('SHOP'),
+        // so this approved buyer selection returned an incomplete set. It is matched here by the
+        // non-bearing branch instead, on property_type, which is NOT NULL and always correct.
+        assertThat(cards.stream().map(AreaListingCard::id))
+                .containsExactlyInAnyOrder(SHOP_ID, LOWERCASE_SHOP_ID, WAREHOUSE_ID);
+
+        assertThat(cards.stream().map(AreaListingCard::id))
+                .as("still no OFFICE, and still no fabricated classification of the legacy rows")
+                .doesNotContain(OFFICE_ID, LEGACY_NULL_SUBTYPE_ID, LEGACY_NO_ROW_ID);
+    }
+
+    @Test
+    @DisplayName("#2509 (parentheses, proved behaviourally): a row that satisfies the subtype branch "
+            + "but fails status='LIVE' must NOT leak — OR binds looser than AND")
+    void theUnionCannotLeakARowThatFailsTheOtherPredicates() {
+        // THE SELECTION IS LOAD-BEARING AND MUST SPAN BOTH BRANCHES. An earlier version of this arm
+        // passed List.of("SHOP") and could not fail for its own input: SHOP implies only
+        // `commercial`, which is the sole member of SUBTYPE_BEARING_PROPERTY_TYPES, so nonBearing
+        // was empty, the emitter never appended " OR ", and removing the outer parenthesis still
+        // left `AND (bearing AND EXISTS)` — correctly grouped, archived row still excluded. The arm
+        // passed with and without the thing it is named for. Its isNotEmpty() control did not
+        // rescue it: a positive control rules out passing-by-emptiness, which is a DIFFERENT hazard
+        // from a mutation that is inert for the input under test.
+        //
+        // SHOP + WAREHOUSE spans bearing and non-bearing, so the union genuinely emits
+        // `(nonBearing OR (bearing AND EXISTS))` and the parentheses become load-bearing here.
+        List<AreaListingCard> cards = areaCardsFiltered(null, List.of("SHOP", "WAREHOUSE"));
+
+        // ARCHIVED_SHOP_ID is a genuine commercial+SHOP row, so it satisfies the union's right-hand
+        // branch outright. The ONLY thing keeping it out is that the union is parenthesised, so the
+        // sibling `pl.status = 'LIVE'` and `pl.area_key = a.area_key` in the same ON clause still
+        // apply to it. Unparenthesised, `A AND B AND (X OR Y)` degrades to `(A AND B AND X) OR Y`,
+        // the right disjunct sheds status and area_key, and an ARCHIVED listing is served to an
+        // anonymous buyer.
+        assertThat(cards.stream().map(AreaListingCard::id))
+                .as("an ARCHIVED shop must never be served, however well it matches the subtype")
+                .doesNotContain(ARCHIVED_SHOP_ID);
+
+        // Positive control — rules out passing-by-emptiness. Kept, but note it is NOT what makes
+        // the mutation detectable; the SHOP+WAREHOUSE selection is.
+        assertThat(cards).as("the filter must still return live rows").isNotEmpty();
+
+        // Both branches must genuinely be populated, or the union degenerates to the single-branch
+        // shape that made the earlier version inert.
+        assertThat(cards.stream().map(AreaListingCard::id))
+                .as("the bearing branch (SHOP) and the non-bearing branch (WAREHOUSE) must BOTH "
+                        + "contribute, or there is no OR for the parentheses to bind")
+                .contains(SHOP_ID, WAREHOUSE_ID);
+    }
+
+    @Test
+    @DisplayName("#2509 (no exhaustive collapse): selecting ALL five subtypes still excludes the "
+            + "legacy un-subtyped rows — it is not equivalent to 'no filter'")
+    void allFiveSubtypes_doNotCollapseToNoFilter() {
+        List<AreaListingCard> cards =
+                areaCardsFiltered(null, List.of("SHOP", "OFFICE", "BUILDING", "WAREHOUSE", "LAND"));
+
+        // normalizeCommercialSubtypes deliberately has NO `size() == ALLOWED.size()` collapse
+        // branch, unlike normalizePropertyTypes. That asymmetry is correct and is the property most
+        // likely to be "tidied up" by someone who reads it as an oversight: commercial_subtype is
+        // NULLABLE and V102-backfilled rows carry NULL, so collapsing to no-clause would readmit
+        // exactly the un-disambiguated rows the buyer narrowed away.
+        assertThat(cards.stream().map(AreaListingCard::id))
+                .as("'all five subtypes' is not the same question as 'all commercial' — a row whose "
+                        + "subtype was never recorded is none of the five")
+                .doesNotContain(LEGACY_NULL_SUBTYPE_ID, LEGACY_NO_ROW_ID, APARTMENT_ID);
+
+        assertThat(cards.stream().map(AreaListingCard::id))
+                .as("the peers that DO exist in this fixture must still be returned")
+                .contains(SHOP_ID, LOWERCASE_SHOP_ID, OFFICE_ID, WAREHOUSE_ID);
+
+        // Negative control: unfiltered, those legacy rows ARE returned — so the exclusion above is
+        // the filter's doing rather than an empty or broken fixture.
+        assertThat(areaCards().stream().map(AreaListingCard::id))
+                .as("without the filter the legacy rows are present, so their absence above means "
+                        + "something")
+                .contains(LEGACY_NULL_SUBTYPE_ID, LEGACY_NO_ROW_ID, APARTMENT_ID);
+    }
+
+    @Test
+    @DisplayName("#2509: an area with zero matching listings still returns its entry under a "
+            + "subtype filter — the clause stayed in the LEFT JOIN ON, not the WHERE")
+    void emptyAreaSurvivesASubtypeFilter() {
+        CityAreaListingsResponse response = cityAreaService.getAreaListings(
+                CITY_SLUG, List.of(AREA_KEY, EMPTY_AREA_KEY), 20, null, null, null, null,
+                List.of("SHOP"), null, null, null, null, false);
+
+        // Moving filters into the WHERE clause collapses the outer join and deletes zero-match areas
+        // from the response entirely. That is also why this service cannot simply delegate to
+        // DiscoverListingPredicateBuilder#build, which emits WHERE-shaped SQL (#2541).
+        assertThat(response.areas().stream().map(AreaListingsEntry::areaKey))
+                .containsExactlyInAnyOrder(AREA_KEY, EMPTY_AREA_KEY);
+
+        AreaListingsEntry empty = response.areas().stream()
+                .filter(a -> EMPTY_AREA_KEY.equals(a.areaKey()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(empty.listings()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("#2509: a subtype naming no selected property type returns NOTHING rather than the "
+            + "whole apartment inventory presented as a Shop result")
+    void subtypeNamingNoSelectedType_returnsNothing() {
+        List<AreaListingCard> cards = areaCardsFiltered(List.of("apartment"), List.of("SHOP"));
+
+        // The quiet wrongness the union had to prevent deliberately: emitting
+        // property_type IN ('apartment') and dropping the subtype constraint would answer a Shop
+        // filter with every apartment in the city. The emitter produces a literal FALSE instead.
+        assertThat(cards).isEmpty();
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
+
+    private List<AreaListingCard> areaCardsFiltered(List<String> propertyTypes,
+                                                    List<String> subtypes) {
+        CityAreaListingsResponse response = cityAreaService.getAreaListings(
+                CITY_SLUG, List.of(AREA_KEY), 50, null, null, null, propertyTypes, subtypes,
+                null, null, null, null, false);
+        return response.areas().stream()
+                .filter(a -> AREA_KEY.equals(a.areaKey()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("fixture area not returned"))
+                .listings();
+    }
+
+    /**
+     * Inserts a NON-live listing. Deliberately separate from {@link #insertLiveListing} rather than
+     * adding a status parameter to it, so the arms that predate #2509 keep calling byte-identical
+     * code.
+     */
+    private void insertArchivedListing(UUID id, String propertyType) {
+        OffsetDateTime now = OffsetDateTime.now();
+        jdbcTemplate.update(
+                "INSERT INTO public.property_listings "
+                        + "(id, area_key, status, archived_at, is_duplicate, is_valid, property_type, "
+                        + " latitude, longitude, price_paise, created_at, updated_at) "
+                        + "VALUES (?, ?, 'ARCHIVED', ?, false, true, ?, ?, ?, 5000000, ?, ?)",
+                id, AREA_KEY, now, propertyType, CENTRE_LAT, CENTRE_LON, now, now);
+    }
 
     private List<AreaListingCard> areaCards() {
         CityAreaListingsResponse response = cityAreaService.getAreaListings(

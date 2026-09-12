@@ -85,6 +85,50 @@ public class CityAreaListingsService {
     }
 
     /**
+     * The NO-SUBTYPE-FILTER shape of the query (#2509).
+     *
+     * <p><b>This is a legitimate entry point with a stated meaning, NOT a compatibility shim.</b>
+     * The distinction matters: a "shim" invites deletion and invites new callers to treat it as the
+     * default. This overload means one specific thing — <em>apply no Commercial-subtype narrowing</em>
+     * — and every caller of it must genuinely mean that.
+     *
+     * <p><b>Who legitimately calls it:</b> {@code CityAreaListingsCommercialSubtype2433IT}, whose
+     * subject is the subtype PROJECTION on the result card rather than any filtering, and whose
+     * assertions require the unfiltered row set. <b>Production is not among them</b> —
+     * {@link CityAreaListingsController} always calls the 13-argument form, and an arm asserts that
+     * it does.
+     *
+     * <p><b>The hazard this overload creates, stated so it is not rediscovered as a defect.</b> A
+     * call site that silently omits a filter field and loses it with no error is the same shape as
+     * the {@code commercialSubtypes} commit-allowlist discards tracked in #2553, and as the #2023
+     * {@code readyToMove} drop before it. An overload makes exactly that mistake COMPILE CLEANLY
+     * forever: repoint the controller here and every subtype selection is dropped in silence with
+     * no test failing. That is why the controller's use of the 13-argument form is pinned by
+     * assertion rather than left to review.
+     *
+     * <p><b>Residual, not fixed here.</b> The root cause is a 12-going-on-13 positional parameter
+     * list, which will recur at the 14th; a parameter object is the permanent fix and is out of
+     * scope for this change. Recorded as a candidate for #2541's convergence work on this service,
+     * which already owns its structural debt.
+     */
+    @Transactional(readOnly = true)
+    public CityAreaListingsResponse getAreaListings(String city,
+                                                    List<String> areaKeys,
+                                                    Integer rawLimit,
+                                                    Long minPrice,
+                                                    Long maxPrice,
+                                                    List<Integer> bedrooms,
+                                                    List<String> propertyType,
+                                                    String q,
+                                                    String listingPurpose,
+                                                    Boolean readyToMove,
+                                                    DiscoverListingPredicateBuilder.Bbox bbox,
+                                                    boolean isAuthenticated) {
+        return getAreaListings(city, areaKeys, rawLimit, minPrice, maxPrice, bedrooms, propertyType,
+                null, q, listingPurpose, readyToMove, bbox, isAuthenticated);
+    }
+
+    /**
      * Returns the city-first area listings response.
      *
      * @param city         city slug (case-insensitive)
@@ -98,7 +142,15 @@ public class CityAreaListingsService {
      * @param minPrice     optional minimum price in paise (inclusive); null = no filter
      * @param maxPrice     optional maximum price in paise (inclusive); null = no filter
      * @param bedrooms     optional bedroom count; values >= 4 treated as "4 or more"; null = no filter
-     * @param propertyType optional property type string (case-insensitive); null/blank = no filter
+     * @param propertyType optional property types (case-insensitive, multi-value since #2533);
+     *                     null/empty = no filter
+     * @param commercialSubtypes optional Commercial buyer-subtype narrowing (#2509); null/empty =
+     *                     no filter. When present, this and {@code propertyType} are emitted as ONE
+     *                     union clause rather than two AND-ed clauses — see
+     *                     {@link #appendFamilyAndSubtypeClause} for why that is load-bearing.
+     *                     Unknown values are rejected with a 400 by the controller before reaching
+     *                     here; the normaliser's unsatisfiable-preservation is the fail-closed
+     *                     backstop for any non-controller caller.
      * @param q            optional keyword search query; null/blank = no FTS filter applied.
      *                     Passed to {@code websearch_to_tsquery('english', ?)} — malformed input
      *                     may cause a {@code DataAccessException} which propagates to the global
@@ -129,6 +181,7 @@ public class CityAreaListingsService {
                                                     Long maxPrice,
                                                     List<Integer> bedrooms,
                                                     List<String> propertyType,
+                                                    List<String> commercialSubtypes,
                                                     String q,
                                                     String listingPurpose,
                                                     Boolean readyToMove,
@@ -152,6 +205,19 @@ public class CityAreaListingsService {
         // of those locally is how the casing divergence #1956 PR1 removed came about.
         List<String> normPropertyTypes = DiscoverFilterNormalizer.normalizePropertyTypes(propertyType);
         List<Integer> normBedrooms = DiscoverFilterNormalizer.normalizeBedrooms(bedrooms);
+        // #2509 — same shared normaliser, for the same reasons. Note it deliberately does NOT
+        // apply an exhaustive-selection collapse (unlike property types): commercial_subtype is
+        // nullable and legacy V102-backfilled rows carry NULL, so selecting every known subtype is
+        // NOT equivalent to no filter — collapsing would readmit un-disambiguated legacy rows into
+        // a set the buyer explicitly narrowed.
+        //
+        // No post-normalisation repetition cap is applied here, and that is deliberate rather than
+        // an omission: the controller rejects values outside the vocabulary with a 400, and this
+        // normaliser dedupes, so the surviving list is bounded by the vocabulary by construction.
+        // Adding a cap derived from ALLOWED_COMMERCIAL_SUBTYPES.size() would import the
+        // cache-bound-coupled-to-taxonomy-size defect tracked in #2523 onto a third endpoint.
+        List<String> normSubtypes =
+                DiscoverFilterNormalizer.normalizeCommercialSubtypes(commercialSubtypes);
 
         // #2533 AC7 — the SECOND and security-meaningful bound, applied to what actually reaches
         // SQL. The controller's raw-shape guard alone is not sufficient: because unrecognised
@@ -186,7 +252,7 @@ public class CityAreaListingsService {
                 || areaKeys.stream().allMatch(String::isBlank);
         if (areaKeysAbsent) {
             return getBboxOnlyListings(city, minPrice, maxPrice, normBedrooms, normPropertyTypes,
-                    normQ, normPurpose, readyToMove, bbox, isAuthenticated);
+                    normSubtypes, normQ, normPurpose, readyToMove, bbox, isAuthenticated);
         }
 
         // Build IN-clause placeholders
@@ -205,7 +271,7 @@ public class CityAreaListingsService {
             join.add("\n                        AND pl.price_paise <= ?", maxPrice);
         }
         appendBedroomsClause(join, "\n                        ", normBedrooms);
-        appendPropertyTypeClause(join, "\n                        ", normPropertyTypes);
+        appendFamilyAndSubtypeClause(join, "\n                        ", normPropertyTypes, normSubtypes);
         // #2015 — anon "Search this area" viewport narrowing. Same predicate (pl.geog &&
         // ST_MakeEnvelope(...)::geography, bind order west/south/east/north) and GiST-indexed
         // idx_property_listings_geog column used by the authenticated viewportScope path in
@@ -418,6 +484,131 @@ public class CityAreaListingsService {
     }
 
     /**
+     * Emits the Commercial family/subtype narrowing as ONE clause (#2509).
+     *
+     * <h2>Why this REPLACES the property-type clause rather than sitting beside it</h2>
+     *
+     * <p>Appending a subtype clause as a second independent fragment would AND it against
+     * {@link #appendPropertyTypeClause}'s output, and that is exactly the defect #2458 removed from
+     * the authenticated path: an approved MIXED selection such as Shop + Warehouse/Godown becomes
+     * unexpressible, because the Warehouse row passes {@code property_type IN (...)} and is then
+     * eliminated by {@code UPPER(commercial_subtype) IN ('SHOP')} — it carries no Shop/Office
+     * projection. Each selected type must be matched the only way it CAN be matched: bearing types
+     * by subtype, everything else by {@code property_type}, which is NOT NULL and always correct.
+     *
+     * <p>When no subtypes are selected this delegates to {@link #appendPropertyTypeClause} verbatim,
+     * so the subtype-ABSENT SQL and bind order are byte-identical to #2550's merged behaviour.
+     *
+     * <h2>THE WRAPPING PARENTHESES ARE LOAD-BEARING</h2>
+     *
+     * <p>{@code OR} binds looser than {@code AND}, so an unparenthesised union lets every sibling
+     * clause in the same {@code ON} clause bind to the right-hand disjunct alone:
+     * {@code A AND B AND (X OR Y)} degrades to {@code (A AND B AND X) OR Y}. In the area-grouped
+     * path those siblings include {@code pl.status = 'LIVE'} and {@code pl.area_key = a.area_key},
+     * so the right disjunct would admit rows that are neither live nor in the requested area.
+     *
+     * <p><b>What proves this, precisely.</b>
+     * {@code CityAreaListingsCommercialSubtype2433IT#theUnionCannotLeakARowThatFailsTheOtherPredicates}
+     * seeds an ARCHIVED commercial SHOP row and asserts it never appears. That arm is only
+     * discriminating because its selection is {@code SHOP + WAREHOUSE}: a subtype selection that
+     * implies ONLY {@code commercial} leaves {@code nonBearing} empty, emits no {@code " OR "} at
+     * all, and is unaffected by removing the outer parenthesis — an earlier version of that arm
+     * used {@code SHOP} alone and therefore could not fail. The agricultural-land exclusion is a
+     * sibling of the same kind, but it cannot discriminate here: {@code nonBearing} is intersected
+     * with {@link DiscoverFilterNormalizer#impliedPropertyTypes}, which only ever yields
+     * Commercial-family tokens, so agricultural land never enters this union on either branch.
+     *
+     * <h2>Properties preserved from the authenticated predicate</h2>
+     *
+     * <ol>
+     *   <li>A legacy {@code property_type='commercial'} row whose {@code commercial_subtype} is NULL
+     *       is NEVER classified as SHOP or OFFICE — {@code NULL IN ('SHOP')} is NULL, not TRUE.</li>
+     *   <li>{@code UPPER()} goes on the COLUMN, not on a bind: the write path stamps canonical
+     *       upper case, but no CHECK constraint enforces it, so a lower-case row is representable.</li>
+     *   <li>Legacy Building/Warehouse/Land rows have NO {@code listing_commercial_space_details} row
+     *       at all (V102 inserts only {@code WHERE property_type = 'commercial'}), so a subtype-only
+     *       predicate would silently drop every one of them. The non-bearing branch matches them.</li>
+     * </ol>
+     *
+     * <p>The vocabulary is DERIVED from {@link DiscoverFilterNormalizer} — the single declaration —
+     * while the emission is deliberately hand-built here, because this service places its filters in
+     * the {@code LEFT JOIN ON} clause and {@link DiscoverListingPredicateBuilder#build} emits
+     * {@code WHERE}-shaped SQL; moving them would collapse the outer join and delete zero-match
+     * areas from the response. Converging the emission is tracked as #2541.
+     *
+     * <p>The subquery alias is {@code lcsd2} rather than {@code lcsd} because the outer query already
+     * binds {@code lcsd} for the projection join; reusing it would read as shadowing even where SQL
+     * scoping makes it harmless.
+     */
+    private static void appendFamilyAndSubtypeClause(ClauseBuilder cb, String indent,
+                                                     List<String> normTypes,
+                                                     List<String> normSubtypes) {
+        if (normSubtypes == null || normSubtypes.isEmpty()) {
+            appendPropertyTypeClause(cb, indent, normTypes);
+            return;
+        }
+
+        // A subtype-only request must not widen to every property type, nor drop the legacy rows of
+        // the types it names — so the types are DERIVED rather than left unconstrained (#2458 AC11).
+        List<String> effectiveTypes = (normTypes == null || normTypes.isEmpty())
+                ? DiscoverFilterNormalizer.impliedPropertyTypes(normSubtypes)
+                : normTypes;
+
+        // Types the SUBTYPE SELECTION actually names. Without this intersection, propertyType=
+        // [apartment] + subtype=[SHOP] would emit property_type IN ('apartment') and hand the
+        // shopper the whole apartment inventory presented as though it matched a Shop filter.
+        List<String> namedBySubtypes = DiscoverFilterNormalizer.impliedPropertyTypes(normSubtypes);
+
+        List<String> bearing = effectiveTypes.stream()
+                .filter(DiscoverFilterNormalizer.SUBTYPE_BEARING_PROPERTY_TYPES::contains)
+                .toList();
+        List<String> nonBearing = effectiveTypes.stream()
+                .filter(t -> !DiscoverFilterNormalizer.SUBTYPE_BEARING_PROPERTY_TYPES.contains(t))
+                .filter(namedBySubtypes::contains)
+                .toList();
+
+        // Neither branch satisfiable — the selection names no type that could match. A literal
+        // FALSE rather than an empty "( )", which is a syntax error, or a bare TRUE, which widens.
+        if (bearing.isEmpty() && nonBearing.isEmpty()) {
+            cb.add(indent + "AND FALSE");
+            return;
+        }
+
+        StringBuilder fragment = new StringBuilder(indent + "AND (");
+        List<Object> binds = new ArrayList<>();
+
+        if (!nonBearing.isEmpty()) {
+            fragment.append("pl.property_type IN (");
+            for (int i = 0; i < nonBearing.size(); i++) {
+                fragment.append(i == 0 ? "?" : ", ?");
+            }
+            fragment.append(")");
+            binds.addAll(nonBearing);
+        }
+
+        if (!bearing.isEmpty()) {
+            if (!nonBearing.isEmpty()) {
+                fragment.append(" OR ");
+            }
+            fragment.append("(pl.property_type IN (");
+            for (int i = 0; i < bearing.size(); i++) {
+                fragment.append(i == 0 ? "?" : ", ?");
+            }
+            fragment.append(") AND EXISTS (SELECT 1 FROM listing_commercial_space_details lcsd2")
+                    .append(" WHERE lcsd2.listing_id = pl.id AND UPPER(lcsd2.commercial_subtype) IN (");
+            for (int i = 0; i < normSubtypes.size(); i++) {
+                fragment.append(i == 0 ? "?" : ", ?");
+            }
+            fragment.append(")))");
+            binds.addAll(bearing);
+            binds.addAll(normSubtypes);
+        }
+
+        fragment.append(")");
+        cb.add(fragment.toString(), binds.toArray());
+    }
+
+    /**
      * Emits the bedrooms narrowing clause (#2533). ONE implementation, used by both query paths.
      *
      * <p>{@code MAX_BEDROOMS} (4) means "4 or more", and {@link
@@ -605,10 +796,9 @@ public class CityAreaListingsService {
      * Canonicalises the stored subtype to UPPER case, mapping blank to {@code null} (#2431).
      *
      * <p>Deliberately a duplicate of {@code DiscoverListingsService#normalizeCommercialSubtype}
-     * rather than a shared call: this service imports neither {@code DiscoverListingPredicateBuilder}
-     * nor {@code DiscoverFilterNormalizer} and is a separate hand-built SQL path by design (see
-     * #2509's ownership ruling). Reaching across to the other service for four lines would be the
-     * first coupling between them. The two are pinned to agree by
+     * rather than a shared call: this is a separate hand-built SQL path by design (see #2509's
+     * ownership ruling). Reaching across to the other SERVICE for four lines would be the first
+     * coupling between the two services. The two are pinned to agree by
      * {@code CityAreaListingsCommercialSubtype2433IT#bothDiscoverReadPathsAgreeOnTheSubtypeSpelling},
      * which asserts equality rather than trusting that both were written the same way.
      *
@@ -639,6 +829,7 @@ public class CityAreaListingsService {
                                                           Long maxPrice,
                                                           List<Integer> normBedrooms,
                                                           List<String> normPropertyTypes,
+                                                          List<String> normSubtypes,
                                                           String normQ,
                                                           String normPurpose,
                                                           Boolean readyToMove,
@@ -657,7 +848,7 @@ public class CityAreaListingsService {
             where.add("\n              AND pl.price_paise <= ?", maxPrice);
         }
         appendBedroomsClause(where, "\n              ", normBedrooms);
-        appendPropertyTypeClause(where, "\n              ", normPropertyTypes);
+        appendFamilyAndSubtypeClause(where, "\n              ", normPropertyTypes, normSubtypes);
         // bbox is always non-null here (controller guarantees it — see getAreaListings caller
         // above), same predicate/bind order as the area-grouped path and the authenticated
         // viewportScope path in DiscoverListingPredicateBuilder.

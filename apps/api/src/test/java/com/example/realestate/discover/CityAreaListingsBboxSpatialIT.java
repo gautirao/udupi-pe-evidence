@@ -189,7 +189,7 @@ class CityAreaListingsBboxSpatialIT {
             + "(BboxParser.parse invoked from CityAreaListingsController)")
     void controller_nonNumericBbox_returns400() {
         assertThatThrownBy(() -> controller.getCityAreaListings(
-                CITY, List.of(AREA_KEY), null, null, null, null, null, null, null, null,
+                CITY, List.of(AREA_KEY), null, null, null, null, null, null, null, null, null,
                 "13.30,not-a-number,13.40,74.80"))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
@@ -200,7 +200,7 @@ class CityAreaListingsBboxSpatialIT {
     @DisplayName("#2015 (c): non-finite (NaN) bbox token -> 400 via the real controller path")
     void controller_nonFiniteBbox_returns400() {
         assertThatThrownBy(() -> controller.getCityAreaListings(
-                CITY, List.of(AREA_KEY), null, null, null, null, null, null, null, null,
+                CITY, List.of(AREA_KEY), null, null, null, null, null, null, null, null, null,
                 "NaN,74.70,13.40,74.80"))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
@@ -214,7 +214,7 @@ class CityAreaListingsBboxSpatialIT {
         // 10.1 degree lat span, well within [-90,90]/[-180,180] range so BboxParser itself
         // accepts it — only the controller's local validateBoundsSpan should reject this.
         assertThatThrownBy(() -> controller.getCityAreaListings(
-                CITY, List.of(AREA_KEY), null, null, null, null, null, null, null, null,
+                CITY, List.of(AREA_KEY), null, null, null, null, null, null, null, null, null,
                 "0.0,0.0,10.1,10.0"))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
@@ -226,7 +226,7 @@ class CityAreaListingsBboxSpatialIT {
             + "— proves the guard is a strict > check, not an off-by-one <= rejection")
     void controller_exactlyAtSpanCap_isAccepted() {
         CityAreaListingsResponse resp = controller.getCityAreaListings(
-                CITY, List.of(AREA_KEY), null, null, null, null, null, null, null, null,
+                CITY, List.of(AREA_KEY), null, null, null, null, null, null, null, null, null,
                 "3.30,64.70,13.30,74.70").getBody();
 
         assertThat(resp).isNotNull();

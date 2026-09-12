@@ -101,6 +101,9 @@ class CityAreaListingsServiceIT {
         // exactly [city, areaKey, limit] — the WHERE-clause tail with nothing preceding it.
         assertThat(capturedArgs()).containsExactly(CITY, AREA, LIMIT);
         assertThat(capturedSql()).contains("AND LOWER(pl.property_type) != LOWER('agricultural_land')");
+        // #2554 — widened to every arm. This one has the fewest binds, so a stray placeholder
+        // anywhere in the unconditional skeleton shows up here first.
+        assertPlaceholderCountMatchesBindCount();
     }
 
     @Test
@@ -116,6 +119,7 @@ class CityAreaListingsServiceIT {
         // The bedrooms bind precedes the WHERE-clause tail, because the LEFT JOIN ON clause is
         // emitted earlier in the SQL text and JDBC binds positionally left-to-right.
         assertThat(capturedArgs()).containsExactly(2, CITY, AREA, LIMIT);
+        assertPlaceholderCountMatchesBindCount();
     }
 
     @Test
@@ -130,6 +134,10 @@ class CityAreaListingsServiceIT {
         assertThat(capturedSql()).contains("AND pl.bedrooms >= 4");
         assertThat(capturedSql()).doesNotContain("AND pl.bedrooms = ?");
         assertThat(capturedArgs()).containsExactly(CITY, AREA, LIMIT);
+        // #2554 — the pure-LITERAL arm. The seal cannot catch a literal-only clause (it moves both
+        // sides of the equality by zero), but it does catch a placeholder accidentally introduced
+        // WHERE a literal was intended, which is the likelier edit here.
+        assertPlaceholderCountMatchesBindCount();
     }
 
     @Test
@@ -158,6 +166,10 @@ class CityAreaListingsServiceIT {
         // throws no exception and yields plausible-looking rows, which is precisely why the
         // combined-axis arms exist and why count-only assertions are insufficient.
         assertThat(capturedArgs()).containsExactly("apartment", "beach", CITY, AREA, LIMIT);
+        // #2554 — this arm asserted ONLY the bind array and had no capturedSql() assertion at all,
+        // so an extra placeholder here was caught by nothing. That gap is the reason the seal was
+        // widened rather than left on three arms.
+        assertPlaceholderCountMatchesBindCount();
     }
 
     @Test
@@ -190,6 +202,121 @@ class CityAreaListingsServiceIT {
                 .containsExactly(CITY, 2, "apartment", 74.70, 13.30, 74.80, 13.40, 20);
         // Applied to BOTH assemblies deliberately — this path builds its SQL and its param list
         // separately from the area-grouped one, so sealing one proves nothing about the other.
+        assertPlaceholderCountMatchesBindCount();
+    }
+
+    // ── #2509: Commercial subtype narrowing — NEW SIBLING ARMS ──────────────────────
+    // Deliberately siblings rather than edits. The seven arms above were verified
+    // byte-identical across 8c8b4ba0..91dd4a16 and carry the AC5 bind-order proof; a signature
+    // change must not be allowed to rewrite them. The 12-argument overload is what let them stay
+    // untouched, and these arms exercise the 13-argument form directly.
+
+    @Test
+    void issue2509_subtypeAbsent_emitsTheIdenticalPropertyTypeClauseAsBefore() {
+        service.getAreaListings(CITY, List.of(AREA), LIMIT,
+                null, null, null, List.of("apartment"), List.of(), null, null, null, null, false);
+
+        // THE CONTROL that makes every arm below mean something. The combined emitter must be a
+        // no-op when no subtype is selected: same clause text, same single bind, same position as
+        // the merged #2550 behaviour. If this drifts, the subtype-present arms are measuring a
+        // path that also changed underneath them.
+        assertThat(capturedSql()).contains("AND pl.property_type IN (?)");
+        // Deliberately NOT doesNotContain("listing_commercial_space_details"): that assertion was
+        // written here first and FAILED, because the #2433 projection LEFT JOIN onto that table is
+        // UNCONDITIONAL in this query — it supplies commercialSubtype for every card. The thing
+        // that must be absent when no subtype is selected is the FILTER subquery, whose alias is
+        // lcsd2 precisely so the two uses of that table are distinguishable.
+        assertThat(capturedSql()).doesNotContain("lcsd2");
+        assertThat(capturedArgs()).containsExactly("apartment", CITY, AREA, LIMIT);
+        assertPlaceholderCountMatchesBindCount();
+    }
+
+    @Test
+    void issue2509_subtypeOnly_derivesItsPropertyTypeAndBindsBearingThenSubtype() {
+        service.getAreaListings(CITY, List.of(AREA), LIMIT,
+                null, null, null, null, List.of("SHOP"), null, null, null, null, false);
+
+        // A subtype-only request (reachable from a hand-edited URL) must NOT widen to every
+        // property type and must NOT drop legacy rows: the type is DERIVED via impliedPropertyTypes,
+        // so ?commercialSubtypes=SHOP means the same rows as ?propertyType=commercial&...=SHOP.
+        assertThat(capturedSql()).contains(
+                "AND EXISTS (SELECT 1 FROM listing_commercial_space_details lcsd2");
+        // UPPER() on the COLUMN, never on the bind — the column carries no CHECK constraint, so a
+        // lower-case stored row is representable and must still match.
+        assertThat(capturedSql()).contains("UPPER(lcsd2.commercial_subtype) IN (?)");
+        assertThat(capturedArgs()).containsExactly("commercial", "SHOP", CITY, AREA, LIMIT);
+        assertPlaceholderCountMatchesBindCount();
+    }
+
+    @Test
+    void issue2509_mixedBearingAndSelfDescribing_isOneUnionNotTwoAndedClauses() {
+        service.getAreaListings(CITY, List.of(AREA), LIMIT,
+                null, null, null, null, List.of("SHOP", "WAREHOUSE"), null, null, null, null, false);
+
+        // THE ARM THIS WHOLE DESIGN EXISTS FOR. Shop is subtype-bearing; Warehouse is
+        // self-describing and has NO listing_commercial_space_details row at all. ANDing the two
+        // axes makes this approved selection unexpressible — the Warehouse row passes
+        // property_type IN (...) and is then eliminated by UPPER(commercial_subtype) IN ('SHOP').
+        // The union matches each the only way it CAN be matched.
+        assertThat(capturedSql()).contains("AND (pl.property_type IN (?) OR (pl.property_type IN (?)");
+        // Bind order: non-bearing types, then bearing types, then the subtype list.
+        assertThat(capturedArgs())
+                .containsExactly("warehouse", "commercial", "SHOP", "WAREHOUSE", CITY, AREA, LIMIT);
+        assertPlaceholderCountMatchesBindCount();
+    }
+
+    @Test
+    void issue2509_theUnionIsParenthesised_soTheAgriExclusionCannotBindToOneBranch() {
+        service.getAreaListings(CITY, List.of(AREA), LIMIT,
+                null, null, null, null, List.of("SHOP", "WAREHOUSE"), null, null, null, null, false);
+
+        String sql = capturedSql();
+        int unionStart = sql.indexOf("AND (pl.property_type IN (?) OR");
+        int agriExclusion = sql.indexOf("AND LOWER(pl.property_type) != LOWER('agricultural_land')");
+
+        assertThat(unionStart).as("the union clause must be emitted").isGreaterThan(-1);
+        assertThat(agriExclusion).as("the agri exclusion must still be emitted").isGreaterThan(unionStart);
+
+        // OR has the lowest precedence in SQL, so an UNPARENTHESISED union would regroup the whole
+        // ON clause into (everything AND leftBranch) OR (rightBranch AND agriExclusion) — detaching
+        // status='LIVE' and area_key from the right branch entirely. The wrapping parens are what
+        // stop that; the behavioural proof that rows cannot leak through the right branch lives in
+        // CityAreaListingsCommercialSubtype2433IT, because a captured string cannot show row leakage.
+        String betweenUnionAndAgri = sql.substring(unionStart, agriExclusion);
+        assertThat(betweenUnionAndAgri)
+                .as("the union must be CLOSED before the agricultural-land exclusion is appended")
+                .contains(")))");
+        assertPlaceholderCountMatchesBindCount();
+    }
+
+    @Test
+    void issue2509_subtypeNamingNoSelectedType_isFalseRatherThanSilentlyWidening() {
+        service.getAreaListings(CITY, List.of(AREA), LIMIT,
+                null, null, null, List.of("apartment"), List.of("SHOP"), null, null, null, null, false);
+
+        // propertyType=[apartment] + subtype=[SHOP] names no type that could match. Emitting
+        // property_type IN ('apartment') here would hand the shopper the city's whole apartment
+        // inventory presented as though it matched a Shop filter — the quiet wrongness #2458 had to
+        // prevent deliberately once the AND became a union. A literal FALSE binds nothing.
+        assertThat(capturedSql()).contains("AND FALSE");
+        assertThat(capturedArgs()).containsExactly(CITY, AREA, LIMIT);
+        assertPlaceholderCountMatchesBindCount();
+    }
+
+    @Test
+    void issue2509_bboxOnlyPath_carriesTheSubtypeUnionWithItsOwnBindOrder() {
+        DiscoverListingPredicateBuilder.Bbox bbox =
+                new DiscoverListingPredicateBuilder.Bbox(13.30, 74.70, 13.40, 74.80);
+
+        service.getAreaListings(CITY, null, LIMIT,
+                null, null, null, null, List.of("SHOP"), null, null, null, bbox, false);
+
+        // The bbox-only path builds its own WHERE clause and its own param list, so threading the
+        // union into the area-grouped path proves nothing about this one. City leads here.
+        assertThat(capturedSql()).contains(
+                "AND EXISTS (SELECT 1 FROM listing_commercial_space_details lcsd2");
+        assertThat(capturedArgs())
+                .containsExactly(CITY, "commercial", "SHOP", 74.70, 13.30, 74.80, 13.40, 20);
         assertPlaceholderCountMatchesBindCount();
     }
 

@@ -139,7 +139,7 @@ class CityAreaListingsIT {
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
 
         when(cityAreaListingsService.getAreaListings(
-                eq("udupi"), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), eq(false)))
+                eq("udupi"), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), eq(false)))
                 .thenReturn(resp);
 
         mockMvc.perform(get(LISTINGS_URL)
@@ -197,7 +197,7 @@ class CityAreaListingsIT {
 
         // Authed: service called with isAuthenticated=true
         when(cityAreaListingsService.getAreaListings(
-                eq("udupi"), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), eq(true)))
+                eq("udupi"), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), eq(true)))
                 .thenReturn(resp);
 
         mockMvc.perform(get(LISTINGS_URL)
@@ -248,7 +248,7 @@ class CityAreaListingsIT {
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
 
         when(cityAreaListingsService.getAreaListings(
-                eq("udupi"), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), eq(false)))
+                eq("udupi"), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), eq(false)))
                 .thenReturn(resp);
 
         mockMvc.perform(get(LISTINGS_URL)
@@ -289,7 +289,7 @@ class CityAreaListingsIT {
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
 
         when(cityAreaListingsService.getAreaListings(
-                eq("udupi"), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), eq(true)))
+                eq("udupi"), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), eq(true)))
                 .thenReturn(resp);
 
         mockMvc.perform(get(LISTINGS_URL)
@@ -319,7 +319,7 @@ class CityAreaListingsIT {
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
 
         when(cityAreaListingsService.getAreaListings(
-                eq("udupi"), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), eq(false)))
+                eq("udupi"), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), eq(false)))
                 .thenReturn(resp);
 
         mockMvc.perform(get(LISTINGS_URL)
@@ -350,7 +350,7 @@ class CityAreaListingsIT {
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
 
         when(cityAreaListingsService.getAreaListings(
-                eq("udupi"), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), eq(true)))
+                eq("udupi"), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), eq(true)))
                 .thenReturn(resp);
 
         mockMvc.perform(get(LISTINGS_URL)
@@ -418,7 +418,7 @@ class CityAreaListingsIT {
     @DisplayName("anon: controller passes isAuthenticated=false to service (auth-branch wiring)")
     void anonCaller_serviceCalledWithIsAuthenticatedFalse() throws Exception {
         when(cityAreaListingsService.getAreaListings(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), anyBoolean()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
 
         mockMvc.perform(get(LISTINGS_URL)
@@ -427,7 +427,7 @@ class CityAreaListingsIT {
 
         // isAuthenticated=false must be passed — never true for an anonymous caller
         verify(cityAreaListingsService).getAreaListings(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), eq(false));
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), eq(false));
     }
 
     // ── Auth-branch wiring: authed call must pass isAuthenticated=true to service ──
@@ -437,7 +437,7 @@ class CityAreaListingsIT {
     @DisplayName("authed: controller passes isAuthenticated=true to service (auth-branch wiring)")
     void authedCaller_serviceCalledWithIsAuthenticatedTrue() throws Exception {
         when(cityAreaListingsService.getAreaListings(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), anyBoolean()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
 
         mockMvc.perform(get(LISTINGS_URL)
@@ -446,6 +446,6 @@ class CityAreaListingsIT {
 
         // isAuthenticated=true must be passed — @WithMockUser is not AnonymousAuthenticationToken
         verify(cityAreaListingsService).getAreaListings(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), eq(true));
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), eq(true));
     }
 }
