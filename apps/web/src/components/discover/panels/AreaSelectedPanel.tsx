@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
@@ -31,6 +31,7 @@ import { AreaZeroResultRecovery } from './AreaZeroResultRecovery';
 import { AreaSelectedPanelScopeBar } from './AreaSelectedPanelScopeBar';
 import { DEFAULT_CITY } from '@/lib/localityUtils';
 import { SCOPE_TITLE } from '@/features/discover/presentation/scopeTitles';
+import type { CommercialSubtype } from '@/lib/listing-constants';
 
 // Quick filter options (hardcoded MVP). 'All' is a virtual chip that clears the
 // property-type selection — it is not a property_type value.
@@ -53,6 +54,57 @@ const PROPERTY_TYPE_LABELS: Record<string, string> = {
   villa: 'Villas',
   land: 'Plots',
 };
+
+/**
+ * Issue #2450 — the two TYPE families a buyer chooses between.
+ *
+ * `QUICK_PROPERTY_TYPES` above is the Residential family's membership; Commercial rides the
+ * SUBTYPE axis alone (see `COMMERCIAL_SUBTYPE_CHOICES`), which is why there is no
+ * `QUICK_COMMERCIAL_TYPES` counterpart.
+ */
+type PropertyFamily = 'residential' | 'commercial';
+
+/**
+ * Stored `property_type` tokens that mean "this selection is in the Commercial family".
+ *
+ * Used ONLY to DERIVE which family chip reads as active from inbound URL/filter state. It is
+ * deliberately never used to WRITE: emitting one of these alongside a subtype is the auto-add
+ * contradiction #2450 exists to remove (`type=commercial&subtype=WAREHOUSE` asks for a set no
+ * row is in, because `commercial` rows never carry WAREHOUSE). Mirrors the server's
+ * `DiscoverFilterNormalizer.BUYER_SUBTYPE_TO_PROPERTY_TYPE` value set.
+ */
+const COMMERCIAL_FAMILY_TOKENS: readonly string[] = [
+  'commercial',
+  'commercial_building',
+  'warehouse',
+  'commercial_land',
+];
+
+/**
+ * #2450's approved buyer wording for the Commercial subtype row.
+ *
+ * DELIBERATELY NOT `COMMERCIAL_SUBTYPE_LABELS` from propertyTypeConfig.ts, which renders SHOP as
+ * "Commercial Shop" and OFFICE as "Commercial Office". That is correct on a result CARD, where a
+ * bare "Shop" would read as a different property family. Inside a row already scoped to Commercial
+ * the family context is established by the control itself, so #2450 specifies the shorter wording.
+ * The mismatch is recorded on PR #2500 as a focused follow-up — it is not a second private label
+ * map, and it does not change #2430's card labels.
+ *
+ * `value: null` is the "All commercial" chip: it clears the subtype narrowing WITHOUT leaving the
+ * family, so it is a virtual choice rather than a sixth subtype.
+ */
+const COMMERCIAL_SUBTYPE_CHOICES: readonly {
+  testId: string;
+  label: string;
+  value: CommercialSubtype | null;
+}[] = [
+  { testId: 'quick-chip-subtype-all', label: 'All commercial', value: null },
+  { testId: 'quick-chip-subtype-shop', label: 'Shop', value: 'SHOP' },
+  { testId: 'quick-chip-subtype-office', label: 'Office', value: 'OFFICE' },
+  { testId: 'quick-chip-subtype-building', label: 'Commercial Building', value: 'BUILDING' },
+  { testId: 'quick-chip-subtype-warehouse', label: 'Warehouse / Godown', value: 'WAREHOUSE' },
+  { testId: 'quick-chip-subtype-land', label: 'Commercial Land', value: 'LAND' },
+];
 
 interface AreaSelectedPanelProps {
   selectedArea: AreaPoint;
@@ -141,6 +193,28 @@ interface AreaSelectedPanelProps {
    */
   isReadyToMoveSupported?: boolean;
   /**
+   * Issue #2450 — whether the calling surface's listings hook can actually consume a Commercial
+   * SUBTYPE narrowing. Follows the `isReadyToMoveSupported` precedent directly above, and for the
+   * same honesty reason, but **defaults FALSE** where that one defaults true.
+   *
+   * WHY FALSE IS THE RIGHT DEFAULT HERE. This panel's card list is fed by
+   * `useDiscoverCityListings`, whose signature takes a SINGULAR `propertyType` and no
+   * `commercialSubtypes` at all. So on today's surfaces a buyer picking Commercial → Warehouse
+   * would see results **unchanged** — not zero. That is worse than an empty list: zero at least
+   * signals that something happened, whereas unchanged results signal a control that did nothing.
+   * Shipping it reachable would pin exactly the inert-control class #2450 exists to remove.
+   *
+   * GATE-OFF IS "NO FAMILY ROW", NOT "RESIDENTIAL ALONE" (owner ruling on PR #2500, Option A).
+   * While this is false the panel renders NO family row and today's buyer surface is preserved
+   * byte-for-byte. A one-option Residential-only selector was explicitly REJECTED: a lone
+   * Residential chip is indistinguishable from "this product has no commercial inventory", which
+   * is a claim about the catalogue that the capability flag is not making.
+   *
+   * It flips to true once the card path can consume a subtype — which is #2533's multi-value
+   * narrowing work. #2533 must land before this is ENABLED; it does not block this being built.
+   */
+  isCommercialSubtypeSupported?: boolean;
+  /**
    * Issue #2015 — true when the panel is displaying a committed VIEWPORT
    * `resultScope` ("Search this area") rather than the selected AREA_SET.
    * `selectedArea`/`areaLabel` stay populated in this state (the area chip
@@ -221,6 +295,7 @@ export function AreaSelectedPanel({
   onCrumbRegion,
   onCrumbGroup,
   isReadyToMoveSupported = true,
+  isCommercialSubtypeSupported = false,
   isViewportScope = false,
   onRedrawPolygon,
   isListingsError = false,
@@ -258,6 +333,11 @@ export function AreaSelectedPanel({
 
   const hasPropertyFilters = Boolean(
     filters.propertyTypes?.length ||
+      // Issue #2450 — a subtype-only selection is a REAL narrowing under the one-axis contract
+      // (it rides `commercialSubtypes` and sets no `propertyTypes`), so omitting it here would
+      // hide the clear affordance from the only filter the buyer has actually applied and tell
+      // the empty state that nothing is narrowing when something is.
+      filters.commercialSubtypes?.length ||
       filters.bedrooms?.length ||
       filters.priceMin ||
       filters.priceMax ||
@@ -321,12 +401,104 @@ export function AreaSelectedPanel({
     onFiltersChange({ ...filters, readyToMove: activeReadyToMove ? undefined : true });
   }, [filters, activeReadyToMove, onFiltersChange, isReadyToMoveSupported]);
 
+  // ── Issue #2450 — Residential / Commercial family + Commercial subtype ─────────────────
+  const activeCommercialSubtypes = useMemo(
+    () => new Set<string>(filters.commercialSubtypes ?? []),
+    [filters.commercialSubtypes],
+  );
+
+  // The family is DERIVED from filter state rather than stored separately. Under the one-axis
+  // contract a selection rides `commercialSubtypes` alone and sets no `propertyTypes`, so a
+  // restored link carrying only `subtype=WAREHOUSE` must still read as Commercial — otherwise the
+  // buyer returns to their own link and sees Residential selected while Commercial results render.
+  const commercialFromFilters =
+    activeCommercialSubtypes.size > 0 ||
+    (filters.propertyTypes ?? []).some((t) => COMMERCIAL_FAMILY_TOKENS.includes(t));
+
+  // A click must switch the visible family before the emitted filters round-trip back as props:
+  // on the FIRST Commercial click there is no subtype yet, so derivation alone would leave the row
+  // closed and the chip unpressed. `null` means "no click yet — trust the filters".
+  const [familyOverride, setFamilyOverride] = useState<PropertyFamily | null>(null);
+  const activeFamily: PropertyFamily =
+    familyOverride ?? (commercialFromFilters ? 'commercial' : 'residential');
+
+  // ANON POSTURE — owner ruling on PR #2500. This SUPERSEDES the disabled-with-explanation posture
+  // this panel previously implemented, and the earlier one is described below rather than deleted
+  // because what changed was the mechanism, not the taste.
+  //
+  // ANONYMOUS BUYERS BROWSE AND FILTER COMMERCIAL EXACTLY AS THEY DO RESIDENTIAL: they switch
+  // family, pick subtypes, and see the normal anonymous teaser result set. Sign-in is required only
+  // for the protected listing detail Residential already gates, which `PropertyCard` owns via
+  // `isAuthenticated` further down this file. There is deliberately NO Commercial-specific auth
+  // condition here — reintroducing one would be a second, divergent anon posture, which the ruling
+  // forbids in those words.
+  //
+  // WHY THE OLD GATE WENT. It rested on the anonymous endpoint matching property type by
+  // single-value equality, so that the four-value Commercial family (`commercial`,
+  // `commercial_building`, `warehouse`, `commercial_land`) was inexpressible and any anon
+  // Commercial control would have silently excluded three of the four. #2550 removed that
+  // impossibility: `CityAreaListingsService` now normalises a multi-value property-type list
+  // through a shared `appendPropertyTypeClause` emitting `IN (...)` on both the areaKeys and
+  // bbox-only paths. The premise is gone, so the gate built on it is gone with it.
+  //
+  // REACHABILITY IS GOVERNED BY THE CAPABILITY ALONE, and it defaults FALSE — see
+  // `isCommercialSubtypeSupported`. Enablement additionally waits on #2509 making the anonymous
+  // city-listings path express family/subtype/multi-select truthfully and cache-safely. Nothing
+  // here is buyer-reachable today.
+  const showSubtypeRow = isCommercialSubtypeSupported && activeFamily === 'commercial';
+
+  const handleSelectFamily = useCallback(
+    (family: PropertyFamily) => {
+      // CAPABILITY guard only — auth is deliberately not consulted (see the anon-posture note
+      // above). Mirrors `handleToggleReadyToMove`: bail out even if a click somehow reaches the
+      // control while this surface cannot consume the axis, so no unconsumable request is emitted.
+      if (family === 'commercial' && !isCommercialSubtypeSupported) return;
+      setFamilyOverride(family);
+      if (!onFiltersChange) return;
+      onFiltersChange(
+        family === 'commercial'
+          ? // Residential types do not survive the switch, but everything else does: Budget and
+            // Bedrooms are family-independent, and silently dropping them is its own defect.
+            { ...filters, propertyTypes: undefined }
+          : { ...filters, commercialSubtypes: undefined },
+      );
+    },
+    [filters, onFiltersChange, isCommercialSubtypeSupported],
+  );
+
+  // ONE AXIS. The selection rides `commercialSubtypes` and nothing else — no family token is ever
+  // auto-added. See `COMMERCIAL_FAMILY_TOKENS` for why doing so matches zero rows and fails
+  // silently for BUILDING / WAREHOUSE / LAND.
+  const handleToggleSubtype = useCallback(
+    (value: CommercialSubtype | null) => {
+      if (!onFiltersChange || !isCommercialSubtypeSupported) return;
+      if (value === null) {
+        // "All commercial" clears the narrowing WITHOUT leaving the family, so any inbound
+        // `propertyTypes` is preserved exactly as it arrived rather than rewritten.
+        onFiltersChange({ ...filters, commercialSubtypes: undefined });
+        return;
+      }
+      const current = filters.commercialSubtypes ?? [];
+      const updated = activeCommercialSubtypes.has(value)
+        ? current.filter((s) => s !== value)
+        : [...current, value];
+      onFiltersChange({
+        ...filters,
+        commercialSubtypes: updated.length > 0 ? updated : undefined,
+      });
+    },
+    [filters, activeCommercialSubtypes, onFiltersChange, isCommercialSubtypeSupported],
+  );
+
   // Clear property-type filters only; preserve school, polygon, city, date, and other active filters
   const handleClearPropertyFilters = useCallback(() => {
     if (!onFiltersChange) return;
     onFiltersChange({
       ...filters,
       propertyTypes: undefined,
+      // Issue #2450 — enumerated explicitly like every key above. "Clear" that leaves the
+      // Commercial subtype narrowing in place is a clear affordance that does not clear.
+      commercialSubtypes: undefined,
       bedrooms: undefined,
       priceMin: undefined,
       priceMax: undefined,
@@ -835,46 +1007,112 @@ export function AreaSelectedPanel({
       <div className="border-b border-border px-4 py-3">
         <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
           <div className="space-y-3">
+            {/* Issue #2450 — TYPE family. Rendered ONLY when the calling surface can actually
+                consume a Commercial subtype: while the capability is off the owner ruling is that
+                today's buyer surface is preserved unchanged, so there is no family row at all
+                rather than a one-option Residential selector. */}
+            {isCommercialSubtypeSupported && (
+              <div className="space-y-2" data-testid="quick-family-row">
+                <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+                  Property family
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      'h-8 px-3 text-xs',
+                      activeFamily === 'residential'
+                        ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+                        : '',
+                    )}
+                    onClick={() => handleSelectFamily('residential')}
+                    data-testid="quick-chip-family-residential"
+                    aria-pressed={activeFamily === 'residential'}
+                  >
+                    Residential
+                  </Button>
+                  {/* Structurally identical to the Residential chip above, and that is the ruling
+                      expressed in markup rather than asserted in a comment: same browsing posture
+                      for both families, no auth condition, no disabled branch, no gate copy. */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      'h-8 px-3 text-xs',
+                      activeFamily === 'commercial'
+                        ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+                        : '',
+                    )}
+                    onClick={() => handleSelectFamily('commercial')}
+                    data-testid="quick-chip-family-commercial"
+                    aria-pressed={activeFamily === 'commercial'}
+                  >
+                    Commercial
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
               <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                 <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
                 Property type
               </span>
               <div className="flex flex-wrap gap-1.5">
-                {/* R-C — "All" chip: NAVY (--primary) when active. Mock spec uses navy for property-type chips. */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={cn(
-                    'h-8 px-3 text-xs',
-                    allTypesActive
-                      ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
-                      : '',
-                  )}
-                  onClick={handleSelectAllTypes}
-                  data-testid="quick-chip-all"
-                  aria-pressed={allTypesActive}
-                >
-                  All
-                </Button>
-                {QUICK_PROPERTY_TYPES.map((type) => (
-                  <Button
-                    key={type}
-                    variant="outline"
-                    size="sm"
-                    className={cn(
-                      'h-8 px-3 text-xs',
-                      activePropertyTypes.has(type)
-                        ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
-                        : '',
-                    )}
-                    onClick={() => handleTogglePropertyType(type)}
-                    data-testid={`quick-chip-${type}`}
-                    aria-pressed={activePropertyTypes.has(type)}
-                  >
-                    {PROPERTY_TYPE_LABELS[type]}
-                  </Button>
-                ))}
+                {/* Issue #2450 — the Residential type chips and the Commercial subtype row are
+                    MUTUALLY EXCLUSIVE, and this condition is what makes that true rather than a
+                    comment claiming it. Rendered together, a buyer can hold
+                    `propertyTypes:['apartment']` AND `commercialSubtypes:['SHOP']` at the same
+                    time, which `DiscoverListingPredicateBuilder` ANDs into a query no row can
+                    satisfy — the contradictory-selection class this issue exists to remove,
+                    reintroduced through the UI instead of through emission.
+
+                    Gated on `showSubtypeRow` (capability AND commercial family), NOT on
+                    `activeFamily` alone. While the capability is off the family is still DERIVED
+                    from an inbound `subtype=` URL, so keying off it there would hide the type
+                    chips on the surface the owner ruled must stay exactly as it is today. Auth is
+                    not a factor in either direction — signed-out and signed-in buyers get the
+                    same row (see the anon-posture note above). */}
+                {!showSubtypeRow && (
+                  <>
+                    {/* R-C — "All" chip: NAVY (--primary) when active. Mock spec uses navy for property-type chips. */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        'h-8 px-3 text-xs',
+                        allTypesActive
+                          ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+                          : '',
+                      )}
+                      onClick={handleSelectAllTypes}
+                      data-testid="quick-chip-all"
+                      aria-pressed={allTypesActive}
+                    >
+                      All
+                    </Button>
+                    {QUICK_PROPERTY_TYPES.map((type) => (
+                      <Button
+                        key={type}
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          'h-8 px-3 text-xs',
+                          activePropertyTypes.has(type)
+                            ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+                            : '',
+                        )}
+                        onClick={() => handleTogglePropertyType(type)}
+                        data-testid={`quick-chip-${type}`}
+                        aria-pressed={activePropertyTypes.has(type)}
+                      >
+                        {PROPERTY_TYPE_LABELS[type]}
+                      </Button>
+                    ))}
+                  </>
+                )}
                 {/* Issue #2023 — "Ready to move" sits on the trailing edge of the Type
                     row per the frozen mock (ExpPanel.jsx ~L55-72). Evergreen-tint
                     active state, matching this file's existing trust/verified colour
@@ -916,6 +1154,43 @@ export function AreaSelectedPanel({
                   Ready to move
                 </Button>
               </div>
+
+              {/* Commercial subtype row — family-local, so it appears only while Commercial is the
+                  active family and never alongside the Residential type chips. The second half of
+                  that sentence is enforced by the `!showSubtypeRow` guard on those chips above, on
+                  this same condition; an earlier revision asserted it in prose while the two rows
+                  rendered in the same block, which is how the contradictory selection stayed
+                  reachable. */}
+              {showSubtypeRow && (
+                <div className="flex flex-wrap items-center gap-1.5" data-testid="quick-subtype-row">
+                  {COMMERCIAL_SUBTYPE_CHOICES.map((choice) => {
+                    // "All commercial" is the active chip precisely when no subtype narrows the
+                    // family — it is the absence of a narrowing, not a sixth subtype.
+                    const pressed =
+                      choice.value === null
+                        ? activeCommercialSubtypes.size === 0
+                        : activeCommercialSubtypes.has(choice.value);
+                    return (
+                      <Button
+                        key={choice.testId}
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          'h-8 px-3 text-xs',
+                          pressed
+                            ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+                            : '',
+                        )}
+                        onClick={() => handleToggleSubtype(choice.value)}
+                        data-testid={choice.testId}
+                        aria-pressed={pressed}
+                      >
+                        {choice.label}
+                      </Button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -1055,7 +1330,13 @@ export function AreaSelectedPanel({
               scopeLabel: areaLabel,
               cityLabel: resolvedCityLabel || areaLabel,
               isCityScope: false, // an area is always narrower than its city
-              noun: intentNoun === 'rent' ? 'rentals' : 'homes',
+              // #2450 copy truth — "homes" is a Residential word. A Commercial selection must not
+              // have its zero-result state described as homes, whatever the intent.
+              noun: commercialFromFilters
+                ? 'properties'
+                : intentNoun === 'rent'
+                  ? 'rentals'
+                  : 'homes',
             });
             const onClearFilters = hasPropertyFilters ? handleClearPropertyFilters : undefined;
             const onClearSearch = searchQuery && onSearchChange ? () => onSearchChange('') : undefined;
@@ -1089,7 +1370,14 @@ export function AreaSelectedPanel({
                 filters={filters}
                 intent={intent}
                 searchQuery={searchQuery}
-                noun={intentNoun === 'rent' ? 'rentals' : 'homes'}
+                // #2450 copy truth — see the matching derivation on the empty-state copy above.
+                noun={
+                  commercialFromFilters
+                    ? 'properties'
+                    : intentNoun === 'rent'
+                      ? 'rentals'
+                      : 'homes'
+                }
                 cause={copy.cause}
                 scopeKind={resultScopeKind}
                 resultScope={activeScope}
