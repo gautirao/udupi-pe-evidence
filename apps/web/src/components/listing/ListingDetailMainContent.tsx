@@ -10,6 +10,8 @@ import { PoiMiniMap } from '@/components/poi/PoiMiniMap';
 import { NearbySchoolsCard } from '@/components/listing/NearbySchoolsCard';
 import { TrustBadgeCard, DIMENSION_LABELS } from '@/components/listing/TrustBadgeCard';
 import { ListingSpecsGrid } from '@/components/listing/ListingSpecsGrid';
+import { CommercialSpecsSection } from '@/components/listing/CommercialSpecsSection';
+import { resolveBuyerCommercialSubtype } from '@/lib/propertyTypeConfig';
 import { AgriSpecRows } from '@/components/listing/AgriSpecRows';
 import { ListingDetailBoundaryMap } from '@/components/listing/ListingDetailBoundaryMap';
 import { formatPrice, formatRelativeDate, formatArea } from '@/lib/formatters';
@@ -204,6 +206,22 @@ export function ListingDetailMainContent({
 
       {/* ── Property details ──────────────────────────────────────────────── */}
       <ListingSpecsGrid listing={listing} />
+
+      {/* Issue #2432 — subtype-aware Commercial facts, placed directly after the
+          generic spec grid because the two are read together: the grid carries the
+          type-agnostic rows and this section the typed Commercial ones, with the
+          generic row suppressed wherever its richer twin appears here.
+
+          The subtype is resolved AT THIS CALL SITE through #2458's shared authority,
+          from the two raw axes the row already carries. Nothing derives a subtype
+          locally — a second resolver that disagreed with this one for a single input
+          would be a defect with no single owner. Returns null for a legacy generic
+          `commercial` row, which the section renders honestly rather than guessing
+          Shop or Office (#1742). Non-commercial listings render nothing. */}
+      <CommercialSpecsSection
+        listing={listing}
+        subtype={resolveBuyerCommercialSubtype(listing.propertyType, listing.commercialSubtype)}
+      />
 
       {/* Agricultural land specs + boundary map (defensive — non-agri page never
           reaches here, but kept for type completeness). */}

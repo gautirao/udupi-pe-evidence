@@ -2,6 +2,7 @@ import { BedDouble, Bath, Building2, Maximize2, Layers, Car, Ruler, Store, Users
 import { formatArea } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 import type { PublicListingDetail } from '@/pages/ListingDetail';
+import { supersededGenericSpecs } from './commercialDetailModel';
 
 const TYPE_NOUN: Record<string, string> = {
   apartment: 'apartment',
@@ -192,7 +193,17 @@ export function ListingSpecsGrid({ listing }: ListingSpecsGridProps) {
   // ── Secondary spec cards ─────────────────────────────────────────────────────
   const secondarySpecs: SecondarySpec[] = [];
 
-  if (listing.furnishingStatus) {
+  // Issue #2432 — rows whose richer typed Commercial twin is populated and rendered by
+  // CommercialSpecsSection. Suppressing them here is what stops the buyer seeing the same fact
+  // twice in two shapes ("Washrooms 4" beside "Public washrooms 2 / Private washrooms 2").
+  //
+  // This is CONDITIONAL on the twin being populated, and deliberately so: a legacy commercial row
+  // carries only the generic value, and suppressing it unconditionally would delete the fact from
+  // the page entirely (#1742). Residential and agricultural listings are unaffected — the helper
+  // returns an empty set for any non-commercial property type.
+  const superseded = supersededGenericSpecs(listing);
+
+  if (listing.furnishingStatus && !superseded.has('furnishing')) {
     secondarySpecs.push({
       icon: <Layers className="h-4 w-4" />,
       label: 'Furnishing',
@@ -209,14 +220,14 @@ export function ListingSpecsGrid({ listing }: ListingSpecsGridProps) {
       value: formatArea(listing.superBuiltArea, listing.superBuiltAreaUnit),
     });
   }
-  if (listing.parkingCount != null) {
+  if (listing.parkingCount != null && !superseded.has('parking')) {
     secondarySpecs.push({
       icon: <Car className="h-4 w-4" />,
       label: 'Parking',
       value: `${listing.parkingCount} covered`,
     });
   }
-  if (listing.washrooms != null) {
+  if (listing.washrooms != null && !superseded.has('washrooms')) {
     secondarySpecs.push({
       icon: <Bath className="h-4 w-4" />,
       label: 'Washrooms',
@@ -244,7 +255,7 @@ export function ListingSpecsGrid({ listing }: ListingSpecsGridProps) {
       value: listing.numberOfUnits,
     });
   }
-  if (listing.possessionStatus) {
+  if (listing.possessionStatus && !superseded.has('availability')) {
     secondarySpecs.push({
       icon: <CheckCircle className="h-4 w-4" />,
       label: 'Availability',
@@ -283,7 +294,12 @@ export function ListingSpecsGrid({ listing }: ListingSpecsGridProps) {
   if (listing.balconies != null) {
     secondarySpecs.push({ icon: <Building2 className="h-4 w-4" />, label: 'Balconies', value: listing.balconies });
   }
-  if (listing.possessionStatus) {
+  // Same `possessionStatus` field as the "Availability" row above — a pre-existing duplicate that
+  // predates this change and affects residential listings too, so it is left as-is rather than
+  // fixed here (#2432 is explicitly not a residential redesign). It is suppressed under the same
+  // condition, because hiding "Availability" while keeping "Property status" would show the
+  // superseded value under a different name and defeat the de-duplication.
+  if (listing.possessionStatus && !superseded.has('availability')) {
     secondarySpecs.push({
       icon: <CheckCircle className="h-4 w-4" />,
       label: 'Property status',
@@ -383,7 +399,7 @@ export function ListingSpecsGrid({ listing }: ListingSpecsGridProps) {
   // Type-agnostic (#1797 AC6 unmapped-type fallback): shown whenever present, not
   // gated to a known-type allowlist, so a future/unmapped property type still
   // surfaces this field instead of it being silently hidden.
-  if (listing.ownershipType) {
+  if (listing.ownershipType && !superseded.has('ownership')) {
     secondarySpecs.push({
       icon: <CheckCircle className="h-4 w-4" />,
       label: 'Ownership',
