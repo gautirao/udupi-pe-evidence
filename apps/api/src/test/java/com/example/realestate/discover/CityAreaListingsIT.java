@@ -132,7 +132,8 @@ class CityAreaListingsIT {
                 // projects via TrustBadge.publicBadge(...) before constructing the card.
                 "trusted",
                 13.35, 74.79,
-                null, null
+                null, null,
+                null  // #2433 commercialSubtype — this fixture declares none
         );
         AreaListingsEntry entry = new AreaListingsEntry(AREA_KEY, "Manipal", null, List.of(anonCard));
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
@@ -188,7 +189,8 @@ class CityAreaListingsIT {
                 // above (each mapped from its own raw tier, per the TrustBadge allow-list).
                 "verified",
                 13.36, 74.80,
-                null, null
+                null, null,
+                null  // #2433 commercialSubtype — this fixture declares none
         );
         AreaListingsEntry entry = new AreaListingsEntry(AREA_KEY, "Manipal", null, List.of(authedCard));
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
@@ -239,7 +241,8 @@ class CityAreaListingsIT {
                 "2025-03-01T08:00:00Z",
                 null,
                 13.34, 74.78,
-                null, null
+                null, null,
+                null  // #2433 commercialSubtype — this fixture declares none
         );
         AreaListingsEntry entry = new AreaListingsEntry(AREA_KEY, "Manipal", null, List.of(nullPriceCard));
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
@@ -279,7 +282,8 @@ class CityAreaListingsIT {
                 "2025-01-20T12:00:00Z",
                 null,
                 13.33, 74.77,
-                null, null
+                null, null,
+                null  // #2433 commercialSubtype — this fixture declares none
         );
         AreaListingsEntry entry = new AreaListingsEntry(AREA_KEY, "Manipal", null, List.of(nullPriceCard));
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
@@ -308,7 +312,8 @@ class CityAreaListingsIT {
                 2, "Cozy 2BHK for rent", 2, 900.0, "sq ft",
                 null, null, null, null, "semi-furnished",
                 "2025-04-01T09:00:00Z", "verified", 13.35, 74.79,
-                null, "₹20–35K"
+                null, "₹20–35K",
+                null  // #2433 commercialSubtype — this fixture declares none
         );
         AreaListingsEntry entry = new AreaListingsEntry(AREA_KEY, "Manipal", null, List.of(rentCard));
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
@@ -338,7 +343,8 @@ class CityAreaListingsIT {
                 2, "Cozy 2BHK for lease", 2, 900.0, "sq ft",
                 null, null, null, null, "semi-furnished",
                 "2025-04-01T09:00:00Z", "verified", 13.35, 74.79,
-                25000L, null
+                25000L, null,
+                null  // #2433 commercialSubtype — this fixture declares none
         );
         AreaListingsEntry entry = new AreaListingsEntry(AREA_KEY, "Manipal", null, List.of(rentCard));
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));

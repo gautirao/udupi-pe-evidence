@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -256,7 +257,8 @@ public class CityAreaListingsService {
                     sub.trust_tier,
                     sub.latitude,
                     sub.longitude,
-                    sub.monthly_rent
+                    sub.monthly_rent,
+                    sub.commercial_subtype
                 FROM (
                     SELECT
                         a.area_key,
@@ -286,12 +288,22 @@ public class CityAreaListingsService {
                         pl.latitude,
                         pl.longitude,
                         pl.monthly_rent,
+                        lcsd.commercial_subtype,
                         ROW_NUMBER() OVER (PARTITION BY a.area_key ORDER BY pl.created_at DESC) AS rn
                     FROM areas a
                     JOIN cities c ON c.id = a.city_id
                     LEFT JOIN property_listings pl
                         ON  pl.area_key = a.area_key
                         AND pl.status   = 'LIVE'""" + joinFilterClauses + """
+
+                    -- #2433: LEFT JOIN, and 1:0..1 on the projection table's listing_id PK, so
+                    -- it can neither drop a row nor multiply one — the per-area ROW_NUMBER()
+                    -- cap above would be silently wrong if it could. LEFT is also required in
+                    -- the other direction: pl is itself LEFT JOINed here so that an area with
+                    -- zero LIVE listings still returns a row, and an inner join to lcsd would
+                    -- discard exactly those rows and delete empty areas from the response.
+                    LEFT JOIN listing_commercial_space_details lcsd
+                        ON lcsd.listing_id = pl.id
 
                     WHERE c.slug    = ?
                       AND a.area_key IN (""" + placeholders + """
@@ -492,8 +504,33 @@ public class CityAreaListingsService {
                 GeoCoarsener.coarsen(latitude),
                 GeoCoarsener.coarsen(longitude),
                 projectedMonthlyRentRupees,
-                projectedMonthlyRentBand
+                projectedMonthlyRentBand,
+                // #2433: canonicalised here for the same reason TrustBadge.publicBadge and
+                // GeoCoarsener.coarsen are — so this read path and DiscoverListingsService
+                // cannot emit different spellings of the same subtype for the same listing.
+                normalizeCommercialSubtype(rs.getString("commercial_subtype"))
         );
+    }
+
+    /**
+     * Canonicalises the stored subtype to UPPER case, mapping blank to {@code null} (#2431).
+     *
+     * <p>Deliberately a duplicate of {@code DiscoverListingsService#normalizeCommercialSubtype}
+     * rather than a shared call: this service imports neither {@code DiscoverListingPredicateBuilder}
+     * nor {@code DiscoverFilterNormalizer} and is a separate hand-built SQL path by design (see
+     * #2509's ownership ruling). Reaching across to the other service for four lines would be the
+     * first coupling between them. The two are pinned to agree by
+     * {@code CityAreaListingsCommercialSubtype2433IT#bothDiscoverReadPathsAgreeOnTheSubtypeSpelling},
+     * which asserts equality rather than trusting that both were written the same way.
+     *
+     * <p>The column carries no CHECK constraint (V102 L82-92), so a lower-case or whitespace-only
+     * value is representable even though the write path never produces one.
+     */
+    private static String normalizeCommercialSubtype(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        return raw.trim().toUpperCase(Locale.ROOT);
     }
 
     /**
@@ -581,10 +618,14 @@ public class CityAreaListingsService {
                     pl.trust_tier,
                     pl.latitude,
                     pl.longitude,
-                    pl.monthly_rent
+                    pl.monthly_rent,
+                    lcsd.commercial_subtype
                 FROM property_listings pl
                 JOIN areas a ON a.area_key = pl.area_key
                 JOIN cities c ON c.id = a.city_id
+                -- #2433: same 1:0..1 PK join as the area-keyed query above. LEFT so a
+                -- non-Commercial listing keeps its row with a NULL subtype.
+                LEFT JOIN listing_commercial_space_details lcsd ON lcsd.listing_id = pl.id
                 WHERE c.slug = ?
                   AND pl.status = 'LIVE'""" + whereClauses + """
 

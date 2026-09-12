@@ -52,7 +52,6 @@ public record DiscoverListingResponse(
          * absent from the JSON in those cases.
          */
         String commercialSubtype,
-
         /**
          * The resolved buyer peer this listing belongs to (#2458):
          * {@code SHOP | OFFICE | BUILDING | WAREHOUSE | LAND}, or {@code null}.
@@ -76,5 +75,28 @@ public record DiscoverListingResponse(
          * <p>Legacy Building/Warehouse/Land rows carry no subtype on any axis, so this resolves
          * from {@code propertyType} alone for them and they are never lost.
          */
-        String buyerCommercialSubtype
+        String buyerCommercialSubtype,
+        /**
+         * #2433 — the compact, allowlisted Commercial fact set a result card may
+         * summarise, or {@code null} when the listing carries none of them (which
+         * includes every non-Commercial listing).
+         *
+         * <p>APPENDED LAST, and it stays last. {@code commercialSubtype} is still exactly
+         * where #2444 put it; {@code buyerCommercialSubtype} was appended by #2458 on main
+         * and now sits between the two, which is why this component is no longer adjacent
+         * to the subtype it summarises facts for. That ordering is deliberate — main's
+         * components stay contiguous and in their merged positions, so a later rebase of
+         * anything built on main does not shift them again. The detail surface and the
+         * Postgres/OpenSearch parity tests read this record POSITIONALLY, so the order is
+         * load-bearing and is pinned by
+         * {@code DiscoverCommercialFactsTest#commercialFactsIsAppendedAfterSubtype}.
+         *
+         * <p>This carries FACTS only. It deliberately holds no subtype or family
+         * decision — the canonical taxonomy translation is owned in exactly one place
+         * ({@code buyerCommercialSubtype} above, #2458), and a second one riding along on
+         * the card's fact payload is precisely what that ownership exists to prevent. The
+         * two are not alternatives: one is a resolved taxonomy value, the other a fact
+         * payload, and neither substitutes for the other.
+         */
+        DiscoverCommercialFacts commercialFacts
 ) {}

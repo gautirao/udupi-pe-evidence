@@ -171,7 +171,11 @@ public final class SimulatedListingFactory {
                 listing.point().lat(),
                 listing.point().lon(),
                 null, // monthlyRentRupees — simulated listings are always "sale"; never fabricated
-                null); // monthlyRentBand — simulated listings are always "sale"; never fabricated
+                null, // monthlyRentBand — simulated listings are always "sale"; never fabricated
+                // #2433 commercialSubtype — a simulated listing carries no commercial subtype
+                // to report, and guessing one would put invented data in front of a launch
+                // reviewer. Same reasoning as the detail factory above.
+                null);
     }
 
     public static DiscoverListingResponse toDetail(SimulatedListing listing) {
@@ -219,6 +223,13 @@ public final class SimulatedListingFactory {
                 // a launch reviewer would be shown a preview that misrepresents production.
                 // Nothing is fabricated: a simulated listing with no commercial property
                 // type still resolves to null.
-                DiscoverListingsService.resolveBuyerCommercialSubtype(listing.propertyType(), null));
+                DiscoverListingsService.resolveBuyerCommercialSubtype(listing.propertyType(), null),
+                // commercialFacts (#2433) — honest null, and note the contrast with the line
+                // directly above: that one is DERIVABLE from data the factory holds, this one
+                // is not. A simulated listing has no V102 projection row and no V104 flat
+                // commercial column, so it has no floor, hub, seats, clear height, frontage or
+                // zoning to report. An empty facts object would invite the card to render a
+                // summary row that stands for nothing.
+                null);
     }
 }

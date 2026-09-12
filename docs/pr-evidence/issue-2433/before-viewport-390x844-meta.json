@@ -1,0 +1,12 @@
+{
+  "arm": "before",
+  "url": "/discover?city=bangalore&node=a%3AIN%7CKA%7CBengaluru%7CSanjeevini%20Nagar&rscope=vp&rvp=12.90%2C77.57%2C12.93%2C77.61",
+  "authenticated": true,
+  "viewport": "390x844",
+  "listingCards": 7,
+  "commercialSummaryRows": 0,
+  "countsAre": "DOM-measured (locator.count()), not visible-in-frame counts",
+  "firstCardHeightPx": 388,
+  "firstCardWidthPx": 326,
+  "capturedAt": "2026-09-12T08:34:16.087Z"
+}

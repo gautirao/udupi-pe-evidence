@@ -86,7 +86,8 @@ class DiscoverListingsControllerTest {
                 "abc", "L-001", "house", "Test title", "Malpe", "IN|KA|Udupi|Malpe",
                 5_000_000L, null, null, 100.0, "sq m", 3, 13.3, 74.7,
                 null, OffsetDateTime.now(), null, null, null, null,
-                5, false, null, null, "A", null, "OWNER", "sale", "LIVE", null, null
+                5, false, null, null, "A", null, "OWNER", "sale", "LIVE", null, null,
+                null  // #2433 commercialFacts — this fixture declares no commercial facts
         );
         DiscoverListingsPage page = new DiscoverListingsPage(
                 List.of(listing), 0, 20, 1L, 1, null);
@@ -774,26 +775,106 @@ class DiscoverListingsControllerTest {
         verify(service, never()).getListings(any());
     }
 
+    /**
+     * DELIBERATE REVERSAL of the #2431 assertion, matching the one #2458 already made at the
+     * integration level in {@code CommercialSubtypeFilter2431IT#nonAmbiguousSubtypes_areAccepted}.
+     * That lane reversed the IT but not this controller-boundary twin, so this test asserted a
+     * contract main no longer implements and was failing ON MAIN: {@code
+     * ALLOWED_COMMERCIAL_SUBTYPES} is now {SHOP, OFFICE, BUILDING, WAREHOUSE, LAND}.
+     *
+     * <p>The reasoning is #2458's, not this lane's: an approved MIXED selection (Shop +
+     * Warehouse) needs ONE predicate spanning both axes, which the old property_type-only
+     * shape made unreachable.
+     *
+     * <p>Acceptance is all this claims. WHICH rows each subtype matches is pinned by the
+     * #2458 membership matrix, not here.
+     */
     @Test
-    void commercialSubtypes_nonAmbiguousSubtype_returns400() throws Exception {
+    void commercialSubtypes_nonAmbiguousSubtype_isAccepted() throws Exception {
         mockMvc.perform(get("/api/discover/listings")
                         .param("city", "udupi")
                         .param("commercialSubtypes", "WAREHOUSE")
                         .with(jwt()))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isOk());
 
-        verify(service, never()).getListings(any());
+        // Asserted by the SIDE EFFECT, not just the status. A 200 that never reached the
+        // service would mean the value was silently dropped rather than accepted — which is
+        // exactly the failure a reversal like this could introduce unnoticed.
+        verify(service).getListings(any());
+    }
+
+    /**
+     * Re-pinned, and the re-pinning is the point.
+     *
+     * <p>This previously sent THREE values against a cap that was 2. #2458 widened the
+     * vocabulary to five, and {@code MAX_COMMERCIAL_SUBTYPE_VALUES} is DERIVED as
+     * {@code ALLOWED_COMMERCIAL_SUBTYPES.size()} — so the cap silently moved 2 to 5 and three
+     * values stopped being "too many". Nobody had to edit this test for it to stop testing
+     * anything; it just started passing through a guard it no longer reached, then failed
+     * outright once the whole request became valid.
+     *
+     * <p><b>Derived from the cap, not a literal.</b> A literal {@code 6} goes stale the same
+     * way {@code 3} did, the next time the vocabulary widens. {@code MAX + 1} always means
+     * "one past the cap", which is what this test is for.
+     *
+     * <p><b>Duplicates are deliberate and necessary.</b> With the cap equal to the vocabulary
+     * size, more than MAX <i>distinct valid</i> values cannot exist — so the guard is only
+     * reachable by repetition. That is coherent with what the cap is actually for: the param
+     * is repeatable on a public cached endpoint, and the guard bounds cache-key cardinality
+     * from unbounded repetition, not the number of distinct subtypes a buyer may select. The
+     * cap check runs on the RAW list BEFORE the allowlist loop, so repetition of a VALID value
+     * reaches it — which is why every value here is valid.
+     *
+     * <p><b>WHICH guard fired is asserted, not just the status.</b> Three different guards in
+     * {@code CommercialSubtypeParam#validate} all return 400, so a bare {@code isBadRequest()}
+     * cannot distinguish the cap from the allowlist or the empty-list check. That is exactly how
+     * the previous version drifted unnoticed. Asserted on the BODY rather than
+     * {@code status().reason()}: {@code GlobalExceptionHandler} catches
+     * {@code ResponseStatusException} and renders the reason as {@code {"error": ...}}, leaving
+     * the raw HTTP reason phrase null — so a {@code status().reason(...)} assertion fails even
+     * when the correct guard fired (measured, not assumed).
+     */
+    /**
+     * DISCRIMINATING CONTROL for the cap test below, and the reason that test is not vacuous.
+     *
+     * <p>Because {@code MAX_COMMERCIAL_SUBTYPE_VALUES} equals the vocabulary size, more than MAX
+     * <i>distinct valid</i> values cannot exist — so the cap test must use duplicates. That
+     * raises a fair objection: perhaps the DUPLICATION is what gets rejected, through a dedupe
+     * or allowlist path, and the cap never fires at all. A cap test that is really exercising a
+     * different guard would be an assertion that cannot fail, passing.
+     *
+     * <p>This arm settles it by varying ONLY the property under test. Same endpoint, same value,
+     * same duplication — exactly MAX repetitions instead of MAX + 1 — and it returns 200. So
+     * duplication alone is not rejected, and the 400 one value later is the COUNT crossing the
+     * cap, not the repetition.
+     *
+     * <p>Consistent with the code: {@code CommercialSubtypeParam#validate} tests
+     * {@code raw.size() > MAX} on the RAW list before the allowlist loop, and deduping happens
+     * later in {@code DiscoverFilterNormalizer#normalizeCommercialSubtypes} through a
+     * LinkedHashSet that never throws. There is no "dedupe rejects" path to confuse it with.
+     */
+    @Test
+    void commercialSubtypes_atExactlyTheCap_isAccepted() throws Exception {
+        var request = get("/api/discover/listings").param("city", "udupi");
+        for (int i = 0; i < DiscoverFilterNormalizer.MAX_COMMERCIAL_SUBTYPE_VALUES; i++) {
+            request = request.param("commercialSubtypes", "SHOP");
+        }
+
+        mockMvc.perform(request.with(jwt())).andExpect(status().isOk());
+
+        verify(service).getListings(any());
     }
 
     @Test
     void commercialSubtypes_tooManyValues_returns400() throws Exception {
-        mockMvc.perform(get("/api/discover/listings")
-                        .param("city", "udupi")
-                        .param("commercialSubtypes", "SHOP")
-                        .param("commercialSubtypes", "OFFICE")
-                        .param("commercialSubtypes", "SHOP")
-                        .with(jwt()))
-                .andExpect(status().isBadRequest());
+        var request = get("/api/discover/listings").param("city", "udupi");
+        for (int i = 0; i <= DiscoverFilterNormalizer.MAX_COMMERCIAL_SUBTYPE_VALUES; i++) {
+            request = request.param("commercialSubtypes", "SHOP");
+        }
+
+        mockMvc.perform(request.with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("commercial_subtypes_exceeds_max_values"));
 
         verify(service, never()).getListings(any());
     }
@@ -804,7 +885,7 @@ class DiscoverListingsControllerTest {
                 "abc", "L-001", "commercial", "Shop unit", "Malpe", "IN|KA|Udupi|Malpe",
                 5_000_000L, null, null, 100.0, "sq m", null, 13.3, 74.7,
                 null, OffsetDateTime.now(), null, null, null, null,
-                5, false, null, null, "A", null, "OWNER", "sale", "LIVE", "SHOP", null);
+                5, false, null, null, "A", null, "OWNER", "sale", "LIVE", "SHOP", null, null);
         when(service.getListings(any())).thenReturn(
                 new DiscoverListingsPage(List.of(shop), 0, 20, 1L, 1, null));
 
@@ -821,7 +902,7 @@ class DiscoverListingsControllerTest {
                 "abc", "L-001", "commercial", "Legacy commercial", "Malpe", "IN|KA|Udupi|Malpe",
                 5_000_000L, null, null, 100.0, "sq m", null, 13.3, 74.7,
                 null, OffsetDateTime.now(), null, null, null, null,
-                5, false, null, null, "A", null, "OWNER", "sale", "LIVE", null, null);
+                5, false, null, null, "A", null, "OWNER", "sale", "LIVE", null, null, null);
         when(service.getListings(any())).thenReturn(
                 new DiscoverListingsPage(List.of(legacy), 0, 20, 1L, 1, null));
 

@@ -10,7 +10,12 @@ import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { useSavedListingIds, useSaveListing, useUnsaveListing } from '@/hooks/useSavedListings';
 import { useAuthModal } from '@/contexts/AuthModalContext';
 import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
-import { getPropertyTypeVisual, getPropertyTypeLabel } from '@/lib/propertyTypeConfig';
+import {
+  getPropertyTypeVisual,
+  getPropertyTypeLabel,
+  resolveBuyerCommercialSubtype,
+} from '@/lib/propertyTypeConfig';
+import { buildCommercialSummary } from '@/lib/commercialSummary';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -228,6 +233,59 @@ export function PropertyCard({
   const purpose = listing.listingPurpose ? purposeLabel(listing.listingPurpose) : null;
   const locationText = buildLocationText(listing.locality, areaLabel);
 
+  // Issue #2433 — the Commercial result-card summary.
+  //
+  // Resolved at the call site from the two RAW axes the row already carries, via
+  // #2458's shared resolver. No DTO field is consumed for this: `propertyType` and
+  // `commercialSubtype` are both on the row, so the Discover DTO's
+  // `buyerCommercialSubtype` projection is not needed here (same conclusion #2432
+  // reached for the listing-detail surface).
+  //
+  // getPropertyTypeLabel (#2430) already owns the identity TEXT and already takes
+  // these same two axes, so it is NOT re-derived from the resolved subtype — the two
+  // are parallel resolvers over one pair of axes, not a label(identity(row))
+  // composition. Minting an enum-keyed label here would duplicate ownership #2430
+  // already holds.
+  const buyerCommercialSubtype = resolveBuyerCommercialSubtype(
+    listing.propertyType,
+    listing.commercialSubtype,
+  );
+
+  // ⚠️ Deliberately suppressed when the subtype does not resolve, even though
+  // buildCommercialSummary has a legacy-generic branch that would render area-only.
+  //
+  // That branch asserts something about the DATA — "this row's Shop-vs-Office was
+  // never recorded". This shape is filled from three different backends, and they
+  // do NOT carry the same fields:
+  //
+  //   /api/discover/listings                -> DiscoverListingResponse        identity + facts
+  //   /api/discover/cities/{city}/listings  -> AreaListingCard                identity ONLY
+  //   /school-radius-listings               -> PublicSchoolRadiusListingCard  neither
+  //
+  // The AREA feed DOES carry identity (`commercialSubtype`) as of this PR; what it
+  // still lacks is the allowlisted FACT columns, which are #2516's scope, not this
+  // issue's. So AREA is not an "absent subtype" feed at all — do not group it with
+  // the school feed, which remains the only one that cannot express a subtype and
+  // therefore the only one where absence means "this endpoint cannot carry it"
+  // rather than "the data does not have it". Rendering the legacy branch on absence
+  // alone would state a falsehood about a listing whose subtype IS recorded.
+  //
+  // BUILDING / WAREHOUSE / LAND resolve from `propertyType` alone and so are safe
+  // on every feed. Only `property_type='commercial'` is ambiguous, and that is
+  // exactly the case being suppressed. The guard can relax to include the
+  // legacy-generic branch honestly once the school feed carries the field.
+  const commercialSummaryFacts = buyerCommercialSubtype
+    ? buildCommercialSummary(buyerCommercialSubtype, listing.propertyType, {
+        builtArea: listing.builtArea,
+        builtAreaUnit: listing.builtAreaUnit,
+        landArea: listing.landArea,
+        landAreaUnit: listing.landAreaUnit,
+        ...(listing.commercialFacts ?? {}),
+      })
+    : [];
+
+  const hasCommercialSummary = commercialSummaryFacts.length > 0;
+
   const hasMetadata =
     listing.bedrooms != null ||
     listing.bathrooms != null ||
@@ -396,8 +454,24 @@ export function PropertyCard({
           </p>
         )}
 
+        {/* Issue #2433 — Commercial summary row. REPLACES the generic specs row for a
+            Commercial listing rather than stacking with it: the two overlap (both would
+            render built area, and both would render floors) and a card that says
+            "1,200 sq ft · 3 floors" immediately above "1,200 sq ft  3 floors" reads as a
+            rendering bug. Capped at MAX_SUMMARY_FACTS by buildCommercialSummary. */}
+        {hasCommercialSummary && (
+          <div
+            className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground tabular-nums"
+            data-testid="listing-commercial-summary"
+          >
+            {commercialSummaryFacts.map((fact) => (
+              <span key={fact}>{fact}</span>
+            ))}
+          </div>
+        )}
+
         {/* Specs row — render only non-null values */}
-        {hasMetadata && (
+        {!hasCommercialSummary && hasMetadata && (
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground tabular-nums">
             {listing.bedrooms != null && (
               <span className="flex items-center gap-1">

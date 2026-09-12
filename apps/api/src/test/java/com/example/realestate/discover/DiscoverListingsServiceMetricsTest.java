@@ -174,7 +174,8 @@ class DiscoverListingsServiceMetricsTest {
                 null, null, null, null, null,
                 5, false,
                 null, false,
-                "A", "READY", "owner", "sale", "LIVE", null, null
+                "A", "READY", "owner", "sale", "LIVE", null, null,
+                null  // #2433 commercialFacts — this fixture declares no commercial facts
         );
     }
 }

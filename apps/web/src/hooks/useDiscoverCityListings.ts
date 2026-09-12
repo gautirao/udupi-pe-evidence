@@ -2,6 +2,7 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useDiscoverSource, discoverPath, discoverKey } from '@/features/discover/state/DiscoverDataSourceContext';
 import { snapBbox } from '@/lib/bboxUtils';
+import type { DiscoverCommercialFactsDto } from '@/hooks/useDiscoverListings';
 
 /**
  * Client freshness for public city listings, mirroring the endpoint's
@@ -73,6 +74,38 @@ export interface DiscoverCityListingItem {
   lon?: number | null;
   latitude?: number | null;
   longitude?: number | null;
+  /**
+   * Issue #2431 — `SHOP` or `OFFICE` when declared; absent otherwise. See the field of
+   * the same name on `DiscoverListingItem` for what absence means and why it must never
+   * be guessed at.
+   *
+   * ⚠️ **The three feeds do NOT carry the same fields.** This shape is filled from three
+   * different backends:
+   *
+   *   - `/api/discover/listings` → `DiscoverListingResponse` (remapped by
+   *     `discoverListingToCityListing`) — carries the subtype AND the facts. Feeds
+   *     `authViewportListings` (#2015) and `polygonListings` (#2461).
+   *   - `/api/discover/cities/{city}/listings` → `AreaListingCard` — **carries the
+   *     SUBTYPE** as of `e3aab5f` (`AreaListingCard.java:93`). What it does not carry is
+   *     the allowlisted FACT columns, which are #2516's scope. Feeds `areaListings`, the
+   *     default AREA journey. (#2509 covers the query direction.)
+   *   - `/school-radius-listings` → `PublicSchoolRadiusListingCard` — carries neither.
+   *     Feeds `schoolListings`.
+   *
+   * So the school feed is the ONLY one where absence means "this endpoint cannot carry it"
+   * rather than "the data does not have it". Consumers must not render the legacy-generic
+   * branch on the strength of absence alone.
+   *
+   * `PropertyCard.tsx` states this same contract at its suppression site. The two must not
+   * drift apart: a reader who finds them disagreeing will re-derive the suppression rule
+   * from whichever one they happened to open.
+   */
+  commercialSubtype?: string | null;
+  /**
+   * Issue #2433 — allowlisted Commercial facts for the card summary. Same three-feed
+   * caveat as `commercialSubtype` above: only the authenticated feed populates it.
+   */
+  commercialFacts?: DiscoverCommercialFactsDto | null;
 }
 
 interface DiscoverCityAreaResult {

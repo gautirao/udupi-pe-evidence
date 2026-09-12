@@ -1,5 +1,6 @@
 package com.example.realestate.discover.opensearch;
 
+import com.example.realestate.discover.DiscoverCommercialFacts;
 import com.example.realestate.discover.DiscoverListingResponse;
 import com.example.realestate.discover.DiscoverListingsService;
 import com.example.realestate.discover.DiscoverMarker;
@@ -170,8 +171,45 @@ final class OpenSearchHitMapper {
                 sellerType,
                 listingPurpose,
                 status,
-                commercialSubtype
+                commercialSubtype,
+                commercialFacts(source)
         );
+    }
+
+    /**
+     * #2433 — the OpenSearch counterpart of the Postgres Commercial-facts projection.
+     *
+     * <p>Reads the SAME allowlist under the SAME snake_case keys the indexer writes, so a
+     * listing produces an equal {@link DiscoverCommercialFacts} on either backend. A key
+     * the index does not carry reads as absent rather than as a fabricated zero — which is
+     * also why the numeric reads go through {@link #number} and an explicit null check
+     * instead of {@code intValue()} on a possibly-null Number.
+     *
+     * <p>The coalesced Postgres columns ({@code total_floors}, {@code road_frontage_ft})
+     * are flattened to one indexed field each by the indexer, so no coalescing is needed
+     * here — the equality the parity test asserts is between the two mappers' OUTPUT, not
+     * between their internal shapes.
+     */
+    private static DiscoverCommercialFacts commercialFacts(Map<String, Object> source) {
+        Number floorNumber = number(source, "floor_number");
+        Number totalFloors = number(source, "total_floors");
+        Number officeSeats = number(source, "office_seats");
+        Number clearHeight = number(source, "warehouse_clear_height_ft");
+        Number loadingBays = number(source, "warehouse_loading_bays");
+        Number roadFrontage = number(source, "road_frontage_ft");
+
+        return DiscoverCommercialFacts.orNullIfEmpty(new DiscoverCommercialFacts(
+                string(source, "floor_choice"),
+                string(source, "floor_mode"),
+                floorNumber == null ? null : floorNumber.intValue(),
+                totalFloors == null ? null : totalFloors.intValue(),
+                string(source, "hub_type"),
+                officeSeats == null ? null : officeSeats.intValue(),
+                string(source, "occupancy_status"),
+                clearHeight == null ? null : clearHeight.doubleValue(),
+                loadingBays == null ? null : loadingBays.intValue(),
+                roadFrontage == null ? null : roadFrontage.doubleValue(),
+                string(source, "commercial_zoning")));
     }
 
     // -----------------------------------------------------------------------

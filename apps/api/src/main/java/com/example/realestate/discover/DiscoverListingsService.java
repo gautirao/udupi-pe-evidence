@@ -11,6 +11,9 @@ import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -133,7 +136,28 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                         pl.seller_type,
                         pl.listing_purpose,
                         pl.status,
-                        lcsd.commercial_subtype
+                        lcsd.commercial_subtype,
+                        -- #2433 Commercial summary facts. Explicit allowlist; NOT a
+                        -- SELECT * of the commercial columns. See DiscoverCommercialFacts
+                        -- for what is deliberately excluded (ROI, lease, power, approvals).
+                        pl.floor_choice,
+                        pl.floor_mode,
+                        pl.hub_type,
+                        pl.office_seats,
+                        pl.occupancy_status,
+                        pl.warehouse_clear_height_ft,
+                        pl.warehouse_loading_bays,
+                        pl.commercial_zoning,
+                        lcsd.floor_number,
+                        -- Coalesced across the per-family V102 projections. A listing is
+                        -- keyed into at most ONE of these tables (each PK is listing_id and
+                        -- V102 backfilled them by property_type), so this cannot merge two
+                        -- listings' values — it selects whichever single projection exists.
+                        COALESCE(lcsd.total_floors, lcbd.total_floors, lwd.total_floors)
+                            AS total_floors,
+                        COALESCE(lcsd.road_frontage_ft, lcbd.road_frontage_ft,
+                                 lwd.road_frontage_ft, lcld.road_frontage_ft)
+                            AS road_frontage_ft
                     FROM property_listings pl
                     -- #2431: LEFT JOIN, not a correlated subselect, because the FROM clause of
                     -- THIS query is ours to shape. listing_id is the PK of the projection table,
@@ -143,6 +167,13 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                     -- NULL subtype. The shared WHERE fragment still references only `pl`, so
                     -- adding this join does not alter which rows match.
                     LEFT JOIN listing_commercial_space_details lcsd ON lcsd.listing_id = pl.id
+                    -- #2433: the same 1:0..1 PK join argument as #2431's above applies to
+                    -- each of these. They carry the Building / Warehouse / Commercial-Land
+                    -- facts that listing_commercial_space_details does not hold, and LEFT
+                    -- keeps every non-matching listing in the page with NULL facts.
+                    LEFT JOIN listing_commercial_building_details lcbd ON lcbd.listing_id = pl.id
+                    LEFT JOIN listing_warehouse_details lwd ON lwd.listing_id = pl.id
+                    LEFT JOIN listing_commercial_land_details lcld ON lcld.listing_id = pl.id
                     WHERE \s""" + whereFragment + """
 
                     ORDER BY pl.created_at DESC
@@ -208,7 +239,26 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                         rs.getString("seller_type"),
                         rs.getString("listing_purpose"),
                         rs.getString("status"),
-                        rs.getString("commercial_subtype")
+                        rs.getString("commercial_subtype"),
+                        // getObject(..., Class) — NOT getInt/getDouble, which return 0.0
+                        // for a SQL NULL and would turn "no seats recorded" into
+                        // "0 seats", fabricating a fact the row does not carry.
+                        // The two `numeric` columns go through nullableDouble() instead:
+                        // pgjdbc REJECTS getObject(col, Double.class) on a numeric column
+                        // ("conversion to class java.lang.Double from numeric not
+                        // supported") — see nullableDouble's javadoc.
+                        DiscoverCommercialFacts.orNullIfEmpty(new DiscoverCommercialFacts(
+                                rs.getString("floor_choice"),
+                                rs.getString("floor_mode"),
+                                rs.getObject("floor_number", Integer.class),
+                                rs.getObject("total_floors", Integer.class),
+                                rs.getString("hub_type"),
+                                rs.getObject("office_seats", Integer.class),
+                                rs.getString("occupancy_status"),
+                                nullableDouble(rs, "warehouse_clear_height_ft"),
+                                rs.getObject("warehouse_loading_bays", Integer.class),
+                                nullableDouble(rs, "road_frontage_ft"),
+                                rs.getString("commercial_zoning")))
                 );
             }, pageParams.toArray());
 
@@ -241,6 +291,27 @@ public class DiscoverListingsService implements DiscoverListingsPort {
      * the underlying {@link java.sql.SQLException} message inside its own message text
      * (e.g. {@code BadSqlGrammarException} prepends the task string before the SQL text).
      */
+    /**
+     * Reads a nullable SQL {@code numeric} column as a {@link Double}, preserving SQL NULL
+     * as Java {@code null}.
+     *
+     * <p>{@code rs.getObject(col, Double.class)} is NOT usable here. pgjdbc's
+     * {@code PgResultSet.getObject(String, Class)} has no numeric-to-Double conversion and
+     * throws {@code PSQLException: conversion to class java.lang.Double from numeric not
+     * supported} on the FIRST row it reaches, aborting the whole query. That is how #2433's
+     * first cut of this projection turned every authenticated {@code GET
+     * /api/discover/listings} into a 500 — {@code warehouse_clear_height_ft} (V104) and
+     * {@code road_frontage_ft} (V32 / V102) are both {@code numeric}, not {@code float8}.
+     *
+     * <p>{@code BigDecimal.class} IS supported for numeric, so read that and narrow. The
+     * null check is what keeps "no clear height recorded" from becoming "0.0 ft" — the same
+     * discipline the {@code Integer} columns get from {@code getObject(..., Integer.class)}.
+     */
+    private static Double nullableDouble(ResultSet rs, String column) throws SQLException {
+        BigDecimal value = rs.getObject(column, BigDecimal.class);
+        return value == null ? null : value.doubleValue();
+    }
+
     private static boolean isFtsSyntaxError(DataAccessException ex) {
         if (containsFtsKeyword(ex.getMessage())) return true;
         Throwable cause = ex.getCause();
@@ -295,7 +366,10 @@ public class DiscoverListingsService implements DiscoverListingsPort {
             int daysOnMarket,
             boolean backOnMarket, String reraNumber, boolean reraValid, String rawTrustTier,
             String possessionStatus, String sellerType, String listingPurpose, String status,
-            String commercialSubtype) {
+            String commercialSubtype, DiscoverCommercialFacts commercialFacts) {
+        // Normalised ONCE and reused by both consumers below. See the commit that
+        // introduced this local for why the two must not be independently computed.
+        String normalisedSubtype = normalizeCommercialSubtype(commercialSubtype);
         return new DiscoverListingResponse(
                 id, listingNumber, propertyType, title, locality, areaKey, pricePaise,
                 landArea, landAreaUnit, builtArea, builtAreaUnit, bedrooms,
@@ -303,9 +377,11 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                 heroImageUrl, createdAt, updatedAt, firstPublishedAt, lastUpdatedAt, confirmedAt,
                 daysOnMarket, backOnMarket, reraNumber, reraValid, TrustBadge.publicBadge(rawTrustTier),
                 possessionStatus, sellerType, listingPurpose, status,
-                normalizeCommercialSubtype(commercialSubtype),
-                resolveBuyerCommercialSubtype(
-                        propertyType, normalizeCommercialSubtype(commercialSubtype)));
+                normalisedSubtype,
+                // #2458 — the resolved taxonomy value. #2433's fact payload follows it and
+                // carries no taxonomy decision of its own; see DiscoverListingResponse.
+                resolveBuyerCommercialSubtype(propertyType, normalisedSubtype),
+                DiscoverCommercialFacts.orNullIfEmpty(commercialFacts));
     }
 
     /**

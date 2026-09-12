@@ -6,6 +6,37 @@ import { buildDiscoverSearchParams } from '@/lib/discoverSearchParams';
 import { computeScopeFingerprint } from '@/features/discover/state/resultScope';
 import type { ResultScope } from '@/features/discover/state/resultScope';
 
+/**
+ * Issue #2433 — the allowlisted Commercial fact set the backend projects onto
+ * `DiscoverListingResponse`, mirrored field-for-field from Java's
+ * `DiscoverCommercialFacts`.
+ *
+ * Every field is optional AND nullable: the record is `NON_NULL`-serialised, and
+ * every underlying column is nullable with no backfill (V104) or lives on a typed
+ * child table that may have no row (V102). Absence is the norm here, not the
+ * exception — and it is HONEST absence, which is why the backend reads these with
+ * `getObject(..., Class)` rather than `getInt`/`getDouble`: a SQL NULL must never
+ * arrive as `0`, or "no seats recorded" becomes "0 seats".
+ *
+ * `floorChoice`/`floorMode` (V104 flat) and `floorNumber`/`totalFloors` (V102 typed
+ * child) are the SAME logical fact in two storage locations; a listing authored
+ * through one path reads null on the other. Both are carried deliberately — see
+ * `resolveFloorFact` in `@/lib/commercialSummary`.
+ */
+export interface DiscoverCommercialFactsDto {
+  floorChoice?: string | null;
+  floorMode?: string | null;
+  floorNumber?: number | null;
+  totalFloors?: number | null;
+  hubType?: string | null;
+  officeSeats?: number | null;
+  occupancyStatus?: string | null;
+  warehouseClearHeightFt?: number | null;
+  warehouseLoadingBays?: number | null;
+  roadFrontageFt?: number | null;
+  commercialZoning?: string | null;
+}
+
 export interface DiscoverListingItem {
   id: string;
   listingNumber: string | null;
@@ -40,6 +71,21 @@ export interface DiscoverListingItem {
   sellerType: string | null;
   listingPurpose: string | null;
   status: string;
+  /**
+   * Issue #2431 — `SHOP` or `OFFICE` for a commercial listing whose subtype has been
+   * declared; absent otherwise.
+   *
+   * Absence carries real information and must NOT be rendered as a subtype: it means
+   * either "not a commercial listing" or "a legacy `property_type='commercial'` row
+   * whose shop-vs-office distinction was never recorded". Callers separate the two
+   * using `propertyType`, which is NOT NULL. Never guess between them.
+   */
+  commercialSubtype?: string | null;
+  /**
+   * Issue #2433 — the allowlisted Commercial facts a result card may summarise, or
+   * absent when the listing carries none (which includes every non-Commercial one).
+   */
+  commercialFacts?: DiscoverCommercialFactsDto | null;
 }
 
 export interface DiscoverListingsPage {

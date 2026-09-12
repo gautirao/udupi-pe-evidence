@@ -71,5 +71,24 @@ public record AreaListingCard(
         Double latitude,
         Double longitude,
         Long monthlyRentRupees,
-        String monthlyRentBand
+        String monthlyRentBand,
+        /**
+         * #2433 — {@code SHOP} or {@code OFFICE} for a commercial listing whose subtype has
+         * been declared; {@code null} otherwise. Canonicalised to UPPER case, mirroring
+         * {@code DiscoverListingsService}'s shared funnel so the two Discover read paths
+         * cannot emit different spellings of the same subtype for the same listing.
+         *
+         * <p><b>Why this endpoint carries it at all.</b> This is the read-model counterpart of
+         * #2509, which covers only the QUERY direction (this endpoint cannot be FILTERED by
+         * subtype). Without this field the result card could not DISPLAY one either, and that
+         * is not merely an omission: {@code buildCommercialSummary}'s legacy-generic branch
+         * asserts a claim about the DATA — "this row's Shop-vs-Office was never recorded" —
+         * so a card reached through this endpoint would state that falsely for a listing whose
+         * subtype IS recorded, indistinguishable from a genuine V102 legacy row. Honest
+         * absence requires that absence actually mean absence.
+         *
+         * <p>APPEND ONLY. Every field above keeps its position; the frontend and the
+         * OpenSearch/Postgres parity tests read this record positionally.
+         */
+        String commercialSubtype
 ) {}
