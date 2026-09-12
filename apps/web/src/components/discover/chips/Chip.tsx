@@ -19,6 +19,28 @@ export interface ChipSpec {
   testId?: string;
   dismissTestId?: string;
   emphasis?: boolean;
+  /**
+   * Issue #2459 AC6 rule 5 (owner ruling, PR #2502) — let the label WRAP inside the same
+   * `max-w-[160px]` box instead of truncating it.
+   *
+   * OPT-IN, and defaulting to `false` on purpose: every existing caller keeps today's truncating
+   * behaviour byte for byte, so this prop has no blast radius on them. That default is the whole
+   * reason the ruling permitted touching this shared primitive at all — the alternative on the
+   * table was forking it into `ActiveContextChips.tsx`, which would be a second declaration of the
+   * roving focus, the four-key keydown handler, the styling and the dual `aria-label` that this
+   * file's header says it was extracted to avoid.
+   *
+   * Width is UNCHANGED. The trade this buys is vertical: a label that needs more than one line
+   * gets more than one line (2 lines = 36px, 3 = 54px at this font size) rather than losing its
+   * tail to an ellipsis. Nothing about the text itself changes — no abbreviation, no rounding, no
+   * rewritten numbers. The rejected alternatives all bought width or brevity by altering what the
+   * buyer reads; this one alters only how many lines it occupies.
+   *
+   * `break-words` is required, not decorative: the multi-meaning labels contain a single
+   * unbroken 24-character token (`built-up/warehouse/plot:`) that has no space to wrap at, and
+   * would otherwise overflow the box rather than wrap inside it.
+   */
+  wrap?: boolean;
 }
 
 export interface RovingChipProps extends ChipSpec {
@@ -36,6 +58,7 @@ export function Chip({
   testId,
   dismissTestId,
   emphasis,
+  wrap = false,
   tabIndex,
   onFocus,
   onArrow,
@@ -72,7 +95,9 @@ export function Chip({
       data-testid={testId}
     >
       {icon}
-      <span className="max-w-[160px] truncate">{label}</span>
+      <span className={cn('max-w-[160px]', wrap ? 'whitespace-normal break-words' : 'truncate')}>
+        {label}
+      </span>
       <Button
         variant="ghost"
         size="icon"

@@ -1,0 +1,326 @@
+[
+  {
+    "case": "single apartment",
+    "viewport": {
+      "w": 1366,
+      "h": 768
+    },
+    "url": "http://localhost:5174/discover?city=bangalore&journey=agri-first&type=apartment&areaMinSqft=800&areaMaxSqft=1200",
+    "found": true,
+    "ariaLabel": "Active filter: Built-up area: 800 – 1,200 sq ft",
+    "renderedText": "Built-up area: 800 – 1,200 sq ft",
+    "textContent": "Built-up area: 800 – 1,200 sq ft",
+    "chip": {
+      "w": 219.25,
+      "h": 24
+    },
+    "span": {
+      "clientW": 160,
+      "scrollW": 177,
+      "clientH": 16,
+      "scrollH": 16,
+      "rectW": 160,
+      "rectH": 16
+    },
+    "css": {
+      "whiteSpace": "nowrap",
+      "textOverflow": "ellipsis",
+      "overflowX": "hidden",
+      "overflowWrap": "normal",
+      "maxWidth": "160px",
+      "lineHeight": "16px"
+    },
+    "clippedHorizontally": true,
+    "clippedVertically": false,
+    "viewportOverflow": false,
+    "innerWidth": 1366
+  },
+  {
+    "case": "single warehouse",
+    "viewport": {
+      "w": 1366,
+      "h": 768
+    },
+    "url": "http://localhost:5174/discover?city=bangalore&journey=agri-first&type=warehouse&areaMaxSqft=5000",
+    "found": true,
+    "ariaLabel": "Active filter: Warehouse area: Up to 5,000 sq ft",
+    "renderedText": "Warehouse area: Up to 5,000 sq ft",
+    "textContent": "Warehouse area: Up to 5,000 sq ft",
+    "chip": {
+      "w": 219.25,
+      "h": 24
+    },
+    "span": {
+      "clientW": 160,
+      "scrollW": 196,
+      "clientH": 16,
+      "scrollH": 16,
+      "rectW": 160,
+      "rectH": 16
+    },
+    "css": {
+      "whiteSpace": "nowrap",
+      "textOverflow": "ellipsis",
+      "overflowX": "hidden",
+      "overflowWrap": "normal",
+      "maxWidth": "160px",
+      "lineHeight": "16px"
+    },
+    "clippedHorizontally": true,
+    "clippedVertically": false,
+    "viewportOverflow": false,
+    "innerWidth": 1366
+  },
+  {
+    "case": "mixed residential",
+    "viewport": {
+      "w": 1366,
+      "h": 768
+    },
+    "url": "http://localhost:5174/discover?city=bangalore&journey=agri-first&type=apartment%2Cresidential_plot&areaMinSqft=800&areaMaxSqft=1200",
+    "found": true,
+    "ariaLabel": "Active filter: Residential built-up/plot: 800 – 1,200 sq ft — Compares built-up area for homes; plot size for plots.",
+    "renderedText": "Residential built-up/plot: 800 – 1,200 sq ft — Compares built-up area for homes; plot size for plots.",
+    "textContent": "Residential built-up/plot: 800 – 1,200 sq ft — Compares built-up area for homes; plot size for plots.",
+    "chip": {
+      "w": 219.25,
+      "h": 24
+    },
+    "span": {
+      "clientW": 160,
+      "scrollW": 563,
+      "clientH": 16,
+      "scrollH": 16,
+      "rectW": 160,
+      "rectH": 16
+    },
+    "css": {
+      "whiteSpace": "nowrap",
+      "textOverflow": "ellipsis",
+      "overflowX": "hidden",
+      "overflowWrap": "normal",
+      "maxWidth": "160px",
+      "lineHeight": "16px"
+    },
+    "clippedHorizontally": true,
+    "clippedVertically": false,
+    "viewportOverflow": false,
+    "innerWidth": 1366
+  },
+  {
+    "case": "mixed commercial",
+    "viewport": {
+      "w": 1366,
+      "h": 768
+    },
+    "url": "http://localhost:5174/discover?city=bangalore&journey=agri-first&type=warehouse%2Ccommercial_land&areaMaxSqft=5000",
+    "found": true,
+    "ariaLabel": "Active filter: Commercial warehouse/plot: Up to 5,000 sq ft — Compares warehouse area for warehouses and godowns; plot size for commercial land.",
+    "renderedText": "Commercial warehouse/plot: Up to 5,000 sq ft — Compares warehouse area for warehouses and godowns; plot size for commercial land.",
+    "textContent": "Commercial warehouse/plot: Up to 5,000 sq ft — Compares warehouse area for warehouses and godowns; plot size for commercial land.",
+    "chip": {
+      "w": 219.25,
+      "h": 24
+    },
+    "span": {
+      "clientW": 160,
+      "scrollW": 781,
+      "clientH": 16,
+      "scrollH": 16,
+      "rectW": 160,
+      "rectH": 16
+    },
+    "css": {
+      "whiteSpace": "nowrap",
+      "textOverflow": "ellipsis",
+      "overflowX": "hidden",
+      "overflowWrap": "normal",
+      "maxWidth": "160px",
+      "lineHeight": "16px"
+    },
+    "clippedHorizontally": true,
+    "clippedVertically": false,
+    "viewportOverflow": false,
+    "innerWidth": 1366
+  },
+  {
+    "case": "mixed two-family (homes + warehouses)",
+    "viewport": {
+      "w": 1366,
+      "h": 768
+    },
+    "url": "http://localhost:5174/discover?city=bangalore&journey=agri-first&type=apartment%2Cwarehouse&areaMinSqft=800&areaMaxSqft=1200",
+    "found": true,
+    "ariaLabel": "Active filter: Mixed built-up/warehouse: 800 – 1,200 sq ft — Compares built-up area for homes; warehouse area for warehouses and godowns.",
+    "renderedText": "Mixed built-up/warehouse: 800 – 1,200 sq ft — Compares built-up area for homes; warehouse area for warehouses and godowns.",
+    "textContent": "Mixed built-up/warehouse: 800 – 1,200 sq ft — Compares built-up area for homes; warehouse area for warehouses and godowns.",
+    "chip": {
+      "w": 219.25,
+      "h": 24
+    },
+    "span": {
+      "clientW": 160,
+      "scrollW": 738,
+      "clientH": 16,
+      "scrollH": 16,
+      "rectW": 160,
+      "rectH": 16
+    },
+    "css": {
+      "whiteSpace": "nowrap",
+      "textOverflow": "ellipsis",
+      "overflowX": "hidden",
+      "overflowWrap": "normal",
+      "maxWidth": "160px",
+      "lineHeight": "16px"
+    },
+    "clippedHorizontally": true,
+    "clippedVertically": false,
+    "viewportOverflow": false,
+    "innerWidth": 1366
+  },
+  {
+    "case": "commercial broad",
+    "viewport": {
+      "w": 1366,
+      "h": 768
+    },
+    "url": "http://localhost:5174/discover?city=bangalore&journey=agri-first&type=commercial%2Ccommercial_building%2Cwarehouse%2Ccommercial_land&areaMinSqft=500",
+    "found": true,
+    "ariaLabel": "Active filter: Commercial built-up/warehouse/plot: 500+ sq ft — Compares built-up area for shops, offices and commercial buildings; warehouse area for warehouses and godowns; plot size for commercial land.",
+    "renderedText": "Commercial built-up/warehouse/plot: 500+ sq ft — Compares built-up area for shops, offices and commercial buildings; warehouse area for warehouses and godowns; plot size for commercial land.",
+    "textContent": "Commercial built-up/warehouse/plot: 500+ sq ft — Compares built-up area for shops, offices and commercial buildings; warehouse area for warehouses and godowns; plot size for commercial land.",
+    "chip": {
+      "w": 219.25,
+      "h": 24
+    },
+    "span": {
+      "clientW": 160,
+      "scrollW": 1126,
+      "clientH": 16,
+      "scrollH": 16,
+      "rectW": 160,
+      "rectH": 16
+    },
+    "css": {
+      "whiteSpace": "nowrap",
+      "textOverflow": "ellipsis",
+      "overflowX": "hidden",
+      "overflowWrap": "normal",
+      "maxWidth": "160px",
+      "lineHeight": "16px"
+    },
+    "clippedHorizontally": true,
+    "clippedVertically": false,
+    "viewportOverflow": false,
+    "innerWidth": 1366
+  },
+  {
+    "case": "broadest",
+    "viewport": {
+      "w": 1366,
+      "h": 768
+    },
+    "url": "http://localhost:5174/discover?city=bangalore&journey=agri-first&areaMinSqft=500",
+    "found": true,
+    "ariaLabel": "Active filter: Mixed built-up/warehouse/plot: 500+ sq ft — Compares built-up area for homes; plot size for plots; built-up area for shops, offices and commercial buildings; warehouse area for warehouses and godowns; plot size for commercial land; plot size for agricultural land.",
+    "renderedText": "Mixed built-up/warehouse/plot: 500+ sq ft — Compares built-up area for homes; plot size for plots; built-up area for shops, offices and commercial buildings; warehouse area for warehouses and godowns; plot size for commercial land; plot size for agricultural land.",
+    "textContent": "Mixed built-up/warehouse/plot: 500+ sq ft — Compares built-up area for homes; plot size for plots; built-up area for shops, offices and commercial buildings; warehouse area for warehouses and godowns; plot size for commercial land; plot size for agricultural land.",
+    "chip": {
+      "w": 219.25,
+      "h": 24
+    },
+    "span": {
+      "clientW": 160,
+      "scrollW": 1499,
+      "clientH": 16,
+      "scrollH": 16,
+      "rectW": 160,
+      "rectH": 16
+    },
+    "css": {
+      "whiteSpace": "nowrap",
+      "textOverflow": "ellipsis",
+      "overflowX": "hidden",
+      "overflowWrap": "normal",
+      "maxWidth": "160px",
+      "lineHeight": "16px"
+    },
+    "clippedHorizontally": true,
+    "clippedVertically": false,
+    "viewportOverflow": false,
+    "innerWidth": 1366
+  },
+  {
+    "case": "broadest six-digit range",
+    "viewport": {
+      "w": 1366,
+      "h": 768
+    },
+    "url": "http://localhost:5174/discover?city=bangalore&journey=agri-first&areaMinSqft=100000&areaMaxSqft=200000",
+    "found": true,
+    "ariaLabel": "Active filter: Mixed built-up/warehouse/plot: 1,00,000 – 2,00,000 sq ft — Compares built-up area for homes; plot size for plots; built-up area for shops, offices and commercial buildings; warehouse area for warehouses and godowns; plot size for commercial land; plot size for agricultural land.",
+    "renderedText": "Mixed built-up/warehouse/plot: 1,00,000 – 2,00,000 sq ft — Compares built-up area for homes; plot size for plots; built-up area for shops, offices and commercial buildings; warehouse area for warehouses and godowns; plot size for commercial land; plot size for agricultural land.",
+    "textContent": "Mixed built-up/warehouse/plot: 1,00,000 – 2,00,000 sq ft — Compares built-up area for homes; plot size for plots; built-up area for shops, offices and commercial buildings; warehouse area for warehouses and godowns; plot size for commercial land; plot size for agricultural land.",
+    "chip": {
+      "w": 219.25,
+      "h": 24
+    },
+    "span": {
+      "clientW": 160,
+      "scrollW": 1591,
+      "clientH": 16,
+      "scrollH": 16,
+      "rectW": 160,
+      "rectH": 16
+    },
+    "css": {
+      "whiteSpace": "nowrap",
+      "textOverflow": "ellipsis",
+      "overflowX": "hidden",
+      "overflowWrap": "normal",
+      "maxWidth": "160px",
+      "lineHeight": "16px"
+    },
+    "clippedHorizontally": true,
+    "clippedVertically": false,
+    "viewportOverflow": false,
+    "innerWidth": 1366
+  },
+  {
+    "case": "warehouse six-digit range",
+    "viewport": {
+      "w": 1366,
+      "h": 768
+    },
+    "url": "http://localhost:5174/discover?city=bangalore&journey=agri-first&type=warehouse&areaMinSqft=10000&areaMaxSqft=20000",
+    "found": true,
+    "ariaLabel": "Active filter: Warehouse area: 10,000 – 20,000 sq ft",
+    "renderedText": "Warehouse area: 10,000 – 20,000 sq ft",
+    "textContent": "Warehouse area: 10,000 – 20,000 sq ft",
+    "chip": {
+      "w": 219.25,
+      "h": 24
+    },
+    "span": {
+      "clientW": 160,
+      "scrollW": 226,
+      "clientH": 16,
+      "scrollH": 16,
+      "rectW": 160,
+      "rectH": 16
+    },
+    "css": {
+      "whiteSpace": "nowrap",
+      "textOverflow": "ellipsis",
+      "overflowX": "hidden",
+      "overflowWrap": "normal",
+      "maxWidth": "160px",
+      "lineHeight": "16px"
+    },
+    "clippedHorizontally": true,
+    "clippedVertically": false,
+    "viewportOverflow": false,
+    "innerWidth": 1366
+  }
+]

@@ -169,7 +169,16 @@ docker run -d \
 
 echo "==> Waiting for Postgres to become ready..."
 ATTEMPTS=0
-MAX_ATTEMPTS=30
+# Default deliberately UNCHANGED at 30. This script is shared by every lane and by CI, so an
+# unset variable behaves exactly as before -- blast radius zero for every other consumer.
+# Raising the default instead would silently lengthen everyone's failure path, including the
+# cases where a container really is broken and the 30s deadline is doing useful work.
+#
+# Override per-run (e.g. PG_READY_MAX_ATTEMPTS=120) when the image runs under emulation:
+# postgis/postgis:15-3.4 is linux/amd64, so on an arm64 host Postgres can become ready AFTER
+# this deadline fires. That is a too-short deadline, not a broken container -- the failure log
+# shows the server accepting connections seconds after the error is printed.
+MAX_ATTEMPTS="${PG_READY_MAX_ATTEMPTS:-30}"
 until PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" -d "${DB_NAME}" \
       -c "SELECT 1" -q 2>/dev/null; do
   ATTEMPTS=$(( ATTEMPTS + 1 ))

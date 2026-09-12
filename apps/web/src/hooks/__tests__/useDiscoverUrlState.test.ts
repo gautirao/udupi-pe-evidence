@@ -231,7 +231,14 @@ describe('useDiscoverUrlState — setFiltersCommitted', () => {
 
     act(() => {
       result.current[1].setFiltersCommitted({
-        propertyTypes: ['land'],
+        // Issue #2459 AC2 — was `['land']`. The property type here was incidental to what this
+        // test asserts (that a committed filter set round-trips through the URL), but `land`
+        // resolves to PLOT, and a plot-only selection now deliberately serialises NO `beds=`.
+        // Switched to a dwelling type so the round-trip assertion still exercises a bedroom
+        // value rather than accidentally asserting the absence of one. The plot-only behaviour
+        // this uncovered is pinned directly in
+        // features/discover/filters/__tests__/bedroomSuppressionPlotOnly.test.ts.
+        propertyTypes: ['apartment'],
         bedrooms: [2, 3],
         priceMin: 1000000,
         priceMax: 5000000,
@@ -240,7 +247,7 @@ describe('useDiscoverUrlState — setFiltersCommitted', () => {
     });
 
     const { filters } = result.current[0];
-    expect(filters.propertyTypes).toEqual(['land']);
+    expect(filters.propertyTypes).toEqual(['apartment']);
     expect(filters.bedrooms).toEqual([2, 3]);
     expect(filters.priceMin).toBe(1000000);
     expect(filters.priceMax).toBe(5000000);

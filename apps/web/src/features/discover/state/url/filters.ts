@@ -7,6 +7,11 @@
  */
 import { useCallback } from 'react';
 import { isDiscoverCommercialSubtype } from '@/lib/listing-constants';
+import { shouldSubmitBedrooms } from '@/features/discover/filters/bedroomApplicability';
+import {
+  isInvertedAreaRange,
+  readAreaBoundsFromParams,
+} from '@/features/discover/filters/areaBounds';
 import type { UrlDomainCtx, UrlDomainModule } from './_shared';
 import type {
   DiscoverUrlActions,
@@ -63,7 +68,19 @@ function serializeFilters(
   } else {
     params.delete('subtype');
   }
-  if (filters.bedrooms && filters.bedrooms.length > 0) {
+  // Issue #2459 AC2 — a plot-only OR commercial-only selection serialises NO bedroom predicate
+  // (BOTH sentences of the rule; see bedroomApplicability.ts), so such a URL cannot be reloaded,
+  // bookmarked or shared carrying an invisible `beds=` constraint that whatever reads it next
+  // would silently reapply. This is the URL half of the same suppression
+  // `buildDiscoverSearchParams` applies to the wire; both read the one predicate in
+  // features/discover/filters/bedroomApplicability.ts.
+  //
+  // The `else` branch DELETES, so the suppression is not merely "stop writing": an existing
+  // `beds=` inherited from a dwelling selection is actively removed the moment the buyer narrows
+  // to plots or to Commercial. `filters.bedrooms` itself is untouched — the value lives on in
+  // PropertyFilters state, and is re-serialised unchanged as soon as a dwelling type is selected
+  // again.
+  if (filters.bedrooms && filters.bedrooms.length > 0 && shouldSubmitBedrooms(filters)) {
     params.set('beds', filters.bedrooms.join(','));
   } else {
     params.delete('beds');
@@ -77,6 +94,26 @@ function serializeFilters(
     params.set('priceMax', String(filters.priceMax));
   } else {
     params.delete('priceMax');
+  }
+  // Issue #2459 — contextual area bounds (SQ FT). Written and cleared in the SAME pass as every
+  // other filter key, so "Clear all" (which calls serializeFilters with {}) drops them without
+  // needing to know they exist.
+  //
+  // An INVERTED pair is not written at all, and the `else` branches actively DELETE, so a URL
+  // carrying one cannot be produced — and therefore cannot be shared, bookmarked or reloaded into
+  // a 400. The control already clamps (`applyAreaBound`) so it cannot author one; this closes the
+  // same hole at the write boundary for any other caller of `setFiltersCommitted`, symmetrically
+  // with the read guard in `readAreaBoundsFromParams`.
+  const areaBounds = isInvertedAreaRange(filters) ? {} : filters;
+  if (areaBounds.areaMinSqft != null) {
+    params.set('areaMinSqft', String(areaBounds.areaMinSqft));
+  } else {
+    params.delete('areaMinSqft');
+  }
+  if (areaBounds.areaMaxSqft != null) {
+    params.set('areaMaxSqft', String(areaBounds.areaMaxSqft));
+  } else {
+    params.delete('areaMaxSqft');
   }
   if (filters.sellerTypes && filters.sellerTypes.length > 0) {
     params.set('seller', filters.sellerTypes.join(','));
@@ -212,6 +249,26 @@ export function useFiltersUrlDomain(
     bedrooms: parseCommaInts(urlParams.get('beds')),
     priceMin: urlParams.get('priceMin') ? Number(urlParams.get('priceMin')) : undefined,
     priceMax: urlParams.get('priceMax') ? Number(urlParams.get('priceMax')) : undefined,
+    // Issue #2459 — guarded far harder than the agri numerics, and read as a PAIR. These reach the
+    // server as a validated range, so a link that cannot be honoured must degrade to "no filter"
+    // here rather than becoming a 400 the buyer has no way to interpret. THREE ways a link fails,
+    // all of them ending at the same honest degrade (see features/discover/filters/areaBounds.ts):
+    //
+    //   - junk (`abc`)          — was already handled;
+    //   - a decimal (`1200.5`)  — was NOT. It parsed clean as a finite non-negative number and was
+    //     forwarded verbatim, then 400'd on Spring's `Integer` REQUEST BINDING before
+    //     `AreaBoundsParam.validate()` could run, so the server's designed message never fired.
+    //     That made the sentence two lines below FALSE for every decimal;
+    //   - an inverted pair (`min=2000&max=1000`) — was NOT. Each value is individually valid, so
+    //     nothing that looked at one key at a time could ever see it; the server 400s it BY DESIGN
+    //     (`AreaBoundsParam:48-51`) where "no results" is the honest answer.
+    //
+    // ...so a hand-edited link degrades to no area filter rather than to a bad request — which is
+    // now a description of the code rather than a claim it contradicted.
+    ...readAreaBoundsFromParams(
+      urlParams.get('areaMinSqft'),
+      urlParams.get('areaMaxSqft'),
+    ),
     sellerTypes,
     boardFilters: (() => {
       // Read all repeated `board` params (?board=CBSE&board=ICSE).

@@ -9,6 +9,7 @@ import { PropertyTypeFilter } from './filters/PropertyTypeFilter';
 import { BedroomFilter } from './filters/BedroomFilter';
 import { SellerTypeFilter } from './filters/SellerTypeFilter';
 import { PriceRangeFilter } from './filters/PriceRangeFilter';
+import { AreaRangeFilter } from './filters/AreaRangeFilter';
 import { ListingStatusFilter } from './filters/ListingStatusFilter';
 import { DateRangeFilter } from './filters/DateRangeFilter';
 
@@ -39,13 +40,20 @@ export function MapFilters({
 }: MapFiltersProps) {
   const navigate = useNavigate();
 
-  // 14-condition predicate — kept centralized so the polygon check is never silently lost.
+  // Kept centralized so the polygon check is never silently lost — and so that EVERY control
+  // rendered below is represented here. A control whose filter is missing from this predicate is
+  // still applied to the results but leaves the Clear affordance hidden: an active filter the
+  // buyer can neither see nor undo. #2459 added the contextual area bounds; they are registered
+  // here for that reason. Adding a control below without adding it here is the bug this comment
+  // exists to prevent.
   const hasActiveFilters =
     (filters.propertyTypes && filters.propertyTypes.length > 0) ||
     (filters.bedrooms && filters.bedrooms.length > 0) ||
     (filters.sellerTypes && filters.sellerTypes.length > 0) ||
     filters.priceMin !== undefined ||
     filters.priceMax !== undefined ||
+    filters.areaMinSqft !== undefined ||
+    filters.areaMaxSqft !== undefined ||
     filters.dateFrom !== undefined ||
     filters.dateTo !== undefined ||
     !!filters.backOnMarket ||
@@ -183,6 +191,7 @@ export function MapFilters({
         <BedroomFilter filters={filters} onFiltersChange={onFiltersChange} />
         <SellerTypeFilter filters={filters} onFiltersChange={onFiltersChange} />
         <PriceRangeFilter filters={filters} onFiltersChange={onFiltersChange} />
+        <AreaRangeFilter filters={filters} onFiltersChange={onFiltersChange} />
         <ListingStatusFilter filters={filters} onFiltersChange={onFiltersChange} />
         <DateRangeFilter filters={filters} onFiltersChange={onFiltersChange} />
       </CardContent>

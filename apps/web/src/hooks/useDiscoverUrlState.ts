@@ -116,6 +116,15 @@ export interface DiscoverUrlFilters {
   bedrooms?: number[];
   priceMin?: number;
   priceMax?: number;
+  /**
+   * Issue #2459 — contextual area bounds in SQUARE FEET, serialised as `areaMinSqft`/`areaMaxSqft`.
+   * URL-backed (not local-only) so AC7 holds: reload and browser back/forward restore both the
+   * visible control and the predicate the server actually ran. Non-numeric and negative values are
+   * dropped on parse, so a hand-edited link degrades to "no area filter" rather than to a bad
+   * request.
+   */
+  areaMinSqft?: number;
+  areaMaxSqft?: number;
   /** Comma-separated seller types in the URL; replaces the former singular sellerType. */
   sellerTypes?: string[];
   /**

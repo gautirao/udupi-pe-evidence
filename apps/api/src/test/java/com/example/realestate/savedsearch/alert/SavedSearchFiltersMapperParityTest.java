@@ -52,7 +52,15 @@ class SavedSearchFiltersMapperParityTest {
     static final Set<String> NON_FILTER_COMPONENTS = Set.of(
             "city", "areaKeys", "polygon", "viewportScope",
             "dateFrom", "dateTo", "schoolLat", "schoolLon", "schoolRadiusKm", "bbox", "q",
-            "excludePropertyTypes");
+            "excludePropertyTypes",
+            // #2459 contextual area bounds. Classified NON-ALERTABLE for now — deliberately, and
+            // narrowly: #2459 delivers the PREDICATE and the two query params, not a saved-search
+            // representation. Making them alertable means adding them to
+            // SavedSearchFilterAllowlist.SUPPORTED_KEYS and to the mapper, which is #2019's domain
+            // and needs its own ruling (a size range saved today would silently mean "any size"
+            // if the meaning mapping later changed for a stored type). Until that ruling, a saved
+            // search does not carry an area bound, which is honest rather than approximate.
+            "areaMinSqft", "areaMaxSqft");
 
     private static final UUID USER = UUID.fromString("aaaaaaaa-0000-0000-0000-0000000000a1");
 
@@ -89,11 +97,11 @@ class SavedSearchFiltersMapperParityTest {
     }
 
     @Test
-    @DisplayName("SUPPORTED_KEYS and NON_FILTER_COMPONENTS partition Filters' 23 components exactly")
+    @DisplayName("SUPPORTED_KEYS and NON_FILTER_COMPONENTS partition Filters' 25 components exactly")
     void keySetsPartitionFiltersComponents() {
         Set<String> components = Arrays.stream(Filters.class.getRecordComponents())
                 .map(RecordComponent::getName).collect(Collectors.toSet());
-        assertThat(components).hasSize(23);
+        assertThat(components).hasSize(25);
         assertThat(SUPPORTED_KEYS).doesNotContainAnyElementsOf(NON_FILTER_COMPONENTS);
         Set<String> union = new java.util.HashSet<>(SUPPORTED_KEYS);
         union.addAll(NON_FILTER_COMPONENTS);

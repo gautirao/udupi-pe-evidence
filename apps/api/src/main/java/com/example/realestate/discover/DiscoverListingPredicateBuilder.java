@@ -56,8 +56,61 @@ public class DiscoverListingPredicateBuilder {
             String listingPurpose,         // 'sale' or 'rent'; null = no filter
             List<String> excludePropertyTypes,  // property types to exclude via NOT IN; null = no exclusion
             List<String> areaKeys,         // restrict to specific area_keys (group members); null = no filter; MUST NOT be empty
-            Bbox viewportScope              // #2015 "Search this area" candidate result scope; boundary-inclusive rectangle filter, nullable
+            Bbox viewportScope,             // #2015 "Search this area" candidate result scope; boundary-inclusive rectangle filter, nullable
+            /**
+             * Inclusive lower bound on the row's PRIMARY area in square feet (#2459), or
+             * {@code null} for "Any size".
+             *
+             * <p>"Primary area" is resolved PER ROW by {@link DiscoverPrimaryArea} — built-up for
+             * dwellings/shops/offices/buildings, warehouse area for warehouses, plot size for land.
+             * A row whose primary area cannot be resolved, or whose value/unit is absent or
+             * unrecognised, matches NEITHER bound: it stays visible under "Any size" and is honestly
+             * excluded the moment a bound is active (AC5). Nothing is ever coalesced across the
+             * land/built columns to keep such a row in the result.
+             */
+            Integer areaMinSqft,
+            /** Inclusive upper bound on the row's PRIMARY area in square feet (#2459), or
+             *  {@code null}. Same per-row resolution and same UNRESOLVED handling as
+             *  {@link #areaMinSqft()}. */
+            Integer areaMaxSqft
     ) {
+
+        /**
+         * Backward-compatible constructor for the pre-#2459 23-component shape (no area bounds).
+         * Defaults both to {@code null} — "Any size" — which is byte-for-byte the behaviour every
+         * one of these call sites had before the fields existed.
+         */
+        @SuppressWarnings("java:S107") // mirrors the pre-#2459 record shape verbatim
+        public Filters(
+                String city,
+                List<String> propertyTypes,
+                List<String> commercialSubtypes,
+                Long priceMinPaise,
+                Long priceMaxPaise,
+                String dateFrom,
+                String dateTo,
+                List<Integer> bedrooms,
+                List<String> sellerTypes,
+                Boolean backOnMarket,
+                Boolean newToMarket,
+                Boolean reraRegistered,
+                Boolean readyToMove,
+                List<List<Double>> polygon,
+                Double schoolLat,
+                Double schoolLon,
+                Double schoolRadiusKm,
+                Bbox bbox,
+                String q,
+                String listingPurpose,
+                List<String> excludePropertyTypes,
+                List<String> areaKeys,
+                Bbox viewportScope
+        ) {
+            this(city, propertyTypes, commercialSubtypes, priceMinPaise, priceMaxPaise, dateFrom,
+                    dateTo, bedrooms, sellerTypes, backOnMarket, newToMarket, reraRegistered,
+                    readyToMove, polygon, schoolLat, schoolLon, schoolRadiusKm, bbox, q,
+                    listingPurpose, excludePropertyTypes, areaKeys, viewportScope, null, null);
+        }
 
         /**
          * Backward-compatible constructor for the pre-#2431 22-component shape (no
@@ -471,6 +524,31 @@ public class DiscoverListingPredicateBuilder {
               .append(")");
             for (String t : f.excludePropertyTypes()) {
                 params.add(t.toLowerCase());
+            }
+        }
+
+        // area bounds (#2459) — ONE contextual square-foot filter whose MEANING follows the row.
+        //
+        // WHY IT LIVES HERE AND NOWHERE ELSE. This class's javadoc declares it the shared WHERE
+        // fragment for listings, counts and markers; adding the area predicate anywhere else — or
+        // post-filtering a fetched page in Java — would give listings one membership and
+        // counts/markers another. That divergence is silent (no error, just different numbers), and
+        // it is precisely what AC4 forbids, so the predicate is expressed in SQL and inherited.
+        //
+        // DiscoverPrimaryArea.primaryAreaSqftSql binds nothing — it embeds only this codebase's own
+        // constants — so appending it cannot disturb the positional parameter order built above.
+        // Rows with no resolvable primary area evaluate to NULL and therefore match NEITHER bound:
+        // AC5 ("visible under Any size, excluded when bounded") is SQL three-valued logic, not a
+        // separate rule that could be forgotten on one of the two engines.
+        if (f.areaMinSqft() != null || f.areaMaxSqft() != null) {
+            String areaSqft = DiscoverPrimaryArea.primaryAreaSqftSql("pl");
+            if (f.areaMinSqft() != null) {
+                sb.append(" AND ").append(areaSqft).append(" >= ?");
+                params.add(f.areaMinSqft());
+            }
+            if (f.areaMaxSqft() != null) {
+                sb.append(" AND ").append(areaSqft).append(" <= ?");
+                params.add(f.areaMaxSqft());
             }
         }
 

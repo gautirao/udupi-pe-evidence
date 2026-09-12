@@ -84,7 +84,9 @@ public class DiscoverListingsController {
             @RequestParam(name = "areaKeys", required = false) List<String> areaKeys,
             @RequestParam(name = "nodeKey", required = false) String nodeKey,
             @RequestParam(name = "viewportScope", required = false) String viewportScopeParam,
-            @RequestParam(name = "scopeFingerprint", required = false) String scopeFingerprint
+            @RequestParam(name = "scopeFingerprint", required = false) String scopeFingerprint,
+            @RequestParam(name = "areaMinSqft", required = false) Integer areaMinSqft,
+            @RequestParam(name = "areaMaxSqft", required = false) Integer areaMaxSqft
     ) {
         log.debug("GET /api/discover/listings city={} page={} size={}", city, page, size);
 
@@ -110,6 +112,10 @@ public class DiscoverListingsController {
         // than silently returning an empty page. Same validator as the markers endpoint, so the
         // two cannot accept different vocabularies.
         CommercialSubtypeParam.validate(commercialSubtypes);
+
+        // areaMinSqft/areaMaxSqft (#2459): identical validation to the markers endpoint, so the
+        // two cannot accept different ranges and disagree about what is on the map.
+        AreaBoundsParam.validate(areaMinSqft, areaMaxSqft);
 
         // Parse and validate polygon
         List<List<Double>> polygon = parsePolygon(polygonJson);
@@ -187,7 +193,9 @@ public class DiscoverListingsController {
                 listingPurpose,
                 effectiveAreaKeys,
                 viewportScope,
-                scopeFingerprint
+                scopeFingerprint,
+                areaMinSqft,
+                areaMaxSqft
         );
 
         return ResponseEntity.ok()

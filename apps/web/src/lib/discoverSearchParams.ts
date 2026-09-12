@@ -1,4 +1,5 @@
 import { PropertyFilters } from '@/hooks/usePropertyListings';
+import { shouldSubmitBedrooms } from '@/features/discover/filters/bedroomApplicability';
 
 export interface DiscoverSearchParamsOptions {
   city: string;
@@ -86,6 +87,18 @@ export function buildDiscoverSearchParams({
     params.set('priceMax', String(filters.priceMax));
   }
 
+  // Issue #2459 — contextual square-foot bounds. Emitted here, in the ONE builder both the
+  // listings hook and the markers hook call, for the same reason `commercialSubtypes` is: the two
+  // endpoints share a single server-side validator (`AreaBoundsParam.validate`) and so cannot
+  // accept different ranges. Emitting at either hook instead would let cards and markers drift.
+  // Always SQUARE FEET — the per-row column the server compares against varies, the unit does not.
+  if (filters.areaMinSqft != null) {
+    params.set('areaMinSqft', String(filters.areaMinSqft));
+  }
+  if (filters.areaMaxSqft != null) {
+    params.set('areaMaxSqft', String(filters.areaMaxSqft));
+  }
+
   // dateFrom/dateTo: PropertyFilters may hold Date objects — always serialise to ISO string
   if (filters.dateFrom != null) {
     params.set(
@@ -100,7 +113,12 @@ export function buildDiscoverSearchParams({
     );
   }
 
-  if (filters.bedrooms != null) {
+  // Issue #2459 AC2 — a plot-only OR commercial-only selection submits NO bedroom predicate
+  // (BOTH sentences of the rule; see bedroomApplicability.ts). Suppressed here, in the ONE builder
+  // both `/api/discover/listings` and `/api/discover/markers` call, so cards and map markers
+  // cannot disagree about whether a bedroom constraint was applied. Nothing is mutated:
+  // `filters.bedrooms` is left intact for the moment the buyer returns to a dwelling type.
+  if (filters.bedrooms != null && shouldSubmitBedrooms(filters)) {
     filters.bedrooms.forEach((b) => params.append('bedrooms', String(b)));
   }
 

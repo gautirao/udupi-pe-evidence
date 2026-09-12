@@ -489,7 +489,9 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                 q.polygon() != null || q.viewportScope() != null
                         ? CityAreaListingsService.AREA_FIRST_EXCLUDED_PROPERTY_TYPES : null,
                 q.areaKeys(),
-                q.viewportScope()
+                q.viewportScope(),
+                q.areaMinSqft(),
+                q.areaMaxSqft()
         );
     }
 }

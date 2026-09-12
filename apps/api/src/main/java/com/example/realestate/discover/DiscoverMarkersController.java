@@ -81,7 +81,9 @@ public class DiscoverMarkersController {
             @RequestParam(name = "areaKeys", required = false) List<String> areaKeys,
             @RequestParam(name = "nodeKey", required = false) String nodeKey,
             @RequestParam(name = "viewportScope", required = false) String viewportScopeParam,
-            @RequestParam(name = "scopeFingerprint", required = false) String scopeFingerprint
+            @RequestParam(name = "scopeFingerprint", required = false) String scopeFingerprint,
+            @RequestParam(name = "areaMinSqft", required = false) Integer areaMinSqft,
+            @RequestParam(name = "areaMaxSqft", required = false) Integer areaMaxSqft
     ) {
         log.debug("GET /api/discover/markers city={}", city);
 
@@ -99,6 +101,10 @@ public class DiscoverMarkersController {
         // validator, so markers and cards cannot accept different vocabularies and therefore
         // cannot disagree on membership for a request either one accepts.
         CommercialSubtypeParam.validate(commercialSubtypes);
+
+        // areaMinSqft/areaMaxSqft (#2459): identical validation to the listings endpoint, for the
+        // same reason — a range one endpoint accepts and the other rejects is a divergence.
+        AreaBoundsParam.validate(areaMinSqft, areaMaxSqft);
 
         // Parse and validate polygon
         List<List<Double>> polygon = parsePolygon(polygonJson);
@@ -170,7 +176,9 @@ public class DiscoverMarkersController {
                 (listingPurpose != null && !listingPurpose.isBlank()) ? listingPurpose.trim() : null,
                 excludeList,
                 effectiveAreaKeys,
-                viewportScope
+                viewportScope,
+                areaMinSqft,
+                areaMaxSqft
         );
 
         DiscoverMarkersResponse response = service.getMarkers(filters);

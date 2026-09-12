@@ -4,6 +4,8 @@ import com.example.realestate.listing.core.Listing;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
+import java.util.Locale;
 
 /**
  * Utility class for normalizing land area units and computing price per cent.
@@ -172,69 +174,122 @@ public final class AreaNormalizer {
         return pricePerCent.longValue();
     }
 
+    // ── Sq-ft projection, shared by the Discover area filter (#2459) ────────────────────────────
+
     /**
-     * Internal enum for recognized area units.
+     * The scale every sq-ft value in this class is produced at ({@code 6}, HALF_UP). Exposed so the
+     * SQL that reproduces {@link #toSqft} row-side can {@code ROUND(..., 6)} to the SAME scale
+     * instead of hardcoding a second copy of the number.
      */
-    private enum AreaUnit {
-        SQM, SQFT, CENT, GUNTA, ACRE
+    public static final int SQFT_SCALE = AREA_SCALE;
+
+    /**
+     * Converts an arbitrary (value, unit) area pair to square feet, or returns {@code null} when the
+     * pair carries no usable area.
+     *
+     * <p><b>This is the ONE conversion layer</b> (#2459 Step 2). It is deliberately NOT a second
+     * normaliser: it produces exactly {@code normalize(value, unit).areaSqft()} for every input —
+     * {@code AreaNormalizerSqftTest} asserts that equivalence for every unit — and every other
+     * consumer (the Discover primary-area predicate on Postgres, its OpenSearch mirror) derives from
+     * {@link AreaUnit#sqftFactor()} declared here rather than restating a factor.
+     *
+     * <p>{@code null} is returned — never a fabricated or coerced value — when:
+     * <ul>
+     *   <li>{@code value} is {@code null} or {@code <= 0};</li>
+     *   <li>{@code unit} is {@code null}, blank, or NOT in the recognised vocabulary. An
+     *       unrecognised unit (e.g. {@code SQ_YD}, which the write vocabulary accepts but for which
+     *       no conversion path exists) is UNRESOLVED, never defaulted to sq ft — silently treating
+     *       an unknown unit as sq ft would misreport a plot by orders of magnitude.</li>
+     * </ul>
+     *
+     * @param value the raw area value in {@code unit}
+     * @param unit  the raw unit string (case/spacing insensitive, see {@link AreaUnit})
+     * @return the area in sq ft at scale {@link #SQFT_SCALE}, or {@code null} when unresolvable
+     */
+    public static BigDecimal toSqft(BigDecimal value, String unit) {
+        if (value == null || value.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+        AreaUnit parsed = parseUnit(unit);
+        if (parsed == null) {
+            return null;
+        }
+        return value.multiply(parsed.sqftFactor()).setScale(SQFT_SCALE, RoundingMode.HALF_UP);
     }
 
     /**
-     * Parses a unit string into AreaUnit, handling common aliases and variations.
+     * Recognised area units and their exact sq-ft factors.
+     *
+     * <p>Public because it is the single declaration the Discover area predicate (#2459) generates
+     * both its SQL {@code CASE} and its OpenSearch {@code terms}/{@code range} mirror from. Adding a
+     * unit here teaches every engine about it at once; that is the whole point of not letting a
+     * second conversion table exist.
+     */
+    public enum AreaUnit {
+        SQM(SQFT_PER_SQM, "sqm", "sq m", "sqmtr", "sqmtrs",
+                "square meter", "square meters", "square metre", "square metres", "m2"),
+        SQFT(BigDecimal.ONE, "sqft", "sq ft", "sft", "square foot", "square feet", "ft2"),
+        CENT(SQFT_PER_CENT, "cent", "cents"),
+        GUNTA(SQFT_PER_GUNTA, "gunta", "guntas"),
+        ACRE(SQFT_PER_ACRE, "acre", "acres");
+
+        private final BigDecimal sqftFactor;
+        private final List<String> aliases;
+
+        AreaUnit(BigDecimal sqftFactor, String... aliases) {
+            this.sqftFactor = sqftFactor;
+            this.aliases = List.of(aliases);
+        }
+
+        /** Exact multiplier from this unit to square feet. */
+        public BigDecimal sqftFactor() {
+            return sqftFactor;
+        }
+
+        /**
+         * The accepted spellings, already in the canonical comparison form this class compares
+         * against: lower-case, trimmed, internal whitespace collapsed to a single space.
+         */
+        public List<String> aliases() {
+            return aliases;
+        }
+    }
+
+    /**
+     * Canonicalises a raw unit string for alias comparison: lower-case, internal whitespace
+     * collapsed to one space, then trimmed.
+     *
+     * <p>Exposed so SQL that reproduces {@link #toSqft} row-side can apply the IDENTICAL
+     * transformation ({@code btrim(regexp_replace(lower(col), '\s+', ' ', 'g'))}) rather than
+     * approximating it.
+     *
+     * @param unitString the raw unit string
+     * @return the canonical form, or {@code null} when {@code unitString} is {@code null}
+     */
+    public static String canonicalUnitToken(String unitString) {
+        if (unitString == null) {
+            return null;
+        }
+        return unitString.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
+    }
+
+    /**
+     * Parses a unit string into {@link AreaUnit}, handling common aliases and variations.
      * Normalizes case and spacing.
      *
      * @param unitString the raw unit string
      * @return AreaUnit or null if unrecognized
      */
-    private static AreaUnit parseUnit(String unitString) {
+    public static AreaUnit parseUnit(String unitString) {
         if (unitString == null) {
             return null;
         }
-
-        // Normalize: lowercase, trim, collapse spaces
-        String normalized = unitString.toLowerCase().trim().replaceAll("\\s+", " ");
-
-        // SQM aliases
-        if (normalized.equals("sqm") ||
-            normalized.equals("sq m") ||
-            normalized.equals("sqmtr") ||
-            normalized.equals("sqmtrs") ||
-            normalized.equals("square meter") ||
-            normalized.equals("square meters") ||
-            normalized.equals("square metre") ||
-            normalized.equals("square metres") ||
-            normalized.equals("m2")) {
-            return AreaUnit.SQM;
+        String normalized = canonicalUnitToken(unitString);
+        for (AreaUnit unit : AreaUnit.values()) {
+            if (unit.aliases().contains(normalized)) {
+                return unit;
+            }
         }
-
-        // SQFT aliases
-        if (normalized.equals("sqft") ||
-            normalized.equals("sq ft") ||
-            normalized.equals("sft") ||
-            normalized.equals("square foot") ||
-            normalized.equals("square feet") ||
-            normalized.equals("ft2")) {
-            return AreaUnit.SQFT;
-        }
-
-        // CENT aliases
-        if (normalized.equals("cent") ||
-            normalized.equals("cents")) {
-            return AreaUnit.CENT;
-        }
-
-        // GUNTA aliases (1 gunta = 1089 sqft)
-        if (normalized.equals("gunta") ||
-            normalized.equals("guntas")) {
-            return AreaUnit.GUNTA;
-        }
-
-        // ACRE aliases (1 acre = 43560 sqft)
-        if (normalized.equals("acre") ||
-            normalized.equals("acres")) {
-            return AreaUnit.ACRE;
-        }
-
         return null;
     }
 }

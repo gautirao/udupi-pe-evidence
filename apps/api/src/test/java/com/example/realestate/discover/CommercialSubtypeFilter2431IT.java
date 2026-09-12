@@ -951,14 +951,14 @@ class CommercialSubtypeFilter2431IT {
         return listingsController.getListings(
                 CITY_SLUG, propertyTypes, commercialSubtypes, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null,
-                0, 50, false, null, null, null, null, null);
+                0, 50, false, null, null, null, null, null, null, null);
     }
 
     private DiscoverMarkersResponse rawMarkers(List<String> commercialSubtypes) {
         ResponseEntity<DiscoverMarkersResponse> response = markersController.getMarkers(
                 CITY_SLUG, null, commercialSubtypes, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null);
+                null, null, null, null);
         DiscoverMarkersResponse body = response.getBody();
         assertThat(body).isNotNull();
         return body;

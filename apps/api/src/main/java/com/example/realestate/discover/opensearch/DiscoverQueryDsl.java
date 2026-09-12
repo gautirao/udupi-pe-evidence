@@ -3,7 +3,11 @@ package com.example.realestate.discover.opensearch;
 import com.example.realestate.discover.DiscoverFilterNormalizer;
 import com.example.realestate.discover.DiscoverListingPredicateBuilder;
 import com.example.realestate.discover.DiscoverListingsQuery;
+import com.example.realestate.discover.DiscoverPrimaryArea;
+import com.example.realestate.listing.area.AreaNormalizer;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -54,6 +58,10 @@ public final class DiscoverQueryDsl {
     );
 
     private static final int MARKERS_FETCH_LIMIT = 1001; // CAP + 1 sentinel
+
+    /** Scale used when expressing a sq-ft bound in a row's own unit (#2459). Fine enough that the
+     *  division is EXACT wherever a stored decimal could land on the boundary. */
+    private static final int BOUND_CONVERSION_SCALE = 20;
 
     private DiscoverQueryDsl() {
         // static factory only
@@ -152,7 +160,9 @@ public final class DiscoverQueryDsl {
                 // BEFORE turning that flag on.
                 null,      // excludePropertyTypes — OS responses don't carry this input param
                 q.areaKeys(),
-                q.viewportScope()
+                q.viewportScope(),
+                q.areaMinSqft(),
+                q.areaMaxSqft()
         );
     }
 
@@ -348,6 +358,12 @@ public final class DiscoverQueryDsl {
             filter.add(Map.of("bool", Map.of("must_not", List.of(terms("property_type", excludeLower)))));
         }
 
+        // area bounds (#2459) — the OpenSearch twin of the Postgres primary-area predicate in
+        // DiscoverListingPredicateBuilder#build.
+        if (f.areaMinSqft() != null || f.areaMaxSqft() != null) {
+            filter.add(buildPrimaryAreaClause(f.areaMinSqft(), f.areaMaxSqft()));
+        }
+
         // areaKeys — restrict to specific area_key values (group-scoped browse).
         // null = absent param → no clause (backward-compatible with existing journeys).
         // Empty list is rejected at the controller layer (400), so this only fires for
@@ -422,6 +438,95 @@ public final class DiscoverQueryDsl {
                 "should", List.of(branch1, branch2),
                 "minimum_should_match", 1
         ));
+    }
+
+    /**
+     * The contextual square-foot filter (#2459), mirrored from the Postgres predicate.
+     *
+     * <h2>Why a should-union of (property types × unit) branches</h2>
+     *
+     * <p>The DSL has no {@code CASE} and no arithmetic on a stored field, so the Postgres
+     * expression — "pick this row's primary-area column pair, convert its value to sq ft, compare"
+     * — is inverted: the BOUNDS are converted into each unit, and each
+     * {@code (column pair, unit)} combination becomes one {@code should} branch. A document matches
+     * iff exactly one branch can apply to it, because a row has one {@code property_type} and one
+     * unit value.
+     *
+     * <p>Both sides enumerate {@link DiscoverPrimaryArea#columnGroups()} and
+     * {@link AreaNormalizer.AreaUnit}, so neither the property-type grouping nor the unit
+     * vocabulary nor the conversion factors can drift between engines — which is #2459's R2 hold
+     * condition. In particular <b>the UNRESOLVED decision is identical by construction</b>: a
+     * property type named by no group appears in no branch here and hits {@code ELSE NULL} there; a
+     * missing or unrecognised unit matches no branch here and no {@code WHEN} arm there; a
+     * non-positive value is excluded by the {@code gt: 0} clause here and by
+     * {@code value <= 0 THEN NULL} there.
+     *
+     * <h2>Two residual, deliberate differences</h2>
+     *
+     * <ol>
+     *   <li><b>Bound conversion vs value conversion.</b> Postgres compares
+     *       {@code ROUND(value * factor, 6)} against the bound; this compares {@code value} against
+     *       {@code bound / factor} computed at scale 20. Where the quotient terminates within that
+     *       scale the two agree exactly, including at an inclusive boundary; where it does not, no
+     *       finite stored decimal can land exactly on the boundary anyway, so the difference is not
+     *       reachable by a real row.</li>
+     *   <li><b>Unit casing.</b> Postgres lower-cases and whitespace-collapses the unit column
+     *       row-side; a {@code terms} clause cannot. The aliases emitted here are the canonical
+     *       lower-case spellings, which is what every stored row carries (measured: built units are
+     *       {@code sqft}×1866 / {@code sqm}×1, land units {@code acre}×86 / {@code cent}×30 /
+     *       {@code sqft}×29 — no other spelling and no other casing exists). A hypothetical
+     *       {@code "SqFt"} row would be UNRESOLVED here and resolved there. This is stated rather
+     *       than hidden; closing it needs an index-side normalizer on the unit fields, which is a
+     *       mapping change and out of scope for a predicate-only step.</li>
+     * </ol>
+     */
+    public static Map<String, Object> buildPrimaryAreaClause(Integer areaMinSqft, Integer areaMaxSqft) {
+        List<Object> should = new ArrayList<>();
+
+        for (DiscoverPrimaryArea.ColumnGroup group : DiscoverPrimaryArea.columnGroups()) {
+            for (AreaNormalizer.AreaUnit unit : AreaNormalizer.AreaUnit.values()) {
+                List<Object> branchFilter = new ArrayList<>();
+                branchFilter.add(terms("property_type", group.propertyTypes()));
+                branchFilter.add(terms(group.unitColumn(), unit.aliases()));
+                // value > 0 — the DSL half of AreaNormalizer#toSqft's "non-positive is no area".
+                // Emitted unconditionally, so a caller asking for `areaMinSqft=0` does not silently
+                // admit zero/negative-area rows the Postgres side rejects.
+                branchFilter.add(range(group.areaColumn(), Map.of("gt", 0)));
+
+                Map<String, Object> bounds = new LinkedHashMap<>();
+                if (areaMinSqft != null) {
+                    bounds.put("gte", inUnit(areaMinSqft, unit));
+                }
+                if (areaMaxSqft != null) {
+                    bounds.put("lte", inUnit(areaMaxSqft, unit));
+                }
+                branchFilter.add(range(group.areaColumn(), bounds));
+
+                Map<String, Object> branchBool = new LinkedHashMap<>();
+                branchBool.put("filter", branchFilter);
+                Map<String, Object> branch = new LinkedHashMap<>();
+                branch.put("bool", branchBool);
+                should.add(branch);
+            }
+        }
+
+        Map<String, Object> unionBool = new LinkedHashMap<>();
+        unionBool.put("should", should);
+        unionBool.put("minimum_should_match", 1);
+        Map<String, Object> clause = new LinkedHashMap<>();
+        clause.put("bool", unionBool);
+        return clause;
+    }
+
+    /** A sq-ft bound expressed in {@code unit}, at a scale fine enough that the division is exact
+     *  wherever a stored value could land on the boundary. */
+    private static BigDecimal inUnit(int boundSqft, AreaNormalizer.AreaUnit unit) {
+        BigDecimal converted = BigDecimal.valueOf(boundSqft)
+                .divide(unit.sqftFactor(), BOUND_CONVERSION_SCALE, RoundingMode.HALF_UP)
+                .stripTrailingZeros();
+        // stripTrailingZeros turns an integral result into scientific notation (100 -> 1E+2),
+        // which is numerically identical but renders unrecognisably in a query body and in a log.
+        return converted.scale() < 0 ? converted.setScale(0) : converted;
     }
 
     private static Map<String, Object> buildAggregations() {

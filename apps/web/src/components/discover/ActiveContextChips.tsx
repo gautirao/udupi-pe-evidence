@@ -5,6 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { formatPrice } from '@/lib/formatters';
 import { getPropertyTypeLabel } from '@/lib/propertyTypeConfig';
 import type { DiscoverUrlFilters } from '@/hooks/useDiscoverUrlState';
+import { resolvePrimaryAreaControlLabel } from '@/features/discover/filters/primaryAreaLabels';
 import { Chip, type ChipSpec } from './chips/Chip';
 
 // Issue #1817 — full chip taxonomy per design §3. Scope objects (city, macro-region,
@@ -70,6 +71,11 @@ interface ActiveContextChipsCallbacks {
   onClearSeller?: () => void;
   /** Clear both dateFrom and dateTo atomically. */
   onClearDateRange?: () => void;
+  /**
+   * Issue #2459 — clear both area bounds atomically. Optional so existing callers/tests need no
+   * change; the chip still renders when it is absent, matching how `onClearSeller` behaves.
+   */
+  onClearArea?: () => void;
   /** Clear a single boolean filter by its DiscoverUrlFilters key. */
   onClearBoolean?: (key: keyof Pick<DiscoverUrlFilters, 'backOnMarket' | 'newToMarket' | 'reraRegistered' | 'readyToMove'>) => void;
   /**
@@ -112,6 +118,7 @@ export function ActiveContextChips({
   onClearCategory,
   onClearSeller,
   onClearDateRange,
+  onClearArea,
   onClearBoolean,
   onClearAll,
 }: ActiveContextChipsProps) {
@@ -126,6 +133,7 @@ export function ActiveContextChips({
   const hasType = filters.propertyTypes != null && filters.propertyTypes.length > 0;
   const hasBhk = filters.bedrooms != null && filters.bedrooms.length > 0;
   const hasPrice = filters.priceMin != null || filters.priceMax != null;
+  const hasArea = filters.areaMinSqft != null || filters.areaMaxSqft != null;
 
   // ── Seller ───────────────────────────────────────────────────────────────
   const sellerLabel = useMemo(() => {
@@ -188,6 +196,62 @@ export function ActiveContextChips({
     }
   }
 
+  // ── Contextual area (#2459 AC6) ──────────────────────────────────────────
+  // The prefix and, for a broad/mixed selection, the disclosure both come from the shared
+  // primary-area vocabulary — the SAME module the control reads. No label text is spelled out
+  // here: a second declaration of this taxonomy is precisely the drift #2526 was filed to stop.
+  //
+  // The disclosure is carried INSIDE the chip label because the meaning is not optional garnish:
+  // "800 – 1,200 sq ft" over a mixed selection is comparing built-up area on some rows and plot
+  // size on others, and a chip that does not say so is dishonest (D1). Putting it in the label
+  // also puts it in Chip's `aria-label` accessible name for free.
+  //
+  // THIS CHIP WRAPS; NOTHING HERE IS ELLIPSED. It is the only caller passing `wrap` to Chip
+  // (see that prop's doc), so the whole label — meaning, bound and disclosure — is on screen at
+  // 390px, over two or three lines at the SAME 160px width every other chip gets.
+  //
+  // ⚠️ SUPERSEDED RATIONALE, kept because it is the sentence a future reader would otherwise
+  // reuse. This block previously read "ORDER IS LOAD-BEARING … whatever trails the visible width
+  // is ellipsed away", and ordered the label around surviving `truncate`. That was true while the
+  // chip truncated. It is now false: the owner ruled (PR #2502) that the honest fix for AC6 rule 5
+  // is a TALLER chip rather than a shorter label, so there is no cut-off for the meaning to have
+  // to get in front of. The three alternatives that did shorten the label — a wider chip, a
+  // narrower vocabulary, and rendering `1,200` as `1.2k` — were all withdrawn; the last of those
+  // would have re-introduced on the OUTPUT side exactly the numeric rewriting this PR removed from
+  // the INPUT side.
+  //
+  // The meaning still leads, but for a weaker and more ordinary reason: it is the scannable part
+  // of the sentence, and the disclosure reads as its trailing clause. That is a copy preference
+  // now, not a visibility guarantee — so a reordering here is a copy decision, no longer a defect.
+  //
+  // `shortLabel` is RETAINED, and deliberately so. It was introduced because spelling every
+  // quantity out in full made a Commercial-broad and the broadest selection both read
+  // "Built-up area / warehous" once truncated. Wrapping removes that particular collision, which
+  // would make shortening look unnecessary — but the ruling was explicit that today's wording
+  // stands and no vocabulary changes in this PR. Widening it back out is a copy change for its
+  // own PR, with its own measurement; it is not a tidy-up to fold in here.
+  let areaLabel = '';
+  if (hasArea) {
+    const { disclosure, shortLabel } = resolvePrimaryAreaControlLabel({
+      propertyTypes: filters.propertyTypes,
+      commercialSubtypes: filters.commercialSubtypes,
+    });
+
+    const { areaMinSqft: min, areaMaxSqft: max } = filters;
+    const fmt = (n: number) => n.toLocaleString('en-IN');
+    let range: string;
+    if (min != null && max != null) {
+      range = `${fmt(min)} – ${fmt(max)} sq ft`;
+    } else if (min != null) {
+      range = `${fmt(min)}+ sq ft`;
+    } else {
+      range = `Up to ${fmt(max!)} sq ft`;
+    }
+
+    areaLabel =
+      disclosure != null ? `${shortLabel}: ${range} — ${disclosure}` : `${shortLabel}: ${range}`;
+  }
+
   // ── Build ordered filter-chip specs: booleans → value filters (design §5) ─
   const filterChips: ChipSpec[] = [];
 
@@ -241,6 +305,21 @@ export function ActiveContextChips({
       label: priceLabel,
       onClear: onClearPrice,
       testId: 'chip-price',
+    });
+  }
+
+  if (hasArea) {
+    filterChips.push({
+      id: 'area',
+      icon: <span className="text-[10px] font-bold leading-none">SQ</span>,
+      label: areaLabel,
+      onClear: () => onClearArea?.(),
+      testId: 'chip-area',
+      dismissTestId: 'chip-area-dismiss',
+      // The ONLY caller that opts in. Every other chip on this bar keeps Chip's default
+      // truncating behaviour, which is what keeps this a zero-blast-radius change to the
+      // shared primitive rather than a restyle of the whole bar.
+      wrap: true,
     });
   }
 

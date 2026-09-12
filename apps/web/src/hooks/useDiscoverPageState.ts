@@ -206,6 +206,11 @@ export function useDiscoverPageState({
       bedrooms: f.bedrooms,
       priceMin: f.priceMin,
       priceMax: f.priceMax,
+      // Issue #2459 — seeded from the URL on cold-load, so a shared ?areaMinSqft=1200 link opens
+      // with the bound already applied rather than showing unfiltered results next to a URL that
+      // claims otherwise. Half of AC7; the other half is the write-back in handleFiltersChange.
+      areaMinSqft: f.areaMinSqft,
+      areaMaxSqft: f.areaMaxSqft,
       sellerTypes: f.sellerTypes,
       // Issue #1132 — boardFilters/categoryFilters must be seeded from URL on cold-load
       // so ActiveContextChips renders board/category chips when the page opens with
@@ -416,6 +421,11 @@ export function useDiscoverPageState({
         bedrooms: next.bedrooms,
         priceMin: next.priceMin,
         priceMax: next.priceMax,
+        // Issue #2459 — write-back half of AC7. Without it the bound would live only in React
+        // state: a reload or a Back step would silently drop the predicate while the results
+        // stayed on screen.
+        areaMinSqft: next.areaMinSqft,
+        areaMaxSqft: next.areaMaxSqft,
         sellerTypes: next.sellerTypes,
         boardFilters: next.boardFilters,
         categoryFilters: next.categoryFilters,

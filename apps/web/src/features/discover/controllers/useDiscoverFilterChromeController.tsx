@@ -130,6 +130,14 @@ export function useDiscoverFilterChromeController({
         onClearDateRange={() =>
           handleFiltersChange({ ...filters, dateFrom: undefined, dateTo: undefined })
         }
+        // Issue #2459 (AC6) — both bounds drop together, exactly as onClearPrice drops its pair.
+        // They MUST go to `undefined`, never 0: a 0 lower bound looks identical to "no bound" in
+        // the UI but is a different server request — it excludes every row whose primary area is
+        // unresolvable, which AC5 requires stay visible under "Any size". This matches what
+        // AreaRangeFilter's own commit() already writes on clear.
+        onClearArea={() =>
+          handleFiltersChange({ ...filters, areaMinSqft: undefined, areaMaxSqft: undefined })
+        }
         onClearBoolean={(key) =>
           handleFiltersChange({ ...filters, [key]: undefined })
         }

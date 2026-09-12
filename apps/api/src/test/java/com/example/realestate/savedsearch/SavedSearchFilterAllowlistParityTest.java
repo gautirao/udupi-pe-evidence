@@ -40,8 +40,9 @@ import org.junit.jupiter.api.Test;
 class SavedSearchFilterAllowlistParityTest {
 
     /**
-     * Verbatim snapshot of {@code DiscoverListingPredicateBuilder.Filters}'s 23 record component
-     * names as of #2019 Slice A. Hard-coded (not derived) so the shape assertion detects drift.
+     * Verbatim snapshot of {@code DiscoverListingPredicateBuilder.Filters}'s 25 record component
+     * names (23 as of #2019 Slice A, plus the two #2459 area bounds). Hard-coded (not derived) so
+     * the shape assertion detects drift.
      */
     private static final Set<String> EXPECTED_FILTERS_COMPONENTS =
             Set.of(
@@ -49,7 +50,7 @@ class SavedSearchFilterAllowlistParityTest {
                     "dateFrom", "dateTo", "bedrooms", "sellerTypes", "backOnMarket", "newToMarket",
                     "reraRegistered", "readyToMove", "polygon", "schoolLat", "schoolLon",
                     "schoolRadiusKm", "bbox", "q", "listingPurpose", "excludePropertyTypes",
-                    "areaKeys", "viewportScope");
+                    "areaKeys", "viewportScope", "areaMinSqft", "areaMaxSqft");
 
     /**
      * Discover fields that are deliberately NOT persistable as saved-search filters: the city
@@ -61,7 +62,14 @@ class SavedSearchFilterAllowlistParityTest {
                     "city", "dateFrom", "dateTo", "polygon", "schoolLat", "schoolLon",
                     "schoolRadiusKm", "bbox", "q", "areaKeys", "viewportScope",
                     // #2019 Slice B ruling: no #2016 restore-link URL representation → not alertable
-                    "excludePropertyTypes");
+                    "excludePropertyTypes",
+                    // #2459 contextual area bounds. Classified NON-ALERTABLE for now — deliberately,
+                    // and narrowly: #2459 delivers the PREDICATE and the two query params, not a
+                    // saved-search representation. Making them alertable means adding them to
+                    // SUPPORTED_KEYS and to SavedSearchFiltersMapper, which is #2019's domain and
+                    // needs its own ruling. Until then a saved search carries no area bound, which
+                    // is honest rather than approximate.
+                    "areaMinSqft", "areaMaxSqft");
 
     private static Set<String> actualFiltersComponentNames() {
         RecordComponent[] components = DiscoverListingPredicateBuilder.Filters.class.getRecordComponents();
@@ -71,7 +79,7 @@ class SavedSearchFilterAllowlistParityTest {
     // ── 1. Filters record binding ───────────────────────────────────────────────────
 
     @Test
-    @DisplayName("Filters record shape matches the pinned 23-component snapshot")
+    @DisplayName("Filters record shape matches the pinned 25-component snapshot")
     void filtersRecordComponents_matchExpectedSnapshot() {
         assertThat(actualFiltersComponentNames())
                 .as("Filters record shape changed — update EXPECTED_FILTERS_COMPONENTS AND decide whether "
@@ -188,6 +196,10 @@ class SavedSearchFilterAllowlistParityTest {
                 " SALE ",
                 List.of("VILLA"),
                 List.of("IN|KA|Bangalore|Indiranagar"),
-                new DiscoverListingPredicateBuilder.Bbox(12.8, 77.4, 13.1, 77.7));
+                new DiscoverListingPredicateBuilder.Bbox(12.8, 77.4, 13.1, 77.7),
+                // #2459: populated, so "normalize() leaves them byte-for-byte alone" is proved
+                // against real values rather than against two nulls.
+                800,
+                2400);
     }
 }

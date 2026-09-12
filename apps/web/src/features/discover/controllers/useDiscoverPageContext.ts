@@ -103,6 +103,11 @@ export function useDiscoverPageContext() {
       bedrooms: f.bedrooms,
       priceMin: f.priceMin,
       priceMax: f.priceMax,
+      // Issue #2459 — carried so the group-results query runs the SAME area predicate the URL
+      // expresses. Omitting it here would give group results a different membership from the
+      // cards on a deep link that carries an area bound.
+      areaMinSqft: f.areaMinSqft,
+      areaMaxSqft: f.areaMaxSqft,
       sellerTypes: f.sellerTypes,
       boardFilters: f.boardFilters,
       categoryFilters: f.categoryFilters,
@@ -121,6 +126,8 @@ export function useDiscoverPageContext() {
     nav.filters.bedrooms,
     nav.filters.priceMin,
     nav.filters.priceMax,
+    nav.filters.areaMinSqft,
+    nav.filters.areaMaxSqft,
     nav.filters.sellerTypes,
     nav.filters.boardFilters,
     nav.filters.categoryFilters,

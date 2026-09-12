@@ -315,7 +315,12 @@ public final class DiscoverFilterNormalizer {
                 listingPurpose,
                 f.excludePropertyTypes(),
                 f.areaKeys(),
-                f.viewportScope());
+                f.viewportScope(),
+                // #2459 area bounds are NOT vocabulary-bearing — they are numeric, carry no
+                // allowlist and no casing, and are passed through byte-for-byte. They are absent
+                // from VOCABULARY_FILTER_KEYS for exactly that reason.
+                f.areaMinSqft(),
+                f.areaMaxSqft());
     }
 
     /**

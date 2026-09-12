@@ -151,6 +151,26 @@ export interface PropertyFilters {
   city?: string;
   priceMin?: number;
   priceMax?: number;
+  /**
+   * Issue #2459 — inclusive lower bound of the contextual area filter, in SQUARE FEET.
+   *
+   * "Contextual" because the column it is compared against is resolved PER ROW from that row's
+   * property shape (built-up area for dwellings/shops/offices, plot size for plots and land,
+   * warehouse area for warehouses) — see `features/discover/filters/primaryAreaLabels.ts` for the
+   * buyer-facing half of that same mapping, and `DiscoverPrimaryArea.java` for the predicate. The
+   * value carries NO meaning of its own; it is always square feet, whatever quantity the row's
+   * meaning designates.
+   *
+   * Rows with no resolvable primary area — and rows whose primary area is simply absent — stay
+   * visible while this is unset and are honestly EXCLUDED once it is set. That falls out of SQL
+   * three-valued logic server-side; there is no client-side rescue and none should be added.
+   *
+   * Sent to BOTH `/api/discover/listings` and `/api/discover/markers`, which share one validator,
+   * so cards and map markers cannot be answering different ranges.
+   */
+  areaMinSqft?: number;
+  /** Issue #2459 — inclusive upper bound of the contextual area filter, in SQUARE FEET. See {@link PropertyFilters.areaMinSqft}. */
+  areaMaxSqft?: number;
   dateFrom?: Date;
   dateTo?: Date;
   /** BHK values: 1, 2, 3, or 4 (meaning 4+) */
