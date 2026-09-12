@@ -324,7 +324,7 @@ class CityAreaListingsControllerTest {
 
     @Test
     void filter_bedrooms_passedToService() throws Exception {
-        when(service.getAreaListings(any(), any(), any(), any(), any(), eq(3), any(), any(), any(), any(), isNull(), anyBoolean()))
+        when(service.getAreaListings(any(), any(), any(), any(), any(), eq(List.of(3)), any(), any(), any(), any(), isNull(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
 
         mockMvc.perform(get("/api/discover/cities/udupi/listings")
@@ -332,16 +332,19 @@ class CityAreaListingsControllerTest {
                         .param("bedrooms", "3"))
                 .andExpect(status().isOk());
 
+        // #2533 — the REQUEST is unchanged (?bedrooms=3) and only the binding target widened, so a
+        // single value now arrives as a one-element list. This is AC2 evidence: every request shape
+        // the current frontend sends behaves exactly as before.
         verify(service).getAreaListings(
                 "udupi", List.of("IN|KA|Udupi|Malpe"), null,
-                null, null, 3, null, null, null, null, null, false);
+                null, null, List.of(3), null, null, null, null, null, false);
     }
 
     // ── Filter params: propertyType passed to service ────────────────────────
 
     @Test
     void filter_propertyType_passedToService() throws Exception {
-        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), eq("apartment"), any(), any(), any(), isNull(), anyBoolean()))
+        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), eq(List.of("apartment")), any(), any(), any(), isNull(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
 
         mockMvc.perform(get("/api/discover/cities/udupi/listings")
@@ -349,9 +352,11 @@ class CityAreaListingsControllerTest {
                         .param("propertyType", "apartment"))
                 .andExpect(status().isOk());
 
+        // #2533 AC2 — same single-value request, now a one-element list. The param NAME is
+        // unchanged, which is what keeps this request shape working untouched.
         verify(service).getAreaListings(
                 "udupi", List.of("IN|KA|Udupi|Malpe"), null,
-                null, null, null, "apartment", null, null, null, null, false);
+                null, null, null, List.of("apartment"), null, null, null, null, false);
     }
 
     // ── #2023 (BLOCKING review fix): readyToMove param forwarded to service ──
@@ -468,7 +473,7 @@ class CityAreaListingsControllerTest {
     @Test
     void q_combinedWithBedrooms_bothPassedToService() throws Exception {
         // q="villa" combined with bedrooms=2 → both forwarded correctly
-        when(service.getAreaListings(any(), any(), any(), any(), any(), eq(2), any(), eq("villa"), any(), any(), isNull(), anyBoolean()))
+        when(service.getAreaListings(any(), any(), any(), any(), any(), eq(List.of(2)), any(), eq("villa"), any(), any(), isNull(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
 
         mockMvc.perform(get("/api/discover/cities/udupi/listings")
@@ -477,9 +482,11 @@ class CityAreaListingsControllerTest {
                         .param("q", "villa"))
                 .andExpect(status().isOk());
 
+        // #2533 AC2 — bedrooms widened to a one-element list; q is untouched and still a scalar.
+        // Worth keeping as a combined arm: bedrooms and q sit in adjacent bind slots downstream.
         verify(service).getAreaListings(
                 "udupi", List.of("IN|KA|Udupi|Malpe"), null,
-                null, null, 2, null, "villa", null, null, null, false);
+                null, null, List.of(2), null, "villa", null, null, null, false);
     }
 
     // ── No filter params → service called with all nulls (existing happy path) ─
@@ -639,5 +646,78 @@ class CityAreaListingsControllerTest {
         verify(service).getAreaListings(
                 "udupi", null, null,
                 null, null, null, null, null, null, null, expected, false);
+    }
+
+    // ── #2533: multi-value narrowing, and the two behaviour deltas it introduces ─────
+    // These began as characterisation arms pinning the PRE-widening behaviour. That job is
+    // done and recorded on the issue; they now pin the POST-widening contract. Two of them
+    // document deliberate behaviour changes for request shapes the current frontend never
+    // sends — accepted under an explicit Decision Lock override, not overlooked.
+
+    @Test
+    void issue2533_repeatedPropertyTypeParam_reachesServiceAsUnion() throws Exception {
+        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), anyBoolean()))
+                .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
+
+        mockMvc.perform(get("/api/discover/cities/udupi/listings")
+                        .param("areaKeys", "IN|KA|Udupi|Malpe")
+                        .param("propertyType", "apartment", "villa"))
+                .andExpect(status().isOk());
+
+        // AC1. BEFORE: both values arrived as the single String "apartment,villa", which
+        // property_type's CHECK constraint means no row can equal — so a two-type selection was
+        // not expressible at all, which is why the frontend collapsed it to `undefined`.
+        // AFTER: the union reaches the service intact.
+        verify(service).getAreaListings(
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null,
+                null, null, null, List.of("apartment", "villa"), null, null, null, null, false);
+    }
+
+    @Test
+    void issue2533_commaJoinedPropertyTypeValue_becomesUnion_acceptedDelta() throws Exception {
+        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), anyBoolean()))
+                .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
+
+        mockMvc.perform(get("/api/discover/cities/udupi/listings")
+                        .param("areaKeys", "IN|KA|Udupi|Malpe")
+                        .param("propertyType", "apartment,villa"))
+                .andExpect(status().isOk());
+
+        // DELTA 1, deliberate and accepted. BEFORE: bound verbatim as "apartment,villa", a single
+        // literal no row can match — zero results. AFTER: Spring splits a comma-containing value
+        // for a List target, so it becomes the same union as the repeated form above.
+        //
+        // An earlier revision of the plan REQUIRED that this must not happen. That requirement was
+        // withdrawn: it is not achievable without a custom binder fighting the framework to
+        // preserve a meaningless zero-row answer, and nobody depends on "comma yields nothing" —
+        // it was an artefact of scalar binding, not a feature. Unreachable from the UI.
+        verify(service).getAreaListings(
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null,
+                null, null, null, List.of("apartment", "villa"), null, null, null, null, false);
+    }
+
+    @Test
+    void issue2533_repeatedBedroomsParam_noLongerSilentlyDropsSecondValue() throws Exception {
+        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), anyBoolean()))
+                .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
+
+        mockMvc.perform(get("/api/discover/cities/udupi/listings")
+                        .param("areaKeys", "IN|KA|Udupi|Malpe")
+                        .param("bedrooms", "2", "3"))
+                .andExpect(status().isOk());
+
+        // DELTA 2, and a latent production defect CLOSED rather than a silent improvement.
+        // BEFORE (measured, not assumed — a 400 was predicted and the measurement refuted it):
+        // this returned 200 and bound `2`, discarding the 3 with no error and no signal. That is
+        // the same silent-narrowing family as the defect this issue exists to fix — a two-value
+        // request answered with a one-value filter — and it was masked only because the frontend
+        // never sent the shape. It would have surfaced the moment that collapse was fixed.
+        // AFTER: both values are retained.
+        //
+        // Note the scalar paths were NOT symmetric: String comma-JOINED while Integer took
+        // FIRST-VALUE-WINS. A future reader will assume they behaved alike. They did not.
+        verify(service).getAreaListings(
+                "udupi", List.of("IN|KA|Udupi|Malpe"), null,
+                null, null, List.of(2, 3), null, null, null, null, null, false);
     }
 }

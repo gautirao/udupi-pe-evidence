@@ -127,8 +127,8 @@ public class CityAreaListingsService {
                                                     Integer rawLimit,
                                                     Long minPrice,
                                                     Long maxPrice,
-                                                    Integer bedrooms,
-                                                    String propertyType,
+                                                    List<Integer> bedrooms,
+                                                    List<String> propertyType,
                                                     String q,
                                                     String listingPurpose,
                                                     Boolean readyToMove,
@@ -143,6 +143,27 @@ public class CityAreaListingsService {
         // Normalise listingPurpose: blank/whitespace-only → treat as absent
         String normPurpose = (listingPurpose != null && !listingPurpose.isBlank())
                 ? listingPurpose.trim() : null;
+
+        // #2533 — canonicalise the multi-value filters through the SHARED normaliser rather than
+        // reimplementing its rules here. That buys dedupe, canonicalisation to the stored
+        // lower-case value, the exhaustive-selection collapse (selecting every known type is
+        // provably equivalent to no clause), and unsatisfiable PRESERVATION — an impossible
+        // request must match nothing, never silently widen to the whole city. Reimplementing any
+        // of those locally is how the casing divergence #1956 PR1 removed came about.
+        List<String> normPropertyTypes = DiscoverFilterNormalizer.normalizePropertyTypes(propertyType);
+        List<Integer> normBedrooms = DiscoverFilterNormalizer.normalizeBedrooms(bedrooms);
+
+        // #2533 AC7 — the SECOND and security-meaningful bound, applied to what actually reaches
+        // SQL. The controller's raw-shape guard alone is not sufficient: because unrecognised
+        // values are PRESERVED rather than dropped, a list that clears the raw guard can still
+        // carry more values into the query than the vocabulary could ever match. Capping after
+        // normalisation bounds the real quantity; capping only before it bounds the wrong one.
+        if (normPropertyTypes.size() > DiscoverFilterNormalizer.MAX_PROPERTY_TYPE_VALUES) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "too_many_property_type_values");
+        }
+        if (normBedrooms.size() > DiscoverFilterNormalizer.MAX_BEDROOM_VALUES) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "too_many_bedroom_values");
+        }
 
         // Validate city exists and is active — an inactive city must be indistinguishable
         // from an unknown one (#1935).
@@ -164,7 +185,7 @@ public class CityAreaListingsService {
         boolean areaKeysAbsent = areaKeys == null || areaKeys.isEmpty()
                 || areaKeys.stream().allMatch(String::isBlank);
         if (areaKeysAbsent) {
-            return getBboxOnlyListings(city, minPrice, maxPrice, bedrooms, propertyType,
+            return getBboxOnlyListings(city, minPrice, maxPrice, normBedrooms, normPropertyTypes,
                     normQ, normPurpose, readyToMove, bbox, isAuthenticated);
         }
 
@@ -176,48 +197,41 @@ public class CityAreaListingsService {
         // dropping areas that have zero LIVE listings matching the filter (they would not appear
         // in the response at all instead of returning listings: []). Placing them in ON means
         // only matching listings are joined; the area row itself always survives.
-        StringBuilder joinFilterClauses = new StringBuilder();
+        ClauseBuilder join = new ClauseBuilder();
         if (minPrice != null) {
-            joinFilterClauses.append("\n                        AND pl.price_paise >= ?");
+            join.add("\n                        AND pl.price_paise >= ?", minPrice);
         }
         if (maxPrice != null) {
-            joinFilterClauses.append("\n                        AND pl.price_paise <= ?");
+            join.add("\n                        AND pl.price_paise <= ?", maxPrice);
         }
-        if (bedrooms != null) {
-            if (bedrooms >= 4) {
-                joinFilterClauses.append("\n                        AND pl.bedrooms >= 4");
-            } else {
-                joinFilterClauses.append("\n                        AND pl.bedrooms = ?");
-            }
-        }
-        if (propertyType != null && !propertyType.isBlank()) {
-            joinFilterClauses.append("\n                        AND LOWER(pl.property_type) = LOWER(?)");
-        }
+        appendBedroomsClause(join, "\n                        ", normBedrooms);
+        appendPropertyTypeClause(join, "\n                        ", normPropertyTypes);
         // #2015 — anon "Search this area" viewport narrowing. Same predicate (pl.geog &&
         // ST_MakeEnvelope(...)::geography, bind order west/south/east/north) and GiST-indexed
         // idx_property_listings_geog column used by the authenticated viewportScope path in
         // DiscoverListingPredicateBuilder — reused here so both paths hit the identical index
         // rather than reinventing the predicate.
         if (bbox != null) {
-            joinFilterClauses.append("\n                        AND pl.geog && ST_MakeEnvelope(?, ?, ?, ?, 4326)::geography");
+            join.add("\n                        AND pl.geog && ST_MakeEnvelope(?, ?, ?, ?, 4326)::geography",
+                    bbox.west(), bbox.south(), bbox.east(), bbox.north());
         }
         // Area-first journey never shows agricultural_land — always excluded unconditionally.
-        joinFilterClauses.append("\n                        AND LOWER(pl.property_type) != LOWER('"
+        join.add("\n                        AND LOWER(pl.property_type) != LOWER('"
                 + AREA_FIRST_EXCLUDED_PROPERTY_TYPE + "')");
         if (normQ != null) {
             // FTS clause must be in the LEFT JOIN ON clause (not WHERE) so that areas with
             // zero keyword-matching listings still appear in the response with listings:[].
-            joinFilterClauses.append("\n                        AND pl.search_vector @@ websearch_to_tsquery('english', ?)");
+            join.add("\n                        AND pl.search_vector @@ websearch_to_tsquery('english', ?)", normQ);
         }
         if (normPurpose != null) {
-            joinFilterClauses.append("\n                        AND pl.listing_purpose = ?");
+            join.add("\n                        AND pl.listing_purpose = ?", normPurpose);
         }
         // readyToMove — #2023: same predicate DiscoverListingPredicateBuilder already applies
         // for markers/navigation-counts/authenticated Browse-all (possession_status = 'READY').
         // No bind param needed; 'READY' is a fixed literal, same pattern as the
         // agricultural_land exclusion above.
         if (Boolean.TRUE.equals(readyToMove)) {
-            joinFilterClauses.append("\n                        AND pl.possession_status = 'READY'");
+            join.add("\n                        AND pl.possession_status = 'READY'");
         }
 
         // Single query: join areas → cities to enforce city ownership, lateral join to listing_images
@@ -294,7 +308,7 @@ public class CityAreaListingsService {
                     JOIN cities c ON c.id = a.city_id
                     LEFT JOIN property_listings pl
                         ON  pl.area_key = a.area_key
-                        AND pl.status   = 'LIVE'""" + joinFilterClauses + """
+                        AND pl.status   = 'LIVE'""" + join.sql() + """
 
                     -- #2433: LEFT JOIN, and 1:0..1 on the projection table's listing_id PK, so
                     -- it can neither drop a row nor multiply one — the per-area ROW_NUMBER()
@@ -316,8 +330,14 @@ public class CityAreaListingsService {
         // Parameters: [filter params in ON-clause order], city, areaKey×N, limit
         // Filter params appear first because the LEFT JOIN ON clause precedes the WHERE clause
         // in the SQL text; JDBC binds ? positionally left-to-right.
-        Object[] params = buildParams(city.toLowerCase(), areaKeys, limit,
-                minPrice, maxPrice, bedrooms, propertyType, bbox, normQ, normPurpose);
+        // Bind order mirrors the SQL text left-to-right. The LEFT JOIN ON clause binds travel with
+        // their own fragments inside `join`, so only the WHERE tail is appended here: city, one
+        // bind per areaKey, then the outer rn limit.
+        List<Object> paramList = new ArrayList<>(join.params());
+        paramList.add(city.toLowerCase());
+        paramList.addAll(areaKeys);
+        paramList.add(limit);
+        Object[] params = paramList.toArray();
 
         // area_key → list of cards; LinkedHashMap preserves insertion (sorted) order per key
         Map<String, List<AreaListingCard>> cardsByArea = new LinkedHashMap<>();
@@ -366,57 +386,126 @@ public class CityAreaListingsService {
         return Math.min(raw, MAX_LIMIT);
     }
 
-    private static Object[] buildParams(String city, List<String> areaKeys, int limit,
-                                        Long minPrice, Long maxPrice,
-                                        Integer bedrooms, String propertyType,
-                                        DiscoverListingPredicateBuilder.Bbox bbox, String normQ,
-                                        String normPurpose) {
-        List<Object> params = new ArrayList<>();
-        // Parameter order mirrors the left-to-right ? placeholder order in the SQL:
-        //
-        //   LEFT JOIN ON clause params (in order appended to joinFilterClauses):
-        //     1. minPrice           (if non-null)
-        //     2. maxPrice           (if non-null)
-        //     3. bedrooms           (if non-null AND < 4; bedrooms >= 4 uses literal, no placeholder)
-        //     4. propertyType       (if non-null/non-blank)
-        //     5. bbox               (if non-null — ST_MakeEnvelope(west, south, east, north, 4326);
-        //                            #2015, same bind order as DiscoverListingPredicateBuilder)
-        //     6. normQ              (if non-null/non-blank — FTS via websearch_to_tsquery)
-        //     7. normPurpose        (if non-null/non-blank — listing_purpose filter)
-        //
-        //   WHERE clause params:
-        //     8. city               (always)
-        //     9. areaKey × N        (one per element in areaKeys)
-        //    10. limit              (outer rn bound, always)
-        if (minPrice != null) {
-            params.add(minPrice);
+    /**
+     * Emits the property-type narrowing clause (#2533). ONE implementation, used by both query
+     * paths — the area-grouped ON clause and the bbox-only WHERE clause differ only in indent.
+     *
+     * <p>Three behaviours inherited from {@link DiscoverFilterNormalizer} rather than reinvented:
+     * an empty list emits NO clause (which is also how an exhaustive selection arrives, since
+     * selecting every known type is provably equivalent to no filter); an UNSATISFIABLE list emits
+     * a literal {@code FALSE}, which Postgres plans as a One-Time Filter so it scans nothing and
+     * binds nothing — a long garbage list therefore cannot push the statement toward the
+     * 65535-parameter ceiling; and the comparison is case-SENSITIVE, which is correct only because
+     * normalisation has already canonicalised every value to its stored lower-case form. That last
+     * point is load-bearing: the previous {@code LOWER(...) = LOWER(?)} form was the shape #1956
+     * PR1 removed elsewhere for drifting from this predicate on casing.
+     */
+    private static void appendPropertyTypeClause(ClauseBuilder cb, String indent, List<String> normTypes) {
+        if (normTypes == null || normTypes.isEmpty()) {
+            return;
         }
-        if (maxPrice != null) {
-            params.add(maxPrice);
+        if (DiscoverFilterNormalizer.isUnsatisfiable(
+                normTypes, DiscoverFilterNormalizer.ALLOWED_PROPERTY_TYPES)) {
+            cb.add(indent + "AND FALSE");
+            return;
         }
-        if (bedrooms != null && bedrooms < 4) {
-            params.add(bedrooms);
+        StringBuilder fragment = new StringBuilder(indent + "AND pl.property_type IN (");
+        for (int i = 0; i < normTypes.size(); i++) {
+            fragment.append(i == 0 ? "?" : ", ?");
         }
-        if (propertyType != null && !propertyType.isBlank()) {
-            params.add(propertyType);
+        fragment.append(")");
+        cb.add(fragment.toString(), normTypes.toArray());
+    }
+
+    /**
+     * Emits the bedrooms narrowing clause (#2533). ONE implementation, used by both query paths.
+     *
+     * <p>{@code MAX_BEDROOMS} (4) means "4 or more", and {@link
+     * DiscoverFilterNormalizer#normalizeBedrooms} clamps 5/8/9 down to it. So a selection
+     * containing 4 contributes a LITERAL {@code >= 4} with NO bind, while every other value
+     * contributes an exact match WITH one — the placeholder count varies per element.
+     *
+     * <p>That asymmetry is exactly what made the previous two-chain assembly fragile: a separate
+     * param array had to predict which elements would and would not bind. Here the fragment and
+     * its binds are handed over together, so the question cannot be got wrong.
+     */
+    private static void appendBedroomsClause(ClauseBuilder cb, String indent, List<Integer> normBedrooms) {
+        if (normBedrooms == null || normBedrooms.isEmpty()) {
+            return;
         }
-        if (bbox != null) {
-            params.add(bbox.west());
-            params.add(bbox.south());
-            params.add(bbox.east());
-            params.add(bbox.north());
+        List<Integer> exact = new ArrayList<>();
+        boolean fourOrMore = false;
+        for (Integer value : normBedrooms) {
+            if (value == null) {
+                continue;
+            }
+            if (value >= DiscoverFilterNormalizer.MAX_BEDROOMS) {
+                fourOrMore = true;
+            } else {
+                exact.add(value);
+            }
         }
-        if (normQ != null) {
-            params.add(normQ);
+        if (exact.isEmpty()) {
+            cb.add(indent + "AND pl.bedrooms >= " + DiscoverFilterNormalizer.MAX_BEDROOMS);
+            return;
         }
-        if (normPurpose != null) {
-            params.add(normPurpose);
+        StringBuilder fragment = new StringBuilder(indent + "AND (pl.bedrooms IN (");
+        for (int i = 0; i < exact.size(); i++) {
+            fragment.append(i == 0 ? "?" : ", ?");
         }
-        // WHERE clause params: city, areaKeys, then the outer WHERE rn limit
-        params.add(city);
-        params.addAll(areaKeys);
-        params.add(limit);
-        return params.toArray();
+        fragment.append(")");
+        if (fourOrMore) {
+            fragment.append(" OR pl.bedrooms >= ").append(DiscoverFilterNormalizer.MAX_BEDROOMS);
+        }
+        fragment.append(")");
+        cb.add(fragment.toString(), exact.toArray());
+    }
+
+    /**
+     * A SQL fragment and the bind params that fragment consumes, appended together (#2533, AC8).
+     *
+     * <p><b>What this replaces, and why.</b> This assembly previously kept the clause text and the
+     * positional bind array in two separate {@code if} chains — {@code joinFilterClauses} and a
+     * {@code buildParams} method ~140 lines away, with the bbox-only path duplicating the same
+     * split independently. Every condition was written twice, and the two copies had to agree on
+     * both the NUMBER and the ORDER of {@code ?} placeholders with nothing enforcing it.
+     *
+     * <p>That is not a theoretical concern here. {@code bedrooms >= 4} emits a literal and
+     * contributes NO placeholder while any other bedroom value contributes one, so the counts
+     * legitimately differ per input. A count mismatch throws loudly; an ORDER mismatch between two
+     * same-typed binds does not — {@code propertyType} and the FTS keyword are both Strings in
+     * adjacent slots, so a swap returns plausible-looking wrong rows and no exception.
+     *
+     * <p>Appending the fragment and its binds in a single call makes both failures unrepresentable
+     * rather than merely tested for: there is no second ordering to drift from. A clause with no
+     * bind (a literal such as {@code >= 4}, the agricultural-land exclusion, or
+     * {@code possession_status = 'READY'}) simply passes no binds, which is the same call shape
+     * rather than a special case to remember.
+     *
+     * <p>Deliberately minimal, and deliberately local to this service: the shared predicate
+     * vocabulary in {@link DiscoverListingPredicateBuilder} has 11 call sites including the
+     * saved-search alert path, so converging on it is tracked separately (#2541) rather than
+     * bundled into a correctness change.
+     */
+    private static final class ClauseBuilder {
+        private final StringBuilder sql = new StringBuilder();
+        private final List<Object> params = new ArrayList<>();
+
+        /** Appends a clause and the binds it consumes. Pass no binds for a literal-only clause. */
+        void add(String fragment, Object... binds) {
+            sql.append(fragment);
+            for (Object bind : binds) {
+                params.add(bind);
+            }
+        }
+
+        String sql() {
+            return sql.toString();
+        }
+
+        List<Object> params() {
+            return params;
+        }
     }
 
     /**
@@ -548,46 +637,43 @@ public class CityAreaListingsService {
     private CityAreaListingsResponse getBboxOnlyListings(String city,
                                                           Long minPrice,
                                                           Long maxPrice,
-                                                          Integer bedrooms,
-                                                          String propertyType,
+                                                          List<Integer> normBedrooms,
+                                                          List<String> normPropertyTypes,
                                                           String normQ,
                                                           String normPurpose,
                                                           Boolean readyToMove,
                                                           DiscoverListingPredicateBuilder.Bbox bbox,
                                                           boolean isAuthenticated) {
 
-        StringBuilder whereClauses = new StringBuilder();
+        // Same lockstep assembly as the area-grouped path (#2533, AC8): each clause carries its own
+        // binds, so this path cannot drift between placeholder count/order and the param array
+        // either. It kept its own separate copy of that split before, which is why a fix confined
+        // to one path would have left the identical hazard live here.
+        ClauseBuilder where = new ClauseBuilder();
         if (minPrice != null) {
-            whereClauses.append("\n              AND pl.price_paise >= ?");
+            where.add("\n              AND pl.price_paise >= ?", minPrice);
         }
         if (maxPrice != null) {
-            whereClauses.append("\n              AND pl.price_paise <= ?");
+            where.add("\n              AND pl.price_paise <= ?", maxPrice);
         }
-        if (bedrooms != null) {
-            if (bedrooms >= 4) {
-                whereClauses.append("\n              AND pl.bedrooms >= 4");
-            } else {
-                whereClauses.append("\n              AND pl.bedrooms = ?");
-            }
-        }
-        if (propertyType != null && !propertyType.isBlank()) {
-            whereClauses.append("\n              AND LOWER(pl.property_type) = LOWER(?)");
-        }
+        appendBedroomsClause(where, "\n              ", normBedrooms);
+        appendPropertyTypeClause(where, "\n              ", normPropertyTypes);
         // bbox is always non-null here (controller guarantees it — see getAreaListings caller
         // above), same predicate/bind order as the area-grouped path and the authenticated
         // viewportScope path in DiscoverListingPredicateBuilder.
-        whereClauses.append("\n              AND pl.geog && ST_MakeEnvelope(?, ?, ?, ?, 4326)::geography");
+        where.add("\n              AND pl.geog && ST_MakeEnvelope(?, ?, ?, ?, 4326)::geography",
+                bbox.west(), bbox.south(), bbox.east(), bbox.north());
         // Area-first journey never shows agricultural_land — always excluded unconditionally.
-        whereClauses.append("\n              AND LOWER(pl.property_type) != LOWER('"
+        where.add("\n              AND LOWER(pl.property_type) != LOWER('"
                 + AREA_FIRST_EXCLUDED_PROPERTY_TYPE + "')");
         if (normQ != null) {
-            whereClauses.append("\n              AND pl.search_vector @@ websearch_to_tsquery('english', ?)");
+            where.add("\n              AND pl.search_vector @@ websearch_to_tsquery('english', ?)", normQ);
         }
         if (normPurpose != null) {
-            whereClauses.append("\n              AND pl.listing_purpose = ?");
+            where.add("\n              AND pl.listing_purpose = ?", normPurpose);
         }
         if (Boolean.TRUE.equals(readyToMove)) {
-            whereClauses.append("\n              AND pl.possession_status = 'READY'");
+            where.add("\n              AND pl.possession_status = 'READY'");
         }
 
         String sql = """
@@ -627,36 +713,19 @@ public class CityAreaListingsService {
                 -- non-Commercial listing keeps its row with a NULL subtype.
                 LEFT JOIN listing_commercial_space_details lcsd ON lcsd.listing_id = pl.id
                 WHERE c.slug = ?
-                  AND pl.status = 'LIVE'""" + whereClauses + """
+                  AND pl.status = 'LIVE'""" + where.sql() + """
 
                 ORDER BY pl.created_at DESC
                 LIMIT ?
                 """;
 
+        // City leads here — its ? sits in the WHERE clause BEFORE the filter clauses, the reverse
+        // of the area-grouped path where the filters live in the LEFT JOIN ON clause and therefore
+        // bind first. That asymmetry between the two paths is exactly why each needs its own test
+        // arm: fixing the bind order in one does not imply the other is correct.
         List<Object> paramList = new ArrayList<>();
         paramList.add(city.toLowerCase());
-        if (minPrice != null) {
-            paramList.add(minPrice);
-        }
-        if (maxPrice != null) {
-            paramList.add(maxPrice);
-        }
-        if (bedrooms != null && bedrooms < 4) {
-            paramList.add(bedrooms);
-        }
-        if (propertyType != null && !propertyType.isBlank()) {
-            paramList.add(propertyType);
-        }
-        paramList.add(bbox.west());
-        paramList.add(bbox.south());
-        paramList.add(bbox.east());
-        paramList.add(bbox.north());
-        if (normQ != null) {
-            paramList.add(normQ);
-        }
-        if (normPurpose != null) {
-            paramList.add(normPurpose);
-        }
+        paramList.addAll(where.params());
         paramList.add(BBOX_ONLY_MAX_RESULTS);
 
         Map<String, List<AreaListingCard>> cardsByArea = new LinkedHashMap<>();

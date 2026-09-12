@@ -44,6 +44,24 @@ public class CityAreaListingsController {
     // city/metro-scale "Search this area" viewport with headroom to spare.
     private static final double MAX_BOUNDS_SPAN_DEGREES = 10.0;
 
+    /**
+     * #2533 — cheap upper bound on the RAW size of a repeatable filter param, rejected before any
+     * normalisation work is done.
+     *
+     * <p>This is not the security-meaningful cap; {@link DiscoverFilterNormalizer}'s own
+     * {@code MAX_PROPERTY_TYPE_VALUES} / {@code MAX_BEDROOM_VALUES} bound what actually reaches
+     * SQL, and the service applies those AFTER normalisation. This guard exists because
+     * normalisation is not free: {@code preserveUnsatisfiable} deliberately KEEPS unrecognised
+     * values (so an impossible request matches nothing rather than silently widening), which means
+     * a 10,000-element list of garbage is not filtered down — it is carried. Bounding request
+     * SHAPE here stops that work being done at all.
+     *
+     * <p>Deliberately generous: it is an abuse guard, not a product constraint. No legitimate
+     * client sends anywhere near this many values, and the narrower vocabulary caps do the real
+     * narrowing downstream.
+     */
+    private static final int MAX_RAW_FILTER_VALUES = 50;
+
     private final CityAreaListingsService service;
 
     public CityAreaListingsController(CityAreaListingsService service) {
@@ -96,8 +114,15 @@ public class CityAreaListingsController {
             @RequestParam(name = "limitPerArea", required = false) Integer limitPerArea,
             @RequestParam(required = false) Long minPrice,
             @RequestParam(required = false) Long maxPrice,
-            @RequestParam(required = false) Integer bedrooms,
-            @RequestParam(required = false) String propertyType,
+            // #2533 — widened from Integer/String so a multi-value narrowing is expressible at all.
+            // The param NAMES are deliberately unchanged: Spring binds a single
+            // ?propertyType=apartment to a one-element list and the repeated form to an N-element
+            // list, so every request shape the current frontend sends behaves exactly as before.
+            // Renaming these to the sibling endpoint's plural spelling (DiscoverListingsController
+            // :62 uses propertyTypes) would break the unchanged frontend and force this work back
+            // into a single cross-layer PR. Do not "fix" that asymmetry without reading this.
+            @RequestParam(required = false) List<Integer> bedrooms,
+            @RequestParam(required = false) List<String> propertyType,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) String listingPurpose,
             @RequestParam(required = false) Boolean readyToMove,
@@ -116,6 +141,17 @@ public class CityAreaListingsController {
 
         if (q != null && q.length() > 500) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "query_too_long");
+        }
+
+        // #2533 AC7 — the FIRST of two bounds. Making these params repeatable is what creates the
+        // exposure: as scalars they could not express an over-long list at all. See
+        // MAX_RAW_FILTER_VALUES for why a raw-shape guard is needed in addition to the
+        // post-normalisation cap the service applies.
+        if (propertyType != null && propertyType.size() > MAX_RAW_FILTER_VALUES) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "too_many_property_type_values");
+        }
+        if (bedrooms != null && bedrooms.size() > MAX_RAW_FILTER_VALUES) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "too_many_bedroom_values");
         }
 
         // #2015 — anon "Search this area" viewport narrowing. Reuses BboxParser (shared with
