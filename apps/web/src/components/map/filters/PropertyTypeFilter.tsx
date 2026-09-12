@@ -1,10 +1,14 @@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+// SUBTYPE_BEARING_PROPERTY_TYPE is deliberately no longer imported here: both handlers now key
+// off each subtype's OWN implied type via BUYER_SUBTYPE_TO_PROPERTY_TYPE, so a single hardcoded
+// bearing token has no remaining role in this control. The constant still exists for the places
+// that legitimately need to know which stored type the subtype axis disambiguates.
 import {
   DISCOVER_COMMERCIAL_SUBTYPE_OPTIONS,
-  SUBTYPE_BEARING_PROPERTY_TYPE,
   type CommercialSubtype,
 } from '@/lib/listing-constants';
+import { BUYER_SUBTYPE_TO_PROPERTY_TYPE } from '@/lib/propertyTypeConfig';
 import { PropertyFilters, PropertyType } from '@/hooks/usePropertyListings';
 
 const propertyTypes: { value: PropertyType; label: string }[] = [
@@ -26,24 +30,40 @@ interface PropertyTypeFilterProps {
 export function PropertyTypeFilter({ filters, onFiltersChange }: PropertyTypeFilterProps) {
   const selectedTypes = filters.propertyTypes ?? [];
   const selectedSubtypes = filters.commercialSubtypes ?? [];
-  const commercialSelected = selectedTypes.includes(SUBTYPE_BEARING_PROPERTY_TYPE);
 
   const handleTypeChange = (type: PropertyType, checked: boolean) => {
     const newTypes = checked
       ? [...selectedTypes, type]
       : selectedTypes.filter((t) => t !== type);
 
-    // Issue #2431 — leaving the generic Commercial family CLEARS any Shop/Office selection.
-    // Carrying it would leave an invisible filter applied: the checkboxes that expressed it are
-    // no longer on screen, but the query would still narrow to a subtype, so the buyer would see
-    // fewer results than the visible controls account for. Clearing here (rather than in a
-    // useEffect watching propertyTypes) keeps it a single atomic change with one URL write.
-    const keepSubtypes = type === SUBTYPE_BEARING_PROPERTY_TYPE && !checked ? false : true;
+    // Issue #2431 — leaving a Commercial family CLEARS the subtypes that lived in it. Carrying
+    // them would leave an invisible filter applied: the checkboxes that expressed them are no
+    // longer on screen, but the query would still narrow by subtype. Clearing here (rather than
+    // in a useEffect watching propertyTypes) keeps it one atomic change with one URL write.
+    //
+    // The relationship is PER SUBTYPE, exactly as `handleSubtypeChange` below now treats it.
+    // Keying the clear on the bearing token alone was wrong in BOTH directions once a subtype
+    // implies its own type:
+    //
+    //   - it stranded a subtype without its type. Tick Apartment, tick the WAREHOUSE subtype
+    //     (which selects `warehouse` for you), then untick the Warehouse box: the old rule kept
+    //     `commercialSubtypes=['WAREHOUSE']` alongside `propertyTypes=['apartment']`. The server
+    //     intersects `nonBearing` with `namedBySubtypes`, gets nothing, and emits literal
+    //     `AND FALSE` — silent zero results, the very class this file exists to remove.
+    //   - it cleared subtypes that never lived in the type being left. Unticking `commercial`
+    //     also dropped BUILDING / WAREHOUSE / LAND, losing a selection the buyer never touched.
+    //
+    // Filtering by each subtype's own implied type fixes both, rather than trading one for the
+    // other. A subtype whose implying type is gone is still cleared, so #2431's no-invisible-
+    // filter intent is preserved.
+    const nextSubtypes = checked
+      ? selectedSubtypes
+      : selectedSubtypes.filter((s) => BUYER_SUBTYPE_TO_PROPERTY_TYPE[s] !== type);
 
     onFiltersChange({
       ...filters,
       propertyTypes: newTypes.length > 0 ? newTypes : undefined,
-      commercialSubtypes: keepSubtypes && selectedSubtypes.length > 0 ? selectedSubtypes : undefined,
+      commercialSubtypes: nextSubtypes.length > 0 ? nextSubtypes : undefined,
     });
   };
 
@@ -52,13 +72,36 @@ export function PropertyTypeFilter({ filters, onFiltersChange }: PropertyTypeFil
       ? [...selectedSubtypes, subtype]
       : selectedSubtypes.filter((s) => s !== subtype);
 
-    // Picking a subtype implies the Commercial family. Without this, a buyer who ticks "Shop"
-    // while Commercial is unticked would get zero results — the subtype filter is applied
-    // literally by the server, and no apartment or plot has a commercial subtype. Selecting the
-    // family for them is what the click plainly means.
+    // Picking a subtype implies its property type. Without this, a buyer who ticks "Shop" while
+    // no type is selected would get zero results — the subtype filter is applied literally by the
+    // server, and no apartment or plot has a commercial subtype. Selecting the type for them is
+    // what the click plainly means.
+    //
+    // The implied type is PER SUBTYPE, not a fixed 'commercial'. Only SHOP and OFFICE live in
+    // `property_type='commercial'`; BUILDING, WAREHOUSE and LAND are self-describing types
+    // (`commercial_building`, `warehouse`, `commercial_land`). Hardcoding the bearing token sent
+    // `type=commercial&subtype=WAREHOUSE`, which the server's family/subtype union reads as
+    // "property_type IN ('commercial') AND has subtype WAREHOUSE" — a set no row can be in,
+    // because warehouse rows are not `property_type='commercial'`. Zero results, HTTP 200, no
+    // error. Same for Building and Commercial Land.
+    //
+    // Mapping through BUYER_SUBTYPE_TO_PROPERTY_TYPE is what puts the request on the canonical
+    // #2458 implied-property-type path: it is the TS half of
+    // `DiscoverFilterNormalizer.BUYER_SUBTYPE_TO_PROPERTY_TYPE`, held in cross-language parity by
+    // contracts/commercial-subtype-mapping.json, so this cannot drift from the server's own
+    // `impliedPropertyTypes`.
+    //
+    // Union rather than replace, so a MIXED selection works: Shop + Warehouse/Godown implies
+    // BOTH 'commercial' and 'warehouse', which the server's union then matches on the only axis
+    // each can be matched on — the warehouse row by property_type, the shop row by subtype. A fix
+    // that merely stopped appending the family token would leave Shop-alone correct and silently
+    // break as soon as a bearing and a self-describing subtype were selected together.
+    const impliedTypes = newSubtypes.map(
+      (s) => BUYER_SUBTYPE_TO_PROPERTY_TYPE[s] as PropertyType,
+    );
     const nextTypes: PropertyType[] =
-      newSubtypes.length > 0 && !commercialSelected
-        ? [...selectedTypes, SUBTYPE_BEARING_PROPERTY_TYPE]
+      newSubtypes.length > 0
+        ? Array.from(new Set([...selectedTypes, ...impliedTypes]))
         : selectedTypes;
 
     onFiltersChange({
