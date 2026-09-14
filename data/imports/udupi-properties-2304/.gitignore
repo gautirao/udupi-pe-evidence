@@ -1,0 +1,8 @@
+# The .py files here are runnable scripts (normalise, generate_sql, sanitize_pii,
+# pii_residuals, test_pii_filter) and pii_filter is imported by three of them, so running any
+# of them by hand drops a __pycache__/ into this committed artefact directory.
+# validate.sh additionally sets PYTHONDONTWRITEBYTECODE=1 so its own run creates nothing.
+# The repo-root .gitignore's __pycache__ patterns are path-anchored to .claude/scripts/ and
+# scripts/geography/, so they do not cover this directory.
+__pycache__/
+*.pyc
