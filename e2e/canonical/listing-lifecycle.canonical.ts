@@ -324,6 +324,37 @@ test('[role:broker] T13 — broker fills core fields, arranges photos+pin out-of
     // `locality` gate — see the module docstring's gate 3 note. The
     // gate-satisfying value is set later via the arranged PUT.
     await page.locator('#locality').fill('Manipal');
+
+    // IF T13 GOES RED AND YOU ARE BISECTING: THIS HUNK IS THE FIRST SUSPECT.
+    // It was added by #2434 to a currently-green, externally-owned,
+    // CI-required test, so it gives T13 a new failure surface it did not have
+    // before — the "Write it myself" button and the description-assistant
+    // testid are Residential-specific and could drift independently of
+    // anything #2434 touches. Revert this hunk first to isolate; the
+    // consequence of reverting is the dedupe collision below, which is
+    // currently masked only because T14 is broken.
+    //
+    // FIXTURE-ONLY SWEEP (#2434): this chain has the SAME dedupe collision
+    // the Commercial one hit. computeDedupeHash is (description, locality,
+    // price) — title is not a component — so varying only UNIQUE_TITLE with
+    // a null description and a constant locality produced one shared hash
+    // across runs, and rows from run 2 onward carry is_duplicate = true.
+    // DiscoverListingPredicateBuilder's base predicate excludes those
+    // unconditionally (`pl.is_duplicate = false`). Cited by SYMBOL, not line:
+    // this is the sole justification for a hunk in an externally-owned,
+    // CI-required test, and the previous `:135` citation had drifted onto a
+    // record constructor — which invites the next reader to conclude the
+    // justification was fabricated and distrust the hunk.
+    //
+    // It has not bitten here ONLY because these rows stop at PENDING_REVIEW
+    // and never reach LIVE while T14 is broken (#2513). Fixing T14 without
+    // this would make the Residential membership assertions fail exactly as
+    // the Commercial one did, for a reason that looks nothing like the cause.
+    // This is a fixture change only — it does NOT fix T14.
+    await page.getByRole('button', { name: 'Write it myself', exact: true }).click();
+    const t13Description = page.getByTestId('description-assistant-ready').locator('textarea');
+    await expect(t13Description).toBeVisible({ timeout: 10_000 });
+    await t13Description.fill(`Canonical Residential lifecycle fixture for ${UNIQUE_TITLE}.`);
     await page.locator('#price').fill('7500000');
     await page.getByRole('radio', { name: '2 BHK' }).click();
     await page.getByRole('radio', { name: '1,000 sqft' }).click();
