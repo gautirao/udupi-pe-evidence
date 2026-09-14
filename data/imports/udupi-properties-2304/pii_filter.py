@@ -16,17 +16,18 @@ document. The structured field denylist is retained as a second layer, not the e
 the filter fails closed rather than depending on anyone having thought of the right field name.
 
 NUMERIC BOUNDARY RULE. Digit runs must be delimited by non-alphanumerics. That is what makes it
-safe to scan URLs like every other string instead of exempting them: across the 942 distinct
-http strings in this dataset (679 of them image/PDF URLs), 71 contain a 10-digit digit sequence,
+safe to scan URLs like every other string instead of exempting them: across all four raw
+artefacts there are 2,189 distinct http strings, of which 1,035 contain a 10-digit sequence —
 and every one of those is a SUBSTRING of a longer hex CDN hash or numeric id rather than a
-delimited run of its own. Under the boundary rule all 71 produce zero matches, while a real
-number in a URL slug would still be caught.
+delimited run of its own. Boundary-delimited bare 10-digit runs in URLs: ZERO, in all four
+files. So the rule costs nothing here, while a real number in a URL slug would still be caught.
 
-Measured, not assumed — and re-measured in review of PR #2587, which corrected this paragraph:
-it previously cited 939 URLs and 8 bare runs, and neither figure reproduced under any definition
-of "URL" (the delimited-run count is 0, not 8). The CONCLUSION was and remains exactly right;
-the two supporting numbers were not, which is the kind of detail a later reader would have
-trusted without re-deriving.
+Measured, not assumed — and twice corrected, which is the point of writing the numbers down.
+The original paragraph cited 939 URLs with 8 bare runs; neither reproduced. The first correction
+cited 942 / 71, which was right but covered only raw-apify-output.json — the three 99acres files
+add 1,247 http strings and 964 more 10-digit substrings. The CONCLUSION survived both rounds
+unchanged; only the supporting figures moved, and a later reader would have trusted either
+version without re-deriving it.
 """
 import re
 
@@ -58,12 +59,30 @@ def _is_phone(raw):
       fewer than four trailing zeros. This is what catches a mobile parked in `reraId` while
       rejecting `price_paise` magnitudes, which are the same shape but never phone numbers.
     """
-    # Any decimal component means this is a measurement or an arithmetic expression, not a
-    # number. Catches both a bare coordinate ("13.3876323") and the shapes that read as one
-    # candidate across a separator: a coordinate RANGE ("13.310-13.318") and the bbox arithmetic
-    # in these very scripts ("13.3876323 - 0.012"). Phone numbers do not carry decimal points.
-    if any(DECIMAL_RE.match(tok) for tok in re.split(r"[\s\-()]+", raw.strip()) if tok):
-        return False
+    # A decimal component means MEASUREMENT — a bare coordinate ("13.3876323"), a coordinate
+    # RANGE ("13.310-13.318"), or the bbox arithmetic in these very scripts
+    # ("13.3876323 - 0.012"). Phone numbers do not carry decimal points.
+    #
+    # But an earlier revision VETOED THE WHOLE CANDIDATE on seeing one, and PHONE_CAND_RE
+    # greedily absorbs spaces and dots — so ordinary listing text put a real number out of
+    # reach: "call <mobile> 1.5 km from beach" and "contact <mobile> 2.5 bhk ready" both
+    # returned no match, and so did a +-prefixed international number followed by a distance.
+    # finditer had already consumed the span, so no shorter candidate was ever retried.
+    #
+    # A previous review round recorded this as NOT REPRODUCING. That was wrong: the probe used
+    # "<mobile> just 1.5 km away", and the intervening WORD breaks the regex span, which is
+    # precisely the case that still works. Three variants of one shape were mistaken for a class.
+    #
+    # So: drop the measurement tokens and re-test the REMAINDER instead of discarding
+    # everything. A pure coordinate leaves nothing behind and is still rejected; a phone number
+    # standing next to a measurement survives, including the +-prefixed form, which is
+    # unambiguous — no price or coordinate carries a leading country code.
+    toks = [t for t in re.split(r"[\s\-()]+", raw.strip()) if t]
+    if any(DECIMAL_RE.match(t) for t in toks):
+        kept = [t for t in toks if not DECIMAL_RE.match(t)]
+        if not kept:
+            return False
+        raw = " ".join(kept)
     digits = re.sub(r"\D", "", raw)
     if not PHONE_MIN_DIGITS <= len(digits) <= PHONE_MAX_DIGITS:
         return False
@@ -85,17 +104,25 @@ def _is_phone(raw):
     # 91 + 10 without a leading `+`. Only the first was accepted before this revision, so a
     # number in either of the other two forms was invisible to every layer of the gate —
     # confirmed by probing this module directly, not inferred from reading it.
-    if len(digits) == 11 and digits[0] == "0":
-        digits = digits[1:]
+    if len(digits) == 13 and digits.startswith("091"):
+        digits = digits[3:]
     elif len(digits) == 12 and digits.startswith("91"):
         digits = digits[2:]
+    elif len(digits) == 11 and digits[0] == "0":
+        digits = digits[1:]
 
-    # The trailing-zeros exclusion and the group-size floor above are deliberate and KEPT.
-    # A 10-digit price_paise value with a 6-9 lead is the same shape as a mobile and those are
-    # common in this dataset, while a real mobile ending 0000 is not; the floor is what stopped
-    # an earlier revision corrupting real housing.com URL slugs. Both trade a rare false
-    # negative for a common false positive, which is the right way round for a filter whose
-    # output is committed data.
+    # The group-size floor above is KEPT unreservedly: it is what stopped an earlier revision
+    # corrupting real housing.com URL slugs, which is a measured regression, not a worry.
+    #
+    # The trailing-zeros exclusion is also KEPT, but its STATED REASON was wrong and is
+    # corrected here. It claimed to reject `price_paise` magnitudes, which are mobile-shaped.
+    # They are — but they never reach this rule: normalise emits int(price) * 100, so a paise
+    # value is an integer, never a JSON string leaf (measured: ZERO bare 9-12 digit string
+    # leaves across all four artefacts), and in generated .sql/.md the bare-digit rule is
+    # already disabled via bare_digits=False. So the exclusion currently guards nothing real.
+    # It stays as a cheap conservative guard for a future artefact that does carry numeric
+    # strings — but a later reader must not reason from the old justification, because a
+    # correct decision resting on a wrong rationale is how the other retractions here started.
     return len(digits) == 10 and digits[0] in "6789" and not digits.endswith("0000")
 
 # --- detector 3: numbers spelled out as words ---------------------------------------------

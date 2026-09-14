@@ -313,10 +313,52 @@ print(f"  committed artefacts left untouched: {untouched}",
 PY
 
 echo "### 9. A11 fail-closed PII residuals sweep over every committed artefact"
-python3 "$IMP/pii_residuals.py" --dir "$IMP" || echo "  -> FAIL (residuals found)"
+# Exit 1 and exit 2 mean different things and must not be reported as the same thing. An earlier
+# revision ran `... || echo "  -> FAIL (residuals found)"`, and `||` fires on ANY non-zero — so a
+# coverage-floor failure (exit 2: the sweep examined nothing, e.g. a moved or mistyped $IMP) was
+# announced as a residuals finding. That sends a reader hunting for PII that was never reported,
+# and hides the real fault, which is that the gate did not run. Both branches still print the
+# literal FAIL, which is what the transcript scan at the top of this script matches on.
+# Status alone is still not enough to name the failure: Python exits 1 on an unhandled
+# exception too, so a CRASHED gate would be announced as "residuals found" with no findings
+# above it — narrower than the bug this replaced, identical in shape. The verdict marker is the
+# discriminator: the gate prints a PII_RESIDUALS: line on every path it completes, and on none
+# where it dies. Require both the marker and exit 1 before claiming residuals.
+_pii_out="$(mktemp)"
+python3 "$IMP/pii_residuals.py" --dir "$IMP" > "$_pii_out" 2>&1; _pii_rc=$?
+cat "$_pii_out"
+if [ "$_pii_rc" -eq 0 ]; then
+  :
+elif [ "$_pii_rc" -eq 1 ] && LC_ALL=C grep -qF 'PII_RESIDUALS:' "$_pii_out"; then
+  echo "  -> FAIL (residuals found — see the findings listed above)"
+else
+  # Do NOT claim "no verdict line" here. The coverage-floor path DOES print a PII_RESIDUALS:
+  # line (to stderr, folded in above), it just exits 2 rather than 1 — so an earlier wording
+  # asserting the line was absent was false for the commonest case reaching this branch. In a
+  # script whose subject is a gate that described itself incorrectly, that is not a detail to
+  # leave wrong. Say only what is known: no residuals verdict at exit 1.
+  echo "  -> FAIL (no residuals verdict, exit $_pii_rc — coverage floor, usage error or crash; see the output above for which. NOT a residuals finding)"
+fi
+rm -f "$_pii_out"
 
 echo "### 10. PII detector regression fixture"
-python3 "$IMP/test_pii_filter.py" || echo "  -> FAIL (detector regression)"
+# Symmetric with step 9, for the same reason: `||` fires on ANY non-zero, so a CRASHED fixture
+# and a genuine detector regression were announced identically — the exact conflation step 9
+# removed, left standing in the step that validates the detector this work is about. The fixture
+# prints a PII_FILTER_SELFTEST: line on every path it completes and on none where it dies, so
+# that marker is the discriminator. It fails closed either way; what was wrong was the NAME it
+# gave the failure, which sends a reader hunting for a regression that never happened.
+_fx_out="$(mktemp)"
+python3 "$IMP/test_pii_filter.py" > "$_fx_out" 2>&1; _fx_rc=$?
+cat "$_fx_out"
+if [ "$_fx_rc" -eq 0 ]; then
+  :
+elif [ "$_fx_rc" -eq 1 ] && LC_ALL=C grep -qF 'PII_FILTER_SELFTEST:' "$_fx_out"; then
+  echo "  -> FAIL (detector regression — see the failing cases above)"
+else
+  echo "  -> FAIL (fixture did not complete, exit $_fx_rc — crash or usage error, NOT a detector regression)"
+fi
+rm -f "$_fx_out"
 
 echo
 echo "done. container '$CT' left running for inspection; docker rm -f $CT to remove."

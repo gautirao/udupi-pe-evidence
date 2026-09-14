@@ -47,6 +47,16 @@ MUST_MATCH = [
     # _is_phone learned to strip a bare STD/country prefix; verified failing before the fix.
     ("bare STD-prefixed mobile, 0 + 10 digits, no separators", "call 09845012345 now"),
     ("bare country-coded mobile, 91 + 10 digits, no plus", "call 919845012345 now"),
+    # Added in the follow-up. A measurement standing next to the number used to veto the WHOLE
+    # candidate, so all three of these returned nothing — including the +-prefixed form, which is
+    # unambiguous since no price or coordinate carries a leading country code. This is idiomatic
+    # listing text, not contrived. An earlier round recorded the class as "not reproducing"
+    # because the probe put a WORD between number and decimal, which breaks the regex span and
+    # was never affected — three variants of one shape mistaken for a class.
+    ("mobile followed by a distance measurement", "call 9845012345 1.5 km from beach"),
+    ("mobile followed by a bhk measurement", "contact 9845012345 2.5 bhk ready"),
+    ("+-prefixed number followed by a measurement", "call +91 98450 12345 1.5 km away"),
+    ("bare STD+country mobile, 091 + 10 digits", "call 0919845012345 now"),
 ]
 
 # Shapes that MUST NOT be detected — real content from this dataset that is not a contact.
@@ -118,6 +128,93 @@ def baseline_leak_check(baseline_dir):
     return leaks
 
 
+def coverage_floor_arms():
+    """Assert the GATE's exit codes, not just the detectors' verdicts.
+
+    pii_residuals.py must never report clean for a sweep that examined nothing, and a real
+    finding must never be downgraded to an environment error. The second half is what needs a
+    test: the first implementation of the floor evaluated coverage BEFORE findings, so an
+    unparseable .json — simultaneously a finding and a zero-leaf file — returned exit 2 instead
+    of exit 1, and every shape case above still passed. Without these assertions the next edit
+    to that block can silently re-invert the precedence.
+
+    THE END-TO-END ARM IS THE LOAD-BEARING ONE. Every other check in this file is blind to the
+    primary detection path being severed: the shape cases call find_contacts DIRECTLY, bypassing
+    the sweep; the empty and zero-leaf arms expect exit 2, which needs no findings at all; the
+    unparseable arm takes its exit 1 from the unconditional `unreadable` finding, which never
+    consults the detector; the routing arm asserts coverage-line strings; and the
+    populated-directory arm expects exit 0, which a severed detector produces too. Cut the
+    `findings.append` on the JSON branch and every one of them stays green.
+
+    That blindness was not hypothetical, and it was CREATED by this work: before the artefacts
+    were sanitised they carried live PII, so the populated-directory arm expected a finding and
+    would have failed on a severed sweep. Remediating the data flipped it from a positive control
+    to a negative one and silently removed the suite's only end-to-end proof — the empty-dataset
+    failure mode, consuming an arm's evidentiary value rather than making it unfalsifiable.
+
+    So the planted arm restores a positive control that no longer exists in the committed data.
+    Planted values are synthetic, as everywhere in this file.
+    """
+    import subprocess
+    import tempfile
+
+    gate = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pii_residuals.py")
+    results = []
+    with tempfile.TemporaryDirectory() as tmp:
+        empty = os.path.join(tmp, "empty")
+        os.makedirs(empty)
+
+        noleaf = os.path.join(tmp, "noleaf")
+        os.makedirs(noleaf)
+        open(os.path.join(noleaf, "notes.md"), "w").write("# no json here\n")
+
+        bad = os.path.join(tmp, "bad")
+        os.makedirs(bad)
+        open(os.path.join(bad, "truncated.json"), "w").write(
+            '[{"listingId": "X1", "description": "call 9845012345 now"')
+
+        # A WELL-FORMED .json carrying a planted synthetic value. This is the only check in the
+        # file that exercises the JOIN between the detector and the sweep on the JSON path —
+        # which is the primary path, because that is where the artefacts are. Same synthetic
+        # literal as the truncated fixture above; no new value is introduced.
+        plant = os.path.join(tmp, "plant")
+        os.makedirs(plant)
+        open(os.path.join(plant, "seeded.json"), "w").write(
+            '[{"listingId": "X1", "description": "call 9845012345 now"}]')
+
+        for label, target, want in (
+            ("empty directory exits 2, never a clean pass", empty, 2),
+            ("files present but zero JSON leaves exits 2", noleaf, 2),
+            ("unparseable JSON exits 1 — findings beat the floor", bad, 1),
+            ("planted contact in a well-formed .json is DETECTED end to end", plant, 1),
+            ("populated real directory still exits 0", os.path.dirname(gate), 0),
+        ):
+            rc = subprocess.run([sys.executable, gate, "--dir", target],
+                                capture_output=True, text=True).returncode
+            results.append((label, rc, want))
+    return results
+
+
+def json_routing_arm():
+    """A .json parsing to top-level `null` must still be routed as JSON, not as raw text.
+
+    Exit codes CANNOT discriminate this one — a null document contributes zero leaves either
+    way, so both routes reach the same status. Only the coverage line differs, which is why this
+    arm asserts the ROUTE rather than a verdict. Without it the sentinel fix is untestable and
+    can be undone silently.
+    """
+    import subprocess
+    import tempfile
+
+    gate = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pii_residuals.py")
+    with tempfile.TemporaryDirectory() as tmp:
+        open(os.path.join(tmp, "null.json"), "w").write("null")
+        out = subprocess.run([sys.executable, gate, "--dir", tmp],
+                             capture_output=True, text=True).stdout
+    routed_as_json = "string leaves" in out and "raw text" not in out
+    return "top-level null .json routes as JSON, never to the weaker raw-text rule", routed_as_json
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--baseline", default=None,
@@ -140,6 +237,19 @@ def main():
         print(f"  [{'PASS' if ok else 'FAIL'}] {label}" + ("" if ok else f" -> {hits}"))
     total = len(MUST_MATCH) + len(MUST_NOT_MATCH)
 
+    print("GATE COVERAGE FLOOR (exit codes, not detector verdicts)")
+    for label, rc, want in coverage_floor_arms():
+        ok = rc == want
+        failures += not ok
+        total += 1
+        print(f"  [{'PASS' if ok else 'FAIL'}] {label}"
+              + ("" if ok else f" -> exit {rc}, wanted {want}"))
+
+    route_label, route_ok = json_routing_arm()
+    failures += not route_ok
+    total += 1
+    print(f"  [{'PASS' if route_ok else 'FAIL'}] {route_label}")
+
     print("NO REAL VALUE IN THIS FIXTURE")
     if not args.baseline:
         print("  [SKIP] no --baseline given; guard NOT run "
@@ -157,7 +267,7 @@ def main():
             print(f"  [PASS] no MUST_MATCH literal occurs in {os.path.basename(args.baseline)}")
 
     print(f"\nPII_FILTER_SELFTEST: {'PASS' if not failures else 'FAIL'} "
-          f"({total - min(failures, total)}/{total} shape cases"
+          f"({total - min(failures, total)}/{total} checks — shape cases + gate arms"
           f"{'' if not args.baseline else ', baseline guard ' + ('PASS' if not failures else 'FAIL')})")
     return 0 if not failures else 1
 

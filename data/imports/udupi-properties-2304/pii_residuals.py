@@ -9,7 +9,13 @@ time only proves it has no more work it knows how to do; it says nothing about t
 never modelled. This is the independent verifier, and a non-zero exit is a blocker.
 
   Usage:  python3 pii_residuals.py [--dir DIR] [--baseline DIR] [--canary-file F] [--json]
-  Exit :  0 = clean, 1 = residuals found (report on stdout), 2 = usage error
+  Exit :  0 = clean, 1 = residuals found (report on stdout), 2 = usage or coverage error
+
+Exit 0 means VERIFIED CLEAN and is gated on a positive coverage floor: the sweep must have
+examined at least one file and at least one JSON string leaf, or it exits 2 instead. Without
+that, an empty or mistyped --dir reported the tree clean. Findings take precedence over the
+floor — anything actually detected exits 1, so a detection is never downgraded to an
+environment error.
 
 NO PII LITERALS ARE STORED IN THIS FILE. An earlier draft hardcoded the offending values as
 canaries, which would have re-committed to git exactly the names and numbers this work exists
@@ -63,8 +69,21 @@ SHAPE_EXEMPT = {"test_pii_filter.py"}
 # below, that left a bare unseparated mobile written into any of those three sources invisible to
 # ALL THREE layers at once: no name layer runs on .py, the shape layer dropped the bare-digit
 # rule, and the canary layer skipped the file. That is exactly the trap this module's history
-# records being hit before. Those sources now carry no literals for a canary list to collide
-# with, so the exemption is removed and a hit there is reportable.
+# records being hit before, so the exemption is removed and a hit in those sources is reportable.
+#
+# KNOWN AND ACCEPTED COST, measured rather than assumed. An earlier draft of this comment claimed
+# those sources "carry no literals for a canary list to collide with". That is FALSE: of the 624
+# name-variant forms derivable from the baseline's identity fields, exactly one — an 8-character
+# single-token value that also reads as an ordinary English word — appears in pii_filter.py and
+# in sanitize_pii.py. So an operator who builds a canary list from the baseline's identity fields
+# WILL get findings on a clean tree and must judge them. That cry-wolf cost is accepted, because
+# the blind spot the exemption created is worth more than the noise removing it causes.
+#
+# Finding this needed three attempts, which is the transferable part: harvesting only
+# dealerName/companyName/builderName missed developer.name and sellers[].name, and filtering to
+# multi-token names excluded the colliding value outright. Both wrong instruments returned a
+# confident ZERO. A negative from a filter that never looked at the right field is
+# indistinguishable from a clean result.
 CANARY_EXEMPT = {"test_pii_filter.py"}
 
 # Hand-written sources are swept with the FULL rule, bare unseparated digits included. Only the
@@ -75,11 +94,27 @@ STRICT_TEXT_SUFFIXES = (".py", ".sh")
 
 
 def row_key(row):
-    # housingListingId is included so normalised-listings.json and
-    # normalised-listings-housingcom-only.json — the direct input to import.sql — are reachable
-    # by the row-keyed name layer. Keyed on neither `listingId` nor `id`, both files previously
-    # returned None here and so fell outside that layer entirely, despite being consumed.
-    for k in ("listingId", "id", "housingListingId"):
+    # KNOWN GAP, stated rather than papered over: the normalised artefacts are NOT covered by the
+    # row-keyed name layer, and this function is not what would fix it.
+    #
+    # A previous revision added "housingListingId" here so normalised-listings.json — the direct
+    # input to import.sql — would get a key. That was a STRUCTURAL NO-OP and has been reverted.
+    # baseline_index harvests each row's variants from that row's OWN identity fields, and a
+    # normalised row carries none: measured over all 104 rows, dealerName / companyName /
+    # builderName / sellerFirm / developer / sellers are populated ZERO times. A key with no
+    # names behind it buys nothing, so the change read as coverage while adding none.
+    #
+    # Closing it properly needs a JOIN, not a key: index the baseline by the bare id VALUE and
+    # look it up globally, so a normalised row inherits the variants of the source row it came
+    # from. That is only partly possible here, and the limit is worth knowing before anyone
+    # tries: apify `id` overlaps 54 of the 104 normalised rows (all 54 do carry identity at
+    # baseline), while the 99acres `listingId` values overlap ZERO of them — those rows are
+    # unreachable by any id join because the identifier does not carry through normalisation.
+    #
+    # Until then the normalised artefacts are protected by the SHAPE layer only, which does sweep
+    # them in full. That is a real but bounded gap, and naming it is worth more than a key that
+    # makes the gate look covered.
+    for k in ("listingId", "id"):
         if row.get(k) is not None:
             return f"{k}={row[k]}"
     return None
@@ -129,8 +164,9 @@ def baseline_index(baseline_dir):
             # building's name is public signage, not contact information. Multi-token names
             # carry no such ambiguity.
             #
-            # The illustrative values are deliberately NOT quoted here. This file is on
-            # CANARY_EXEMPT, so a real dataset value written into this comment is one the
+            # The illustrative values are deliberately NOT quoted here. This file is NO LONGER on
+            # CANARY_EXEMPT — it was when this comment was first written, and that is exactly why
+            # the rule mattered then: a real dataset value written into this comment was one the
             # literal layer will never report — the same way a live mobile once reached the
             # regression fixture. Describe the shape; never paste the value.
             variants = set()
@@ -166,20 +202,40 @@ def main():
 
     findings, coverage = [], []
     names_checked = 0
+    total_leaves = 0
 
     for fn in sorted(os.listdir(target)):
         path = os.path.join(target, fn)
         if not os.path.isfile(path):
             continue
 
+        # NEVER infer the route from the `doc` sentinel. `doc is None` meant BOTH "not a JSON
+        # file" and "a JSON file that parsed to null", so a document whose top-level value is
+        # `null` fell through to the raw-text branch — which sweeps with bare_digits=False, the
+        # WEAKER rule. That is the same weak-detector routing the unparseable case above exists
+        # to prevent, reached through a different door.
+        #
+        # No PII can hide in a four-byte `null` file, so this was latent rather than live. It
+        # becomes exploitable the moment anyone adds a second `doc = None` assignment — a size
+        # cap, a skip rule, a depth guard — and it would do so silently, in a gate whose first
+        # implementation already lost a real detection. Route on the FILENAME and the parse
+        # outcome, never on the parsed value.
         doc = None
-        if fn.endswith(".json"):
+        is_json = fn.endswith(".json")
+        unparseable_json = False
+        if is_json:
             try:
                 doc = json.load(open(path))
             except ValueError:
-                doc = None
+                # A .json that will not parse must NOT fall through to the raw-text branch.
+                # That branch sweeps with bare_digits=False for generated artefacts, which drops
+                # the unseparated 10-digit rule — the exact rule that caught exposure class 1,
+                # the mobile parked in `reraId`. A truncated or half-written artefact would then
+                # be swept by a WEAKER detector and reported clean. Unparseable is itself a
+                # finding: the sweep cannot vouch for a file it was unable to read.
+                doc, unparseable_json = None, True
 
-        if doc is not None:
+        if is_json and not unparseable_json:
             leaves = 0
             for p, s in walk_strings(doc, fn):
                 leaves += 1
@@ -198,7 +254,12 @@ def main():
                     for p, s in walk_strings(r, f"{fn}[{row_key(r)}]"):
                         for h in find_names(s, variants):
                             findings.append({"file": fn, "path": p, "kind": "name", "value": h})
+            total_leaves += leaves
             coverage.append((fn, f"{leaves} string leaves"))
+        elif unparseable_json:
+            findings.append({"file": fn, "path": "<unparseable>", "kind": "unreadable",
+                             "value": "does not parse as JSON — not swept"})
+            coverage.append((fn, "UNPARSEABLE JSON — NOT SWEPT"))
         else:
             text = open(path, errors="replace").read()
             if fn not in SHAPE_EXEMPT:
@@ -242,6 +303,31 @@ def main():
         print(f"  findings                       : {len(findings)}")
         for f in findings[:80]:
             print(f"      [{f['kind']}] {f['file']} {f.get('path','')} -> {f['value']!r}")
+
+    # POSITIVE COVERAGE FLOOR. Without this, an empty or mistyped --dir returns
+    # "PASS (0 residuals)" and exit 0 while printing "files swept: 0", and nothing asserts on
+    # that line — validate.sh step 9 passes --dir "$IMP", so a moved or renamed directory would
+    # report the whole tree clean. A gate that cannot tell "found nothing" from "looked at
+    # nothing" is worse than no gate, because it manufactures confidence. Exit 2 (environment
+    # error), never the 0 that means verified-clean.
+    # ORDERING IS LOAD-BEARING: `not findings` comes first. An unparseable .json is BOTH a
+    # finding and a file that contributed no leaves, so a floor checked first would report a
+    # real detection as a mere environment error and lose it. Findings always win.
+    #
+    # The line says FAIL, not ERROR, so the token reaches validate.sh's transcript scan directly.
+    # An earlier revision of THIS comment justified that by claiming an ERROR-phrased failure
+    # "would exit non-zero while the container run's own summary still reported PASS". That was
+    # FALSE and is corrected rather than left to be trusted: step 9 runs
+    # `python3 pii_residuals.py --dir "$IMP" || echo "  -> FAIL (residuals found)"`, and `||`
+    # fires on ANY non-zero status including exit 2, so the literal FAIL reached the log either
+    # way. The token is still worth carrying — it states the real reason instead of depending on
+    # the caller's fallback, which additionally mislabels an exit-2 coverage failure as
+    # "(residuals found)" — but the failure mode it was sold on did not exist.
+    if not findings and (not coverage or total_leaves == 0):
+        print(f"PII_RESIDUALS: FAIL — coverage floor: swept {len(coverage)} files and "
+              f"{total_leaves} JSON string leaves under {target}. A sweep that examined "
+              f"nothing cannot report clean; refusing to exit 0.", file=sys.stderr)
+        return 2
 
     # Under --json the verdict goes to stderr so the document on stdout stays parseable. An
     # earlier revision appended it to stdout, which made `--json | jq` die on "Extra data" —
