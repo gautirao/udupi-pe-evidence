@@ -535,22 +535,20 @@ public class DiscoverListingPredicateBuilder {
         // counts/markers another. That divergence is silent (no error, just different numbers), and
         // it is precisely what AC4 forbids, so the predicate is expressed in SQL and inherited.
         //
-        // DiscoverPrimaryArea.primaryAreaSqftSql binds nothing — it embeds only this codebase's own
-        // constants — so appending it cannot disturb the positional parameter order built above.
-        // Rows with no resolvable primary area evaluate to NULL and therefore match NEITHER bound:
-        // AC5 ("visible under Any size, excluded when bounded") is SQL three-valued logic, not a
-        // separate rule that could be forgotten on one of the two engines.
-        if (f.areaMinSqft() != null || f.areaMaxSqft() != null) {
-            String areaSqft = DiscoverPrimaryArea.primaryAreaSqftSql("pl");
-            if (f.areaMinSqft() != null) {
-                sb.append(" AND ").append(areaSqft).append(" >= ?");
-                params.add(f.areaMinSqft());
-            }
-            if (f.areaMaxSqft() != null) {
-                sb.append(" AND ").append(areaSqft).append(" <= ?");
-                params.add(f.areaMaxSqft());
-            }
-        }
+        // DiscoverPrimaryArea.areaBoundSql binds nothing beyond the bounds themselves — the
+        // expression embeds only this codebase's own constants — so appending it cannot disturb the
+        // positional parameter order built above. Rows with no resolvable primary area evaluate to
+        // NULL and therefore match NEITHER bound: AC5 ("visible under Any size, excluded when
+        // bounded") is SQL three-valued logic, not a separate rule that could be forgotten on one of
+        // the two engines.
+        //
+        // #2450 — the operators and their bind order moved INTO DiscoverPrimaryArea alongside the
+        // expression, so the anon city-area endpoint could adopt the whole predicate rather than
+        // re-spell it. The emitted SQL here is unchanged, byte for byte.
+        DiscoverPrimaryArea.AreaBoundSql areaBound =
+                DiscoverPrimaryArea.areaBoundSql("pl", f.areaMinSqft(), f.areaMaxSqft(), " ");
+        sb.append(areaBound.sql());
+        params.addAll(areaBound.params());
 
         // areaKeys — restrict to explicit area_key members (group-scoped browse).
         // null = absent param → no filter (backward-compatible; existing journeys pass nothing).

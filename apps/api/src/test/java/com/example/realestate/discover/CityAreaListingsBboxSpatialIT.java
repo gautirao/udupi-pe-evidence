@@ -190,6 +190,10 @@ class CityAreaListingsBboxSpatialIT {
     void controller_nonNumericBbox_returns400() {
         assertThatThrownBy(() -> controller.getCityAreaListings(
                 CITY, List.of(AREA_KEY), null, null, null, null, null, null, null, null, null,
+                // #2450 — areaMinSqft/areaMaxSqft, both absent ("Any size"). These arms are about
+                // bbox parsing and the span guard; the area bound is deliberately not exercised
+                // here, and absent bounds emit no clause at all.
+                null, null,
                 "13.30,not-a-number,13.40,74.80"))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
@@ -201,6 +205,10 @@ class CityAreaListingsBboxSpatialIT {
     void controller_nonFiniteBbox_returns400() {
         assertThatThrownBy(() -> controller.getCityAreaListings(
                 CITY, List.of(AREA_KEY), null, null, null, null, null, null, null, null, null,
+                // #2450 — areaMinSqft/areaMaxSqft, both absent ("Any size"). These arms are about
+                // bbox parsing and the span guard; the area bound is deliberately not exercised
+                // here, and absent bounds emit no clause at all.
+                null, null,
                 "NaN,74.70,13.40,74.80"))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
@@ -215,6 +223,10 @@ class CityAreaListingsBboxSpatialIT {
         // accepts it — only the controller's local validateBoundsSpan should reject this.
         assertThatThrownBy(() -> controller.getCityAreaListings(
                 CITY, List.of(AREA_KEY), null, null, null, null, null, null, null, null, null,
+                // #2450 — areaMinSqft/areaMaxSqft, both absent ("Any size"). These arms are about
+                // bbox parsing and the span guard; the area bound is deliberately not exercised
+                // here, and absent bounds emit no clause at all.
+                null, null,
                 "0.0,0.0,10.1,10.0"))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
@@ -227,6 +239,10 @@ class CityAreaListingsBboxSpatialIT {
     void controller_exactlyAtSpanCap_isAccepted() {
         CityAreaListingsResponse resp = controller.getCityAreaListings(
                 CITY, List.of(AREA_KEY), null, null, null, null, null, null, null, null, null,
+                // #2450 — areaMinSqft/areaMaxSqft, both absent ("Any size"). These arms are about
+                // bbox parsing and the span guard; the area bound is deliberately not exercised
+                // here, and absent bounds emit no clause at all.
+                null, null,
                 "3.30,64.70,13.30,74.70").getBody();
 
         assertThat(resp).isNotNull();

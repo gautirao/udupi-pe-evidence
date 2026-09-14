@@ -1006,6 +1006,22 @@ function AreaLeafListingsSurface({
     // Issue #2023 — CityAreaListingsService now filters on possession_status = 'READY'
     // for this endpoint too, matching markers/navigation-counts/authenticated Browse-all.
     readyToMove: effectiveFilters.readyToMove,
+    // Issue #2450 — the AREA (SQ FT) axis, and the SAME carried-but-not-forwarded shape as
+    // `commercialSubtypes` above, at the same call site. `resolveEffectiveAreaLeafFilters`
+    // already projects both bounds — which is why the chip latches and the bound reaches the
+    // page URL — so they ARRIVED here and were then dropped on the way to the wire. This
+    // surface builds its params inline rather than via `buildCityListingsQueryParams`, so
+    // #2555's adapter fix never reached it: a call site that never passes the field in is
+    // unaffected by the field becoming expressible.
+    //
+    // Forwarded RAW, with no applicability gate and no truthiness guard. Two reasons, both
+    // load-bearing: (1) `cityListingsQueryParams.ts:84-89` — unlike `bedrooms`, an area bound
+    // has no shape to suppress, because #2459 resolves the column PER ROW (built-up / plot /
+    // warehouse) so every property shape has a comparable quantity; (2) a `?.length`-style or
+    // falsy guard would drop `areaMinSqft: 0`, which is a REAL selection the URL layer
+    // deliberately preserves — pinned by this surface's own areaBounds2450 spec.
+    areaMinSqft: effectiveFilters.areaMinSqft,
+    areaMaxSqft: effectiveFilters.areaMaxSqft,
     isAuthenticated,
   });
   // The resolved listings/loading/error/fetching signals this surface renders

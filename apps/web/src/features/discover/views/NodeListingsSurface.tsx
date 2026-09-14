@@ -197,6 +197,18 @@ export function NodeListingsSurface({
     // Issue #2023 — CityAreaListingsService now filters on possession_status = 'READY',
     // same predicate markers/navigation-counts/authenticated Browse-all already apply.
     readyToMove: effectiveFilters.readyToMove,
+    // Issue #2450 — site 4 of the four inline call sites. #2555 already added both bounds to
+    // the `effectiveFilters` projection above (lines 89-90 and 102-103, plus the memo deps),
+    // so the bound ARRIVED here and was then dropped on the way to the wire — the identical
+    // carried-but-not-forwarded shape #2531 found for `commercialSubtypes` at this very call
+    // site, and the reason that projection alone was never sufficient.
+    //
+    // Forwarded raw: no falsy guard, because `areaMinSqft: 0` is a real selection the URL
+    // layer deliberately preserves. No applicability gate either — per
+    // `cityListingsQueryParams.ts:84-89`, unlike `bedrooms` an area bound has no shape to
+    // suppress, since #2459 resolves the column PER ROW.
+    areaMinSqft: effectiveFilters.areaMinSqft,
+    areaMaxSqft: effectiveFilters.areaMaxSqft,
   });
 
   // Normalise anon city-listing items to the DiscoverListingItem shape so a single

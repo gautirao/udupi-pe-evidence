@@ -732,6 +732,31 @@ export function useDiscoverMapData({
     : filters.commercialSubtypes?.length
     ? filters.commercialSubtypes
     : undefined;
+  // Issue #2450 — the AREA (SQ FT) axis, derived ONCE here for BOTH city-listings calls
+  // below (the area-click card list and the anon VIEWPORT set), exactly as
+  // `discoverCommercialSubtypes` is. This hook feeds the cards AND the map markers from
+  // those same queries, so deriving here rather than at each call site is what keeps marker
+  // membership and card membership the same question.
+  //
+  // DELIBERATELY NOT forced off in the agri journey, unlike the subtype above — do not
+  // "restore symmetry" by adding an isAgriJourney branch. The subtype is suppressed because
+  // it would AND against that journey's pinned `agricultural_land` family and empty the
+  // result set. An area bound has no family to conflict with: #2459 resolves the column PER
+  // ROW, and `agricultural_land` resolves to PLOT.
+  //
+  // The effect here is STRUCTURAL rather than observable on agricultural inventory: both
+  // city-listings assemblies exclude agricultural_land unconditionally
+  // (AREA_FIRST_EXCLUDED_PROPERTY_TYPE — in the area-grouped ON clause, and again in the
+  // bbox-only WHERE), so neither of these two queries can return an agri row at all. The
+  // asymmetry is kept because the REASONS differ, not because the agri journey gains rows:
+  // the subtype is unsatisfiable by construction against a pinned family, whereas an area
+  // bound is satisfiable for every shape these queries CAN return. An isAgriJourney branch
+  // here would encode a false equivalence.
+  //
+  // Passed through RAW — no `?.length` or falsy guard — because `areaMinSqft: 0` is a real
+  // selection the URL layer deliberately preserves.
+  const discoverAreaMinSqft = filters.areaMinSqft;
+  const discoverAreaMaxSqft = filters.areaMaxSqft;
 
   // Issue #2017 (owner manual-test fix) — a committed multi-area AREA_SET
   // scope must broaden the area-listings fetch to every committed areaKey,
@@ -780,6 +805,12 @@ export function useDiscoverMapData({
     bedrooms: discoverBedrooms,
     propertyType: discoverPropertyType,
     commercialSubtypes: discoverCommercialSubtypes,
+    // Issue #2450 — site 5 of four. This is the map's OWN area-listings query, and it is the
+    // one that is LIVE whenever the map supplies `mapAreaListings` to the AREA-leaf surface:
+    // in that state the panel's own query (site 3) is disabled by its empty `areaKeys`, so
+    // fixing site 3 alone would have left the actually-rendered request unnarrowed.
+    areaMinSqft: discoverAreaMinSqft,
+    areaMaxSqft: discoverAreaMaxSqft,
     q: debouncedSearch?.trim() || undefined,
     listingPurpose,
     // Issue #1616: thread auth state into the hook so JWT is sent for authed users (they
@@ -968,6 +999,12 @@ export function useDiscoverMapData({
     bedrooms: discoverBedrooms,
     propertyType: discoverPropertyType,
     commercialSubtypes: discoverCommercialSubtypes,
+    // Issue #2450 — site 6 of four: the anon "Search this area" bbox-only set. This one
+    // lands on the backend's SECOND assembly (`getBboxOnlyListings`), which builds its own
+    // WHERE clause independently of the area-grouped path, so this forward and the IT arm
+    // `bboxOnlyPath_appliesAreaBoundsToo` approach the same path from opposite ends.
+    areaMinSqft: discoverAreaMinSqft,
+    areaMaxSqft: discoverAreaMaxSqft,
     q: debouncedSearch?.trim() || undefined,
     listingPurpose,
     // Always false: this branch only ever runs for an anonymous caller (see

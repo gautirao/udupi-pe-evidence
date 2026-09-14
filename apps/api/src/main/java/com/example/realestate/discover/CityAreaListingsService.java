@@ -129,6 +129,39 @@ public class CityAreaListingsService {
     }
 
     /**
+     * The NO-AREA-BOUND shape of the query (#2450) — "Any size".
+     *
+     * <p>Same kind of entry point as the 12-argument overload above, and carrying the same hazard:
+     * a caller that means to narrow by area but reaches this form loses both bounds silently and
+     * COMPILES CLEANLY. That is exactly the shape of the defect being fixed here, one layer down,
+     * so {@link CityAreaListingsController}'s use of the 15-argument form is pinned by assertion in
+     * {@code CityAreaListingsControllerTest} rather than left to review.
+     *
+     * <p>Kept so the dozens of existing call sites with no concept of an area bound — every test
+     * arm predating #2450 included — do not have to thread two literal {@code null}s through a
+     * 15-argument list.
+     */
+    @Transactional(readOnly = true)
+    @SuppressWarnings("java:S107") // mirrors the pre-#2450 signature verbatim
+    public CityAreaListingsResponse getAreaListings(String city,
+                                                    List<String> areaKeys,
+                                                    Integer rawLimit,
+                                                    Long minPrice,
+                                                    Long maxPrice,
+                                                    List<Integer> bedrooms,
+                                                    List<String> propertyType,
+                                                    List<String> commercialSubtypes,
+                                                    String q,
+                                                    String listingPurpose,
+                                                    Boolean readyToMove,
+                                                    DiscoverListingPredicateBuilder.Bbox bbox,
+                                                    boolean isAuthenticated) {
+        return getAreaListings(city, areaKeys, rawLimit, minPrice, maxPrice, bedrooms, propertyType,
+                commercialSubtypes, q, listingPurpose, readyToMove, null, null, bbox,
+                isAuthenticated);
+    }
+
+    /**
      * Returns the city-first area listings response.
      *
      * @param city         city slug (case-insensitive)
@@ -167,6 +200,18 @@ public class CityAreaListingsService {
      *                        {@link DiscoverListingPredicateBuilder}. When {@code areaKeys} is
      *                        absent, bbox alone drives a standalone query capped at
      *                        {@link #BBOX_ONLY_MAX_RESULTS} — see class javadoc.
+     * @param areaMinSqft     optional inclusive lower bound, in sq ft, on the row's PRIMARY area
+     *                        (#2459); null = "Any size". Resolved PER ROW — built-up for
+     *                        dwellings/shops/offices/buildings, warehouse area for warehouses, plot
+     *                        size for land — by {@link DiscoverPrimaryArea}, whose
+     *                        {@code areaBoundSql} this path SHARES with
+     *                        {@link DiscoverListingPredicateBuilder} rather than re-spelling. A row
+     *                        whose primary area cannot be resolved matches NEITHER bound: visible
+     *                        under "Any size", honestly excluded once a bound is active (AC5).
+     *                        Validated (non-negative, non-inverted) by {@link AreaBoundsParam} at
+     *                        the controller.
+     * @param areaMaxSqft     optional inclusive upper bound in sq ft; same per-row resolution and
+     *                        same UNRESOLVED handling as {@code areaMinSqft}
      * @param isAuthenticated true when the caller presented a valid JWT; false for anonymous callers.
      *                        When false, pricePaise is omitted and priceBand (coarse label) is returned
      *                        instead. Server-side price filtering (minPrice/maxPrice) always uses the
@@ -185,6 +230,8 @@ public class CityAreaListingsService {
                                                     String q,
                                                     String listingPurpose,
                                                     Boolean readyToMove,
+                                                    Integer areaMinSqft,
+                                                    Integer areaMaxSqft,
                                                     DiscoverListingPredicateBuilder.Bbox bbox,
                                                     boolean isAuthenticated) {
 
@@ -252,7 +299,8 @@ public class CityAreaListingsService {
                 || areaKeys.stream().allMatch(String::isBlank);
         if (areaKeysAbsent) {
             return getBboxOnlyListings(city, minPrice, maxPrice, normBedrooms, normPropertyTypes,
-                    normSubtypes, normQ, normPurpose, readyToMove, bbox, isAuthenticated);
+                    normSubtypes, normQ, normPurpose, readyToMove, areaMinSqft, areaMaxSqft, bbox,
+                    isAuthenticated);
         }
 
         // Build IN-clause placeholders
@@ -300,6 +348,13 @@ public class CityAreaListingsService {
         if (Boolean.TRUE.equals(readyToMove)) {
             join.add("\n                        AND pl.possession_status = 'READY'");
         }
+        // area bounds (#2459, reached from this endpoint by #2450) — the SAME fragment
+        // DiscoverListingPredicateBuilder applies for markers/counts/authenticated Browse-all, taken
+        // from DiscoverPrimaryArea rather than re-spelled. Re-spelling is what this issue IS: the
+        // bound is on the row's PRIMARY area, not on built_area, and a second hand-written copy of
+        // that resolution would recreate the listings-vs-markers disagreement one layer down, where
+        // the only symptom is different numbers and nothing errors.
+        appendAreaBoundsClause(join, "\n                        ", areaMinSqft, areaMaxSqft);
 
         // Single query: join areas → cities to enforce city ownership, lateral join to listing_images
         // Row shape: area_key, area_name, listing_id (nullable), price_paise, property_type,
@@ -539,6 +594,32 @@ public class CityAreaListingsService {
     static int clampLimit(Integer raw) {
         if (raw == null || raw < 1) return DEFAULT_LIMIT;
         return Math.min(raw, MAX_LIMIT);
+    }
+
+    /**
+     * Emits the area-bound narrowing (#2459) onto either assembly, by DELEGATING to
+     * {@link DiscoverPrimaryArea#areaBoundSql} — the same fragment
+     * {@link DiscoverListingPredicateBuilder} applies for markers, navigation counts and
+     * authenticated Browse-all.
+     *
+     * <p><b>This method deliberately contains no SQL of its own.</b> The bound is not
+     * {@code built_area >= ?}: the column it reads is chosen PER ROW from the row's
+     * {@code property_type}, the value is converted from that row's own unit, and an unresolvable
+     * row yields {@code NULL} so it matches neither bound (AC5). Writing any of that a second time
+     * here would give this endpoint a different notion of "area" from the one the map and the
+     * counts use — a divergence with no error and no symptom except different numbers, which is
+     * precisely the class of defect #2450 was filed for. If this ever needs to change, change
+     * {@link DiscoverPrimaryArea} so both surfaces move together.
+     *
+     * <p>Null bounds emit nothing at all, so "Any size" is byte-for-byte the pre-#2450 query.
+     */
+    private static void appendAreaBoundsClause(ClauseBuilder cb, String indent,
+                                               Integer areaMinSqft, Integer areaMaxSqft) {
+        DiscoverPrimaryArea.AreaBoundSql bound =
+                DiscoverPrimaryArea.areaBoundSql("pl", areaMinSqft, areaMaxSqft, indent);
+        if (!bound.sql().isEmpty()) {
+            cb.add(bound.sql(), bound.params().toArray());
+        }
     }
 
     /**
@@ -1024,6 +1105,8 @@ public class CityAreaListingsService {
                                                           String normQ,
                                                           String normPurpose,
                                                           Boolean readyToMove,
+                                                          Integer areaMinSqft,
+                                                          Integer areaMaxSqft,
                                                           DiscoverListingPredicateBuilder.Bbox bbox,
                                                           boolean isAuthenticated) {
 
@@ -1058,6 +1141,11 @@ public class CityAreaListingsService {
         if (Boolean.TRUE.equals(readyToMove)) {
             where.add("\n              AND pl.possession_status = 'READY'");
         }
+        // area bounds (#2459/#2450) — this path assembles its own WHERE clause and shares nothing
+        // with the area-grouped ON clause but the helpers, so the bound has to be applied here
+        // explicitly. Fixing one path demonstrably does not fix the other, which is why the IT
+        // carries a separate arm for this one rather than assuming it.
+        appendAreaBoundsClause(where, "\n              ", areaMinSqft, areaMaxSqft);
 
         String sql = """
                 SELECT

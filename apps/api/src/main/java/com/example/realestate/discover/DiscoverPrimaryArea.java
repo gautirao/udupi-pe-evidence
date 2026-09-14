@@ -356,6 +356,67 @@ public enum DiscoverPrimaryArea {
     }
 
     /**
+     * One area-bound WHERE fragment and the binds it consumes, in the order the fragment consumes
+     * them.
+     *
+     * @param sql    the fragment, or {@code ""} when neither bound is present
+     * @param params the binds, empty when {@code sql} is empty
+     */
+    public record AreaBoundSql(String sql, List<Object> params) {}
+
+    /**
+     * Emits the {@code areaMinSqft}/{@code areaMaxSqft} narrowing as a WHERE/ON fragment — the ONE
+     * place that predicate is spelled, for every surface that narrows by area.
+     *
+     * <h2>Why this is shared rather than written per endpoint</h2>
+     *
+     * <p>The bound is not {@code built_area >= ?}. It is a bound on the row's PRIMARY area, which
+     * {@link #primaryAreaSqftSql} resolves per row — built-up for dwellings/shops/offices/buildings,
+     * warehouse area for warehouses, plot size for land — and which is {@code NULL} when no meaning
+     * can be resolved. A second endpoint computing "primary area" independently is how this codebase
+     * produced the listings/markers disagreements #2459 and #2450 exist to stop; two hand-written
+     * copies drift SILENTLY, since the only symptom is different numbers. So the operators, their
+     * order, and the bind order live here alongside the expression, not just the expression.
+     *
+     * <p><b>AC5 is inherited, not re-decided.</b> An unresolved row makes the expression {@code NULL},
+     * so {@code NULL >= ?} and {@code NULL <= ?} are both {@code NULL} rather than {@code TRUE}: the
+     * row stays visible under "Any size" and is honestly excluded the moment a bound is active. That
+     * is SQL three-valued logic, so no caller can forget it and nothing is ever coalesced across the
+     * land/built columns to keep such a row in.
+     *
+     * <p>{@link #primaryAreaSqftSql} binds nothing, so the returned fragment consumes exactly the
+     * returned params and embedding it cannot disturb a caller's positional parameter order.
+     *
+     * @param tableAlias      alias of {@code property_listings} in the caller's FROM clause
+     * @param areaMinSqft     inclusive lower bound in sq ft, or {@code null}
+     * @param areaMaxSqft     inclusive upper bound in sq ft, or {@code null}
+     * @param clauseSeparator emitted before each {@code AND} so a caller controls its own layout
+     *                        (a single space for a one-line WHERE, a newline+indent for a
+     *                        multi-line JOIN ON clause). Affects whitespace only.
+     * @return the fragment and its binds; both empty when neither bound is present
+     */
+    public static AreaBoundSql areaBoundSql(String tableAlias,
+                                            Integer areaMinSqft,
+                                            Integer areaMaxSqft,
+                                            String clauseSeparator) {
+        if (areaMinSqft == null && areaMaxSqft == null) {
+            return new AreaBoundSql("", List.of());
+        }
+        String areaSqft = primaryAreaSqftSql(tableAlias);
+        StringBuilder sb = new StringBuilder();
+        List<Object> params = new ArrayList<>(2);
+        if (areaMinSqft != null) {
+            sb.append(clauseSeparator).append("AND ").append(areaSqft).append(" >= ?");
+            params.add(areaMinSqft);
+        }
+        if (areaMaxSqft != null) {
+            sb.append(clauseSeparator).append("AND ").append(areaSqft).append(" <= ?");
+            params.add(areaMaxSqft);
+        }
+        return new AreaBoundSql(sb.toString(), List.copyOf(params));
+    }
+
+    /**
      * The unit-resolving sq-ft conversion for ONE column pair — the SQL twin of
      * {@link AreaNormalizer#toSqft}, including its {@code value <= 0} and unrecognised-unit
      * {@code NULL}s.

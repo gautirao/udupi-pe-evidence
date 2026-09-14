@@ -82,6 +82,12 @@ public class CityAreaListingsController {
      *       unknown values are rejected with a 400 rather than ignored</li>
      *   <li>{@code q} — full-text keyword search (max 500 chars); matched against
      *       {@code search_vector} via {@code websearch_to_tsquery}</li>
+     *   <li>{@code areaMinSqft} / {@code areaMaxSqft} — inclusive bounds, in sq ft, on the row's
+     *       PRIMARY area (#2459, wired to this endpoint by #2450). The meaning follows the row —
+     *       built-up for dwellings/shops/offices/buildings, warehouse area for warehouses, plot
+     *       size for land — and a row whose primary area cannot be resolved matches NEITHER bound.
+     *       A negative or inverted range is a 400, via the same {@link AreaBoundsParam} the
+     *       listings and markers endpoints use</li>
      * </ul>
      *
      * @param city         city slug (e.g. {@code udupi})
@@ -135,6 +141,15 @@ public class CityAreaListingsController {
             @RequestParam(required = false) String q,
             @RequestParam(required = false) String listingPurpose,
             @RequestParam(required = false) Boolean readyToMove,
+            // #2459/#2450 — the AREA (SQ FT) control was UNGATED in the UI (it renders for every
+            // buyer, not just Commercial) and the frontend has sent these since #2585, but this
+            // endpoint never declared them, so Spring discarded them silently: the chip latched,
+            // looked applied, and the results did not move. Same silent-discard shape as the
+            // commercialSubtypes gap #2509 closed on this very method. Named with the sibling
+            // endpoint's spelling (DiscoverListingsController already binds these exact names)
+            // because the frontend emits that spelling on both paths.
+            @RequestParam(required = false) Integer areaMinSqft,
+            @RequestParam(required = false) Integer areaMaxSqft,
             @RequestParam(required = false) String bbox) {
 
         boolean areaKeysAbsent = areaKeys == null || areaKeys.isEmpty() || areaKeys.stream().allMatch(String::isBlank);
@@ -164,6 +179,12 @@ public class CityAreaListingsController {
         }
         validateCommercialSubtypes(commercialSubtypes);
 
+        // #2459 — the SHARED validator, not a local copy, so this endpoint and
+        // DiscoverListingsController reject exactly the same inputs. A URL the shopper can reach
+        // hits both; if one 400s on an inverted range and the other returns an empty page, the
+        // cards and the markers disagree about what the request even meant.
+        AreaBoundsParam.validate(areaMinSqft, areaMaxSqft);
+
         // #2015 — anon "Search this area" viewport narrowing. Reuses BboxParser (shared with
         // DiscoverListingsController/DiscoverMarkersController) so the parsing/validation contract
         // is defined exactly once; the span cap below is duplicated locally (see
@@ -187,9 +208,14 @@ public class CityAreaListingsController {
         // that genuinely apply no subtype narrowing; repointing this call at it would drop every
         // subtype selection silently and COMPILE CLEANLY, which is the #2553/#2023 allowlist-discard
         // shape. CityAreaListingsControllerTest pins this call's subtype argument for that reason.
+        // #2450 — the 15-ARGUMENT form, for the same reason the 13-argument form is used above
+        // rather than the 12: the shorter overload means "Any size" and would drop both bounds
+        // silently while compiling cleanly. CityAreaListingsControllerTest pins both bound
+        // arguments of this call so a swap or a drop fails a test rather than a shopper.
         CityAreaListingsResponse response = service.getAreaListings(
                 city, areaKeys, limitPerArea, minPrice, maxPrice, bedrooms, propertyType,
-                commercialSubtypes, q, listingPurpose, readyToMove, parsedBbox, isAuthenticated);
+                commercialSubtypes, q, listingPurpose, readyToMove, areaMinSqft, areaMaxSqft,
+                parsedBbox, isAuthenticated);
 
         // Cache-control split by auth state:
         //   anon  → coarsened response; safe to share via public cache (maxAge 60s)
