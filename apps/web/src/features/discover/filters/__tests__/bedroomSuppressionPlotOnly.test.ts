@@ -212,6 +212,59 @@ describe('#2459 AC2 — which selections are commercial-only ("Commercial never 
     expect(isCommercialOnlySelection({ propertyTypes: ['other'] })).toBe(false);
     expect(isCommercialOnlySelection({ propertyTypes: ['warehouse', 'other'] })).toBe(false);
   });
+
+  /**
+   * Issue #2531 — the ONE-AXIS shape, which this predicate could not previously see.
+   *
+   * A Commercial subtype selection rides `commercialSubtypes` alone and sets no family token, so
+   * `propertyTypes` is empty and a family-only rule returns false. Until #2531 that was inert: the
+   * subtype never reached the wire, so it could not combine with a bedroom bound. Forwarding the
+   * axis made `?subtype=OFFICE&beds=3` expressible — and a commercial row carries `bedrooms` NULL,
+   * so that pair is HTTP 200 with zero rows and no reason the buyer can see.
+   */
+  it('a subtype-only selection IS commercial-only, with no family token present', () => {
+    for (const subtype of ['SHOP', 'OFFICE', 'BUILDING', 'WAREHOUSE', 'LAND']) {
+      expect(isCommercialOnlySelection({ commercialSubtypes: [subtype] })).toBe(true);
+      expect(shouldSubmitBedrooms({ commercialSubtypes: [subtype] })).toBe(false);
+    }
+  });
+
+  /**
+   * The control that keeps the fix narrow. Only a NON-EMPTY subtype list may flip the empty-types
+   * branch: treating empty `propertyTypes` as commercial outright would suppress the bedroom
+   * predicate for the DEFAULT unfiltered view, which is the opposite of AC2. Without this arm,
+   * `return true` in that branch would pass the test above.
+   */
+  it('the no-selection edge is unchanged — empty still means every type, dwellings included', () => {
+    expect(isCommercialOnlySelection({ commercialSubtypes: [] })).toBe(false);
+    expect(shouldSubmitBedrooms({})).toBe(true);
+    expect(shouldSubmitBedrooms({ commercialSubtypes: [] })).toBe(true);
+  });
+
+  /**
+   * End to end through the REAL facade: a composed `?subtype=OFFICE&beds=3` link is the shape that
+   * is buyer-reachable TODAY, while `isCommercialSubtypeSupported` is still false and there is no
+   * clickable Commercial chip. The buyer's bedroom value must survive in state (suppression is
+   * about SUBMISSION, per this module's header) while never reaching the wire.
+   *
+   * SCOPE — read the assertion, not the title. `wireParamsFor` builds
+   * `buildDiscoverSearchParams`, i.e. the AUTHENTICATED listings/markers wire, which is one of
+   * the three boundaries that gate on `shouldSubmitBedrooms`. It does NOT cover the anon
+   * city-listings path: `buildCityListingsQueryParams` forwards `bedrooms` unconditionally and
+   * is not among the censused boundaries, so this same link still carries `bedrooms` there. That
+   * gap is #2531 review FINDING 1b and is deliberately NOT claimed closed by this arm.
+   */
+  it('a composed ?subtype=OFFICE&beds=3 link puts NO bedrooms on the AUTHENTICATED wire', () => {
+    const { result } = renderFacade('/discover?city=bangalore&subtype=OFFICE&beds=3');
+    const restored = result.current.urlState[0].filters;
+    expect(restored.commercialSubtypes).toEqual(['OFFICE']);
+    // Retained, not deleted — switching back to a dwelling must re-emit it.
+    expect(restored.bedrooms).toEqual([3]);
+    expect(wireParamsFor(restored).getAll('bedrooms')).toEqual([]);
+    // Same-shape control: the subtype itself still reaches the wire, so the empty bedrooms above
+    // is suppression rather than an unbuilt param set.
+    expect(wireParamsFor(restored).getAll('commercialSubtypes')).toEqual(['OFFICE']);
+  });
 });
 
 describe('#2459 AC2 — the bedroom predicate never reaches the wire for a commercial selection', () => {

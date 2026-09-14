@@ -3,7 +3,16 @@ import type { DiscoverCityListingsParams } from '@/hooks/useDiscoverCityListings
 
 type BuiltCityListingsQueryParams = Pick<
   DiscoverCityListingsParams,
-  'city' | 'areaKeys' | 'limitPerArea' | 'propertyType' | 'bedrooms' | 'minPrice' | 'maxPrice' | 'listingPurpose' | 'q'
+  | 'city'
+  | 'areaKeys'
+  | 'limitPerArea'
+  | 'propertyType'
+  | 'commercialSubtypes'
+  | 'bedrooms'
+  | 'minPrice'
+  | 'maxPrice'
+  | 'listingPurpose'
+  | 'q'
 >;
 
 /**
@@ -28,6 +37,22 @@ type BuiltCityListingsQueryParams = Pick<
  * is always 20 here regardless of caller — the anon path is a teaser, not a
  * full paginated view.
  *
+ * Issue #2531 — `commercialSubtypes` is forwarded too. Before this it was not merely
+ * dropped, it was UNREPRESENTABLE: the Pick<> union above had no such member, so a
+ * committed Commercial subtype could not be expressed on the anon path at all and the
+ * backend (which has accepted the param since #2509) returned every commercial family.
+ * Forwarded independently of `propertyType` because a Commercial selection rides the
+ * subtype axis ALONE — gating it on `propertyTypes` being set would re-drop it.
+ *
+ * BEDROOMS ARE NOT GATED HERE, deliberately — do not read that as an oversight. #2527 asks the
+ * anon path to reuse the shared `shouldSubmitBedrooms` predicate rather than grow a second
+ * implementation, and #2531 added that call one layer down, inside `useDiscoverCityListings`. That
+ * is the last point before the URL is built and the one function all six production call sites
+ * funnel through, so a single gate cannot drift and a future call site inherits it; gating here
+ * PLUS the four direct call sites would be five places to keep in step — the "N sites, not N-1"
+ * shape #2531 exists to remove. So this adapter still RETURNS `bedrooms` for a plot-only or
+ * commercial-only selection; the hook is what declines to emit it.
+ *
  * priceMin/priceMax are converted from rupees (`PropertyFilters`' unit) to
  * paise (the backend's unit) — same conversion at both original call sites.
  */
@@ -43,6 +68,7 @@ export function buildCityListingsQueryParams(
     areaKeys,
     limitPerArea: 20,
     propertyType: filters.propertyTypes?.length ? filters.propertyTypes : undefined,
+    commercialSubtypes: filters.commercialSubtypes?.length ? filters.commercialSubtypes : undefined,
     bedrooms: filters.bedrooms?.length ? filters.bedrooms : undefined,
     minPrice: filters.priceMin != null ? filters.priceMin * 100 : undefined,
     maxPrice: filters.priceMax != null ? filters.priceMax * 100 : undefined,

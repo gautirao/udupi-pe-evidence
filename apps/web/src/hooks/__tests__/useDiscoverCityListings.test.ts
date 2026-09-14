@@ -216,6 +216,107 @@ describe('useDiscoverCityListings', () => {
     expect(params.get('bedrooms')).toBe('3');
   });
 
+  // ─── Part of #2527 / #2531 review FINDING 1b — bedroom applicability on the ANON path ───
+  //
+  // #2459 AC2 censused three submission boundaries and missed this one, so the anon
+  // city-listings request emitted `bedrooms` unconditionally. Plot and commercial rows carry
+  // `bedrooms` NULL, so `AND pl.bedrooms IN (3)` eliminates every row: HTTP 200, zero results,
+  // no reason the buyer can see. #2531 made the commercial half of that REACHABLE by forwarding
+  // the subtype, which is why the guard lands here rather than being left to #2527 alone.
+  //
+  // Each arm asserts the OTHER axis still reaches the wire, so an absent `bedrooms` is
+  // suppression rather than a request that was never built.
+
+  it('does NOT append bedrooms for a subtype-only Commercial selection', async () => {
+    mockGet.mockResolvedValue(BASE_RESPONSE);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverCityListings({
+          city: 'udupi',
+          areaKeys: ['udupi|manipal'],
+          commercialSubtypes: ['OFFICE'],
+          bedrooms: [3],
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.has('bedrooms')).toBe(false);
+    expect(params.getAll('commercialSubtypes')).toEqual(['OFFICE']);
+  });
+
+  it('does NOT append bedrooms for a plot-only selection (#2527 own case)', async () => {
+    mockGet.mockResolvedValue(BASE_RESPONSE);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverCityListings({
+          city: 'udupi',
+          areaKeys: ['udupi|manipal'],
+          propertyType: ['residential_plot'],
+          bedrooms: [3],
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.has('bedrooms')).toBe(false);
+    expect(params.getAll('propertyType')).toEqual(['residential_plot']);
+  });
+
+  // CONTROL — a mixed selection still HAS a bedroom-bearing shape, so the constraint stays
+  // meaningful and must survive (the #2537 per-shape ruling). Passes before AND after the guard.
+  it('STILL appends bedrooms for a mixed dwelling+commercial selection', async () => {
+    mockGet.mockResolvedValue(BASE_RESPONSE);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverCityListings({
+          city: 'udupi',
+          areaKeys: ['udupi|manipal'],
+          propertyType: ['apartment', 'warehouse'],
+          bedrooms: [3],
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.getAll('bedrooms')).toEqual(['3']);
+  });
+
+  // CONTROL — the regression guard that catches an over-broad fix. "No selection" is NOT
+  // commercial-only and NOT plot-only, so the buyer's bedroom filter must still be submitted
+  // across every Residential journey. Passes before AND after.
+  it('STILL appends bedrooms when no property selection is active', async () => {
+    mockGet.mockResolvedValue(BASE_RESPONSE);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverCityListings({
+          city: 'udupi',
+          areaKeys: ['udupi|manipal'],
+          bedrooms: [2, 3],
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.getAll('bedrooms')).toEqual(['2', '3']);
+  });
+
   it('appends propertyType when provided', async () => {
     mockGet.mockResolvedValue(BASE_RESPONSE);
 

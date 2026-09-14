@@ -3,6 +3,8 @@ import { api } from '@/lib/api';
 import { useDiscoverSource, discoverPath, discoverKey } from '@/features/discover/state/DiscoverDataSourceContext';
 import { snapBbox } from '@/lib/bboxUtils';
 import type { DiscoverCommercialFactsDto } from '@/hooks/useDiscoverListings';
+import type { CommercialSubtype } from '@/lib/listing-constants';
+import { shouldSubmitBedrooms } from '@/features/discover/filters/bedroomApplicability';
 
 /**
  * Client freshness for public city listings, mirroring the endpoint's
@@ -151,6 +153,29 @@ export interface DiscoverCityListingsParams {
    * already cached at page load and showing the buyer unrelated property types.
    */
   propertyType?: string[];
+  /**
+   * Issue #2531 — Commercial buyer subtype narrowing, sent as a REPEATED
+   * `?commercialSubtypes=SHOP&commercialSubtypes=OFFICE` param.
+   *
+   * Unlike `propertyType`/`bedrooms` above, the param NAME here is the PLURAL
+   * `commercialSubtypes`: this param is new on this endpoint (#2509), so there is no
+   * pre-existing frontend request shape or saved URL to stay wire-compatible with, and
+   * the plural matches the sibling authenticated endpoints. See
+   * `CityAreaListingsController.java:128-134`, which states this asymmetry deliberately.
+   *
+   * Values are the canonical upper-case taxonomy (`SHOP`/`OFFICE`/`BUILDING`/`WAREHOUSE`/
+   * `LAND`). An unknown value is a 400 from the server, not a silent ignore — so rather than
+   * leaving that requirement to this sentence, the param is typed to the union itself
+   * (#2531 review, FINDING 3). An unrecognised value is now a COMPILE error at the call site
+   * instead of a runtime 400, and the narrowing flows through `buildCityListingsQueryParams`'
+   * `Pick<>` for free. `PropertyFilters.commercialSubtypes` is already this type, so every
+   * caller assigns unchanged.
+   *
+   * ONE AXIS: a Commercial selection rides this key alone and sets no `propertyType` —
+   * the server derives the family via `DiscoverFilterNormalizer.impliedPropertyTypes`.
+   * So this must be forwarded independently of `propertyType`, never gated on it.
+   */
+  commercialSubtypes?: CommercialSubtype[];
   /** Free-text keyword search forwarded to the backend FTS endpoint. */
   q?: string;
   /** Issue #1494 — buy/rent intent mapped to listingPurpose for the backend. */
@@ -199,6 +224,7 @@ export function useDiscoverCityListings({
   maxPrice,
   bedrooms,
   propertyType,
+  commercialSubtypes,
   q,
   listingPurpose,
   readyToMove,
@@ -233,6 +259,14 @@ export function useDiscoverCityListings({
       // The WIRE order below is left as the caller supplied it.
       bedrooms?.length ? [...bedrooms].sort((a, b) => a - b).join(',') : null,
       propertyType?.length ? [...propertyType].sort().join(',') : null,
+      // Issue #2531 — same sorted-join treatment as the two axes above, for the same
+      // reasons: the backend's IN-list is order-insensitive (so two click orders of the
+      // same set are genuinely one result and should share a cache entry), and a
+      // primitive key segment stops a caller that rebuilds the array each render from
+      // fragmenting the cache by identity. Omitting this segment would be the worse bug:
+      // the subtype would reach the wire but NOT the key, so switching Shop→Office would
+      // hit the cached Shop response and render the wrong rows without a refetch.
+      commercialSubtypes?.length ? [...commercialSubtypes].sort().join(',') : null,
       q?.trim() || null,
       listingPurpose ?? null,
       readyToMove ?? null,
@@ -273,8 +307,33 @@ export function useDiscoverCityListings({
       // Issue #2533 — repeated params, one per selected value. An empty array appends
       // nothing, so "nothing selected" stays indistinguishable from "param absent"
       // (the backend treats a missing param as "no narrowing", never as "match none").
-      bedrooms?.forEach((b) => params.append('bedrooms', String(b)));
+      //
+      // Part of #2527 / Issue #2531 review FINDING 1b — the bedroom applicability guard, which
+      // this endpoint was missing entirely. #2459 AC2 censused three submission boundaries and
+      // this was not among them, so `bedroomApplicability`'s own stated invariant ("anything that
+      // can put a bedroom constraint in front of the server calls shouldSubmitBedrooms first") was
+      // FALSE for the anon path: a plot-only or commercial-only selection still emitted `bedrooms`,
+      // and those shapes carry `bedrooms` NULL, so the query could only ever return nothing.
+      //
+      // GATED HERE, AT THE HOOK — deliberately ONE place rather than at
+      // `buildCityListingsQueryParams` plus the four direct call sites. All six production call
+      // sites funnel through this function, and this is the last point before the URL is built, so
+      // a single gate cannot drift and any FUTURE call site inherits it. Gating five sites would
+      // rebuild the "N sites, not N-1" shape that #2531 itself is a fix for, and #2527 asks for
+      // "the same applicability predicate, not a second implementation".
+      //
+      // The predicate reads the selection this very request is about (`propertyType` +
+      // `commercialSubtypes`), so it cannot disagree with what the request actually asks for.
+      // `bedrooms` is NOT cleared from state or from the cache key — suppression is about
+      // SUBMISSION, so switching back to a dwelling re-emits the buyer's value untouched.
+      if (shouldSubmitBedrooms({ propertyTypes: propertyType, commercialSubtypes })) {
+        bedrooms?.forEach((b) => params.append('bedrooms', String(b)));
+      }
       propertyType?.forEach((t) => params.append('propertyType', t));
+      // Issue #2531 — repeated param, PLURAL name (see the field's doc above). Same
+      // empty-array-appends-nothing rule as the two axes above: "nothing selected" must
+      // stay indistinguishable from "param absent", never become "match none".
+      commercialSubtypes?.forEach((s) => params.append('commercialSubtypes', s));
       if (q?.trim()) params.append('q', q.trim());
       if (listingPurpose) params.append('listingPurpose', listingPurpose);
       if (readyToMove) params.append('readyToMove', 'true');

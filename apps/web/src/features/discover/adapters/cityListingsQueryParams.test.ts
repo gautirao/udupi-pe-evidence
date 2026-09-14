@@ -28,6 +28,44 @@ describe('buildCityListingsQueryParams (#2142 Commit 2 — moved verbatim from M
     expect(result.bedrooms).toBeUndefined();
   });
 
+  // ─── Issue #2531 — Commercial subtype forwarding ───────────────────────────
+  //
+  // Before this fix the field was not merely dropped, it was UNREPRESENTABLE: the
+  // BuiltCityListingsQueryParams Pick<> union had no `commercialSubtypes` member, so
+  // a committed Commercial subtype could not be expressed on the anon path at all.
+
+  it('forwards the FULL commercialSubtypes selection', () => {
+    const filters: PropertyFilters = { commercialSubtypes: ['SHOP', 'OFFICE'] };
+    const result = buildCityListingsQueryParams('udupi', [], filters, 'sale');
+    expect(result.commercialSubtypes).toEqual(['SHOP', 'OFFICE']);
+  });
+
+  /**
+   * ONE AXIS: a Commercial selection rides `commercialSubtypes` alone and sets no
+   * `propertyTypes`. An implementation that forwarded the subtype only alongside a
+   * property type would drop it on every real selection, so this pins the real shape
+   * rather than the convenient one.
+   */
+  it('forwards commercialSubtypes even when no propertyTypes is selected', () => {
+    const filters: PropertyFilters = { commercialSubtypes: ['OFFICE'] };
+    const result = buildCityListingsQueryParams('udupi', [], filters, 'sale');
+    expect(result.commercialSubtypes).toEqual(['OFFICE']);
+    expect(result.propertyType).toBeUndefined();
+  });
+
+  // Falsifiability control, same query shape: absent selection stays undefined rather
+  // than becoming an empty array a caller could mistake for "match none".
+  it('leaves commercialSubtypes undefined when nothing is selected', () => {
+    const result = buildCityListingsQueryParams('udupi', [], {}, 'sale');
+    expect(result.commercialSubtypes).toBeUndefined();
+  });
+
+  it('normalises an empty commercialSubtypes array to undefined', () => {
+    const filters: PropertyFilters = { commercialSubtypes: [] };
+    const result = buildCityListingsQueryParams('udupi', [], filters, 'sale');
+    expect(result.commercialSubtypes).toBeUndefined();
+  });
+
   it('converts priceMin/priceMax from rupees to paise (x100)', () => {
     const filters: PropertyFilters = { priceMin: 1000000, priceMax: 5000000 };
     const result = buildCityListingsQueryParams('udupi', [], filters, 'sale');

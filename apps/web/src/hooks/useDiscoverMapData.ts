@@ -719,6 +719,19 @@ export function useDiscoverMapData({
     : filters.propertyTypes?.length
     ? filters.propertyTypes
     : undefined;
+  // Issue #2531 — Commercial subtype narrowing for BOTH city-listings calls below (the
+  // area-click card list and the anon VIEWPORT set). This hook feeds the cards AND the
+  // map markers from those same two queries, so forwarding it here — rather than at one
+  // call site — is what keeps marker membership and card membership the same question.
+  //
+  // Forced OFF in the agri journey for the same reason `discoverPropertyType` is forced
+  // to agricultural_land: that journey pins the family, and a leftover Commercial subtype
+  // would AND against it and empty the agri result set.
+  const discoverCommercialSubtypes = isAgriJourney
+    ? undefined
+    : filters.commercialSubtypes?.length
+    ? filters.commercialSubtypes
+    : undefined;
 
   // Issue #2017 (owner manual-test fix) — a committed multi-area AREA_SET
   // scope must broaden the area-listings fetch to every committed areaKey,
@@ -766,6 +779,7 @@ export function useDiscoverMapData({
     maxPrice: discoverMaxPrice,
     bedrooms: discoverBedrooms,
     propertyType: discoverPropertyType,
+    commercialSubtypes: discoverCommercialSubtypes,
     q: debouncedSearch?.trim() || undefined,
     listingPurpose,
     // Issue #1616: thread auth state into the hook so JWT is sent for authed users (they
@@ -953,6 +967,7 @@ export function useDiscoverMapData({
     maxPrice: discoverMaxPrice,
     bedrooms: discoverBedrooms,
     propertyType: discoverPropertyType,
+    commercialSubtypes: discoverCommercialSubtypes,
     q: debouncedSearch?.trim() || undefined,
     listingPurpose,
     // Always false: this branch only ever runs for an anonymous caller (see

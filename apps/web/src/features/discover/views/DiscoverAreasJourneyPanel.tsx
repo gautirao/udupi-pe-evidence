@@ -989,6 +989,15 @@ function AreaLeafListingsSurface({
     // Issue #2533 — full selection forwarded; see useDiscoverCityListings' propertyType
     // doc for why the previous `length === 1` collapse dropped the filter outright.
     propertyType: effectiveFilters.propertyTypes?.length ? effectiveFilters.propertyTypes : undefined,
+    // Issue #2531 — the AREA-FIRST journey's own leaf query, and the sixth of six
+    // production call sites. `resolveEffectiveAreaLeafFilters` (above) already projects
+    // the subtype as of #2553, so it ARRIVED here and was then dropped on the way to the
+    // wire — carried-but-not-forwarded, one layer below the boundary #2553 fixed.
+    // Widening the hook's params type does nothing for a call site that never passes the
+    // field in, which is why this is enumerated rather than assumed.
+    commercialSubtypes: effectiveFilters.commercialSubtypes?.length
+      ? effectiveFilters.commercialSubtypes
+      : undefined,
     bedrooms: effectiveFilters.bedrooms?.length ? effectiveFilters.bedrooms : undefined,
     minPrice: effectiveFilters.priceMin != null ? effectiveFilters.priceMin * 100 : undefined,
     maxPrice: effectiveFilters.priceMax != null ? effectiveFilters.priceMax * 100 : undefined,

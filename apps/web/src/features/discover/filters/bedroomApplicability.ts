@@ -44,8 +44,16 @@
  *   > counts query — calls {@link shouldSubmitBedrooms} first.
  *
  * That sentence stays true as call sites are added; the census below is only where they are TODAY
- * (three, verified 2026-09-12), and is not the thing to keep in step. If you add a fourth, add the
+ * (four, verified 2026-09-14), and is not the thing to keep in step. If you add a fifth, add the
  * call — updating this list is a courtesy, not the contract.
+ *
+ * **The invariant above was FALSE when it was written, and #2527 is the proof.** A fourth boundary
+ * already existed and was not called: the ANONYMOUS city-listings request
+ * (`hooks/useDiscoverCityListings.ts`) emitted `bedrooms` unconditionally, so a plot-only selection
+ * on the anon path submitted a predicate that can only return nothing — precisely what this module
+ * exists to prevent. The paragraph above warns that a count read as a guarantee is how a boundary
+ * goes missing, and then the census did exactly that. It is corrected rather than deleted, because
+ * a reader who finds the old "three" elsewhere needs to know it was superseded.
  *
  *  - `lib/discoverSearchParams.ts` — the single builder BOTH `/api/discover/listings` and
  *    `/api/discover/markers` call, so cards and map markers cannot disagree about whether a
@@ -59,6 +67,12 @@
  *    the original defect rather than a partial fix: before AC2 every path emitted bedrooms —
  *    wrong, but CONSISTENT — whereas suppressing at only the request and link boundaries would
  *    make a destination advertise a count its own result list cannot reproduce.
+ *  - `hooks/useDiscoverCityListings.ts` — the ANONYMOUS per-area city-listings request (#2527,
+ *    added by #2531). Gated inside the hook rather than at `buildCityListingsQueryParams` plus the
+ *    four direct call sites, deliberately: all six production call sites funnel through this one
+ *    function and it is the last point before the URL is built, so one gate cannot drift and a
+ *    future call site inherits it. Gating five places would rebuild the "N sites, not N-1" shape
+ *    that #2531 is itself a fix for.
  *
  * ## The meaning, not a hand-maintained list of types
  *
@@ -126,16 +140,25 @@ export function isPlotOnlySelection(selection: PrimaryAreaSelection = {}): boole
  * Bedroom rule, in the same shape as {@link isPlotOnlySelection} and for the same reasons.
  *
  * The family is read from {@link resolvePrimaryAreaFamily}, which already returns `'commercial'`;
- * no new taxonomy is declared here. Subtype is deliberately NOT consulted: all five buyer subtypes
- * (SHOP/OFFICE/BUILDING/WAREHOUSE/LAND) are commercial, and a commercial row carries `bedrooms`
- * NULL whichever one it is, so the family alone settles the question. That also means an
- * unnarrowed Commercial selection — the two-click path `Residential 3 BHK → Commercial Shop` —
- * is covered, which is the case that was reaching the wire.
+ * no new taxonomy is declared here. Whenever a property type IS present the family alone settles
+ * the question — all five buyer subtypes (SHOP/OFFICE/BUILDING/WAREHOUSE/LAND) are commercial and a
+ * commercial row carries `bedrooms` NULL whichever one it is. That covers an unnarrowed Commercial
+ * selection, the two-click path `Residential 3 BHK → Commercial Shop`, which is the case that was
+ * reaching the wire.
+ *
+ * **Issue #2531 — an earlier revision of this paragraph said subtype is "deliberately NOT
+ * consulted", and that is now false.** The reasoning was sound only while every Commercial
+ * selection carried a family token. Under the ONE-AXIS contract a subtype selection rides
+ * `commercialSubtypes` ALONE and sets no `propertyTypes` at all, so a rule keyed solely on the
+ * family cannot see it. The sentence is corrected rather than deleted: a reader who finds the old
+ * claim elsewhere needs to know it was superseded, not wonder which is current.
  *
  * The same three edges as the plot rule, and for the same reasons:
  *
- *  - **No selection is not commercial-only.** Empty/absent `propertyTypes` means every type,
- *    dwellings included.
+ *  - **No selection is not commercial-only — UNLESS a subtype is selected.** Empty/absent
+ *    `propertyTypes` normally means every type, dwellings included. The one exception is the
+ *    one-axis shape above, where an empty type list alongside a NON-EMPTY subtype list is an
+ *    unambiguously commercial selection.
  *  - **An unfamilied type is not commercial.** `other` resolves to `null`, so it makes the
  *    selection NOT commercial-only and the predicate is submitted as before — a shrug must not
  *    silently drop a constraint the buyer set.
@@ -144,7 +167,20 @@ export function isPlotOnlySelection(selection: PrimaryAreaSelection = {}): boole
  */
 export function isCommercialOnlySelection(selection: PrimaryAreaSelection = {}): boolean {
   const selectedTypes = selection.propertyTypes;
-  if (selectedTypes == null || selectedTypes.length === 0) return false;
+  if (selectedTypes == null || selectedTypes.length === 0) {
+    // Issue #2531 — the ONE-AXIS shape. `AreaSelectedPanel`'s `handleToggleSubtype` spreads
+    // `...filters` and writes `commercialSubtypes` alone, never adding a family token, so
+    // `propertyTypes` is genuinely empty while the selection is unambiguously commercial.
+    //
+    // This branch was inert until #2531: the subtype never reached the wire on the anon paths, so
+    // it could not combine with a bedroom bound. Forwarding the axis is what made
+    // `?subtype=OFFICE&beds=3` expressible — and per this module's header a commercial row carries
+    // `bedrooms` NULL, so that pair is a search that can only ever return nothing.
+    //
+    // A NON-EMPTY subtype list is required: bare `{}` must stay "no narrowing", or this would
+    // suppress the bedroom predicate for the default unfiltered view, the opposite of AC2.
+    return (selection.commercialSubtypes?.length ?? 0) > 0;
+  }
   return selectedTypes.every((rawType) => resolvePrimaryAreaFamily(rawType) === 'commercial');
 }
 

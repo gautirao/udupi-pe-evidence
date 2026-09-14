@@ -157,6 +157,14 @@ export function NodeListingsSurface({
     // client-side; that under-included, because the server's 20-per-area teaser cap was
     // applied to the over-broad single-value result set BEFORE the client narrowed it.
     propertyType: effectiveFilters.propertyTypes?.length ? effectiveFilters.propertyTypes : undefined,
+    // Issue #2531 — this surface calls the hook DIRECTLY (it does not go through
+    // buildCityListingsQueryParams), so the adapter fix does not reach it. #2553 made the
+    // subtype survive the commit boundary into `effectiveFilters` above; without this line
+    // it arrived here and was then dropped on the way to the wire — the same
+    // carried-but-not-forwarded shape one layer further down.
+    commercialSubtypes: effectiveFilters.commercialSubtypes?.length
+      ? effectiveFilters.commercialSubtypes
+      : undefined,
     bedrooms: effectiveFilters.bedrooms?.length ? effectiveFilters.bedrooms : undefined,
     // priceMin/priceMax: convert from rupees (PropertyFilters unit) to paise (backend unit).
     minPrice: effectiveFilters.priceMin != null ? effectiveFilters.priceMin * 100 : undefined,

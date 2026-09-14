@@ -100,6 +100,16 @@ export function useDiscoverPageContext() {
     const f = nav.filters;
     return {
       propertyTypes: f.propertyTypes as PropertyFilters['propertyTypes'],
+      // Issue #2531 — the projection that made every downstream subtype fix inert.
+      // `urlDiscoverFilters` is what BOTH anon adapter call sites
+      // (useDiscoverResultsController, useDiscoverBoundedBrowseController) hand to
+      // `buildCityListingsQueryParams`, and what the authenticated group-results
+      // listings/markers queries serialise via `buildDiscoverSearchParams`. Every one of
+      // those forwards `commercialSubtypes` faithfully — but the field never ARRIVED,
+      // because this explicit key list omitted it. A forwarding fix downstream of a
+      // projection that drops the axis is a no-op, which is why the call-site enumeration
+      // alone did not surface this: it is a drop point, not a call site.
+      commercialSubtypes: f.commercialSubtypes as PropertyFilters['commercialSubtypes'],
       bedrooms: f.bedrooms,
       priceMin: f.priceMin,
       priceMax: f.priceMax,
@@ -123,6 +133,10 @@ export function useDiscoverPageContext() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     nav.filters.propertyTypes,
+    // Issue #2531 — without this dep the memo would not recompute on a subtype change,
+    // so the axis would reach the projection but the controllers would keep the
+    // previously-derived object: correct code, stale value.
+    nav.filters.commercialSubtypes,
     nav.filters.bedrooms,
     nav.filters.priceMin,
     nav.filters.priceMax,
