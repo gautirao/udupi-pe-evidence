@@ -305,6 +305,139 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- ───────────────────────────────────────────────────────────────────────────
+-- BEDROOMS-PER-SHAPE DISCRIMINATING TRIO (Issue #2570, unblocks #2566)
+--
+-- #2566 makes the bedroom predicate apply PER SHAPE instead of as a global
+-- conjunct. Before it, `AND pl.bedrooms IN (3)` was ANDed across the whole query,
+-- so a bedroom-INCAPABLE row (bedrooms NULL) evaluated to NULL — not TRUE — and
+-- was silently eliminated. The fix emits
+--     AND ((pl.bedrooms IN (3)) OR pl.property_type IN ('residential_plot'))
+-- admitting incapable shapes without judging them by a predicate that cannot
+-- describe them.
+--
+--   R1  2570…0001  apartment,        bedrooms = 3  -> RETAINED in both arms
+--   R2  2570…0002  apartment,        bedrooms = 2  -> EXCLUDED in both arms
+--   R3  2570…0003  residential_plot, bedrooms NULL -> ABSENT pre-fix, RETAINED post-fix
+--
+-- Discriminating request:
+--   /api/discover/cities/bangalore/listings
+--     ?areaKeys=IN|KA|Bengaluru|Sanjeevini Nagar
+--     &propertyType=apartment&propertyType=residential_plot&bedrooms=3
+--
+-- WHY R1 AND R2 SHARE A property_type — load-bearing, and easy to get wrong. If R2
+-- were a different bedroom-capable shape (a house, say), the request above would
+-- exclude it via `property_type IN (…)` rather than via the bedroom predicate, so
+-- the arm would prove nothing about bedroom narrowing — it would pass against a fix
+-- that dropped the bedroom predicate entirely. A control that excludes for the wrong
+-- reason is not a control. R1 and R2 differ in EXACTLY ONE property: the bedroom
+-- count. Asserted below, because the two rows are one careless edit from diverging.
+--
+-- WHY R2 EXISTS. Without a wrong-count dwelling that must stay excluded, the journey
+-- proves only retention, and would pass against a fix that merely stopped filtering.
+--
+-- WHY R3 IS residential_plot AND NOT agricultural_land.
+-- CityAreaListingsService.AREA_FIRST_EXCLUDED_PROPERTY_TYPE is agricultural_land,
+-- excluded UNCONDITIONALLY by both query paths, so an agricultural R3 would be absent
+-- in BOTH arms and the retention it exists to show could never be observed. That
+-- exclusion is INVISIBLE from the endpoint: `propertyType` is NOT validated, so an
+-- excluded type and an outright typo both return 200 with ZERO rows (unlike
+-- `commercialSubtypes`, which 400s). And note the verification trap: on an area with
+-- no agricultural inventory the empty 200 proves nothing, because empty-because-
+-- filtered and empty-because-absent are indistinguishable. residential_plot is in
+-- PropertyType (V103's chk_listing_property_type) and therefore in
+-- DiscoverFilterNormalizer.ALLOWED_PROPERTY_TYPES, so it normalises, is satisfiable,
+-- and emits a plain `AND pl.property_type IN (?)`: genuinely SERVED.
+--
+-- WHY THIS AREA. Manipal cannot host these arms: Udupi has ZERO navigation_nodes
+-- (measured — bangalore 20, nothing else), so the area-first journey has no node to
+-- resolve and renders the journey chooser rather than an area panel. Every
+-- d:southeast leaf is count-pinned by a LIVE-fixture spec — RR Nagar by issue-2129
+-- (`property-marker` toHaveCount(2)) and issue-2089 (`listing-card` toHaveCount(2)),
+-- Vijayanagar by issue-2083's exact per-area purpose split, and Nagarbhavi is the
+-- deliberate zero-rent control. R3 must be SERVED to demonstrate retention, and
+-- anything served in those scopes moves a pinned count. Sanjeevini Nagar has an AREA
+-- navigation node (depth 2 under d:central) and no cardinality pins — the same
+-- reasoning, and the same area, this file already chose for its Commercial inventory.
+--
+-- WHY created_at IS A FIXED PAST LITERAL, NOT NOW(). capture-2433-visual.spec.ts crops
+-- its evidence screenshot to the union of the FIRST THREE cards' bounding boxes. Rows
+-- stamped NOW() would become those three cards, so #2433's frames would silently show
+-- THESE rows instead of the Commercial summary rows they exist to prove — and nothing
+-- would fail, because that spec asserts only `cardCount > 0` and merely RECORDS the
+-- summary count. A silently corrupted evidence frame is worse than a broken test.
+--
+-- WHICH SERVICE — stated precisely, because an earlier revision of this comment named
+-- the wrong one. That spec drives the VIEWPORT journey (`rscope=vp&rvp=…`, :89), served
+-- by DiscoverListingsService (/api/discover/listings), which pages with LIMIT/OFFSET and
+-- has NO per-area cap. CityAreaListingsService's DEFAULT_LIMIT of 5 is NOT in play on
+-- the capture path, so no cap argument protects these rows there. The seeded coordinates
+-- also sit inside that spec's bbox, so the rows are genuinely served to it.
+--
+-- What protects the crop is ORDERING ALONE: both services order `ORDER BY
+-- pl.created_at DESC` (DiscoverListingsService:179; CityAreaListingsService via its
+-- ROW_NUMBER()), and these fixed 2020 literals sort strictly behind all 11 existing
+-- Sanjeevini rows, which are stamped NOW(). That holds on EITHER endpoint at ANY page
+-- size, which is what makes it a guarantee rather than a coincidence of page size.
+--
+-- Separately true of the AREA endpoint, where a cap does apply — recorded because it is
+-- a trap, not because it protects anything: at limitPerArea=20 that endpoint returns 14
+-- rows with these three last, and at the default 5 it returns only [COMM] rows. Anyone
+-- probing /api/discover/cities/{city}/listings by curl must pass limitPerArea=20 or see
+-- none of these rows and read it as "the seed did not land".
+--
+-- Title prefix is [BEDS], deliberately NOT [COMM]: several assertions in this file
+-- scope on `title LIKE '[COMM]%'`, and these rows are not Commercial inventory and
+-- must not enter those counts.
+-- ───────────────────────────────────────────────────────────────────────────
+INSERT INTO public.property_listings
+  (id, property_type, listing_family, title, locality, price, latitude, longitude,
+   status, listing_purpose, created_by, price_paise, area_key, bedrooms,
+   is_valid, address_confirmed, is_duplicate, archived_at, created_at, updated_at)
+VALUES
+  -- R1 — bedroom-capable, carrying the count the buyer asks for.
+  ('25700001-0000-0000-0000-000000000001',
+   'apartment', 'RESIDENTIAL',
+   '[BEDS] Sanjeevini Nagar 3BHK Apartment', 'Sanjeevini Nagar', 0,
+   12.9165546, 77.5894812,
+   'LIVE', 'sale', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+   72000000, 'IN|KA|Bengaluru|Sanjeevini Nagar', 3,
+   true, true, false, NULL, TIMESTAMPTZ '2020-01-01 00:00:00+00', NOW()),
+
+  -- R2 — SAME property_type as R1, WRONG count. The falsifiability arm.
+  ('25700001-0000-0000-0000-000000000002',
+   'apartment', 'RESIDENTIAL',
+   '[BEDS] Sanjeevini Nagar 2BHK Apartment', 'Sanjeevini Nagar', 0,
+   12.9166046, 77.5895312,
+   'LIVE', 'sale', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+   58000000, 'IN|KA|Bengaluru|Sanjeevini Nagar', 2,
+   true, true, false, NULL, TIMESTAMPTZ '2020-01-01 00:00:01+00', NOW()),
+
+  -- R3 — bedroom-INCAPABLE and served. `bedrooms` stays NULL: that is the property
+  -- under test, not an omission.
+  ('25700001-0000-0000-0000-000000000003',
+   'residential_plot', 'RESIDENTIAL',
+   '[BEDS] Sanjeevini Nagar Residential Plot', 'Sanjeevini Nagar', 0,
+   12.9166546, 77.5895812,
+   'LIVE', 'sale', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+   41000000, 'IN|KA|Bengaluru|Sanjeevini Nagar', NULL,
+   true, true, false, NULL, TIMESTAMPTZ '2020-01-01 00:00:02+00', NOW())
+ON CONFLICT (id) DO UPDATE
+  SET property_type     = EXCLUDED.property_type,
+      listing_family    = EXCLUDED.listing_family,
+      status            = 'LIVE',
+      listing_purpose   = EXCLUDED.listing_purpose,
+      area_key          = EXCLUDED.area_key,
+      latitude          = EXCLUDED.latitude,
+      longitude         = EXCLUDED.longitude,
+      price_paise       = EXCLUDED.price_paise,
+      bedrooms          = EXCLUDED.bedrooms,
+      is_duplicate      = false,
+      archived_at       = NULL,
+      address_confirmed = true,
+      created_at        = EXCLUDED.created_at,
+      updated_at        = NOW();
+
+-- ───────────────────────────────────────────────────────────────────────────
 -- V102 typed detail rows.
 -- Only listing_commercial_space_details carries a V102 commercial_subtype column.
 -- ───────────────────────────────────────────────────────────────────────────
@@ -526,6 +659,13 @@ DECLARE
   v_inapplic     INTEGER;
   v_inapplic_txt TEXT;
   v_sale_fin     INTEGER;
+  -- #2570 — the bedrooms-per-shape discriminating trio
+  v_beds_r1      INTEGER;
+  v_beds_r2      INTEGER;
+  v_type_r1      TEXT;
+  v_type_r2      TEXT;
+  v_type_r3      TEXT;
+  v_r3_rows      INTEGER;
 BEGIN
   -- ARM 1 — no filter: the surface is alive.
   SELECT COUNT(*) INTO v_total
@@ -893,6 +1033,57 @@ BEGIN
     RAISE EXCEPTION 'commercial-listings-seed: the legacy row has acquired typed V104 values — it '
       'must stay NULL on every typed axis or the pre-V102 case it represents is destroyed';
   END IF;
+
+  -- ── #2570: the bedrooms-per-shape trio ────────────────────────────────────
+  -- Each arm is asserted INDEPENDENTLY and BY VALUE. A single "all three rows
+  -- exist" check would stay green if R2 drifted to R1's bedroom count, which is
+  -- exactly the degradation that makes the #2566 journey unfalsifiable — and it
+  -- would then surface as a PASSING capture rather than a failing seed.
+  SELECT bedrooms, property_type INTO v_beds_r1, v_type_r1
+    FROM public.property_listings WHERE id = '25700001-0000-0000-0000-000000000001';
+  SELECT bedrooms, property_type INTO v_beds_r2, v_type_r2
+    FROM public.property_listings WHERE id = '25700001-0000-0000-0000-000000000002';
+  SELECT property_type INTO v_type_r3
+    FROM public.property_listings WHERE id = '25700001-0000-0000-0000-000000000003';
+
+  IF v_beds_r1 IS DISTINCT FROM 3 THEN
+    RAISE EXCEPTION 'commercial-listings-seed (#2570 R1): expected bedrooms = 3 on the retained arm, got %', v_beds_r1;
+  END IF;
+  IF v_beds_r2 IS DISTINCT FROM 2 THEN
+    RAISE EXCEPTION 'commercial-listings-seed (#2570 R2): expected bedrooms = 2 (a count the request does NOT ask for), got % — without a wrong-count dwelling that stays excluded, the journey proves only retention and would pass against a fix that merely stopped filtering', v_beds_r2;
+  END IF;
+
+  -- R1 and R2 must share a property_type, or the discriminating request excludes R2
+  -- by TYPE rather than by bedrooms and the arm proves nothing about bedroom
+  -- narrowing. Asserted rather than left to the reader.
+  IF v_type_r1 IS DISTINCT FROM v_type_r2 THEN
+    RAISE EXCEPTION 'commercial-listings-seed (#2570): R1 (%) and R2 (%) must share a property_type — otherwise the request excludes R2 by type, not by bedrooms, and the arm would pass against a fix that dropped the bedroom predicate entirely', v_type_r1, v_type_r2;
+  END IF;
+
+  SELECT COUNT(*) INTO v_r3_rows
+    FROM public.property_listings
+    WHERE id = '25700001-0000-0000-0000-000000000003'
+      AND status = 'LIVE' AND archived_at IS NULL AND is_duplicate = false
+      AND bedrooms IS NULL
+      AND area_key = 'IN|KA|Bengaluru|Sanjeevini Nagar';
+  IF v_r3_rows <> 1 THEN
+    RAISE EXCEPTION 'commercial-listings-seed (#2570 R3): expected exactly 1 LIVE, non-archived, non-duplicate Sanjeevini Nagar row with bedrooms IS NULL, got % — bedrooms NULL is the property under test, not an omission', v_r3_rows;
+  END IF;
+
+  -- R3 must not be the type the area-first journey drops unconditionally. This
+  -- cannot be caught by running the journey: the endpoint does NOT validate
+  -- propertyType, so an excluded type and a typo both return 200 with ZERO rows,
+  -- and on an area with no agricultural inventory an empty arm is indistinguishable
+  -- from a correctly-failing pre-fix arm. Assert it at seed time instead.
+  IF v_type_r3 = 'agricultural_land' THEN
+    RAISE EXCEPTION 'commercial-listings-seed (#2570 R3): property_type is agricultural_land, which CityAreaListingsService excludes UNCONDITIONALLY from the area-first journey — R3 would be absent in BOTH arms, so the post-fix retention it exists to demonstrate could never be observed';
+  END IF;
+  IF v_type_r3 IS DISTINCT FROM 'residential_plot' THEN
+    RAISE EXCEPTION 'commercial-listings-seed (#2570 R3): expected property_type = residential_plot (bedroom-incapable AND served by the area-first journey), got %', v_type_r3;
+  END IF;
+
+  RAISE NOTICE 'commercial-listings-seed #2570 trio OK: R1 beds=% R2 beds=% (both %) R3 %/bedrooms NULL, all at IN|KA|Bengaluru|Sanjeevini Nagar',
+    v_beds_r1, v_beds_r2, v_type_r1, v_type_r3;
 
   RAISE NOTICE 'commercial-listings-seed OK: total=% residential=% commercial=% subtypes=% '
     'legacy_null=% dual_v102=% dual_v104=% | typed: hub=% warehouse=% office=% building=% land=% '
