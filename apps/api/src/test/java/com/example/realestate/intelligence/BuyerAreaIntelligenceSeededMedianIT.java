@@ -1,5 +1,6 @@
 package com.example.realestate.intelligence;
 
+import com.example.realestate.discover.CityActivationGuard;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -77,7 +78,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.flyway.placeholders.concurrently_keyword="
 })
 @Import({AreaIntelligenceSnapshotService.class, BuyerAreaIntelligenceService.class,
-        AdminIntelligenceService.class})
+        AdminIntelligenceService.class, CityActivationGuard.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class BuyerAreaIntelligenceSeededMedianIT {
 

@@ -1,5 +1,6 @@
 package com.example.realestate.intelligence;
 
+import com.example.realestate.discover.CityActivationGuard;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.flyway.locations=classpath:db/test-stubs,classpath:db/migration",
         "spring.flyway.placeholders.concurrently_keyword="
 })
-@Import({BuyerAreaIntelligenceService.class})
+@Import({BuyerAreaIntelligenceService.class, CityActivationGuard.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class ResolveAreaIT {
 
