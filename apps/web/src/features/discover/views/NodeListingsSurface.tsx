@@ -78,6 +78,16 @@ export function NodeListingsSurface({
             // toggle in AreaSelectedPanel never reached the chip-display
             // `filters` prop (nor this surface's own listings queries below).
             readyToMove: committedFilters.readyToMove,
+            // Issue #2555 — the AREA (SQ FT) axis, missing for the same reason the two
+            // above were and with a worse symptom than either. #2459's bound ALREADY
+            // reached the map markers (`useDiscoverMapData` forwards `filters` wholesale
+            // to `useDiscoverFilteredMarkers`, and `buildDiscoverSearchParams` emits it),
+            // but this projection dropped it before it returned as the panel's `filters`
+            // prop. So a signed-in buyer's MAP narrowed to the chosen size while the card
+            // list ignored the bound and the AREA chip still read "Any size" — a
+            // cards/markers DIVERGENCE rather than a dead control.
+            areaMinSqft: committedFilters.areaMinSqft,
+            areaMaxSqft: committedFilters.areaMaxSqft,
           }
         : {
             propertyTypes: nav.filters.propertyTypes as PropertyFilters['propertyTypes'],
@@ -86,6 +96,11 @@ export function NodeListingsSurface({
             priceMin: nav.filters.priceMin,
             priceMax: nav.filters.priceMax,
             readyToMove: nav.filters.readyToMove,
+            // Issue #2555 — BOTH branches need it. This one serves a cold-load or shared
+            // link (`?areaMinSqft=1200`), the exact path that would otherwise render an
+            // unfiltered card list beside an already-narrowed map.
+            areaMinSqft: nav.filters.areaMinSqft,
+            areaMaxSqft: nav.filters.areaMaxSqft,
           },
     [
       committedFilters,
@@ -95,6 +110,14 @@ export function NodeListingsSurface({
       nav.filters.priceMin,
       nav.filters.priceMax,
       nav.filters.readyToMove,
+      // Issue #2555 — the deps are a SEPARATE half of this fix, not bookkeeping. #2583
+      // showed the failure mode on the subtype axis: a memo that reads a key it does not
+      // depend on keeps serving the previous value, so the literal looks right and the
+      // surface still shows stale filters. Omitting these two would let the projection
+      // above pass a naive test and still diverge from the map on the SECOND change of
+      // the bound.
+      nav.filters.areaMinSqft,
+      nav.filters.areaMaxSqft,
     ],
   );
 

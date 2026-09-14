@@ -198,6 +198,23 @@ export interface DiscoverCityListingsParams {
    */
   readyToMove?: boolean;
   /**
+   * Issue #2555 — #2459's contextual area bounds, in SQUARE FEET, sent as
+   * `?areaMinSqft=`/`?areaMaxSqft=` and validated server-side by the shared
+   * `AreaBoundsParam`.
+   *
+   * This endpoint had no area parameter at all until now, which is why the buyer-facing
+   * AREA (SQ FT) row DIVERGED rather than merely being inert: the same bound already
+   * reached the map markers (`buildDiscoverSearchParams` emits it, and both marker hooks
+   * forward `filters` wholesale), so a signed-in buyer's map narrowed while these cards
+   * did not. Adding it here is what makes the two ask the server the same question.
+   *
+   * Always SQUARE FEET and never converted — the per-row column the server compares
+   * against varies (built-up / plot / warehouse), the unit does not.
+   */
+  areaMinSqft?: number;
+  /** Issue #2555 — inclusive upper bound in SQUARE FEET. See {@link DiscoverCityListingsParams.areaMinSqft}. */
+  areaMaxSqft?: number;
+  /**
    * Issue #2015 — viewport rectangle `[south, west, north, east]` for the anonymous
    * "Search this area" bbox-only mode. Snapped to a 0.02° grid via `snapBbox()` before
    * being sent (mirrors the convention in `useDiscoverListings.ts`). Non-finite values
@@ -239,6 +256,9 @@ export function useDiscoverCityListings({
   q,
   listingPurpose,
   readyToMove,
+  // Issue #2555 — see the param docs above.
+  areaMinSqft,
+  areaMaxSqft,
   bbox,
   isAuthenticated = false,
 }: DiscoverCityListingsParams) {
@@ -281,6 +301,13 @@ export function useDiscoverCityListings({
       q?.trim() || null,
       listingPurpose ?? null,
       readyToMove ?? null,
+      // Issue #2555 — the area bounds are part of the cache IDENTITY, not just the wire.
+      // This half is separately load-bearing: forwarding the param while omitting it here
+      // would send the narrowed request but key it identically to the previous bound, so
+      // changing 1,000+ → 5,000+ would hit the cached 1,000+ response and render the wrong
+      // rows with no refetch — the same class the `commercialSubtypes` note above records.
+      areaMinSqft ?? null,
+      areaMaxSqft ?? null,
       snappedBbox ? snappedBbox.join(',') : null,
       // Issue #1616: include auth state so login/logout produces a separate cache bucket.
       // Anon callers receive priceBand; authed callers receive pricePaise — they must not
@@ -315,6 +342,19 @@ export function useDiscoverCityListings({
       params.set('limitPerArea', String(limitPerArea));
       if (minPrice != null) params.append('minPrice', String(minPrice));
       if (maxPrice != null) params.append('maxPrice', String(maxPrice));
+      // Issue #2555 — #2459's contextual area bounds, in SQUARE FEET. THIS is the half that
+      // makes the axis actually narrow: the param type, the destructure and the cache key
+      // above are all inert without it, and shipping those alone would be worse than the
+      // original defect — the hook would accept the bound and key the cache on it while
+      // still sending an unnarrowed request, so the cache would faithfully distinguish
+      // responses that are all identical.
+      //
+      // `!= null`, not truthiness, matching the price guards directly above: a legitimate
+      // bound of 0 must still be sent. Unconverted — `PropertyFilters` holds sq ft and the
+      // backend compares sq ft via the shared `AreaBoundsParam`, so there is no unit change
+      // at this boundary (unlike price, which is rupees→paise one layer out).
+      if (areaMinSqft != null) params.append('areaMinSqft', String(areaMinSqft));
+      if (areaMaxSqft != null) params.append('areaMaxSqft', String(areaMaxSqft));
       // Issue #2533 — repeated params, one per selected value. An empty array appends
       // nothing, so "nothing selected" stays indistinguishable from "param absent"
       // (the backend treats a missing param as "no narrowing", never as "match none").

@@ -11,6 +11,11 @@ type BuiltCityListingsQueryParams = Pick<
   | 'bedrooms'
   | 'minPrice'
   | 'maxPrice'
+  // Issue #2555 — the AREA (SQ FT) axis. Like `commercialSubtypes` before it, this was
+  // not merely dropped on the anon path: absent from this Pick<> union it was
+  // UNREPRESENTABLE, so a committed area bound could not be expressed here at all.
+  | 'areaMinSqft'
+  | 'areaMaxSqft'
   | 'listingPurpose'
   | 'q'
 >;
@@ -72,6 +77,18 @@ export function buildCityListingsQueryParams(
     bedrooms: filters.bedrooms?.length ? filters.bedrooms : undefined,
     minPrice: filters.priceMin != null ? filters.priceMin * 100 : undefined,
     maxPrice: filters.priceMax != null ? filters.priceMax * 100 : undefined,
+    // Issue #2555 — forwarded in SQUARE FEET, unconverted. Unlike price above, this axis
+    // has no unit change at the boundary: `PropertyFilters` holds sq ft and the backend
+    // compares sq ft (`AreaBoundsParam`), so a `* 100` here would be a 100x narrowing.
+    //
+    // Forwarded unconditionally, with no applicability gate. That is NOT the `bedrooms`
+    // shape documented above: bedrooms are suppressed for plot-only/commercial-only
+    // selections because such rows carry `bedrooms` NULL, so the predicate can only ever
+    // match nothing. An area bound has no such shape — #2459 resolves the column PER ROW
+    // (built-up / plot / warehouse), so every property shape has a comparable quantity and
+    // there is nothing to suppress.
+    areaMinSqft: filters.areaMinSqft,
+    areaMaxSqft: filters.areaMaxSqft,
     q,
     listingPurpose,
   };

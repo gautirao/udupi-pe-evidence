@@ -81,6 +81,16 @@ export function resolveEffectiveAreaLeafFilters(
         // toggle never reached AreaSelectedPanel's chip-display `filters` prop
         // for the AREA-leaf surface (AreaLeafListingsSurface).
         readyToMove: committedFilters.readyToMove,
+        // Issue #2555 — the AREA (SQ FT) axis, missing for the same reason as the two
+        // above and with a worse symptom than either. #2459's bound ALREADY reached the
+        // map markers (`useDiscoverMapData` forwards `filters` wholesale to
+        // `useDiscoverFilteredMarkers`, and `buildDiscoverSearchParams` emits it), but
+        // this projection dropped it before it returned as the panel's `filters` prop.
+        // So a signed-in buyer's MAP narrowed to the chosen size while the card list
+        // ignored the bound and the AREA chip still read "Any size" — a cards/markers
+        // DIVERGENCE rather than a dead control.
+        areaMinSqft: committedFilters.areaMinSqft,
+        areaMaxSqft: committedFilters.areaMaxSqft,
       }
     : {
         propertyTypes: navFilters.propertyTypes as PropertyFilters['propertyTypes'],
@@ -89,5 +99,10 @@ export function resolveEffectiveAreaLeafFilters(
         priceMin: navFilters.priceMin,
         priceMax: navFilters.priceMax,
         readyToMove: navFilters.readyToMove,
+        // Issue #2555 — BOTH branches need it. This one serves a cold-load or shared link
+        // (`?areaMinSqft=1200`), which is exactly the path that would otherwise render an
+        // unfiltered card list beside an already-narrowed map.
+        areaMinSqft: navFilters.areaMinSqft,
+        areaMaxSqft: navFilters.areaMaxSqft,
       };
 }

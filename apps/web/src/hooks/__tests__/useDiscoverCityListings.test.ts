@@ -196,6 +196,72 @@ describe('useDiscoverCityListings', () => {
     expect(params.has('readyToMove')).toBe(false);
   });
 
+  /**
+   * Issue #2555 — the AREA (SQ FT) axis. TWO arms, because the fix had two independently
+   * load-bearing halves and a single test would pass with either one missing.
+   */
+  it('appends areaMinSqft/areaMaxSqft in SQUARE FEET, unconverted', async () => {
+    mockGet.mockResolvedValue(BASE_RESPONSE);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverCityListings({
+          city: 'udupi',
+          areaKeys: ['udupi|manipal'],
+          areaMinSqft: 1000,
+          areaMaxSqft: 5000,
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    // UNCONVERTED, unlike minPrice/maxPrice above. `PropertyFilters` holds square feet and the
+    // backend compares square feet via the shared `AreaBoundsParam`, so there is no unit change at
+    // this boundary — a `* 100` here would be a hundredfold narrowing. 1000 must arrive as "1000".
+    expect(params.get('areaMinSqft')).toBe('1000');
+    expect(params.get('areaMaxSqft')).toBe('5000');
+  });
+
+  /**
+   * THE CACHE-KEY ARM, which fails DIFFERENTLY from the arm above and is the half a param-only fix
+   * leaves broken. Forwarding `areaMinSqft` into the URL while omitting it from the react-query key
+   * sends a correctly narrowed FIRST request and then keys every later bound identically — so
+   * 1,000+ → 5,000+ hits the cached 1,000+ response and renders the wrong rows with no second
+   * request at all. The buyer-visible symptom is a filter that works exactly once.
+   *
+   * ASSERTING THE CALL COUNT IS THE POINT. An assertion on the most recent URL alone would PASS
+   * against the broken build: there would be no second call, so the only URL in the log would be
+   * the correct first one, and the test would confirm the bug as if it were the fix.
+   */
+  it('REFETCHES when the area bound changes, rather than serving the cached response', async () => {
+    mockGet.mockResolvedValue(BASE_RESPONSE);
+
+    const { result, rerender } = renderHook(
+      ({ areaMinSqft }: { areaMinSqft: number }) =>
+        useDiscoverCityListings({
+          city: 'udupi',
+          areaKeys: ['udupi|manipal'],
+          areaMinSqft,
+        }),
+      // One wrapper instance, so a single QueryClient spans both renders — otherwise a fresh cache
+      // per render would make the refetch look correct no matter what the key contained.
+      { wrapper: makeWrapper(), initialProps: { areaMinSqft: 1000 } },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockGet).toHaveBeenCalledTimes(1);
+
+    rerender({ areaMinSqft: 5000 });
+
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+
+    const [secondUrl] = mockGet.mock.calls[1] as [string, unknown];
+    expect(new URLSearchParams(secondUrl.split('?')[1]).get('areaMinSqft')).toBe('5000');
+  });
+
   it('appends bedrooms when provided', async () => {
     mockGet.mockResolvedValue(BASE_RESPONSE);
 

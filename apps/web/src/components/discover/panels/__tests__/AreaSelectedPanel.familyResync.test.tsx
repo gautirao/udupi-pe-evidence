@@ -455,11 +455,24 @@ describe('AreaSelectedPanel — #2552 family/predicate agreement', () => {
       );
     });
 
+    /**
+     * Issue #2555 — the CHIP this clicks changed; the contract it pins did not.
+     *
+     * Budget bands are now family-aware (#2450: "Budget state is independent per family/intent"),
+     * so once Commercial is the active family the offered bands are the Commercial ones and the
+     * residential ₹50L chip (`quick-chip-budget-5000000`) is genuinely not rendered. This arm was
+     * reaching for it AFTER clicking Commercial, so it failed on `Unable to find an element` —
+     * the band table working as designed, not a regression in the behaviour under test.
+     *
+     * Retargeted to `quick-chip-budget-10000000` (≤ ₹1 Cr), the Commercial Buy band that exists in
+     * this state. Every assertion below is untouched: the point is still that a family-IRRELEVANT
+     * Budget change leaves the subtype row open and the family on Commercial.
+     */
     it('keeps the subtype row open across a family-irrelevant Budget change', () => {
       renderHost({ initialFilters: {} });
 
       fireEvent.click(screen.getByTestId('quick-chip-family-commercial'));
-      fireEvent.click(screen.getByTestId('quick-chip-budget-5000000'));
+      fireEvent.click(screen.getByTestId('quick-chip-budget-10000000'));
 
       expect(screen.getByTestId('quick-subtype-row')).toBeInTheDocument();
       expect(screen.getByTestId('quick-chip-family-commercial')).toHaveAttribute(

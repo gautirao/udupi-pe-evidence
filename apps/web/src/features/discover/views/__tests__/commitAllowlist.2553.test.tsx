@@ -345,6 +345,33 @@ describe('#2553 — NodeListingsSurface commit boundary', () => {
       commercialSubtypes: ['WAREHOUSE'],
     });
   });
+
+  /**
+   * Issue #2555 — THE AREA (SQ FT) AXIS on the read path, entered through the SURFACE.
+   *
+   * DELIBERATELY NOT WRITTEN by handing `AreaSelectedPanel` a filters object directly. #2583
+   * established that a spec shaped that way is structurally BLIND to this defect class: the panel
+   * would hold the area keys because the test put them there, and the projection that never builds
+   * the axis would simply never be consulted. The bug lives in the projection, so the test must
+   * enter through the projection.
+   *
+   * RED before `65b5dc7c`, where `effectiveFilters` projected exactly propertyTypes /
+   * commercialSubtypes / bedrooms / priceMin / priceMax / readyToMove. `areaMinSqft` was dropped
+   * before reaching the panel, so the AREA chip read "Any size" while the map — which forwards
+   * `filters` wholesale to `buildDiscoverSearchParams` — was already narrowed to the chosen size.
+   */
+  it('projects the AREA bounds into the panel filters prop (read path)', () => {
+    renderSurface({
+      committedFilters: { ...COMMITTED, areaMinSqft: 1200, areaMaxSqft: 4800 },
+      onCommittedFiltersChange: vi.fn(),
+    });
+
+    const projected = JSON.parse(screen.getByTestId('area-selected-panel-filters').textContent ?? '{}');
+    expect(projected).toMatchObject({ areaMinSqft: 1200, areaMaxSqft: 4800 });
+    // Positive control on a pre-existing key: a projection returning `{}`, or a panel that failed
+    // to render at all, must not be able to satisfy the assertion above by accident.
+    expect(projected).toMatchObject({ propertyTypes: ['commercial'] });
+  });
 });
 
 /**
@@ -427,6 +454,25 @@ describe('#2553 — DiscoverAreasJourneyPanel AREA-leaf commit boundary', () => 
       commercialSubtypes: ['SHOP'],
       sellerTypes: ['owner'],
     });
+  });
+
+  /**
+   * Issue #2555 — the same axis through `resolveEffectiveAreaLeafFilters`, the OTHER projection.
+   *
+   * BOTH had to be fixed and both are pinned here. Repairing only the `NodeListingsSurface` twin
+   * would leave the divergence standing on the AREA-leaf surface — which is precisely where the
+   * buyer-facing AREA (SQ FT) row renders, so the one surface the row actually appears on would
+   * have kept ignoring it.
+   */
+  it('projects the AREA bounds into the panel filters prop on the AREA-leaf surface', () => {
+    renderPanel({
+      areaLeafFilters: { ...COMMITTED, areaMinSqft: 1200, areaMaxSqft: 4800 },
+      onAreaLeafFiltersChange: vi.fn(),
+    });
+
+    const projected = JSON.parse(screen.getByTestId('area-selected-panel-filters').textContent ?? '{}');
+    expect(projected).toMatchObject({ areaMinSqft: 1200, areaMaxSqft: 4800 });
+    expect(projected).toMatchObject({ propertyTypes: ['commercial'] });
   });
 });
 

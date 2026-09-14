@@ -148,16 +148,20 @@ describe('AreaSelectedPanel', () => {
       expect(onFiltersChange).toHaveBeenCalledWith({ readyToMove: undefined });
     });
 
+    // Issue #2555 — the owner-approved mock specifies COPPER as Budget's selected treatment,
+    // deliberately distinct from the gold used by the family / subtype / area controls so the
+    // buyer can tell at a glance which axis they just narrowed. These arms previously pinned
+    // navy (`bg-primary`); the token changed with the approved design, the contract did not.
     it('highlights the active budget chip', () => {
       renderPanel({ filters: { priceMax: 8_000_000 } });
-      expect(screen.getByTestId('quick-chip-budget-8000000')).toHaveClass('bg-primary');
-      expect(screen.getByTestId('quick-chip-budget-any')).not.toHaveClass('bg-primary');
-      expect(screen.getByTestId('quick-chip-budget-5000000')).not.toHaveClass('bg-primary');
+      expect(screen.getByTestId('quick-chip-budget-8000000')).toHaveClass('bg-copper');
+      expect(screen.getByTestId('quick-chip-budget-any')).not.toHaveClass('bg-copper');
+      expect(screen.getByTestId('quick-chip-budget-5000000')).not.toHaveClass('bg-copper');
     });
 
     it('highlights "Any price" as active when no priceMax is set', () => {
       renderPanel();
-      expect(screen.getByTestId('quick-chip-budget-any')).toHaveClass('bg-primary');
+      expect(screen.getByTestId('quick-chip-budget-any')).toHaveClass('bg-copper');
     });
 
     it('highlights the ready-to-move chip when active', () => {

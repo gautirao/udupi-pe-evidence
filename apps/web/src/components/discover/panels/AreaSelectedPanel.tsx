@@ -32,22 +32,138 @@ import { AreaSelectedPanelScopeBar } from './AreaSelectedPanelScopeBar';
 import { DEFAULT_CITY } from '@/lib/localityUtils';
 import { SCOPE_TITLE } from '@/features/discover/presentation/scopeTitles';
 import type { CommercialSubtype } from '@/lib/listing-constants';
+// Issue #2555 — the AREA (SQ FT) presets consume #2459's REAL contract rather than a
+// design-only lookalike: `applyAreaBound` is the same writer `AreaRangeFilter` uses (so an
+// inverted range is repaired identically), and `resolvePrimaryAreaControlLabel` is the same
+// label authority, so this row can never name a quantity the predicate is not comparing.
+// #2450: "Never ship an inert design-only Area chip."
+import { applyAreaBound } from '@/features/discover/filters/areaBounds';
+import { resolvePrimaryAreaControlLabel } from '@/features/discover/filters/primaryAreaLabels';
+// Issue #2555 — the SUBMIT half of #2459 AC2's bedroom rule, shared with the URL writer and the
+// counts/city-listings adapters. Imported so the selected-filter chip can ask the same question
+// those boundaries ask, rather than this file re-deriving half the rule and getting it backwards.
+import { shouldSubmitBedrooms } from '@/features/discover/filters/bedroomApplicability';
+// #2430's shared display authority. The selected-filter chips resolve property-type wording
+// through it rather than this file's private `PROPERTY_TYPE_LABELS`, which covers only the three
+// Residential quick types — so a Commercial FAMILY token arriving from a URL (`?type=warehouse`)
+// rendered as a raw stored token in a buyer-facing chip.
+import { getPropertyTypeLabel } from '@/lib/propertyTypeConfig';
 
 // Quick filter options (hardcoded MVP). 'All' is a virtual chip that clears the
 // property-type selection — it is not a property_type value.
 const QUICK_PROPERTY_TYPES = ['apartment', 'villa', 'land'] as const;
 const QUICK_BEDROOMS = [2, 3] as const;
 
-// Issue #2023 — fixed budget bands (rupees), matching the frozen mock
-// (docs/design/retrends-design-system/ui_kits/new_discover/src/ExpPanel.jsx
-// ~L55-72: "Any price" / "≤50L" / "≤80L" / "≤1.2Cr"). A max-only band; the
-// "Any price" chip clears priceMin/priceMax entirely (there is no min-price
-// control on this card).
-const QUICK_BUDGETS = [
-  { label: '≤ ₹50L', max: 5_000_000 },
-  { label: '≤ ₹80L', max: 8_000_000 },
-  { label: '≤ ₹1.2Cr', max: 12_000_000 },
-] as const;
+interface QuickBudgetBand {
+  label: string;
+  max: number;
+}
+
+/**
+ * Issue #2555 item 3 — PURPOSE-AWARE, FAMILY-LOCAL budget bands.
+ *
+ * #2450: "Buy uses total purchase-price bands. Rent/Lease uses monthly bands with `/month`.
+ * Budget state is independent per family/intent." The previous single `QUICK_BUDGETS` list was
+ * max-only with NO intent branch and no family branch, so a Commercial shopper and a renter were
+ * both offered residential purchase-price ceilings.
+ *
+ * WHY THE TABLE IS KEYED BY FAMILY AND NOT ONLY BY INTENT. The owner mock's Buy row
+ * (≤ ₹1 Cr / ≤ ₹2.5 Cr / ≤ ₹5 Cr) is the COMMERCIAL state. Applying it globally would replace the
+ * Residential bands, which are separately approved under #2023 and pinned by
+ * `AreaSelectedPanel.test.tsx`. Keying by family satisfies the mock, #2450's "independent per
+ * family/intent" sentence, and the existing suite at the same time, instead of trading one against
+ * another.
+ *
+ * RENT/LEASE IS ONE INTENT, NOT TWO — the #2458 decision this issue is required to follow.
+ * `LEASE` is not persistable (`chk_listing_purpose` admits only 'sale'/'rent') and zero LEASE rows
+ * exist or can be created, so the ruling is: the LABEL reads "Rent / Lease", `rent` remains the
+ * SOLE query value, and no third purpose is invented. That is why the key below is the existing
+ * `DiscoverIntent` ('buy' | 'rent') and nothing new was coined for it.
+ *
+ * THE RENT THRESHOLDS ARE RATIFIED, NOT PROVISIONAL. Owner decision `5662756143` (D2) adopts the
+ * exact bands below as the MVP production contract: Residential ≤ ₹15,000 / ₹30,000 / ₹50,000 and
+ * Commercial ≤ ₹50,000 / ₹1,00,000 / ₹2,50,000 per month.
+ *
+ * ⚠ DO NOT REINTRODUCE "PROVISIONAL" OR "PLACEHOLDER" WORDING HERE. The ruling is explicit:
+ * "source/PR wording must stop calling these bands provisional/placeholders or saying they still
+ * await an owner ruling." TWO earlier revisions of this paragraph did exactly that — the first
+ * because the ruling had not yet landed (true when written), the second because it misread the
+ * ruling and recorded the bands as approved-BUT-provisional. Both erred in the direction that
+ * matters: they described a settled product contract as unsettled.
+ *
+ * THEY ARE STILL NOT MARKET DATA, and the two statements are compatible rather than in tension.
+ * #2450 requires production thresholds to be RECORDED ("The illustrative values in #2429 are not
+ * market data"); the ruling adopts these as "owner-approved MVP product thresholds, not claimed
+ * market data". So nothing in the product, its copy, or any downstream artefact may present them as
+ * market-derived or as recommended market bands. RATIFIED answers who decided them; NOT-MARKET-DATA
+ * answers how they were arrived at. Conflating the two is what produced the wrong revision above.
+ *
+ * THIS TABLE IS THE SINGLE AUTHORITATIVE LOCATION for every band, so calibration is a value edit
+ * here and touches no interaction logic: the controls read `QUICK_BUDGET_BANDS[family][intent]`,
+ * the selected-filter chip resolves its label from that same array, and no other module in the app
+ * carries a copy of these numbers.
+ *
+ * LEASE presents exactly as Rent — same monthly bands, same `/month` suffix — per the #2458
+ * decision above. There is no third pricing model.
+ *
+ * The BUY bands reach the same settled status by a different route: Residential is #2023's approved
+ * set, Commercial is the owner-approved mock's (≤ ₹1 Cr / ≤ ₹2.5 Cr / ≤ ₹5 Cr).
+ *
+ * BUY-VS-RENT SEMANTICS ARE TESTED, as that same ruling requires. `AreaSelectedPanel.dod2555` pins
+ * monthly `/month` bands under the rent intent, their ABSENCE under buy, and the same contrast in
+ * both directions on the selected-Budget chip's off-band fallback label.
+ *
+ * A max-only band in every cell: the "Any price" chip clears priceMin/priceMax entirely, because
+ * this card has no min-price control.
+ */
+const QUICK_BUDGET_BANDS: Record<
+  'residential' | 'commercial',
+  Record<'buy' | 'rent', readonly QuickBudgetBand[]>
+> = {
+  residential: {
+    // Issue #2023's approved bands — deliberately unchanged.
+    buy: [
+      { label: '≤ ₹50L', max: 5_000_000 },
+      { label: '≤ ₹80L', max: 8_000_000 },
+      { label: '≤ ₹1.2Cr', max: 12_000_000 },
+    ],
+    rent: [
+      { label: '≤ ₹15,000/month', max: 15_000 },
+      { label: '≤ ₹30,000/month', max: 30_000 },
+      { label: '≤ ₹50,000/month', max: 50_000 },
+    ],
+  },
+  commercial: {
+    // The owner-approved mock's Buy row.
+    buy: [
+      { label: '≤ ₹1 Cr', max: 10_000_000 },
+      { label: '≤ ₹2.5 Cr', max: 25_000_000 },
+      { label: '≤ ₹5 Cr', max: 50_000_000 },
+    ],
+    rent: [
+      { label: '≤ ₹50,000/month', max: 50_000 },
+      { label: '≤ ₹1,00,000/month', max: 100_000 },
+      { label: '≤ ₹2,50,000/month', max: 250_000 },
+    ],
+  },
+};
+
+/**
+ * Issue #2555 — the mock's AREA (SQ FT) presets.
+ *
+ * `min: undefined` is the "Any size" chip: it CLEARS the bound rather than setting a zero one, so
+ * it is the absence of a narrowing rather than a fourth size. Mirrors how "All commercial" and
+ * "Any price" express the same idea elsewhere in this file.
+ *
+ * These write `areaMinSqft` through #2459's own `applyAreaBound`, so the presets and the numeric
+ * `AreaRangeFilter` cannot disagree about what a bound means.
+ */
+const QUICK_AREA_PRESETS: readonly { testId: string; label: string; min: number | undefined }[] = [
+  { testId: 'quick-chip-area-any', label: 'Any size', min: undefined },
+  { testId: 'quick-chip-area-1000', label: '1,000+ sq ft', min: 1000 },
+  { testId: 'quick-chip-area-2500', label: '2,500+ sq ft', min: 2500 },
+  { testId: 'quick-chip-area-5000', label: '5,000+ sq ft', min: 5000 },
+];
 
 const PROPERTY_TYPE_LABELS: Record<string, string> = {
   apartment: 'Apartments',
@@ -79,6 +195,13 @@ type PropertyFamily = 'residential' | 'commercial';
  * (`withoutCommercialFamilyTokens` strips exactly these on a switch to Residential), which raises
  * the cost of the two lists drifting apart: a commercial type added there and not here would stop
  * being stripped, and the contradictory-family state this issue removes would come back.
+ *
+ * WHY ONLY THE RESIDENTIAL SIDE NEEDS STRIPPING (#2555). `propertyTypes` is a SHARED axis: it
+ * carries both families' tokens, which is the whole reason this constant exists. `commercialSubtypes`
+ * is EXCLUSIVE — a Residential value has no route into it. So the per-family memory needs a strip on
+ * the residential side and provably cannot need one on the commercial side. That asymmetry is not
+ * obvious from the two refs sitting side by side, and mistaking it for symmetry invites either a
+ * pointless strip on the commercial side or a missing one here.
  */
 const COMMERCIAL_FAMILY_TOKENS: readonly string[] = [
   'commercial',
@@ -231,10 +354,83 @@ interface AreaSelectedPanelProps {
    * Shipping it reachable would pin exactly the inert-control class #2450 exists to remove.
    *
    * GATE-OFF IS "NO FAMILY ROW", NOT "RESIDENTIAL ALONE" (owner ruling on PR #2500, Option A).
-   * While this is false the panel renders NO family row and today's buyer surface is preserved
-   * byte-for-byte. A one-option Residential-only selector was explicitly REJECTED: a lone
-   * Residential chip is indistinguishable from "this product has no commercial inventory", which
-   * is a claim about the catalogue that the capability flag is not making.
+   * While this is false the panel renders NO family row and NO Commercial subtype control — no
+   * family chips, no subtype row, and no subtype entry in the selected-filter chip row. A
+   * one-option Residential-only selector was explicitly REJECTED: a lone Residential chip is
+   * indistinguishable from "this product has no commercial inventory", which is a claim about the
+   * catalogue that the capability flag is not making.
+   *
+   * THIS CLAIM WAS NARROWED IN #2555, and the correction is recorded rather than silently applied.
+   * It previously said today's buyer surface is preserved "byte-for-byte". That is no longer true
+   * and must not be read as a guarantee. #2555 changes the capability-OFF surface in SEVEN ways.
+   * Items 4 and 5 need a derived-Commercial selection, which is reachable because `activeFamily` is
+   * DERIVED from filters independently of this flag (see `commercialFromFilters`) — an inbound
+   * `?subtype=SHOP` or `?type=warehouse` reads as Commercial even while no Commercial control
+   * renders. Items 1, 2, 3, 6 and 7 need no such URL:
+   *
+   *   1. a removable selected-filter chip row, rendered on ANY filtered state;
+   *   2. the AREA (SQ FT) preset row, which is ungated and so renders for every buyer, and which
+   *      is LIVE on both surfaces as of `65b5dc7c`. Until that commit it DIVERGED: the two
+   *      projections feeding this panel's `filters` prop omitted the area keys and
+   *      `useDiscoverCityListings` had no area param, so the chip could not latch and the CARDS did
+   *      not narrow — while `useDiscoverMapData` forwarded `filters` WHOLESALE to
+   *      `useDiscoverFilteredMarkers`, which hands them to `buildDiscoverSearchParams`, which DOES
+   *      emit `areaMinSqft`, so a signed-in buyer's MAP narrowed against a list that ignored the
+   *      bound. `65b5dc7c` added the keys to both branches of `resolveEffectiveAreaLeafFilters`, to
+   *      `NodeListingsSurface`'s inline twin and its memo deps, to the `cityListingsQueryParams`
+   *      `Pick<>` union and return object, and to `useDiscoverCityListings`' params, react-query key
+   *      and URL append. The divergence is closed; this is still the ONE part of #2555 that
+   *      "dormant behind the capability" does not cover. See the row's own comment for the chain;
+   *   3. family/intent-aware Budget bands, which change the band labels where one fixed list
+   *      stood — BUY as well as RENT: `?type=warehouse` with `intent=buy` renders the Commercial
+   *      buy bands (≤ ₹1 Cr / ≤ ₹2.5 Cr / ≤ ₹5 Cr) where the merge base showed ≤ ₹50L / ≤ ₹80L /
+   *      ≤ ₹1.2Cr;
+   *   4. the Bedrooms row, previously UNCONDITIONAL, is now hidden under a derived-Commercial
+   *      selection — the departure with the most behaviour behind it, since such a buyer loses a
+   *      control they have in production today. The value stays visible and removable via the
+   *      Bedrooms chip in the row named in (1), which is why that chip renders regardless of
+   *      `showBedroomsRow`;
+   *   5. the possession chip's copy, previously the literal "Ready to move", now reads
+   *      "Ready to occupy" under a derived-Commercial selection; and
+   *   6. the EXISTING Budget chips are restyled and their label moves: active state navy
+   *      (`bg-primary`) → copper, square (`px-3`) → pill (`rounded-full px-3.5`), and the `Budget`
+   *      label leaves its own block for the trailing edge of the AREA row. Visual only — but it is
+   *      UNCONDITIONAL, needing neither a derived-Commercial URL nor any filter at all, so it is
+   *      the departure that reaches the most buyers; and
+   *   7. an area-only narrowing now COUNTS as an active filter. `hasPropertyFilters` and
+   *      `handleClearPropertyFilters` both gained the area bounds, so the zero-result state
+   *      routes to the filtered cause and offers "Clear filters" where the merge base — which
+   *      ignored the axis in both readers — claimed "a real area with nothing listed today, not a
+   *      filtered-out result" and offered nothing. A behaviour change on the capability-OFF
+   *      surface, and a fix rather than a regression: it is (2)'s tail, since the ungated AREA row
+   *      is what makes an area-only narrowing reachable in one click.
+   *
+   *      RECONCILED AFTER `65b5dc7c`. This item was written while (2) still diverged, and it was
+   *      accurate then for a narrower reason than it reads now: the row made an area-only state
+   *      REACHABLE, so classifying it as filtered was right, but on the card surface no such state
+   *      was actually PRODUCED — the projection dropped the bound before it could empty a list. Now
+   *      that the projections forward it, the same sentence describes a real narrowing: an
+   *      area-only zero-result is genuinely produced by this row, and the reader routing that sends
+   *      it to the filtered cause is load-bearing rather than anticipatory. The item did not become
+   *      true; it became true for the stronger reason.
+   *
+   * What the gate still guarantees is the sentence above — no Commercial *control* is reachable:
+   * no family row, no subtype row, no subtype chip. It does NOT guarantee an unchanged surface.
+   *
+   * TREAT THIS LIST AS VERIFIED-AT-A-HEAD, NOT AS SELF-EVIDENTLY COMPLETE. It has now been wrong
+   * THREE times: the first attempt named only (1); the second declared itself "deliberate" while
+   * missing (4) and (5); the third said FIVE and missed (6), the most reachable of them all. Every
+   * miss was found the same way — by diffing what actually renders with the flag off against the
+   * merge base — and every miss was produced the same way, by reasoning about intent instead. If
+   * you are relying on this for the flag-flip decision, re-derive it; do not trust this paragraph.
+   *
+   * AND A FOURTH FAILURE MODE, distinct from the three above: an item can be VERIFIED-CORRECT when
+   * written and go false later without anyone touching it. (2) and (7) both did, overtaken by
+   * `65b5dc7c` two commits into this same branch — not by a distant lane. Incompleteness is caught
+   * by re-deriving the list; STALENESS is not, because re-deriving a list you believe is settled is
+   * exactly the step a reader skips. Nothing in the typechecker, the linter or the suite fails when
+   * a comment stops describing the code. The only defence is to treat a behaviour change and its
+   * comment as one edit, which is why the fix commit and these corrections are recorded together.
    *
    * It flips to true once the card path can consume a subtype — which is #2533's multi-value
    * narrowing work. #2533 must land before this is ENABLED; it does not block this being built.
@@ -367,6 +563,19 @@ export function AreaSelectedPanel({
       filters.bedrooms?.length ||
       filters.priceMin ||
       filters.priceMax ||
+      // Issue #2555 (fifth-cycle review) — the AREA axis, for exactly the reason the
+      // `commercialSubtypes` note above gives. Omitting it made an area-only narrowing read as
+      // "no filters active", so a buyer who clicked "5,000+ sq ft" into a zero-result state was
+      // told "this is a real area with nothing listed today, NOT a filtered-out result" — a claim
+      // about the marketplace contradicted by their own one click — and `onClearFilters` resolved
+      // to `undefined`, withdrawing the escape hatch from the only filter they had applied.
+      //
+      // The omission predates this issue: an area bound could already arrive by URL or from the
+      // filters sheet, and both readers ignored it. What changed is REACHABILITY — the AREA
+      // presets are ungated and render on the default surface, so it went from a hand-edited URL
+      // to one click on the card, which is why it is fixed here rather than left as inherited.
+      filters.areaMinSqft != null ||
+      filters.areaMaxSqft != null ||
       // Issue #2023 code-review follow-up — a stale/URL-carried readyToMove
       // has no effect on this surface's listings when unsupported (see
       // `isReadyToMoveSupported` JSDoc), so it must not drive "filters are
@@ -393,6 +602,25 @@ export function AreaSelectedPanel({
       // `'commercial'` override left over from an earlier click would otherwise resurrect and
       // throw the buyer into Commercial from inside the Residential row.
       setFamilyOverride('residential');
+      // Issue #2555 item 1 (review finding) — TOGGLING THE LAST CHIP OFF IS A DELIBERATE CLEAR and
+      // must invalidate the memory, exactly like the explicit "All" affordance does.
+      //
+      // The recording effect banks only NON-EMPTY selections, so an emptying emission would
+      // otherwise leave the memory holding the very selection the buyer just removed: deselect
+      // Apartments, switch to Commercial, switch back, and `['apartment']` returns from the dead.
+      // A wrong-NARROWING bug — the buyer gets a query they explicitly cleared two clicks earlier.
+      // THE ONE TYPECHECK FINGERPRINT THIS BRANCH ADDED, found by a subtraction control against the
+      // clean base rather than by the branch-to-branch diff that missed it. `updated` widens to
+      // `string[]` because `type` is a `string` parameter while `current` is `PropertyType[]`, so
+      // banking it into this ref — typed from `PropertyFilters` — fails, even though the emission on
+      // the next line fails identically at `a4648232` and is therefore not new.
+      //
+      // The cast is sound: every caller passes a `QUICK_PROPERTY_TYPES` member, so the value really
+      // is a property-type token. The two PRE-EXISTING errors in this handler (the `Set.has(type)`
+      // argument above and the emission below) are deliberately left alone — they predate this lane,
+      // and silently changing a shared baseline is not this PR's business.
+      residentialMemoryRef.current =
+        updated.length > 0 ? (updated as PropertyFilters['propertyTypes']) : undefined;
       onFiltersChange({ ...filters, propertyTypes: updated.length > 0 ? updated : undefined });
     },
     [filters, activePropertyTypes, onFiltersChange],
@@ -406,6 +634,10 @@ export function AreaSelectedPanel({
     // so it is the most direct route back to family-silent filters, and the one that resurrected a
     // stale Commercial override most visibly.
     setFamilyOverride('residential');
+    // Issue #2555 item 1 — "All" is an EXPLICIT choice to hold no type, so it becomes this
+    // family's last selection. Leaving the memory intact here would resurrect a selection the
+    // buyer just deliberately dropped the next time they returned to Residential.
+    residentialMemoryRef.current = undefined;
     onFiltersChange({ ...filters, propertyTypes: undefined });
   }, [filters, allTypesActive, onFiltersChange]);
 
@@ -460,6 +692,24 @@ export function AreaSelectedPanel({
   // closed and the chip unpressed. `null` means "no click yet — trust the filters".
   const [familyOverride, setFamilyOverride] = useState<PropertyFamily | null>(null);
 
+  /**
+   * Issue #2555 item 1 — PER-FAMILY MEMORY.
+   *
+   * `familyOverride` above records WHICH family is active and never WHAT was selected inside it,
+   * so switching away and back restored nothing. These hold each family's last selection so the
+   * switch-back can put it back — #2450: "Restore each family's last subtype selection when
+   * switching back."
+   *
+   * REFS, NOT STATE, DELIBERATELY. Nothing renders from these directly: they are read only inside
+   * `handleSelectFamily`, at the moment of a switch. Holding them in state would schedule a render
+   * per selection change that changes no output — and worse, would make the memory a second
+   * renderable source of truth about what is selected, free to disagree with `filters`. The
+   * displayed selection has exactly one owner (`filters`); these are a side channel consulted only
+   * when that owner is about to be told to drop an axis.
+   */
+  const residentialMemoryRef = useRef<PropertyFilters['propertyTypes']>(undefined);
+  const commercialMemoryRef = useRef<PropertyFilters['commercialSubtypes']>(undefined);
+
   // Issue #2552 — the override is consulted ONLY while the filters are family-SILENT.
   //
   // It previously won unconditionally (`familyOverride ?? derived`), permanently and for the life
@@ -492,6 +742,50 @@ export function AreaSelectedPanel({
     : familyIsUnset && familyOverride !== null
       ? familyOverride
       : 'residential';
+
+  /**
+   * Issue #2555 item 1 — keep each family's memory in step with what it currently holds.
+   *
+   * AN EFFECT, NOT A WRITE DURING RENDER, AND NOT A WRITE INSIDE EACH HANDLER.
+   *
+   * The timing is the whole point. This runs AFTER the render it observes, so at the instant
+   * `handleSelectFamily` fires, the ref still holds the selection as it stood BEFORE the click —
+   * which is precisely the value the switch-away needs to bank. Recording inside each selection
+   * handler instead would mean every future control that touches an axis has to remember to
+   * record too, and the one that forgets loses the buyer's selection silently.
+   *
+   * WHATEVER THE ACTIVE FAMILY HOLDS IS BANKED, INCLUDING NOTHING — and the history of this line
+   * is why it is written that way.
+   *
+   * It originally recorded only NON-EMPTY selections, reasoning that an empty axis is not worth
+   * restoring and that banking `undefined` would erase the value on the very emission that clears
+   * the axis for a switch. The first half was wrong and the second does not happen. A cleared axis
+   * IS a selection — "I want no narrowing here" — and refusing to bank it meant every clear had to
+   * be mirrored by hand in the handler that performed it. That obligation was then missed FIVE
+   * times: both toggle handlers (found by review), and the zero-result relaxation's "Include every
+   * property type" offer (found by the re-review, after the first fix claimed the class was
+   * closed). Each miss resurrected a selection the buyer had explicitly cleared — a wrong-NARROWING
+   * bug, not a lost convenience.
+   *
+   * WHY THE ERASURE IT FEARED CANNOT HAPPEN. On a switch to Commercial, `setFamilyOverride` and the
+   * emission batch into ONE render, so by the time this effect observes anything `activeFamily` is
+   * already `'commercial'` — the residential branch does not run and the banked value survives.
+   * The same holds mirrored. The guard was protecting against an ordering that React's batching
+   * already prevents.
+   *
+   * The per-handler writes are KEPT as well. They are redundant with this — they record the same
+   * value — but they state the intent at the point of action, and they are what the targeted arms
+   * assert. This effect is the backstop that also covers clears driven from OUTSIDE the panel (URL
+   * back/forward, the `filtersContent` sheet), which no per-handler discipline can reach.
+   */
+  useEffect(() => {
+    if (activeFamily === 'residential') {
+      residentialMemoryRef.current = filters.propertyTypes;
+    }
+    if (activeFamily === 'commercial') {
+      commercialMemoryRef.current = filters.commercialSubtypes;
+    }
+  }, [activeFamily, filters.propertyTypes, filters.commercialSubtypes]);
 
   // ANON POSTURE — owner ruling on PR #2500. This SUPERSEDES the disabled-with-explanation posture
   // this panel previously implemented, and the earlier one is described below rather than deleted
@@ -546,17 +840,69 @@ export function AreaSelectedPanel({
         family === 'commercial'
           ? // Residential types do not survive the switch, but everything else does: Budget and
             // Bedrooms are family-independent, and silently dropping them is its own defect.
-            { ...filters, propertyTypes: undefined }
+            //
+            // Issue #2555 item 1 — and the Commercial side comes BACK as it was left. Emitting a
+            // bare `commercialSubtypes: undefined` here is what made the round trip lossy.
+            {
+              ...filters,
+              propertyTypes: undefined,
+              commercialSubtypes: commercialMemoryRef.current,
+            }
           : // Issue #2552 — the mirror image, which was missing. Clearing `commercialSubtypes`
             // alone left any inbound Commercial FAMILY TOKEN (`commercial`, `warehouse`, ...) sitting
             // in `propertyTypes`, so "switch to Residential" produced a Residential-looking panel
             // over a Commercial result set. Only the family tokens are stripped: a genuine
             // Residential type the buyer still holds survives, because dropping `propertyTypes`
             // wholesale would trade one wrong-results defect for another.
+            //
+            // Issue #2555 item 1 — the memory is the FALLBACK, not the winner, and the order is
+            // load-bearing. A surviving Residential type is the buyer's live, current selection and
+            // must beat anything remembered; the memory speaks only when the strip leaves nothing,
+            // which is exactly the "I was last here with Apartments" case restoration exists for.
+            //
+            // THE MEMORY IS STRIPPED ON READ (#2555, fourth-cycle review), and this is where the
+            // guarantee lives rather than in the writers.
+            //
+            // `residentialMemoryRef` has six write sites and exactly one read — this one. Two
+            // successive review cycles each found another writer banking a Commercial family token
+            // into it (`handleRemovePropertyType`, then the relaxation wrapper), and each was fixed
+            // where it was found. That is a losing pattern. Every writer carries a standing
+            // obligation, a new one arrives with each feature, and the failure is silent and
+            // identical each time: `withoutCommercialFamilyTokens` strips the live value, the `??`
+            // falls through to a memory still holding `['warehouse']`, and the buyer who asked for
+            // Residential stays in Commercial over a Commercial predicate with nothing on screen
+            // explaining it.
+            //
+            // Stripping HERE is complete by construction: whatever any present or future writer
+            // banks, a Commercial token cannot survive into a Residential emission.
+            //
+            // BE PRECISE ABOUT WHAT IS LOAD-BEARING TODAY, because an earlier revision of this
+            // comment was not. It said the per-site filters are "kept as intent statements, not as
+            // the thing making this safe", which overstates twice: `handleTogglePropertyType` has
+            // no filter at all, and at this head every writer whose bank can be READ already banks
+            // clean, so this strip is defence-in-depth rather than the thing currently preventing a
+            // defect. (The precise form matters — a previous revision said "every REACHABLE writer
+            // banks clean", which its own next sentence contradicts: `handleTogglePropertyType` IS
+            // reachable and CAN bank dirty. What is true is that no reachable dirty bank can be
+            // read.)
+            // The unfiltered bank in `handleTogglePropertyType` is harmless in both directions, and
+            // the trace is recorded so the next reader need not re-derive it: with the capability
+            // ON, holding a commercial token forces `activeFamily === 'commercial'`, which opens
+            // `showSubtypeRow` and HIDES the type chips, so that handler is unreachable; with the
+            // capability OFF the chips do render and the bank can be poisoned, but
+            // `handleSelectFamily` early-returns on `!isCommercialSubtypeSupported`, so it is never
+            // read. The strip exists so that neither of those two accidents has to keep holding.
+            //
+            // The `??` ORDER remains load-bearing: a surviving Residential type is the buyer's
+            // live, current selection and must beat anything remembered. The memory speaks only
+            // when the strip leaves nothing — the "I was last here with Apartments" case that
+            // restoration exists for.
             {
               ...filters,
               commercialSubtypes: undefined,
-              propertyTypes: withoutCommercialFamilyTokens(filters.propertyTypes),
+              propertyTypes:
+                withoutCommercialFamilyTokens(filters.propertyTypes) ??
+                withoutCommercialFamilyTokens(residentialMemoryRef.current),
             },
       );
     },
@@ -584,6 +930,10 @@ export function AreaSelectedPanel({
       if (value === null) {
         // "All commercial" clears the narrowing WITHOUT leaving the family, so any inbound
         // `propertyTypes` is preserved exactly as it arrived rather than rewritten.
+        //
+        // Issue #2555 item 1 — and it is an EXPLICIT choice to hold no subtype, so it replaces
+        // this family's memory. The mirror of `handleSelectAllTypes`; see the note there.
+        commercialMemoryRef.current = undefined;
         onFiltersChange({ ...filters, commercialSubtypes: undefined });
         return;
       }
@@ -591,6 +941,10 @@ export function AreaSelectedPanel({
       const updated = activeCommercialSubtypes.has(value)
         ? current.filter((s) => s !== value)
         : [...current, value];
+      // Issue #2555 item 1 (review finding) — the mirror of the type-chip case; see
+      // `handleTogglePropertyType`. Toggling the LAST subtype off empties the axis, and without
+      // this the memory resurrects it on the next return to Commercial.
+      commercialMemoryRef.current = updated.length > 0 ? updated : undefined;
       onFiltersChange({
         ...filters,
         commercialSubtypes: updated.length > 0 ? updated : undefined,
@@ -607,6 +961,11 @@ export function AreaSelectedPanel({
     // promise is an unfiltered state would deposit the buyer in Commercial — it empties BOTH
     // axes, and a stale override would then be the only thing left speaking.
     setFamilyOverride(null);
+    // Issue #2555 item 1 — "Clear filters" promises an unfiltered state, so BOTH families' memories
+    // go with it. Keeping them would make the next family switch silently re-apply a narrowing the
+    // buyer had just cleared, which is the same broken promise #2552 fixed for the family override.
+    residentialMemoryRef.current = undefined;
+    commercialMemoryRef.current = undefined;
     onFiltersChange({
       ...filters,
       propertyTypes: undefined,
@@ -616,6 +975,13 @@ export function AreaSelectedPanel({
       bedrooms: undefined,
       priceMin: undefined,
       priceMax: undefined,
+      // Issue #2555 (fifth-cycle review) — REQUIRED, not optional, and the pairing is the point:
+      // adding the area axis to `hasPropertyFilters` without adding it here would offer a "Clear
+      // filters" control that leaves the area bound in place, which is precisely the defect the
+      // `commercialSubtypes` note above exists to prevent. `handleRemoveArea` already clears both
+      // bounds; only this family-wide reset was missing them.
+      areaMinSqft: undefined,
+      areaMaxSqft: undefined,
       localities: undefined,
       sellerTypes: undefined,
       backOnMarket: undefined,
@@ -625,9 +991,195 @@ export function AreaSelectedPanel({
     });
   }, [filters, onFiltersChange]);
 
+  // ── Issue #2555 — AREA (SQ FT) presets, on #2459's real contract ─────────────────────────
+  //
+  // Writes through `applyAreaBound`, the SAME writer the numeric `AreaRangeFilter` uses, so the
+  // two controls cannot disagree about what a bound means (including its inverted-range repair).
+  // `undefined` is the "Any size" chip and clears the bound rather than setting a zero one.
+  const handleSelectArea = useCallback(
+    (min: number | undefined) => {
+      if (!onFiltersChange) return;
+      // `applyAreaBound` already spreads `current`, returning the whole filter object with the
+      // bound applied, so an outer `...filters` here would be dead.
+      onFiltersChange(applyAreaBound(filters, 'areaMinSqft', min));
+    },
+    [filters, onFiltersChange],
+  );
+
+  // ── Issue #2555 item 2 — individually removable selected-filter chips ────────────────────
+  //
+  // #2450: "Use selected-filter chips that can be removed individually." Re-clicking an active
+  // control toggles it off, which is per-control toggling, not a removable chip set — and the
+  // mobile requirement ("selected filters can be removed") is about the CHIPS, which had no
+  // removal affordance at all. `activeContextChips` cannot serve this: it is an opaque
+  // caller-supplied ReactNode with nothing for the panel to attach removal to.
+  //
+  // Each handler removes exactly ONE value and leaves every other axis untouched. That is the
+  // distinction from the family-local reset (`handleClearPropertyFilters`), which already existed
+  // and is verified — removal is per-value, reset is per-family.
+  const handleRemoveSubtype = useCallback(
+    (value: CommercialSubtype) => {
+      // CAPABILITY GUARD (review finding). `handleToggleSubtype` and `handleSelectFamily` both test
+      // this unconditionally; without it here the chip row handed the capability-OFF surface a
+      // working commercial-subtype control, on a surface the owner ruled must render none. The
+      // emission relaxes rather than narrows, so this was not a wrong-results path — but a guard
+      // asymmetry one call away from the gate will not survive the next widening. The chip itself
+      // is also omitted while the capability is off, so no dead control renders either.
+      if (!onFiltersChange || !isCommercialSubtypeSupported) return;
+      const remaining = (filters.commercialSubtypes ?? []).filter((s) => s !== value);
+      const next = remaining.length > 0 ? remaining : undefined;
+      // Issue #2552's contract, reached through a SECOND path (review finding). Removing the last
+      // subtype empties the only evidence of the family, so on the canonical restored-link shape
+      // (`?subtype=SHOP` — override still `null`, family DERIVED) the filters fall silent on family
+      // and the buyer is dropped into Residential, closing the subtype row under them.
+      // `handleToggleSubtype` records intent for precisely this reason; this path must too. The
+      // familyResync arms pin the invariant for "All commercial" and would have stayed green while
+      // this route around them shipped.
+      setFamilyOverride('commercial');
+      // Removing a chip is an explicit edit of this family's selection, so the memory tracks it.
+      commercialMemoryRef.current = next;
+      onFiltersChange({ ...filters, commercialSubtypes: next });
+    },
+    [filters, onFiltersChange, isCommercialSubtypeSupported],
+  );
+
+  const handleRemovePropertyType = useCallback(
+    (type: string) => {
+      if (!onFiltersChange) return;
+      const remaining = (filters.propertyTypes ?? []).filter((t) => t !== type);
+      const next = remaining.length > 0 ? remaining : undefined;
+      // The mirror of the note in `handleRemoveSubtype`: recording intent is what stops a stale
+      // override speaking once this empties the filters.
+      //
+      // WHICH family is recorded depends on the TOKEN, not on the control (re-review finding). The
+      // chip row also carries Commercial FAMILY tokens — an inbound `?type=warehouse` renders
+      // `selected-chip-type-warehouse` — and hard-coding `'residential'` there was actively wrong:
+      // dismissing it emptied the axis, and the override then said Residential over what had been
+      // a Commercial selection, closing the subtype row under the buyer. That is F2's class on the
+      // neighbouring axis.
+      setFamilyOverride(
+        COMMERCIAL_FAMILY_TOKENS.includes(type) ? 'commercial' : 'residential',
+      );
+      // THE MEMORY IS FILTERED, NOT BANKED WHOLE (third-cycle review finding), and the previous
+      // revision fixed the line ABOVE while leaving this one unconditional — the same class, one
+      // line apart.
+      //
+      // A mixed `?type=warehouse,apartment` is reachable: the `type` param is parsed with no
+      // allowlist. Dismissing the apartment chip leaves `['warehouse']`, and banking that whole
+      // value as the RESIDENTIAL memory meant the next click on Residential emitted
+      // `withoutCommercialFamilyTokens(['warehouse']) ?? ['warehouse']` — restoring the commercial
+      // token, so `commercialFromFilters` stayed true and the buyer asked for Residential and
+      // remained in Commercial over a Commercial predicate, with nothing on screen explaining it.
+      //
+      // THIS WAS NOT THE ONLY DOOR, and an earlier revision of this very comment claimed it was —
+      // asserted by reasoning rather than by enumerating the write sites, in the same commit that
+      // was fixing the previous instance of the class. The fourth-cycle review then found another:
+      // the zero-result relaxation wrapper, which this issue itself added. The guarantee now lives
+      // on the READ side in `handleSelectFamily`, which is complete regardless of what any present
+      // or future writer banks; filtering here keeps the banked value clean at the point of action
+      // rather than being the thing that makes it safe.
+      residentialMemoryRef.current = withoutCommercialFamilyTokens(next);
+      onFiltersChange({ ...filters, propertyTypes: next });
+    },
+    [filters, onFiltersChange],
+  );
+
+  const handleRemoveBudget = useCallback(() => {
+    if (!onFiltersChange) return;
+    onFiltersChange({ ...filters, priceMin: undefined, priceMax: undefined });
+  }, [filters, onFiltersChange]);
+
+  const handleRemoveArea = useCallback(() => {
+    if (!onFiltersChange) return;
+    onFiltersChange({ ...filters, areaMinSqft: undefined, areaMaxSqft: undefined });
+  }, [filters, onFiltersChange]);
+
+  /**
+   * Issue #2555 item 2 (review finding) — Bedrooms must be removable even while its ROW is hidden.
+   *
+   * Bedrooms is the one axis this work can hide (Commercial has no Bedrooms row), so it is exactly
+   * the axis that can become an active-but-invisible narrowing. A filter that is applied, unseen
+   * and unremovable short of "Clear filters" is worse than one the buyer can see and reject —
+   * especially while the submission-side suppression does not yet cover this panel's one-axis
+   * Commercial shape (tracked separately; see the note on `showBedroomsRow`).
+   */
+  const handleRemoveBedroom = useCallback(
+    (bed: number) => {
+      if (!onFiltersChange) return;
+      const remaining = (filters.bedrooms ?? []).filter((b) => b !== bed);
+      onFiltersChange({ ...filters, bedrooms: remaining.length > 0 ? remaining : undefined });
+    },
+    [filters, onFiltersChange],
+  );
+
+  const handleRemoveReadyToMove = useCallback(() => {
+    if (!onFiltersChange) return;
+    onFiltersChange({ ...filters, readyToMove: undefined });
+  }, [filters, onFiltersChange]);
+
   const handleAddSchool = useCallback(() => {
     onAddSchool?.();
   }, [onAddSchool]);
+
+  // ── Issue #2555 — derived presentation state for the approved filter card ────────────────
+  //
+  // `budgetIntent` narrows `DiscoverIntent` to the two purposes the band table is keyed by. It is
+  // NOT a third purpose: per the #2458 decision, Rent and Lease share the single `rent` value and
+  // only the LABEL says "Rent / Lease" (LEASE is unpersistable under `chk_listing_purpose`).
+  const budgetIntent: 'buy' | 'rent' = intent === 'rent' ? 'rent' : 'buy';
+  const activeBudgetBands = QUICK_BUDGET_BANDS[activeFamily][budgetIntent];
+
+  // The AREA control's label comes from #2459's own resolver rather than a literal, so the row can
+  // never name a quantity the predicate is not comparing. Under the one-axis contract a Commercial
+  // selection carries no `propertyTypes`, so this resolves to the broad "AREA (SQ FT)" — which is
+  // exactly what the approved mock shows for All commercial.
+  // Issue #2459 D1 — "per-row truthful primary area, meaning DISCLOSED in label and chip …
+  // Disclosure is NOT optional."
+  //
+  // THE WHOLE RESULT IS RETAINED, not just `.label`. This call previously ended in `.label` and
+  // dropped everything else on the floor — which meant that for a broad or mixed selection (the
+  // DEFAULT, since no type narrowing means every type is in play) the row rendered the
+  // deliberately non-committal "AREA (SQ FT)" with nothing on screen saying WHICH area was being
+  // compared. `primaryAreaLabels.ts` names that exact outcome: a non-null `disclosure` is returned
+  // whenever more than one meaning is in play, and "rendering a broad label without this is the
+  // failure mode D1 forbids". `shortLabel` serves the selected chip, per the same ruling's
+  // "label AND chip" — one of those two halves is not a substitute for the other.
+  const areaControl = resolvePrimaryAreaControlLabel({
+    propertyTypes: filters.propertyTypes,
+    commercialSubtypes: filters.commercialSubtypes,
+  });
+  const areaControlLabel = areaControl.label;
+  const activeAreaMin = filters.areaMinSqft;
+
+  // #2450 copy rule: "Prefer `Ready to occupy` in Commercial contexts."
+  const possessionLabel = activeFamily === 'commercial' ? 'Ready to occupy' : 'Ready to move';
+
+  // #2459 AC2, second sentence: "Commercial never shows or submits Bedrooms." The SUBMIT half is
+  // owned by `bedroomApplicability.ts`, whose header states in terms that whether the control is
+  // VISIBLE is #2450's question — this is that half. A commercial row carries `bedrooms` NULL, so
+  // a bedroom control here could only ever narrow the result set to nothing.
+  //
+  // BOTH HALVES ARE NOW IN FORCE, and this paragraph used to say the opposite. It read "⚠ THE
+  // SUBMIT HALF DOES NOT YET COVER THIS PANEL'S SHAPE", on the grounds that
+  // `isCommercialOnlySelection` early-returned false when `propertyTypes` was empty — the one-axis
+  // Commercial selection this panel emits (`commercialSubtypes` alone) — so `shouldSubmitBedrooms`
+  // returned true and `beds=` still reached both the request and the shared LINK against rows whose
+  // `bedrooms` is NULL. That was TRUE WHEN WRITTEN and is now FALSE: that predicate gained an
+  // explicit empty-`propertyTypes` branch returning `(commercialSubtypes?.length ?? 0) > 0`, so the
+  // one-axis shape suppresses the predicate at every boundary that consults it — the city-listings
+  // adapter, the counts adapter and `state/url/filters.ts`, which gates `beds=` on the same call.
+  // Superseded rather than deleted, because a reader who meets the old claim quoted elsewhere needs
+  // to know which way round it went.
+  //
+  // THE CONSEQUENCE FOR THE CHIP ROW IS NOT COSMETIC. While the submit half was missing, the
+  // Bedrooms chip rendered REGARDLESS of this flag so the buyer could at least see and remove a
+  // value that was genuinely still narrowing the request — showing it was the honest choice. Now
+  // that the value is suppressed, showing it would assert a narrowing the wire does not carry, so
+  // the chip is gated on `shouldSubmitBedrooms` as well. The value is not thereby trapped:
+  // `hasPropertyFilters` counts `bedrooms` unconditionally and `handleClearPropertyFilters` clears
+  // it, and switching back to Residential re-renders this row with the value still pressed — so it
+  // is never both invisible and effective. See the chip's own note below.
+  const showBedroomsRow = activeFamily !== 'commercial';
 
   const resolvedCityLabel = cityLabel ?? city ?? '';
   const count = areaListings?.length ?? 0;
@@ -1124,56 +1676,113 @@ export function AreaSelectedPanel({
             {/* Issue #2450 — TYPE family. Rendered ONLY when the calling surface can actually
                 consume a Commercial subtype: while the capability is off the owner ruling is that
                 today's buyer surface is preserved unchanged, so there is no family row at all
-                rather than a one-option Residential selector. */}
+                rather than a one-option Residential selector.
+
+                Issue #2555 mock parity — the approved design puts the label INLINE at the left of
+                its own chips ("TYPE  Residential Commercial") rather than stacked above them, and
+                trails the possession chip on the right of the same row. The label is "TYPE", the
+                approved wording, not the "Property family" this previously read. */}
             {isCommercialSubtypeSupported && (
-              <div className="space-y-2" data-testid="quick-family-row">
-                <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                  <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-                  Property family
+              <div
+                className="flex flex-wrap items-center gap-x-2 gap-y-1.5"
+                data-testid="quick-family-row"
+              >
+                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  Type
                 </span>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={cn(
-                      'h-8 px-3 text-xs',
-                      activeFamily === 'residential'
-                        ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    'h-8 rounded-full px-3.5 text-xs',
+                    activeFamily === 'residential'
+                      ? 'border-gold bg-gold text-gold-foreground shadow-sm hover:bg-gold/90'
+                      : '',
+                  )}
+                  onClick={() => handleSelectFamily('residential')}
+                  data-testid="quick-chip-family-residential"
+                  aria-pressed={activeFamily === 'residential'}
+                >
+                  Residential
+                </Button>
+                {/* Structurally identical to the Residential chip above, and that is the ruling
+                    expressed in markup rather than asserted in a comment: same browsing posture
+                    for both families, no auth condition, no disabled branch, no gate copy. */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    'h-8 rounded-full px-3.5 text-xs',
+                    activeFamily === 'commercial'
+                      ? 'border-gold bg-gold text-gold-foreground shadow-sm hover:bg-gold/90'
+                      : '',
+                  )}
+                  onClick={() => handleSelectFamily('commercial')}
+                  data-testid="quick-chip-family-commercial"
+                  aria-pressed={activeFamily === 'commercial'}
+                >
+                  Commercial
+                </Button>
+
+                {/* Issue #2023 — possession chip, moved onto the TYPE row's trailing edge to match
+                    the approved mock. `ml-auto` keeps it right-aligned when the row has room and
+                    lets it wrap naturally when it does not.
+
+                    Code-review follow-up (unchanged): not every calling surface can actually
+                    filter on this (see `isReadyToMoveSupported`). When unsupported the chip renders
+                    muted/disabled with an explanatory title instead of toggling into an active
+                    state that has no effect on the listings shown — an active-looking chip that
+                    does nothing is a UX-honesty bug, not a cosmetic one. A stale
+                    `filters.readyToMove=true` from a prior session/URL still renders inert rather
+                    than silently clearing the user's URL state as a side effect.
+
+                    THE MOCK'S SECOND TRAILING CHIP ("Broker identity verified") IS DELIBERATELY
+                    ABSENT, and this is the one place this panel knowingly departs from the approved
+                    design. `PropertyFilters` carries no broker-identity field (its booleans are
+                    backOnMarket / newToMarket / reraRegistered / readyToMove), so the control could
+                    not narrow anything. Rendering it would ship precisely the inert design-only
+                    control #2450 forbids, and wiring it to `reraRegistered` would be worse: RERA
+                    registration is a property's statutory registration, not a broker's identity, so
+                    the chip would make a verification claim the data does not support. Raised with
+                    the owner rather than resolved here. */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!isReadyToMoveSupported}
+                  className={cn(
+                    'ml-auto h-8 rounded-full px-3.5 text-xs',
+                    !isReadyToMoveSupported
+                      ? 'cursor-not-allowed opacity-50'
+                      : activeReadyToMove
+                        ? 'border-evergreen bg-evergreen-tint text-evergreen shadow-sm hover:bg-evergreen-tint/80'
                         : '',
-                    )}
-                    onClick={() => handleSelectFamily('residential')}
-                    data-testid="quick-chip-family-residential"
-                    aria-pressed={activeFamily === 'residential'}
-                  >
-                    Residential
-                  </Button>
-                  {/* Structurally identical to the Residential chip above, and that is the ruling
-                      expressed in markup rather than asserted in a comment: same browsing posture
-                      for both families, no auth condition, no disabled branch, no gate copy. */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={cn(
-                      'h-8 px-3 text-xs',
-                      activeFamily === 'commercial'
-                        ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
-                        : '',
-                    )}
-                    onClick={() => handleSelectFamily('commercial')}
-                    data-testid="quick-chip-family-commercial"
-                    aria-pressed={activeFamily === 'commercial'}
-                  >
-                    Commercial
-                  </Button>
-                </div>
+                  )}
+                  onClick={isReadyToMoveSupported ? handleToggleReadyToMove : undefined}
+                  data-testid="quick-chip-ready-to-move"
+                  aria-pressed={isReadyToMoveSupported && activeReadyToMove}
+                  title={
+                    isReadyToMoveSupported
+                      ? undefined
+                      : "Ready-to-move filtering isn't available in this view yet — try Browse all listings"
+                  }
+                >
+                  {possessionLabel}
+                </Button>
               </div>
             )}
 
             <div className="space-y-2">
-              <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-                Property type
-              </span>
+              {/* Issue #2555 — the Residential type row keeps its own label, and the Commercial
+                  subtype row below carries the approved "COMMERCIAL TYPE" one. Only one of the two
+                  ever renders (see the mutual-exclusion note below), so the card shows exactly one
+                  type control at a time, as the mock does. The label is suppressed while the
+                  subtype row owns this slot. */}
+              {!showSubtypeRow && (
+                <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+                  Property type
+                </span>
+              )}
               <div className="flex flex-wrap gap-1.5">
                 {/* Issue #2450 — the Residential type chips and the Commercial subtype row are
                     MUTUALLY EXCLUSIVE, and this condition is what makes that true rather than a
@@ -1227,46 +1836,35 @@ export function AreaSelectedPanel({
                     ))}
                   </>
                 )}
-                {/* Issue #2023 — "Ready to move" sits on the trailing edge of the Type
-                    row per the frozen mock (ExpPanel.jsx ~L55-72). Evergreen-tint
-                    active state, matching this file's existing trust/verified colour
-                    convention (ShieldCheck / evergreen-tint result-summary strip
-                    below), distinct from the navy property-type and copper bedroom
-                    chips.
-
-                    Code-review follow-up — not every calling surface can actually
-                    filter on this (see `isReadyToMoveSupported` JSDoc above). When
-                    unsupported the chip renders muted/disabled with an explanatory
-                    title instead of toggling into an active state that has no
-                    effect on the listings shown — an active-looking chip that does
-                    nothing is a UX-honesty bug, not a cosmetic one. If a stale
-                    `filters.readyToMove=true` arrives from a prior session/URL on
-                    an unsupported surface, this deliberately still renders inert
-                    (not visually active) rather than silently clearing the user's
-                    URL state as a side effect. */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!isReadyToMoveSupported}
-                  className={cn(
-                    'h-8 px-3 text-xs ml-auto',
-                    !isReadyToMoveSupported
-                      ? 'cursor-not-allowed opacity-50'
-                      : activeReadyToMove
-                        ? 'border-evergreen bg-evergreen-tint text-evergreen shadow-sm hover:bg-evergreen-tint/80'
-                        : '',
-                  )}
-                  onClick={isReadyToMoveSupported ? handleToggleReadyToMove : undefined}
-                  data-testid="quick-chip-ready-to-move"
-                  aria-pressed={isReadyToMoveSupported && activeReadyToMove}
-                  title={
-                    isReadyToMoveSupported
-                      ? undefined
-                      : "Ready-to-move filtering isn't available in this view yet — try Browse all listings"
-                  }
-                >
-                  Ready to move
-                </Button>
+                {/* Issue #2555 — the possession chip moved to the TYPE row's trailing edge to
+                    match the approved mock; see its note there. It is no longer rendered here.
+                    While the capability is OFF there is no TYPE row, so it is re-rendered below
+                    instead — today's buyer surface must keep the control it has. */}
+                {!isCommercialSubtypeSupported && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!isReadyToMoveSupported}
+                    className={cn(
+                      'h-8 px-3 text-xs ml-auto',
+                      !isReadyToMoveSupported
+                        ? 'cursor-not-allowed opacity-50'
+                        : activeReadyToMove
+                          ? 'border-evergreen bg-evergreen-tint text-evergreen shadow-sm hover:bg-evergreen-tint/80'
+                          : '',
+                    )}
+                    onClick={isReadyToMoveSupported ? handleToggleReadyToMove : undefined}
+                    data-testid="quick-chip-ready-to-move"
+                    aria-pressed={isReadyToMoveSupported && activeReadyToMove}
+                    title={
+                      isReadyToMoveSupported
+                        ? undefined
+                        : "Ready-to-move filtering isn't available in this view yet — try Browse all listings"
+                    }
+                  >
+                    {possessionLabel}
+                  </Button>
+                )}
               </div>
 
               {/* Commercial subtype row — family-local, so it appears only while Commercial is the
@@ -1276,7 +1874,18 @@ export function AreaSelectedPanel({
                   rendered in the same block, which is how the contradictory selection stayed
                   reachable. */}
               {showSubtypeRow && (
-                <div className="flex flex-wrap items-center gap-1.5" data-testid="quick-subtype-row">
+                <div
+                  className="flex flex-wrap items-center gap-x-2 gap-y-1.5"
+                  data-testid="quick-subtype-row"
+                >
+                  {/* Issue #2555 mock parity — the approved "COMMERCIAL TYPE" label, inline at the
+                      left of its own chips. The row wraps after "Commercial Building" at the
+                      desktop target; "Warehouse / Godown" and "Commercial Land" flow to a second
+                      line and stay fully readable because the chips size to their content rather
+                      than being truncated. */}
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                    Commercial type
+                  </span>
                   {COMMERCIAL_SUBTYPE_CHOICES.map((choice) => {
                     // "All commercial" is the active chip precisely when no subtype narrows the
                     // family — it is the absence of a narrowing, not a sixth subtype.
@@ -1290,9 +1899,9 @@ export function AreaSelectedPanel({
                         variant="outline"
                         size="sm"
                         className={cn(
-                          'h-8 px-3 text-xs',
+                          'h-8 rounded-full px-3.5 text-xs',
                           pressed
-                            ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+                            ? 'border-gold bg-gold text-gold-foreground shadow-sm hover:bg-gold/90'
                             : '',
                         )}
                         onClick={() => handleToggleSubtype(choice.value)}
@@ -1307,47 +1916,186 @@ export function AreaSelectedPanel({
               )}
             </div>
 
-            <div className="space-y-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                Bedrooms
-              </span>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {/* R-C — BHK chips: copper-tint active (mock uses copper-tint for BHK, navy for property-type). */}
-                {QUICK_BEDROOMS.map((bed) => (
-                  <Button
-                    key={bed}
-                    variant="outline"
-                    size="sm"
-                    className={cn(
-                      'h-8 px-3 text-xs',
-                      activeBedrooms.has(bed)
-                        ? 'border-copper bg-copper-tint text-[hsl(var(--copper))] shadow-sm hover:bg-copper-tint/80'
-                        : '',
-                    )}
-                    onClick={() => handleToggleBedroom(bed)}
-                    data-testid={`quick-chip-${bed}-bhk`}
-                    aria-pressed={activeBedrooms.has(bed)}
-                  >
-                    {bed} BHK
-                  </Button>
-                ))}
-              </div>
-            </div>
+            {/* Issue #2555 / #2459 AC2 — Bedrooms is RESIDENTIAL-ONLY. A commercial row carries
+                `bedrooms` NULL, so this control could only ever narrow the results to nothing; the
+                approved Commercial mock has no Bedrooms row for that reason. The submit half of
+                the same rule lives in `bedroomApplicability.ts`, which states that visibility is
+                #2450's question — this is that half.
 
+                The buyer's bedroom VALUE is deliberately not cleared when it is hidden: it stays in
+                filter state and re-applies on the way back to Residential, exactly as that module's
+                "suppression is about submission, not about the buyer's state" note requires. */}
+            {showBedroomsRow && (
+              <div className="space-y-2" data-testid="quick-bedrooms-row">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  Bedrooms
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {/* R-C — BHK chips: copper-tint active (mock uses copper-tint for BHK). */}
+                  {QUICK_BEDROOMS.map((bed) => (
+                    <Button
+                      key={bed}
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        'h-8 px-3 text-xs',
+                        activeBedrooms.has(bed)
+                          ? 'border-copper bg-copper-tint text-[hsl(var(--copper))] shadow-sm hover:bg-copper-tint/80'
+                          : '',
+                      )}
+                      onClick={() => handleToggleBedroom(bed)}
+                      data-testid={`quick-chip-${bed}-bhk`}
+                      aria-pressed={activeBedrooms.has(bed)}
+                    >
+                      {bed} BHK
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Issue #2555 — AREA (SQ FT) presets. Each writes `areaMinSqft` through #2459's own
+                `applyAreaBound`, the same writer the numeric AreaRangeFilter uses, and the label
+                comes from #2459's resolver.
+
+                THE ROW IS LIVE ON BOTH SURFACES AS OF `65b5dc7c`. Everything below is the RECORD of
+                a defect that commit CLOSED, kept in past tense because the reasoning is what the
+                five insertion points were chosen against — not a description of today's behaviour.
+                This block has now been rewritten four times: twice because it was WRONG, and once
+                because it was RIGHT WHEN WRITTEN and was overtaken by a fix two commits later in
+                this same branch. If you change the area wiring, change this paragraph in the same
+                commit; nothing in the tooling catches a comment that quietly stops being true.
+
+                THE DEFECT, as it stood before `65b5dc7c`: a cards/markers DIVERGENCE, not a dead
+                control. Both earlier claims were wrong. The first said the row was "LIVE, not
+                decorative", citing #2450's "Never ship an inert design-only Area chip" as though
+                using the real writer settled it — liveness needs a writer, a READER and a QUERY,
+                and that surface had only the writer. The second said `areaMinSqft` was absent from
+                `useDiscoverMapData` and concluded "markers do not narrow either — uniformly inert";
+                the premise was true and the INFERENCE was not, because that hook never names filter
+                keys on the marker path, it forwards them wholesale.
+
+                THE CARD PATH AS IT WAS, each link read rather than inferred:
+                  - `selectors/effectiveDiscoverContext.ts::resolveEffectiveAreaLeafFilters` — both
+                    branches projected exactly propertyTypes / commercialSubtypes / bedrooms /
+                    priceMin / priceMax / readyToMove. No area keys.
+                  - `views/NodeListingsSurface.tsx` — the same six in its inline `effectiveFilters`
+                    memo and in its deps.
+                  - `hooks/useDiscoverCityListings.ts` — no area parameter at all, in neither the
+                    params type nor the `queryFn`.
+                So the click emitted, the commit boundary forwarded, and the projection DROPPED it
+                before it returned as props: `activeAreaMin` stayed undefined, "Any size" stayed
+                pressed, the clicked chip never latched, `selected-chip-area` could not render, and
+                the CARDS did not change.
+
+                THE MARKER PATH NEVER DROPPED IT:
+                  - `useDiscoverMapDataController` passes `filters: effectiveFilters`, which is the
+                    page filters unchanged apart from a combined area+school polygon injection.
+                  - `useDiscoverMapData` — `agriFilters` IS `filters` itself off the agri journey,
+                    handed straight to `useDiscoverFilteredMarkers`.
+                  - `useDiscoverFilteredMarkers` passes `filters` wholesale to
+                    `buildDiscoverSearchParams`.
+                  - `lib/discoverSearchParams.ts` EMITS `areaMinSqft`/`areaMaxSqft`, and its own
+                    #2459 note calls itself "the ONE builder both the listings hook and the markers
+                    hook call".
+                Net: a SIGNED-IN buyer (markers are auth-gated) saw the MAP narrow to the chosen
+                bound while the card list ignored it and the chip still read "Any size".
+
+                WHAT `65b5dc7c` CHANGED. The area keys were added at five points, because the axis
+                was unrepresentable at several layers at once: both branches of
+                `resolveEffectiveAreaLeafFilters`; `NodeListingsSurface`'s inline twin AND its memo
+                deps; the `cityListingsQueryParams` `Pick<>` union and that adapter's return object;
+                and `useDiscoverCityListings`' params type, destructure, react-query KEY and URL
+                append. Forwarded with NO applicability gate, deliberately: unlike `bedrooms` —
+                suppressed for plot-only/commercial-only selections whose rows carry `bedrooms` NULL
+                — #2459 resolves the area column PER ROW, so every shape has a comparable quantity
+                and there is nothing to suppress. Sent in square feet, unconverted.
+
+                THIS IS STILL THE ONE UNGATED PART OF #2555. Everything else here is dormant behind
+                `isCommercialSubtypeSupported`; this row renders for every buyer, so changes here
+                reach production without the flag flip and "it is only a scaffold" does not cover
+                it. Gating the row behind an `isAreaFilterSupported` prop on the
+                `isReadyToMoveSupported` precedent would hide a row the approved mock requires, so
+                that remains an owner decision rather than a tidy-up — and it is now moot, since the
+                capability the prop would have guarded exists.
+
+                The approved mock trails the BUDGET label on the right of this same row, which is
+                what `ml-auto` below reproduces. */}
             <div className="space-y-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                Budget
-              </span>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {/* Fixed budget bands (mock parity) — navy active state, matching
-                    the property-type chips (both are single-facet selections). */}
+              <div
+                className="flex flex-wrap items-center gap-x-2 gap-y-1.5"
+                data-testid="quick-area-row"
+              >
+                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  {areaControlLabel}
+                </span>
+                {QUICK_AREA_PRESETS.map((preset) => {
+                  // "Any size" is active precisely when no lower bound narrows the results.
+                  const pressed =
+                    preset.min === undefined ? activeAreaMin == null : activeAreaMin === preset.min;
+                  return (
+                    <Button
+                      key={preset.testId}
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        'h-8 rounded-full px-3.5 text-xs',
+                        pressed
+                          ? 'border-gold bg-gold text-gold-foreground shadow-sm hover:bg-gold/90'
+                          : '',
+                      )}
+                      onClick={() => handleSelectArea(preset.min)}
+                      data-testid={preset.testId}
+                      aria-pressed={pressed}
+                    >
+                      {preset.label}
+                    </Button>
+                  );
+                })}
+                <span className="ml-auto text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  Budget
+                </span>
+              </div>
+
+              {/* Issue #2459 D1, the LABEL half of "meaning DISCLOSED in label and chip".
+                  "Disclosure is NOT optional" is a ruled acceptance criterion, not copy polish.
+
+                  WHY THIS WAS MISSING RATHER THAN DECLINED. The row above renders
+                  `areaControlLabel`, which for a broad or mixed selection is the deliberately
+                  non-committal "AREA (SQ FT)". That is the DEFAULT state here: with no property-type
+                  narrowing every shape is in play, so the row compares built-up area on homes and
+                  plot size on plots and said so nowhere. `primaryAreaLabels.ts` returns a non-null
+                  `disclosure` in exactly that case and calls rendering the broad label without it
+                  "the failure mode D1 forbids" — the panel simply dropped the value.
+
+                  NO COPY IS COINED HERE. The sentence is built by the shared module from
+                  PRIMARY_AREA_DISCLOSURE_TERMS, so this surface cannot drift from the numeric
+                  AreaRangeFilter or from ActiveContextChips, which render the same data.
+
+                  Rendered as its OWN element with a stable test id, mirroring
+                  `AreaRangeFilter`'s `area-filter-disclosure`, so a test fails when it goes missing
+                  rather than the sentence silently disappearing. A distinct id, because both
+                  controls can mount on the same page. That component additionally wires its
+                  sentence to its numeric inputs via `aria-describedby`; these presets are buttons
+                  sitting immediately after it, so the sentence is announced in normal document
+                  order instead. */}
+              {areaControl.disclosure !== null && (
+                <p className="text-xs text-muted-foreground" data-testid="quick-area-disclosure">
+                  {areaControl.disclosure}
+                </p>
+              )}
+
+              {/* Issue #2555 item 3 — purpose- and family-aware bands; see QUICK_BUDGET_BANDS.
+                  COPPER active state, per the approved mock, which deliberately distinguishes
+                  Budget from the gold family/subtype/area controls. */}
+              <div className="flex flex-wrap items-center gap-1.5" data-testid="quick-budget-row">
                 <Button
                   variant="outline"
                   size="sm"
                   className={cn(
-                    'h-8 px-3 text-xs',
+                    'h-8 rounded-full px-3.5 text-xs',
                     activePriceMax == null
-                      ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+                      ? 'border-copper bg-copper text-copper-foreground shadow-sm hover:bg-copper-hover'
                       : '',
                   )}
                   onClick={() => handleSelectBudget(undefined)}
@@ -1356,15 +2104,15 @@ export function AreaSelectedPanel({
                 >
                   Any price
                 </Button>
-                {QUICK_BUDGETS.map((budget) => (
+                {activeBudgetBands.map((budget) => (
                   <Button
                     key={budget.max}
                     variant="outline"
                     size="sm"
                     className={cn(
-                      'h-8 px-3 text-xs',
+                      'h-8 rounded-full px-3.5 text-xs',
                       activePriceMax === budget.max
-                        ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+                        ? 'border-copper bg-copper text-copper-foreground shadow-sm hover:bg-copper-hover'
                         : '',
                     )}
                     onClick={() => handleSelectBudget(budget.max)}
@@ -1376,6 +2124,229 @@ export function AreaSelectedPanel({
                 ))}
               </div>
             </div>
+
+            {/* ── Issue #2555 item 2 — individually removable selected-filter chips ──────────
+                #2450: "Use selected-filter chips that can be removed individually", and for mobile
+                "selected filters can be removed."
+
+                DISTINCT FROM THE CONTROLS ABOVE. Re-clicking an active control toggles it off,
+                which is per-control toggling; and `handleClearPropertyFilters` is a family-local
+                RESET. Neither is per-value removal, which is what this row provides.
+
+                DISTINCT FROM `activeContextChips` TOO: that prop is an opaque caller-supplied
+                ReactNode rendered near the header, with nothing the panel can attach a removal
+                affordance to. This row is panel-owned, so it can. */}
+            {(() => {
+              const selectedChips: {
+                key: string;
+                label: string;
+                testId: string;
+                onRemove: () => void;
+              }[] = [];
+
+              (filters.propertyTypes ?? []).forEach((type) => {
+                selectedChips.push({
+                  key: `type-${type}`,
+                  // #2430's shared authority, NOT this file's private map: that one covers only
+                  // apartment/villa/land, so a Commercial family token from a URL rendered as the
+                  // raw stored string.
+                  label: getPropertyTypeLabel(type),
+                  testId: `selected-chip-type-${type}`,
+                  onRemove: () => handleRemovePropertyType(type),
+                });
+              });
+
+              // Subtype chips are CAPABILITY-GATED (review finding). Rendering them while the flag
+              // is off would put a working Commercial subtype control on the surface the owner
+              // ruled must carry none — and omitting the chip rather than only guarding the handler
+              // is what stops a rendered-but-dead dismiss button, the class this panel refuses.
+              //
+              // THE COST IS REAL AND IS NOT "the value is inert" (re-review finding). Unlike
+              // `readyToMove` below, an inbound `?subtype=` is NOT inert: it serialises back into
+              // the URL, so it persists, reloads and shares, and it reaches the markers endpoint
+              // for signed-in buyers. Only THIS card list ignores it (`useDiscoverCityListings`
+              // sends no subtype param), which is the capability flag's own premise. So omitting
+              // the chip satisfies the owner's "no Commercial control" ruling at the price of the
+              // buyer not seeing a narrowing that is still partly live. That was raised with the
+              // owner as a disclosure question — a non-removable label is not a control — and HAS
+              // NOW BEEN RULED: show a label, not a chip. It is implemented immediately after this
+              // chip row rather than inside it, because every entry in `selectedChips` renders a
+              // dismiss button, and a dismissable subtype affordance is the Commercial control the
+              // gate-off ruling forbids. `hasPropertyFilters` deliberately still counts the axis,
+              // so the narrowing is not trapped.
+              if (isCommercialSubtypeSupported) {
+                (filters.commercialSubtypes ?? []).forEach((subtype) => {
+                  selectedChips.push({
+                    key: `subtype-${subtype}`,
+                    label:
+                      COMMERCIAL_SUBTYPE_CHOICES.find((c) => c.value === subtype)?.label ?? subtype,
+                    testId: `selected-chip-subtype-${subtype}`,
+                    onRemove: () => handleRemoveSubtype(subtype),
+                  });
+                });
+              }
+
+              // Issue #2555 item 2 — Bedrooms, gated on `shouldSubmitBedrooms` and deliberately NOT
+              // on `showBedroomsRow`. Those answer two different questions and the gap between them
+              // is the point: the ROW's visibility is #2450's question (hidden under any Commercial
+              // selection), while the CHIP must track whether the value is actually SUBMITTED
+              // (#2459 AC2's half). Where the row is hidden but the value still travels, the chip
+              // stays the buyer's only way to see and remove it.
+              //
+              // WHY NOT UNGATED, which is what this was until now. The earlier revision rendered it
+              // unconditionally, reasoning that a hidden row makes a stale bedroom value invisible.
+              // That was correct while `shouldSubmitBedrooms` still returned true for this panel's
+              // one-axis Commercial shape — the value really did reach the request and the shared
+              // link, so surfacing it was honest. That predicate now suppresses it (see the
+              // `showBedroomsRow` note above), which INVERTS the conclusion: an ungated chip would
+              // present an inert value as an applied filter, the precise class the `readyToMove`
+              // chip three blocks below refuses on identical grounds. A chip that says "3 BHK" over
+              // a request carrying no `beds=` is a false report of the search.
+              if (shouldSubmitBedrooms(filters)) {
+                (filters.bedrooms ?? []).forEach((bed) => {
+                  selectedChips.push({
+                    key: `bedrooms-${bed}`,
+                    label: `${bed} BHK`,
+                    testId: `selected-chip-bedrooms-${bed}`,
+                    onRemove: () => handleRemoveBedroom(bed),
+                  });
+                });
+              }
+
+              // Gated on the capability for the same honesty reason the chip itself is: where the
+              // surface cannot filter on possession, a stale URL-carried value is inert and must
+              // not be presented as an applied filter.
+              if (filters.readyToMove && isReadyToMoveSupported) {
+                selectedChips.push({
+                  key: 'ready-to-move',
+                  label: possessionLabel,
+                  testId: 'selected-chip-ready-to-move',
+                  onRemove: handleRemoveReadyToMove,
+                });
+              }
+
+              if (activePriceMax != null) {
+                selectedChips.push({
+                  key: 'budget',
+                  // Prefer the band's own approved wording so the chip and the control agree; fall
+                  // back to a formatted value for a priceMax that arrived from a URL rather than
+                  // from one of this family/intent's bands.
+                  //
+                  // THE FALLBACK CARRIES `/month` UNDER RENT (review finding). Every rent BAND
+                  // label has it; without it here an off-band rent ceiling rendered as "≤ ₹40,000",
+                  // indistinguishable in register from a purchase price — in the one panel whose
+                  // entire item-3 premise is that the two are different quantities.
+                  label:
+                    activeBudgetBands.find((b) => b.max === activePriceMax)?.label ??
+                    `≤ ₹${activePriceMax.toLocaleString('en-IN')}${
+                      budgetIntent === 'rent' ? '/month' : ''
+                    }`,
+                  testId: 'selected-chip-budget',
+                  onRemove: handleRemoveBudget,
+                });
+              }
+
+              if (activeAreaMin != null || filters.areaMaxSqft != null) {
+                const fmt = (n: number) => n.toLocaleString('en-IN');
+                const range =
+                  activeAreaMin != null && filters.areaMaxSqft != null
+                    ? `${fmt(activeAreaMin)} – ${fmt(filters.areaMaxSqft)} sq ft`
+                    : activeAreaMin != null
+                      ? `${fmt(activeAreaMin)}+ sq ft`
+                      : `Up to ${fmt(filters.areaMaxSqft!)} sq ft`;
+                // Issue #2459 D1, the CHIP half — the meaning travels with the value, exactly as
+                // `ActiveContextChips` already does it (same formula, same shared vocabulary). This
+                // chip previously read a bare "1,000+ sq ft", which over a mixed selection is
+                // comparing built-up area on some rows and plot size on others while saying so
+                // nowhere. No copy is coined here: `shortLabel` and `disclosure` both come from the
+                // shared module, because a second declaration of this taxonomy is the drift #2526
+                // was filed to stop.
+                //
+                // The disclosure sits INSIDE the label deliberately, which also puts it into the
+                // dismiss button's accessible name for free (see the `aria-label` below).
+                selectedChips.push({
+                  key: 'area',
+                  label:
+                    areaControl.disclosure != null
+                      ? `${areaControl.shortLabel}: ${range} — ${areaControl.disclosure}`
+                      : `${areaControl.shortLabel}: ${range}`,
+                  testId: 'selected-chip-area',
+                  onRemove: handleRemoveArea,
+                });
+              }
+
+              // Nothing selected renders NO row at all, rather than an empty bordered strip —
+              // chips for filters nobody applied would misreport the state of the search.
+              if (selectedChips.length === 0) return null;
+
+              return (
+                <div
+                  className="flex flex-wrap items-center gap-1.5 border-t border-border pt-3"
+                  role="group"
+                  aria-label="Selected filters"
+                  data-testid="selected-filter-chips"
+                >
+                  {selectedChips.map((chip) => (
+                    <span
+                      key={chip.key}
+                      className="inline-flex items-center gap-1 rounded-full border border-gold/40 bg-gold-tint px-2.5 py-1 text-xs font-medium text-foreground"
+                      data-testid={chip.testId}
+                    >
+                      {chip.label}
+                      <button
+                        type="button"
+                        onClick={chip.onRemove}
+                        aria-label={`Remove ${chip.label} filter`}
+                        data-testid={`${chip.testId}-dismiss`}
+                        className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                      >
+                        <X className="h-3 w-3" aria-hidden="true" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              );
+            })()}
+
+            {/* ── Issue #2555 item 3 — NON-REMOVABLE SUBTYPE DISCLOSURE (owner ruling) ──────────
+                WHY THIS EXISTS. While `isCommercialSubtypeSupported` is false the panel renders no
+                Commercial control and no subtype chip, per the owner's gate-off ruling. But an
+                inbound `?subtype=SHOP` is NOT inert: it survives in URL state, so it persists,
+                reloads and travels in a shared link, and it reaches the markers endpoint for
+                signed-in buyers. Saying nothing leaves the buyer with a narrowing they cannot see.
+
+                A LABEL, NOT A CONTROL — this is the whole point of the ruling and the reason it is
+                not rendered as a selected-filter chip. No dismiss button, no click handler, no
+                tabIndex, no role that implies an action: a `<div>` of text. A dismissable subtype
+                affordance would BE the Commercial control the gate-off ruling forbids, which is why
+                the chip above is capability-gated and this is not.
+
+                OUTSIDE THE CHIP-ROW IIFE, deliberately. That block returns null when
+                `selectedChips` is empty, and the exact state this discloses — an inbound subtype
+                with the capability off and nothing else applied — produces precisely zero chips, so
+                nesting it there would silence it in the one case it exists for.
+
+                THE COPY CLAIMS ONLY WHAT HOLDS IN BOTH SESSIONS. It does not say the map is
+                narrowed: markers are auth-gated, so that is true for a signed-in buyer and false
+                for an anonymous one, and this panel takes no auth prop to tell them apart. Nor does
+                it point at "Clear filters", which renders only in the zero-result branch and is
+                absent while results are on screen — naming an off-screen control would be worse
+                than naming none. Clearing remains available by the existing routes.
+
+                TRANSITIONAL. This whole block is removed by the lane that flips
+                `isCommercialSubtypeSupported` to true: once the card path consumes a subtype there
+                is no divergence to disclose, and the subtype chip above starts rendering instead.
+                Delete it with the flip — do not leave it standing as a permanent explanation of a
+                state that no longer occurs. */}
+            {!isCommercialSubtypeSupported && (filters.commercialSubtypes?.length ?? 0) > 0 && (
+              <div
+                className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground"
+                data-testid="commercial-subtype-disclosure"
+              >
+                A commercial property type from your link is still applied to this search and will
+                travel with the page if you share it. These results are not narrowed by it yet.
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1510,10 +2481,28 @@ export function AreaSelectedPanel({
                 // unconditionally would offer a relaxation on a panel with no filter owner — a
                 // control that cannot do anything, which is the dead-control class this panel
                 // refuses elsewhere (`onRetryListings`, `onAddSchool`).
+                // Issue #2555 (re-review finding) — the memories go with the override, for the
+                // identical reason. The empty PROPERTY_TYPES offer is a DELIBERATE clear by the
+                // buyer, so banking it is what stops the cleared selection returning on the next
+                // family switch. The effect above now banks unconditionally and would cover this
+                // on the following render anyway; clearing here as well states the intent at the
+                // point of action, exactly as the handlers do.
+                //
+                // FOURTH-CYCLE FINDING — this wrapper banked `next.propertyTypes` UNFILTERED, and
+                // it is a door this issue itself opened. `applyRelaxationPreview` spreads `filters`
+                // and overwrites exactly ONE key, so `propertyTypes` passes through untouched on
+                // the PRICE_MAX / READY_TO_MOVE / BEDROOMS offers — a buyer on `?type=warehouse`
+                // accepting any of them banked a Commercial token as the RESIDENTIAL memory.
+                // Filtered here so the banked value is clean at the point of action; the read side
+                // in `handleSelectFamily` is what makes that guarantee complete.
                 onApplyFilters={
                   onFiltersChange
                     ? (next) => {
                         setFamilyOverride(null);
+                        residentialMemoryRef.current = withoutCommercialFamilyTokens(
+                          next.propertyTypes,
+                        );
+                        commercialMemoryRef.current = next.commercialSubtypes;
                         onFiltersChange(next);
                       }
                     : undefined

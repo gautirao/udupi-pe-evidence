@@ -54,6 +54,13 @@ export default {
           hover: "hsl(var(--copper-hover))",
           tint: "hsl(var(--copper-tint))",
         },
+        // ReTrends gold — selected state for the Discover family/subtype/area controls
+        // (Issue #2555). See the --gold token block in src/index.css for provenance.
+        gold: {
+          DEFAULT: "hsl(var(--gold))",
+          foreground: "hsl(var(--gold-foreground))",
+          tint: "hsl(var(--gold-tint))",
+        },
         evergreen: {
           DEFAULT: "hsl(var(--evergreen))",
           foreground: "hsl(var(--evergreen-foreground))",

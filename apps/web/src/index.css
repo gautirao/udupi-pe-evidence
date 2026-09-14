@@ -57,6 +57,23 @@
     --copper-hover: 18 53% 38%;
     --copper-tint: 25 39% 92%;
 
+    /* ReTrends gold (#8A6A22) — the owner-approved selected state for the Discover TYPE /
+       COMMERCIAL TYPE / AREA controls (Issue #2555 mock parity).
+
+       SOURCED, NOT INVENTED. These are ReTrends' own `--gold-600` / `--gold-100`
+       (docs/design/retrends-design-system/tokens/colors.css L24-26, "optional premium
+       highlight"), converted HEX -> shadcn HSL channel format exactly as every token above was.
+       The app palette carried no gold before this: family/subtype selection previously reused
+       --primary (navy), which is not what the approved mock shows.
+
+       DELIBERATELY NOT --copper. Budget keeps copper as its selected treatment in the same mock,
+       so the two must stay visually distinct — collapsing them would make "which axis did I just
+       narrow?" unreadable at a glance, which is the whole reason the design assigns them
+       different accents. */
+    --gold: 42 60% 34%;
+    --gold-foreground: 0 0% 100%;
+    --gold-tint: 44 51% 91%;
+
     /* ReTrends verified/positive — muted evergreen (#1F7A5C) for trusted/sale/land-area (Issue #1547) */
     --evergreen: 160 60% 30%;
     --evergreen-foreground: 0 0% 100%;
@@ -144,6 +161,14 @@
     --copper-foreground: 0 0% 100%;
     --copper-hover: 18 53% 46%;
     --copper-tint: 18 30% 24%;
+
+    /* Gold — lightened for dark-mode contrast, mirroring the copper treatment directly above.
+       Omitting this block would leave --gold undefined in dark mode, which does not fall back to
+       the light value: `hsl(var(--gold))` would resolve to nothing and the selected family /
+       subtype / area chips would lose their fill entirely. */
+    --gold: 42 55% 60%;
+    --gold-foreground: 220 25% 10%;
+    --gold-tint: 42 30% 22%;
 
     --evergreen: 160 52% 42%;
     --evergreen-foreground: 0 0% 100%;
