@@ -270,7 +270,8 @@ public class CityAreaListingsService {
         if (maxPrice != null) {
             join.add("\n                        AND pl.price_paise <= ?", maxPrice);
         }
-        appendBedroomsClause(join, "\n                        ", normBedrooms);
+        appendBedroomsClause(join, "\n                        ", normBedrooms,
+                normPropertyTypes, normSubtypes);
         appendFamilyAndSubtypeClause(join, "\n                        ", normPropertyTypes, normSubtypes);
         // #2015 — anon "Search this area" viewport narrowing. Same predicate (pl.geog &&
         // ST_MakeEnvelope(...)::geography, bind order west/south/east/north) and GiST-indexed
@@ -609,7 +610,36 @@ public class CityAreaListingsService {
     }
 
     /**
-     * Emits the bedrooms narrowing clause (#2533). ONE implementation, used by both query paths.
+     * Emits the bedrooms narrowing clause (#2533, made shape-aware by #2537). ONE implementation,
+     * used by both query paths.
+     *
+     * <h2>The predicate applies PER SHAPE, never globally (#2537)</h2>
+     *
+     * <p>A Shop carries {@code bedrooms} NULL and a plot has none at all, so as a global conjunct
+     * {@code AND pl.bedrooms IN (3)} evaluated to NULL — not TRUE — for every one of them and
+     * silently eliminated the entire Commercial half of a mixed Apartment + Shop selection. The
+     * owner ruling on #2537 requires this membership instead:
+     *
+     * <pre>{@code
+     * (bedroom-capable selected shapes AND bedroom predicate) OR (selected non-bedroom-capable shapes)
+     * }</pre>
+     *
+     * <p><b>Why the emitted SQL is the shorter {@code (predicate OR property_type IN (…))} rather
+     * than that two-armed form literally.</b> This clause is ANDed with
+     * {@link #appendFamilyAndSubtypeClause}'s output, which has already restricted the row set to
+     * the selected shapes. Within that set, naming the incapable shapes on the right is equivalent
+     * to the ruling's left arm naming the capable ones — and it stays equivalent in both directions
+     * that matter: a capable-shape row whose {@code bedrooms} is NULL is still excluded (NULL
+     * satisfies neither disjunct), and an incapable-shape row is admitted whatever its
+     * {@code bedrooms} happens to hold. Every other active predicate — geography, purpose, price,
+     * area, subtype, status — remains a sibling conjunct and so constrains BOTH arms, which is what
+     * the ruling requires and what the wrapping parentheses preserve.
+     *
+     * <p><b>The wholly-capable case emits the pre-#2537 text byte-identically</b>, binds included.
+     * That is not an optimisation: {@code CityAreaListingsServiceIT} is an explicitly immutable
+     * byte-identical baseline, and a selection that changes no membership must change no SQL.
+     *
+     * <h2>The bind asymmetry this assembly already existed to contain (#2533)</h2>
      *
      * <p>{@code MAX_BEDROOMS} (4) means "4 or more", and {@link
      * DiscoverFilterNormalizer#normalizeBedrooms} clamps 5/8/9 down to it. So a selection
@@ -618,9 +648,12 @@ public class CityAreaListingsService {
      *
      * <p>That asymmetry is exactly what made the previous two-chain assembly fragile: a separate
      * param array had to predict which elements would and would not bind. Here the fragment and
-     * its binds are handed over together, so the question cannot be got wrong.
+     * its binds are handed over together, so the question cannot be got wrong. #2537 adds a SECOND
+     * group of binds after the bedroom values, which is precisely the kind of change that assembly
+     * makes safe.
      */
-    private static void appendBedroomsClause(ClauseBuilder cb, String indent, List<Integer> normBedrooms) {
+    private static void appendBedroomsClause(ClauseBuilder cb, String indent, List<Integer> normBedrooms,
+                                             List<String> normTypes, List<String> normSubtypes) {
         if (normBedrooms == null || normBedrooms.isEmpty()) {
             return;
         }
@@ -636,20 +669,56 @@ public class CityAreaListingsService {
                 exact.add(value);
             }
         }
+
+        // The bedroom test alone — no leading AND, no wrapping parentheses — so the two emission
+        // shapes below can each place it without restating it.
+        StringBuilder predicate = new StringBuilder();
         if (exact.isEmpty()) {
-            cb.add(indent + "AND pl.bedrooms >= " + DiscoverFilterNormalizer.MAX_BEDROOMS);
+            predicate.append("pl.bedrooms >= ").append(DiscoverFilterNormalizer.MAX_BEDROOMS);
+        } else {
+            predicate.append("pl.bedrooms IN (");
+            for (int i = 0; i < exact.size(); i++) {
+                predicate.append(i == 0 ? "?" : ", ?");
+            }
+            predicate.append(")");
+            if (fourOrMore) {
+                predicate.append(" OR pl.bedrooms >= ").append(DiscoverFilterNormalizer.MAX_BEDROOMS);
+            }
+        }
+
+        // Derived EXACTLY as appendFamilyAndSubtypeClause derives it, so the two clauses cannot
+        // disagree about which shapes the buyer selected. A subtype-only request (reachable from a
+        // hand-edited URL) names its types through the subtype axis alone.
+        List<String> effectiveTypes = (normTypes == null || normTypes.isEmpty())
+                ? DiscoverFilterNormalizer.impliedPropertyTypes(normSubtypes)
+                : normTypes;
+        List<String> nonCapable = BedroomApplicability.nonBedroomCapable(effectiveTypes);
+
+        if (nonCapable.isEmpty()) {
+            // Every selected shape can have bedrooms (or nothing was selected, which narrows
+            // nothing) — emit the pre-#2537 clause BYTE-IDENTICALLY, binds included. The #2533
+            // baseline arms pin this text and must keep passing unmodified.
+            if (exact.isEmpty()) {
+                cb.add(indent + "AND " + predicate);
+                return;
+            }
+            cb.add(indent + "AND (" + predicate + ")", exact.toArray());
             return;
         }
-        StringBuilder fragment = new StringBuilder(indent + "AND (pl.bedrooms IN (");
-        for (int i = 0; i < exact.size(); i++) {
+
+        // The ruling's membership shape. The selected non-bedroom-capable shapes are admitted
+        // without being judged against a predicate that cannot describe them.
+        StringBuilder fragment = new StringBuilder(indent + "AND ((")
+                .append(predicate)
+                .append(") OR pl.property_type IN (");
+        for (int i = 0; i < nonCapable.size(); i++) {
             fragment.append(i == 0 ? "?" : ", ?");
         }
-        fragment.append(")");
-        if (fourOrMore) {
-            fragment.append(" OR pl.bedrooms >= ").append(DiscoverFilterNormalizer.MAX_BEDROOMS);
-        }
-        fragment.append(")");
-        cb.add(fragment.toString(), exact.toArray());
+        fragment.append("))");
+
+        List<Object> binds = new ArrayList<>(exact);
+        binds.addAll(nonCapable);
+        cb.add(fragment.toString(), binds.toArray());
     }
 
     /**
@@ -847,7 +916,8 @@ public class CityAreaListingsService {
         if (maxPrice != null) {
             where.add("\n              AND pl.price_paise <= ?", maxPrice);
         }
-        appendBedroomsClause(where, "\n              ", normBedrooms);
+        appendBedroomsClause(where, "\n              ", normBedrooms,
+                normPropertyTypes, normSubtypes);
         appendFamilyAndSubtypeClause(where, "\n              ", normPropertyTypes, normSubtypes);
         // bbox is always non-null here (controller guarantees it — see getAreaListings caller
         // above), same predicate/bind order as the area-grouped path and the authenticated
