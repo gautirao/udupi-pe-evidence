@@ -96,13 +96,55 @@ export function PropertyTypeFilter({ filters, onFiltersChange }: PropertyTypeFil
     // each can be matched on — the warehouse row by property_type, the shop row by subtype. A fix
     // that merely stopped appending the family token would leave Shop-alone correct and silently
     // break as soon as a bearing and a self-describing subtype were selected together.
-    const impliedTypes = newSubtypes.map(
-      (s) => BUYER_SUBTYPE_TO_PROPERTY_TYPE[s] as PropertyType,
+    // Issue #2532 — the implied type is RELEASED when nothing implies it any more. Union alone
+    // was only half the relationship: a type a subtype selected for the buyer outlived that
+    // subtype's removal, so unticking Warehouse/Godown left `warehouse` applied.
+    //
+    // That orphan WIDENS results rather than emptying them, which is why it reads as a different
+    // defect from the stranded-subtype case above:
+    //
+    //   - map markers — `buildDiscoverSearchParams` emits every selected type, so
+    //     `type=commercial,warehouse&subtype=SHOP` keeps matching warehouse rows by property_type;
+    //     the buyer unticked Warehouse and still receives warehouses.
+    //   - result cards — worse at the time of writing. `useDiscoverMapData`'s
+    //     `discoverPropertyType` derivation sends a property type only when EXACTLY ONE is
+    //     selected, so a stranded second token drops the type filter ALTOGETHER and a Commercial
+    //     selection shows apartments, houses and land. Collapsing back to one token restores it.
+    //     Cited by symbol, not by line: #2533/#2559 are reworking that collapse, so this bullet
+    //     is CONDITIONAL on it still existing. The fix does not depend on it — releasing an
+    //     orphaned implied type is correct either way, and the marker bullet above holds.
+    //
+    // THE RULE: keep every selected type that NO subtype can imply, plus the implied types of the
+    // subtypes that REMAIN. Stated as a recompute rather than a subtraction, which is what makes
+    // it safe in both directions:
+    //
+    //   - `impliedNow` is unioned in unconditionally, so a surviving subtype can never lose the
+    //     type that carries it. That is the `AND FALSE` silent-zero class the #2530 hotfix
+    //     removed, and a naive "drop the departing subtype's type" subtraction would reintroduce
+    //     it the moment SHOP and OFFICE — which share `commercial` — were both selected.
+    //   - it is the exact mirror of `handleTypeChange`, which drops the subtypes whose implied
+    //     type is leaving. Both handlers now read the same per-subtype relationship from the same
+    //     map, from opposite ends; keying either on a fixed bearing token is what let them
+    //     disagree before.
+    //
+    // KNOWN COLLATERAL, accepted deliberately. A type the buyer ticked in the grid that a
+    // selected subtype ALSO implies is released with that subtype. State cannot tell the two
+    // apart: `PropertyFilters` carries no origin field and the URL contract serialises no origin
+    // param, so `['warehouse']` is one value with two possible histories. Separating them needs
+    // provenance in state AND in the URL (it must survive reload and back/forward), which belongs
+    // to #2458's canonical URL-contract domain, not here. It is visible (the checkbox unticks)
+    // and recoverable (re-tick it), and it is pinned by a test so a future provenance change has
+    // something to flip.
+    const impliedNow = new Set<PropertyType>(
+      newSubtypes.map((s) => BUYER_SUBTYPE_TO_PROPERTY_TYPE[s] as PropertyType),
     );
-    const nextTypes: PropertyType[] =
-      newSubtypes.length > 0
-        ? Array.from(new Set([...selectedTypes, ...impliedTypes]))
-        : selectedTypes;
+    const everImplied = new Set<string>(Object.values(BUYER_SUBTYPE_TO_PROPERTY_TYPE));
+    const nextTypes: PropertyType[] = Array.from(
+      new Set<PropertyType>([
+        ...selectedTypes.filter((t) => !everImplied.has(t) || impliedNow.has(t)),
+        ...impliedNow,
+      ]),
+    );
 
     onFiltersChange({
       ...filters,

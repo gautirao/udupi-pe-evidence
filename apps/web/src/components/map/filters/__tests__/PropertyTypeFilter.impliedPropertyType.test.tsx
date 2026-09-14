@@ -32,6 +32,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PropertyTypeFilter } from '../PropertyTypeFilter';
+import { BUYER_SUBTYPE_TO_PROPERTY_TYPE } from '@/lib/propertyTypeConfig';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 
 function renderFilter(filters: PropertyFilters = {}) {
@@ -207,6 +208,184 @@ describe('a picked subtype implies its own property type', () => {
 
       const emitted = onFiltersChange.mock.calls.at(-1)?.[0] as PropertyFilters;
       expect(emitted.commercialSubtypes).toEqual(['WAREHOUSE']);
+    });
+  });
+
+  /**
+   * THE OTHER DESELECTION PATH — unticking a SUBTYPE (issue #2532).
+   *
+   * `handleTypeChange` above releases the subtypes that lived in a type being unticked. The
+   * mirror was never written: `handleSubtypeChange` only ever UNIONED implied types, so a type a
+   * subtype had selected FOR the buyer outlived that subtype's removal.
+   *
+   * THE BUYER-VISIBLE CONSEQUENCE IS NOT THE ZERO-RESULT CLASS the type direction produces. A
+   * stranded TYPE widens results; a stranded SUBTYPE empties them. Measured on this branch:
+   *
+   *   - MAP MARKERS — `buildDiscoverSearchParams` emits EVERY selected property type, so
+   *     `type=commercial,warehouse&subtype=SHOP` goes on matching warehouse rows by
+   *     property_type. The buyer unticked Warehouse and still receives warehouses.
+   *   - RESULT CARDS — worse at the time of writing. `useDiscoverMapData`'s
+   *     `discoverPropertyType` derivation sends a property type only when EXACTLY ONE is
+   *     selected, so a stranded second token makes it `undefined`, dropping the type filter
+   *     ALTOGETHER — a Commercial selection then shows apartments, houses and land.
+   *
+   * Cited by SYMBOL, not by line: #2533/#2559 are actively reworking that single-value collapse
+   * (five such sites, not three), so any line number here would be stale on their merge. The
+   * second bullet is therefore CONDITIONAL on the collapse still existing. NOTHING BELOW DEPENDS
+   * ON IT — releasing an orphaned implied type is correct either way, and the marker bullet holds
+   * regardless.
+   *
+   * One change fixes both: releasing an implied type the moment nothing implies it collapses the
+   * mixed case back to a single token, which is also what restores the card-list filter.
+   *
+   * WHY THE RULE IS MECHANICAL RATHER THAN PROVENANCE-BASED. Nothing in state distinguishes "the
+   * buyer ticked this type in the grid" from "a subtype selected it for them": `PropertyFilters`
+   * carries no origin field, and `serializeFilters` writes no origin param. So the rule keeps any
+   * selected type that NO subtype can imply, plus the implied types of the subtypes that REMAIN.
+   * The arms below pin what follows from that — including the one case where it is knowingly
+   * wrong, which is asserted rather than left to be discovered.
+   */
+  describe('unticking a subtype releases the property type it implied (#2532)', () => {
+    it('mixed pair — unticking Warehouse leaves Shop alone, not Shop plus every warehouse', async () => {
+      const user = userEvent.setup();
+      const { onFiltersChange, view } = renderFilter({
+        propertyTypes: ['commercial', 'warehouse'],
+        commercialSubtypes: ['SHOP', 'WAREHOUSE'],
+      });
+
+      await user.click(subtypeCheckbox(view, 'WAREHOUSE'));
+
+      const emitted = onFiltersChange.mock.calls.at(-1)?.[0] as PropertyFilters;
+      expect(emitted.commercialSubtypes).toEqual(['SHOP']);
+      expect(
+        emitted.propertyTypes,
+        "'warehouse' was selected only because WAREHOUSE implied it — unticking WAREHOUSE must " +
+          'release it, or the buyer keeps receiving the very rows they just excluded',
+      ).toEqual(['commercial']);
+    });
+
+    it('last subtype, self-describing — unticking Warehouse leaves no filter behind', async () => {
+      const user = userEvent.setup();
+      const { onFiltersChange, view } = renderFilter({
+        propertyTypes: ['warehouse'],
+        commercialSubtypes: ['WAREHOUSE'],
+      });
+
+      await user.click(subtypeCheckbox(view, 'WAREHOUSE'));
+
+      const emitted = onFiltersChange.mock.calls.at(-1)?.[0] as PropertyFilters;
+      expect(emitted.commercialSubtypes).toBeUndefined();
+      expect(emitted.propertyTypes).toBeUndefined();
+    });
+
+    /**
+     * THE BEHAVIOUR CHANGE THIS PR ASKS TO RATIFY, stated as an assertion so it cannot ship
+     * unnoticed. Today unticking Shop RETAINS `commercial`, leaving the buyer filtered to the
+     * whole Commercial family after removing the only thing that selected it. Releasing it is
+     * the same rule the other four subtypes get; treating the bearing token as special is what
+     * made the two handlers disagree in the first place.
+     */
+    it('last subtype, bearing — unticking Shop also releases commercial', async () => {
+      const user = userEvent.setup();
+      const { onFiltersChange, view } = renderFilter({
+        propertyTypes: ['commercial'],
+        commercialSubtypes: ['SHOP'],
+      });
+
+      await user.click(subtypeCheckbox(view, 'SHOP'));
+
+      const emitted = onFiltersChange.mock.calls.at(-1)?.[0] as PropertyFilters;
+      expect(emitted.commercialSubtypes).toBeUndefined();
+      expect(emitted.propertyTypes).toBeUndefined();
+    });
+
+    /**
+     * THE CONTROL that a naive "always drop the implied token" fix fails. SHOP and OFFICE share
+     * one implied type, so removing SHOP while OFFICE remains must NOT release `commercial` —
+     * doing so would strand OFFICE and recreate the `AND FALSE` silent-zero class the #2530
+     * hotfix removed.
+     */
+    it('keeps commercial while a sibling bearing subtype still needs it', async () => {
+      const user = userEvent.setup();
+      const { onFiltersChange, view } = renderFilter({
+        propertyTypes: ['commercial'],
+        commercialSubtypes: ['SHOP', 'OFFICE'],
+      });
+
+      await user.click(subtypeCheckbox(view, 'SHOP'));
+
+      const emitted = onFiltersChange.mock.calls.at(-1)?.[0] as PropertyFilters;
+      expect(emitted.commercialSubtypes).toEqual(['OFFICE']);
+      expect(emitted.propertyTypes).toEqual(['commercial']);
+    });
+
+    it('a selected type that no subtype implies survives untouched', async () => {
+      const user = userEvent.setup();
+      const { onFiltersChange, view } = renderFilter({
+        propertyTypes: ['apartment', 'warehouse'],
+        commercialSubtypes: ['WAREHOUSE'],
+      });
+
+      await user.click(subtypeCheckbox(view, 'WAREHOUSE'));
+
+      const emitted = onFiltersChange.mock.calls.at(-1)?.[0] as PropertyFilters;
+      // 'apartment' is unreachable from any subtype, so no subtype's removal may touch it.
+      expect(emitted.propertyTypes).toEqual(['apartment']);
+    });
+
+    /**
+     * The hotfix's defect class approached from this side: a SURVIVING subtype must never lose
+     * the type that carries it, or the server intersects incompatible families and emits literal
+     * `AND FALSE` — zero rows, HTTP 200, no error. Asserted over the whole surviving set rather
+     * than one hardcoded pair, so a future vocabulary addition is covered too.
+     */
+    it('never strands a surviving subtype without its implied type', async () => {
+      const user = userEvent.setup();
+      const { onFiltersChange, view } = renderFilter({
+        propertyTypes: ['commercial', 'commercial_building', 'warehouse'],
+        commercialSubtypes: ['SHOP', 'BUILDING', 'WAREHOUSE'],
+      });
+
+      await user.click(subtypeCheckbox(view, 'BUILDING'));
+
+      const emitted = onFiltersChange.mock.calls.at(-1)?.[0] as PropertyFilters;
+      const surviving = emitted.commercialSubtypes ?? [];
+      expect(surviving).toEqual(['SHOP', 'WAREHOUSE']);
+      for (const s of surviving) {
+        expect(
+          emitted.propertyTypes ?? [],
+          `${s} lost its implied type — that pairing matches zero rows and fails silently`,
+        ).toContain(BUYER_SUBTYPE_TO_PROPERTY_TYPE[s]);
+      }
+      // ...and the type the REMOVED subtype implied is the one that goes.
+      expect(emitted.propertyTypes).not.toContain('commercial_building');
+    });
+
+    /**
+     * KNOWN COLLATERAL — asserted, not hidden.
+     *
+     * A buyer who ticks Warehouse in the TYPE grid AND the WAREHOUSE subtype has made two
+     * selections that state records as one token. Unticking the subtype therefore also releases
+     * the grid selection. This is visible (the grid checkbox unticks) and recoverable (re-tick
+     * it), but it is not what the buyer asked for.
+     *
+     * It is inherent to having no provenance, NOT to this rule: with `propertyTypes: ['warehouse']`
+     * carrying no origin, the two cases are the same value and no mechanical rule can separate
+     * them. Fixing it properly needs a provenance field AND a URL param (it must survive reload
+     * and back/forward), which is #2458's canonical URL-contract domain. Pinned here so that a
+     * future provenance change has a test to flip rather than a surprise to discover.
+     */
+    it('KNOWN COLLATERAL: a grid-ticked type that a subtype also implies is released too', async () => {
+      const user = userEvent.setup();
+      const { onFiltersChange, view } = renderFilter({
+        propertyTypes: ['warehouse'],
+        commercialSubtypes: ['WAREHOUSE'],
+      });
+
+      await user.click(subtypeCheckbox(view, 'WAREHOUSE'));
+
+      const emitted = onFiltersChange.mock.calls.at(-1)?.[0] as PropertyFilters;
+      expect(emitted.propertyTypes).toBeUndefined();
     });
   });
 
