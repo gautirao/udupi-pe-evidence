@@ -87,11 +87,12 @@ export interface DiscoverCityListingItem {
    *   - `/api/discover/listings` → `DiscoverListingResponse` (remapped by
    *     `discoverListingToCityListing`) — carries the subtype AND the facts. Feeds
    *     `authViewportListings` (#2015) and `polygonListings` (#2461).
-   *   - `/api/discover/cities/{city}/listings` → `AreaListingCard` — **carries the
-   *     SUBTYPE** as of `e3aab5f` (`AreaListingCard.java:93`). It does not *yet* carry the
-   *     allowlisted FACT columns: #2516 is projecting them onto this feed, so treat that
-   *     half as changing rather than settled. Feeds `areaListings`, the default AREA
-   *     journey. (#2509 covers the query direction.)
+   *   - `/api/discover/cities/{city}/listings` → `AreaListingCard` — carries the
+   *     **SUBTYPE** (#2433) **and** the allowlisted **FACT** columns (#2516). Both feeds
+   *     project the same set through the same reader,
+   *     `CommercialFactAuthority.readFrom`, so one listing cannot render differently
+   *     depending on which panel it is reached from. Feeds `areaListings`, the default
+   *     AREA journey. (#2509 covers the query direction.)
    *   - `/school-radius-listings` → `PublicSchoolRadiusListingCard` — carries neither.
    *     Feeds `schoolListings`.
    *
@@ -108,13 +109,15 @@ export interface DiscoverCityListingItem {
    * Issue #2433 — allowlisted Commercial facts for the card summary. Same three-feed
    * caveat as `commercialSubtype` above.
    *
-   * **Which feeds populate this is CHANGING — do not read absence as feed identity.** The
-   * authenticated feed populates it today. #2516 is projecting the same facts onto
-   * `AreaListingCard` / `CityAreaListingsService`, i.e. the anon city-listings feed, so an
-   * earlier revision of this line reading "only the authenticated feed populates it" holds
-   * only until that lands. Worded this way deliberately: a comment that states a feed-set
-   * as settled is exactly how the three-feed caveat above drifts out of date, and a
-   * confidently-wrong comment in this repo has already manufactured one phantom blocker.
+   * BOTH the authenticated feed and the anon city-listings feed populate it, as of #2516.
+   * They read it through the same `CommercialFactAuthority.readFrom`, which is what stops
+   * the two from reporting different facts for the same listing.
+   *
+   * An earlier revision worded this as a pending dependency — "#2516 is projecting the
+   * facts, so treat that half as changing rather than settled". That framing was correct
+   * while the work was in flight and became wrong the moment it landed: the same drift the
+   * paragraph above warns about, arriving through the fix rather than the original. State
+   * the feed-set as it is at this commit.
    *
    * `/school-radius-listings` remains the one feed that structurally cannot carry it.
    */

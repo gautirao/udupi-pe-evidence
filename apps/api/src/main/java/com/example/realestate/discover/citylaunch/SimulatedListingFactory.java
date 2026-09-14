@@ -175,6 +175,11 @@ public final class SimulatedListingFactory {
                 // #2433 commercialSubtype — a simulated listing carries no commercial subtype
                 // to report, and guessing one would put invented data in front of a launch
                 // reviewer. Same reasoning as the detail factory above.
+                null,
+                // #2516 commercialFacts — same reasoning again. A simulated listing has no
+                // typed commercial detail row and no V104 column values, so there is nothing
+                // to summarise; an empty facts object would invite the card to render a
+                // summary row for data that does not exist.
                 null);
     }
 

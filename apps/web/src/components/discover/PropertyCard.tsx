@@ -259,12 +259,20 @@ export function PropertyCard({
   // do NOT carry the same fields:
   //
   //   /api/discover/listings                -> DiscoverListingResponse        identity + facts
-  //   /api/discover/cities/{city}/listings  -> AreaListingCard                identity ONLY
+  //   /api/discover/cities/{city}/listings  -> AreaListingCard                identity + facts
   //   /school-radius-listings               -> PublicSchoolRadiusListingCard  neither
   //
-  // The AREA feed DOES carry identity (`commercialSubtype`) as of this PR; what it
-  // still lacks is the allowlisted FACT columns, which are #2516's scope, not this
-  // issue's. So AREA is not an "absent subtype" feed at all — do not group it with
+  // The AREA feed carries identity (`commercialSubtype`, #2433) AND the allowlisted
+  // FACT columns (#2516). Both feeds project the same set through the same reader,
+  // so one listing cannot render differently depending on which panel it is reached
+  // from — which was the whole point of #2516.
+  //
+  // An earlier revision of these lines said the area feed carried "identity ONLY"
+  // and "still lacks the allowlisted FACT columns, which are #2516's scope". #2516
+  // has shipped, so both are now false and are corrected here rather than left to
+  // misdirect the next reader.
+  //
+  // So AREA is not an "absent subtype" feed at all — do not group it with
   // the school feed, which remains the only one that cannot express a subtype and
   // therefore the only one where absence means "this endpoint cannot carry it"
   // rather than "the data does not have it". Rendering the legacy branch on absence

@@ -78,7 +78,7 @@ class CityAreaListingsControllerTest {
                 "https://example.com/img.jpg", "sale", 2,
                 "Spacious 2BHK near beach", 2, 850.0, "sq ft",
                 null, null, null, null, null,
-                "2024-01-15T10:30:00Z", "verified", null, null, null, null, null);
+                "2024-01-15T10:30:00Z", "verified", null, null, null, null, null, null);
         AreaListingsEntry entry = new AreaListingsEntry("IN|KA|Udupi|Malpe", "Malpe", null,
                 List.of(card));
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
@@ -122,10 +122,10 @@ class CityAreaListingsControllerTest {
         UUID id1 = UUID.randomUUID();
         UUID id2 = UUID.randomUUID();
         AreaListingCard card1 = new AreaListingCard(id1, null, "₹0–25L", "house", "Malpe", null, "sale", null,
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
         // card2 is a "rent" card — assert its monthlyRentBand is present (anon) below.
         AreaListingCard card2 = new AreaListingCard(id2, null, null, "apartment", "Malpe", null, "rent", 3,
-                null, 2, null, null, null, null, null, null, null, null, null, null, null, null, "₹10–20K", null);
+                null, 2, null, null, null, null, null, null, null, null, null, null, null, null, "₹10–20K", null, null);
         AreaListingsEntry entry = new AreaListingsEntry("IN|KA|Udupi|Malpe", "Malpe", null,
                 List.of(card1, card2));
         when(service.getAreaListings(eq("udupi"), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), anyBoolean()))

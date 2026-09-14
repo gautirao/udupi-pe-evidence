@@ -58,10 +58,13 @@ import static org.mockito.Mockito.mock;
  * because {@code getObject(col, Double.class)} is rejected by pgjdbc on a {@code numeric} column.
  * Mocks cannot execute SQL, so they cannot catch SQL defects.
  *
- * <p><b>If facts are later added to this service</b> (they are out of scope here):
- * {@code road_frontage_ft} and {@code warehouse_clear_height_ft} are {@code numeric} on this path
- * too, so they must go through {@code DiscoverListingsService#nullableDouble}, never
- * {@code getObject(..., Double.class)}.
+ * <p><b>Facts have since been added to this service by #2516</b>, so the warning this file used to
+ * carry — that {@code road_frontage_ft} and {@code warehouse_clear_height_ft} are {@code numeric}
+ * on this path too and must never go through {@code getObject(..., Double.class)} — is now
+ * enforced rather than advisory: both feeds read every commercial column through
+ * {@link CommercialFactAuthority}, and {@code CityAreaListingsCommercialFacts2516IT} drives real
+ * {@code numeric} values through it. The subtype arms below remain this file's subject; the fact
+ * arms live in that file.
  */
 // Deliberately NOT annotated @Tag("integration") — surefire's <excludedGroups>integration</...> is a
 // literal, so a tagged test cannot be run from the CLI and only executes under an opt-in profile

@@ -49,13 +49,39 @@ public record DiscoverCommercialFacts(
         String floorChoice,
         /** V104 flat shape — {@code property_listings.floor_mode}. */
         String floorMode,
-        /** V102 typed-child shape — {@code listing_commercial_space_details.floor_number}. */
+        /**
+         * V102 typed-child {@code listing_commercial_space_details.floor_number}, falling back
+         * to the V32 flat {@code property_listings.floor_number} (#2506). Distinct from the
+         * V104 {@code floorChoice}/{@code floorMode} token above, which the client PREFERS
+         * over this integer — see {@link CommercialFactAuthority} for both orderings.
+         */
         Integer floorNumber,
         /**
          * V102 typed-child shape, coalesced across the space / building / warehouse
-         * projections. A listing belongs to at most one of them (they are keyed by
-         * {@code listing_id} PK and populated per {@code property_type}), so the coalesce
-         * cannot merge two different listings' floor counts.
+         * projections, falling back to the V32 flat {@code property_listings.total_floors}
+         * (#2506).
+         *
+         * <p>Each projection is keyed by {@code listing_id} PK, so the coalesce cannot merge
+         * two different listings' floor counts.
+         *
+         * <p>It is NOT true, however, that a listing belongs to at most one of them — this
+         * javadoc asserted that until #2516 checked. {@code refreshTypedProjections} (#1734)
+         * branches on listing_FAMILY rather than {@code property_type}, so it upserts
+         * {@code listing_commercial_space_details} for EVERY Commercial-family listing and
+         * never writes the building / warehouse / land tables at all. A warehouse can hold
+         * both rows. The space projection is coalesced FIRST because it is the only one the
+         * write path keeps current; the others are V102 backfill remnants.
+         *
+         * <p>That ordering is the best available, NOT a guarantee. {@code COALESCE} cannot
+         * distinguish an absent space row from one holding {@code NULL}, so in principle a
+         * CLEARED value could yield to a stale remnant. Only presence-aware selection would
+         * close that, and it is deliberately not done.
+         *
+         * <p>That case is unreachable through the API, verified rather than assumed:
+         * {@code updateListing} applies these scalars as set-if-non-null, so null means "leave
+         * untouched" rather than "clear", and the #2289 subtype-switch nuller touches only
+         * V104 fields. The flat value is monotone, so only a direct DB write could produce it.
+         * The SQL limitation is still real, so do not add a COALESCE arm assuming otherwise.
          */
         Integer totalFloors,
         String hubType,
@@ -63,7 +89,11 @@ public record DiscoverCommercialFacts(
         String occupancyStatus,
         Double warehouseClearHeightFt,
         Integer warehouseLoadingBays,
-        /** Coalesced across the space / building / warehouse / land projections. */
+        /**
+         * Coalesced across the space / building / warehouse / land projections, falling back
+         * to the V32 flat {@code property_listings.road_frontage_ft} (#2506). Same ordering
+         * rationale as {@code totalFloors} above.
+         */
         Double roadFrontageFt,
         String commercialZoning
 ) {

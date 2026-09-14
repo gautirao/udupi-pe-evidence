@@ -371,12 +371,21 @@ export const BUYER_SUBTYPE_TO_PROPERTY_TYPE: Record<BuyerCommercialSubtype, stri
  * confidently — the precise failure this resolver's honest-absence rule exists to
  * prevent, arriving through the caller rather than through storage.
  *
- * `AreaListingCard` (the anonymous `/api/discover/cities/{city}/listings` DTO)
- * carries `propertyType` but NOT `commercialSubtype`, so it does not currently
- * satisfy this precondition for `property_type='commercial'` rows. The three
- * self-describing types are unaffected, since they resolve from `propertyType`
- * alone. Tracked with the anon subtype gap (#2509); until it is closed, do not
- * call this with a subtype the surface never had.
+ * `AreaListingCard` (the anonymous `/api/discover/cities/{city}/listings` DTO) DOES
+ * satisfy this precondition today: it carries `commercialSubtype` as of #2433, and
+ * the allowlisted fact columns as of #2516.
+ *
+ * An earlier revision of this paragraph said that DTO carried `propertyType` but NOT
+ * `commercialSubtype`, and told the reader not to "call this with a subtype the
+ * surface never had". {@code PropertyCard} already calls it exactly that way, so the
+ * instruction had come to forbid shipped, correct behaviour — worse than merely
+ * stale, because it invites someone to "fix" working code.
+ *
+ * `PublicSchoolRadiusListingCard` (`/school-radius-listings`) remains the one feed
+ * that genuinely cannot express a subtype, so it is the only surface where this
+ * precondition still fails for `property_type='commercial'` rows. The three
+ * self-describing types are unaffected there too, since they resolve from
+ * `propertyType` alone.
  *
  * Legacy Building/Warehouse/Land rows carry NO subtype on any axis — V102
  * backfilled `listing_commercial_space_details` only for

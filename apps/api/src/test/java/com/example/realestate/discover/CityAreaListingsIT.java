@@ -133,7 +133,8 @@ class CityAreaListingsIT {
                 "trusted",
                 13.35, 74.79,
                 null, null,
-                null  // #2433 commercialSubtype — this fixture declares none
+                null, // #2433 commercialSubtype — this fixture declares none
+                null  // #2516 commercialFacts — this fixture declares none
         );
         AreaListingsEntry entry = new AreaListingsEntry(AREA_KEY, "Manipal", null, List.of(anonCard));
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
@@ -190,7 +191,8 @@ class CityAreaListingsIT {
                 "verified",
                 13.36, 74.80,
                 null, null,
-                null  // #2433 commercialSubtype — this fixture declares none
+                null, // #2433 commercialSubtype — this fixture declares none
+                null  // #2516 commercialFacts — this fixture declares none
         );
         AreaListingsEntry entry = new AreaListingsEntry(AREA_KEY, "Manipal", null, List.of(authedCard));
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
@@ -242,7 +244,8 @@ class CityAreaListingsIT {
                 null,
                 13.34, 74.78,
                 null, null,
-                null  // #2433 commercialSubtype — this fixture declares none
+                null, // #2433 commercialSubtype — this fixture declares none
+                null  // #2516 commercialFacts — this fixture declares none
         );
         AreaListingsEntry entry = new AreaListingsEntry(AREA_KEY, "Manipal", null, List.of(nullPriceCard));
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
@@ -283,7 +286,8 @@ class CityAreaListingsIT {
                 null,
                 13.33, 74.77,
                 null, null,
-                null  // #2433 commercialSubtype — this fixture declares none
+                null, // #2433 commercialSubtype — this fixture declares none
+                null  // #2516 commercialFacts — this fixture declares none
         );
         AreaListingsEntry entry = new AreaListingsEntry(AREA_KEY, "Manipal", null, List.of(nullPriceCard));
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
@@ -313,7 +317,8 @@ class CityAreaListingsIT {
                 null, null, null, null, "semi-furnished",
                 "2025-04-01T09:00:00Z", "verified", 13.35, 74.79,
                 null, "₹20–35K",
-                null  // #2433 commercialSubtype — this fixture declares none
+                null, // #2433 commercialSubtype — this fixture declares none
+                null  // #2516 commercialFacts — this fixture declares none
         );
         AreaListingsEntry entry = new AreaListingsEntry(AREA_KEY, "Manipal", null, List.of(rentCard));
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
@@ -344,7 +349,8 @@ class CityAreaListingsIT {
                 null, null, null, null, "semi-furnished",
                 "2025-04-01T09:00:00Z", "verified", 13.35, 74.79,
                 25000L, null,
-                null  // #2433 commercialSubtype — this fixture declares none
+                null, // #2433 commercialSubtype — this fixture declares none
+                null  // #2516 commercialFacts — this fixture declares none
         );
         AreaListingsEntry entry = new AreaListingsEntry(AREA_KEY, "Manipal", null, List.of(rentCard));
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));

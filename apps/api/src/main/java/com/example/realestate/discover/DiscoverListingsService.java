@@ -11,7 +11,6 @@ import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -148,16 +147,51 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                         pl.warehouse_clear_height_ft,
                         pl.warehouse_loading_bays,
                         pl.commercial_zoning,
-                        lcsd.floor_number,
-                        -- Coalesced across the per-family V102 projections. A listing is
-                        -- keyed into at most ONE of these tables (each PK is listing_id and
-                        -- V102 backfilled them by property_type), so this cannot merge two
-                        -- listings' values — it selects whichever single projection exists.
+                        lcsd.floor_number AS commercial_floor_number,
+                        pl.floor_number AS legacy_floor_number,
+                        -- Coalesced across the per-family V102 projections. Each is PK-joined
+                        -- on listing_id, so no join can merge two different listings' values.
+                        --
+                        -- NOT because a listing is keyed into at most ONE of these tables.
+                        -- That is FALSE, and this comment asserted it until #2516 checked:
+                        -- ListingCrudService.refreshTypedProjections (#1734) branches on
+                        -- listing_FAMILY, not property_type, so it upserts
+                        -- listing_commercial_space_details for EVERY Commercial-family
+                        -- listing — warehouses and commercial_land included — and never
+                        -- writes lcbd/lwd/lcld at all. A warehouse can hold BOTH an lcsd row
+                        -- and an lwd row.
+                        --
+                        -- lcsd is ordered FIRST for exactly that reason: it is the only
+                        -- projection the write path keeps current, while lcbd/lwd/lcld are
+                        -- V102 backfill remnants no writer refreshes. No other order beats it.
+                        --
+                        -- It carries today's value only when that value is NON-NULL, though.
+                        -- COALESCE cannot tell "no lcsd row" from "lcsd row holding NULL", so
+                        -- in principle a CLEARED value could yield to a stale remnant in
+                        -- lcbd/lwd/lcld. Ordering cannot fix that; only presence-aware
+                        -- selection could (CASE WHEN lcsd.listing_id IS NOT NULL THEN ...).
+                        --
+                        -- Unreachable through the API, checked rather than assumed:
+                        -- updateListing applies these three scalars as set-if-non-null
+                        -- (ListingCrudService:1183), so null means "leave untouched" and never
+                        -- "clear", and clearStaleCommercialSubtypeFields (:650) nulls only
+                        -- V104 fields. The flat value is monotone, so the stale-remnant case
+                        -- cannot arise except via a direct DB write. Cosmetic, not a live
+                        -- stale-render path — but still true of the SQL, so do not add a
+                        -- COALESCE arm on the assumption it is safe.
                         COALESCE(lcsd.total_floors, lcbd.total_floors, lwd.total_floors)
-                            AS total_floors,
+                            AS typed_total_floors,
+                        -- #2506: the V32 flat copies are now carried ALONGSIDE the typed ones
+                        -- rather than being ignored. Reading only the typed source rendered a
+                        -- blank fact for every commercial row that has no projection row, and
+                        -- reading only the flat one is what the city/area feed did — which is
+                        -- how the two feeds came to disagree. CommercialFactAuthority decides
+                        -- between them; this query's job is only to supply both.
+                        pl.total_floors AS legacy_total_floors,
                         COALESCE(lcsd.road_frontage_ft, lcbd.road_frontage_ft,
                                  lwd.road_frontage_ft, lcld.road_frontage_ft)
-                            AS road_frontage_ft
+                            AS typed_road_frontage_ft,
+                        pl.road_frontage_ft AS legacy_road_frontage_ft
                     FROM property_listings pl
                     -- #2431: LEFT JOIN, not a correlated subselect, because the FROM clause of
                     -- THIS query is ours to shape. listing_id is the PK of the projection table,
@@ -240,25 +274,29 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                         rs.getString("listing_purpose"),
                         rs.getString("status"),
                         rs.getString("commercial_subtype"),
-                        // getObject(..., Class) — NOT getInt/getDouble, which return 0.0
-                        // for a SQL NULL and would turn "no seats recorded" into
-                        // "0 seats", fabricating a fact the row does not carry.
-                        // The two `numeric` columns go through nullableDouble() instead:
-                        // pgjdbc REJECTS getObject(col, Double.class) on a numeric column
-                        // ("conversion to class java.lang.Double from numeric not
-                        // supported") — see nullableDouble's javadoc.
-                        DiscoverCommercialFacts.orNullIfEmpty(new DiscoverCommercialFacts(
-                                rs.getString("floor_choice"),
-                                rs.getString("floor_mode"),
-                                rs.getObject("floor_number", Integer.class),
-                                rs.getObject("total_floors", Integer.class),
-                                rs.getString("hub_type"),
-                                rs.getObject("office_seats", Integer.class),
-                                rs.getString("occupancy_status"),
-                                nullableDouble(rs, "warehouse_clear_height_ft"),
-                                rs.getObject("warehouse_loading_bays", Integer.class),
-                                nullableDouble(rs, "road_frontage_ft"),
-                                rs.getString("commercial_zoning")))
+                        // #2506: ONE reader, shared with CityAreaListingsService, so the two
+                        // Discover feeds cannot report different facts for the same listing.
+                        // It also owns the getObject(..., Class) / nullableDouble discipline
+                        // that keeps a SQL NULL from arriving as 0 and keeps a `numeric`
+                        // column from aborting the whole query.
+                        //
+                        // Gated on the Commercial family because the legacy fallback added in
+                        // #2506 reads flat columns that RESIDENTIAL rows also populate: a
+                        // house with a total_floors value would otherwise acquire a
+                        // commercialFacts object and render a Commercial summary row.
+                        //
+                        // This gate is a DELIBERATE narrowing of this feed, not a side effect.
+                        // Previously facts were built for any row with a populated allowlisted
+                        // column, regardless of property_type. Nothing reachable is lost:
+                        // ListingController.validateCommercialFieldSet rejects every M38-FU2
+                        // commercial field for RESIDENTIAL / AGRICULTURAL / PLOT, so a
+                        // non-Commercial-family row cannot acquire these columns through the
+                        // API. A row that somehow carries them (bulk import, direct DB write)
+                        // now reports no facts — which is the honest outcome: a 'land' listing
+                        // advertising a commercial zoning is a claim we should not render.
+                        CommercialFactAuthority.isCommercialFamily(rs.getString("property_type"))
+                                ? CommercialFactAuthority.readFrom(rs)
+                                : null
                 );
             }, pageParams.toArray());
 
@@ -291,27 +329,6 @@ public class DiscoverListingsService implements DiscoverListingsPort {
      * the underlying {@link java.sql.SQLException} message inside its own message text
      * (e.g. {@code BadSqlGrammarException} prepends the task string before the SQL text).
      */
-    /**
-     * Reads a nullable SQL {@code numeric} column as a {@link Double}, preserving SQL NULL
-     * as Java {@code null}.
-     *
-     * <p>{@code rs.getObject(col, Double.class)} is NOT usable here. pgjdbc's
-     * {@code PgResultSet.getObject(String, Class)} has no numeric-to-Double conversion and
-     * throws {@code PSQLException: conversion to class java.lang.Double from numeric not
-     * supported} on the FIRST row it reaches, aborting the whole query. That is how #2433's
-     * first cut of this projection turned every authenticated {@code GET
-     * /api/discover/listings} into a 500 — {@code warehouse_clear_height_ft} (V104) and
-     * {@code road_frontage_ft} (V32 / V102) are both {@code numeric}, not {@code float8}.
-     *
-     * <p>{@code BigDecimal.class} IS supported for numeric, so read that and narrow. The
-     * null check is what keeps "no clear height recorded" from becoming "0.0 ft" — the same
-     * discipline the {@code Integer} columns get from {@code getObject(..., Integer.class)}.
-     */
-    private static Double nullableDouble(ResultSet rs, String column) throws SQLException {
-        BigDecimal value = rs.getObject(column, BigDecimal.class);
-        return value == null ? null : value.doubleValue();
-    }
-
     private static boolean isFtsSyntaxError(DataAccessException ex) {
         if (containsFtsKeyword(ex.getMessage())) return true;
         Throwable cause = ex.getCause();

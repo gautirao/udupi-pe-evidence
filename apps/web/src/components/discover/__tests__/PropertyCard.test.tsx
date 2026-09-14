@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PropertyCard } from '../PropertyCard';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import type { DiscoverCommercialFactsDto } from '@/hooks/useDiscoverListings';
 import { formatRelativeDate } from '@/lib/formatters';
 import { DiscoverDataSourceProvider } from '@/features/discover/state/DiscoverDataSourceContext';
 
@@ -868,6 +869,118 @@ describe('PropertyCard', () => {
         }),
       ).not.toThrow();
       expect(screen.getByText('Legacy Listing')).toBeInTheDocument();
+    });
+  });
+
+  // ── #2516 — commercialFacts reaching the card ────────────────────────────────
+  //
+  // Before these, NO card-level test set `commercialFacts` at all. `resolveFloorFact`
+  // was well covered in isolation, but nothing rendered PropertyCard with a facts
+  // object, so two things the #2516 backend projection newly triggers were entirely
+  // unprotected: that facts reach the summary at all, and the specs-row suppression.
+  //
+  // A third hazard — a future area-shaped key appended to DiscoverCommercialFactsDto
+  // — is guarded at COMPILE time instead, by _assertFactsKeysAreaDisjoint below. An
+  // earlier revision of these comments claimed the runtime arm covered it. It does
+  // not, and could not; see that arm for why.
+  describe('#2516 commercialFacts on the card', () => {
+    // COMPILE-TIME guard for the one hazard no fixture can reach.
+    //
+    // `...(listing.commercialFacts ?? {})` in PropertyCard sits AFTER the explicit
+    // builtArea / builtAreaUnit / landArea / landAreaUnit assignments, so it is safe
+    // ONLY because DiscoverCommercialFactsDto's keys are disjoint from those four —
+    // safe by field-set disjointness, not by construction. Append an area-shaped key
+    // to that DTO and the spread would silently null the area on every Commercial
+    // card.
+    //
+    // A runtime fixture cannot catch that: every field of the DTO is optional, so an
+    // inline literal is never forced to change when the DTO grows, and the spread
+    // would still carry no such key HERE while real backend responses carried it.
+    // The hazard is typecheck-shaped, so it is guarded at typecheck.
+    type _FactsKeysAreaDisjoint = Extract<
+      keyof DiscoverCommercialFactsDto,
+      'builtArea' | 'builtAreaUnit' | 'landArea' | 'landAreaUnit'
+    > extends never
+      ? true
+      : never;
+    const _assertFactsKeysAreaDisjoint: _FactsKeysAreaDisjoint = true;
+    void _assertFactsKeysAreaDisjoint;
+
+    const commercialListing = (overrides: Partial<DiscoverCityListingItem> = {}) =>
+      makeListing({
+        propertyType: 'commercial',
+        commercialSubtype: 'SHOP',
+        bedrooms: null,
+        bathrooms: null,
+        builtArea: null,
+        builtAreaUnit: null,
+        ...overrides,
+      });
+
+    it('keeps the area fact when commercialFacts is spread in after it', () => {
+      // WHAT THIS ARM PINS: that `commercialFacts` reaches buildCommercialSummary
+      // alongside the explicitly-assigned area. Delete the spread in PropertyCard and
+      // the "Floor 3 of 4" assertion below fails. That guard did not exist before.
+      //
+      // WHAT IT DOES NOT PIN — corrected after review, because an earlier revision of
+      // this comment claimed otherwise. It does NOT catch an area-shaped key being
+      // appended to DiscoverCommercialFactsDto: every field of that DTO is optional,
+      // and this fixture is an inline literal, so appending `builtArea?` would not
+      // force the literal to change. The spread would still carry no such key here,
+      // both assertions would keep passing, and real backend responses carrying the
+      // key would null the area on every Commercial card — the test passing in
+      // exactly the scenario it was advertised as catching.
+      //
+      // It does not test spread ORDERING either: moving the spread above the area
+      // assignments would not fail it. Nor does _assertFactsKeysAreaDisjoint catch
+      // reordering — that is a type-level check on the DTO's key set and says nothing
+      // about property order in an object literal. What it does is make ordering
+      // irrelevant: with disjoint key sets the spread cannot overwrite the area fields
+      // from any position. The appended-key hazard is the one it catches, at typecheck.
+      renderCard({
+        listing: commercialListing({
+          builtArea: 1200,
+          builtAreaUnit: 'sqft',
+          commercialFacts: { floorNumber: 3, totalFloors: 4 },
+        }),
+        isAuthenticated: true,
+        onNavigate: vi.fn(),
+      });
+
+      const summary = screen.getByTestId('listing-commercial-summary');
+      expect(summary.textContent).toMatch(/1,?200/);
+      expect(summary.textContent).toMatch(/Floor 3 of 4/);
+    });
+
+    it('suppresses the generic specs row once any fact arrives — and the control proves '
+      + 'the row renders without one', () => {
+      // CONTROL FIRST. "parking is absent" would pass on a card that rendered nothing
+      // at all, so the same listing WITHOUT commercialFacts must be shown to render it.
+      const { unmount } = renderCard({
+        listing: commercialListing({ parkingCount: 2, furnishingStatus: 'semi-furnished' }),
+        isAuthenticated: true,
+        onNavigate: vi.fn(),
+      });
+      expect(screen.getByText(/2 parking/)).toBeInTheDocument();
+      expect(screen.queryByTestId('listing-commercial-summary')).not.toBeInTheDocument();
+      unmount();
+
+      // Now the same card with ONE fact. hasCommercialSummary flips, which gates the
+      // ENTIRE specs row — and parkingCount / furnishingStatus are not in the #2433
+      // allowlist, so they vanish rather than move. Intended convergence with the
+      // authenticated feed, but buyer-visible, so it is pinned as the intended end
+      // state rather than left to be discovered as a regression.
+      renderCard({
+        listing: commercialListing({
+          parkingCount: 2,
+          furnishingStatus: 'semi-furnished',
+          commercialFacts: { hubType: 'HIGH_STREET' },
+        }),
+        isAuthenticated: true,
+        onNavigate: vi.fn(),
+      });
+      expect(screen.getByTestId('listing-commercial-summary')).toHaveTextContent('Hub: High Street');
+      expect(screen.queryByText(/2 parking/)).not.toBeInTheDocument();
     });
   });
 

@@ -331,7 +331,6 @@ public class CityAreaListingsService {
                     sub.built_area_unit,
                     sub.land_area,
                     sub.land_area_unit,
-                    sub.total_floors,
                     sub.parking_count,
                     sub.furnishing_status,
                     sub.created_at,
@@ -339,7 +338,25 @@ public class CityAreaListingsService {
                     sub.latitude,
                     sub.longitude,
                     sub.monthly_rent,
-                    sub.commercial_subtype
+                    sub.commercial_subtype,
+                    -- #2516: forwarded verbatim under the CommercialFactAuthority alias
+                    -- contract. The outer projection must name every one of these: an alias
+                    -- omitted here is not a compile error, it is a runtime
+                    -- "column not found" on the first commercial row.
+                    sub.floor_choice,
+                    sub.floor_mode,
+                    sub.hub_type,
+                    sub.office_seats,
+                    sub.occupancy_status,
+                    sub.warehouse_clear_height_ft,
+                    sub.warehouse_loading_bays,
+                    sub.commercial_zoning,
+                    sub.commercial_floor_number,
+                    sub.legacy_floor_number,
+                    sub.typed_total_floors,
+                    sub.legacy_total_floors,
+                    sub.typed_road_frontage_ft,
+                    sub.legacy_road_frontage_ft
                 FROM (
                     SELECT
                         a.area_key,
@@ -361,7 +378,6 @@ public class CityAreaListingsService {
                         pl.built_area_unit,
                         pl.land_area,
                         pl.land_area_unit,
-                        pl.total_floors,
                         pl.parking_count,
                         pl.furnishing_status,
                         pl.created_at,
@@ -370,6 +386,68 @@ public class CityAreaListingsService {
                         pl.longitude,
                         pl.monthly_rent,
                         lcsd.commercial_subtype,
+                        -- #2516 Commercial summary facts. Explicit allowlist; NOT a SELECT *
+                        -- of the commercial columns — see DiscoverCommercialFacts for what is
+                        -- deliberately excluded (ROI, lease, power, approvals). Identical
+                        -- alias set to the authenticated feed's, because both are read by
+                        -- CommercialFactAuthority.readFrom and that reader is what keeps the
+                        -- two feeds from reporting different facts for the same listing.
+                        pl.floor_choice,
+                        pl.floor_mode,
+                        pl.hub_type,
+                        pl.office_seats,
+                        pl.occupancy_status,
+                        pl.warehouse_clear_height_ft,
+                        pl.warehouse_loading_bays,
+                        pl.commercial_zoning,
+                        lcsd.floor_number AS commercial_floor_number,
+                        pl.floor_number AS legacy_floor_number,
+                        -- Coalesced across the per-family V102 projections. Each is PK-joined
+                        -- on listing_id, so no join can merge two different listings' values.
+                        --
+                        -- NOT because a listing is keyed into at most ONE of them. That is
+                        -- FALSE, and this comment asserted it until #2516 checked:
+                        -- ListingCrudService.refreshTypedProjections (#1734) branches on
+                        -- listing_FAMILY, not property_type, so it upserts
+                        -- listing_commercial_space_details for EVERY Commercial-family
+                        -- listing — warehouses and commercial_land included — and never
+                        -- writes lcbd/lwd/lcld at all. A warehouse can therefore hold BOTH an
+                        -- lcsd row and an lwd row.
+                        --
+                        -- lcsd is ordered FIRST for exactly that reason: it is the only
+                        -- projection the write path keeps current, while lcbd/lwd/lcld are
+                        -- V102 backfill remnants no writer refreshes. No other order beats it.
+                        --
+                        -- It carries today's value only when that value is NON-NULL, though.
+                        -- COALESCE cannot tell "no lcsd row" from "lcsd row holding NULL", so
+                        -- in principle a CLEARED value could yield to a stale remnant in
+                        -- lcbd/lwd/lcld. Ordering cannot fix that; only presence-aware
+                        -- selection could (CASE WHEN lcsd.listing_id IS NOT NULL THEN ...).
+                        --
+                        -- That path is UNREACHABLE through the API, and this was checked
+                        -- rather than assumed. updateListing applies floor_number,
+                        -- total_floors and road_frontage_ft as set-if-non-null
+                        -- (ListingCrudService:1183; :348 on create), so null means "leave
+                        -- untouched", never "clear". And clearStaleCommercialSubtypeFields
+                        -- (:650), the #2289 subtype-switch nuller, nulls ONLY V104 fields and
+                        -- never these three. The flat value is therefore monotone: it can go
+                        -- null -> non-null, never back. "lcsd NULL while a remnant is
+                        -- non-null" cannot be produced by any API path — only by a direct DB
+                        -- write or bulk import, the same caveat class as the family gate.
+                        --
+                        -- The SQL limitation stays documented because it remains true of the
+                        -- query: do not add a COALESCE arm on the assumption it is safe.
+                        COALESCE(lcsd.total_floors, lcbd.total_floors, lwd.total_floors) AS typed_total_floors,
+                        -- #2506: the V32 flat copy is carried ALONGSIDE the typed one, never
+                        -- instead of it. Resolving between them is CommercialFactAuthority's
+                        -- job, not this query's — that is the whole point of the rule living
+                        -- in one place. This column previously fed the card's totalFloors
+                        -- directly while the authenticated feed used the typed tables, which
+                        -- is how one listing came to report two different floor counts.
+                        pl.total_floors AS legacy_total_floors,
+                        COALESCE(lcsd.road_frontage_ft, lcbd.road_frontage_ft,
+                                 lwd.road_frontage_ft, lcld.road_frontage_ft) AS typed_road_frontage_ft,
+                        pl.road_frontage_ft AS legacy_road_frontage_ft,
                         ROW_NUMBER() OVER (PARTITION BY a.area_key ORDER BY pl.created_at DESC) AS rn
                     FROM areas a
                     JOIN cities c ON c.id = a.city_id
@@ -385,6 +463,16 @@ public class CityAreaListingsService {
                     -- discard exactly those rows and delete empty areas from the response.
                     LEFT JOIN listing_commercial_space_details lcsd
                         ON lcsd.listing_id = pl.id
+                    -- #2516: the same 1:0..1 PK join argument applies to each of these. They
+                    -- carry the Building / Warehouse / Commercial-Land facts that
+                    -- listing_commercial_space_details does not hold, and LEFT keeps every
+                    -- non-matching listing — and every empty area — in the result.
+                    LEFT JOIN listing_commercial_building_details lcbd
+                        ON lcbd.listing_id = pl.id
+                    LEFT JOIN listing_warehouse_details lwd
+                        ON lwd.listing_id = pl.id
+                    LEFT JOIN listing_commercial_land_details lcld
+                        ON lcld.listing_id = pl.id
 
                     WHERE c.slug    = ?
                       AND a.area_key IN (""" + placeholders + """
@@ -824,6 +912,34 @@ public class CityAreaListingsService {
             projectedMonthlyRentBand = null;
         }
 
+        // #2516 — the Commercial projection, decided ONCE per row.
+        //
+        // Everything below keys on property_type rather than on whether a subtype resolved: a
+        // legacy `property_type = 'commercial'` row whose Shop-vs-Office was never recorded is
+        // still a Commercial listing, and treating it as Residential is the exact leak this
+        // guards against.
+        String propertyType = rs.getString("property_type");
+        boolean isCommercial = CommercialFactAuthority.isCommercialFamily(propertyType);
+
+        // #2516 — bathrooms is a RESIDENTIAL-ONLY fact and is suppressed for Commercial.
+        // property_listings.bathrooms stores 0 rather than NULL for commercial inventory, so
+        // passing it through put "0 bathrooms" on a live Showroom card — a Residential
+        // semantic asserted about a property that has washrooms, not bathrooms. Suppressed
+        // rather than substituted: washrooms are not in the #2433 allowlist, and widening
+        // that allowlist is a privacy-review decision rather than part of this fix.
+        Integer bathrooms = isCommercial || rs.getObject("bathrooms") == null
+                ? null : rs.getInt("bathrooms");
+
+        // #2506 — resolved through the shared authority, NOT read straight off
+        // pl.total_floors as this path used to. Reading the flat column here while the
+        // authenticated feed read the V102 typed tables is how one listing came to report two
+        // different floor counts on two panels in the same session. Safe to call for every
+        // row: a Residential listing has no commercial projection row, so the typed value is
+        // null and the legacy flat value passes through exactly as before.
+        Integer totalFloors = CommercialFactAuthority.resolveTotalFloors(
+                rs.getObject("typed_total_floors", Integer.class),
+                rs.getObject("legacy_total_floors", Integer.class));
+
         return new AreaListingCard(
                 UUID.fromString(rawId),
                 projectedPricePaise,
@@ -834,12 +950,12 @@ public class CityAreaListingsService {
                 rs.getString("listing_purpose"),
                 rs.getObject("bedrooms") != null ? rs.getInt("bedrooms") : null,
                 rs.getString("title"),
-                rs.getObject("bathrooms") != null ? rs.getInt("bathrooms") : null,
+                bathrooms,
                 builtArea,
                 rs.getString("built_area_unit"),
                 landArea,
                 rs.getString("land_area_unit"),
-                rs.getObject("total_floors") != null ? rs.getInt("total_floors") : null,
+                totalFloors,
                 rs.getObject("parking_count") != null ? rs.getInt("parking_count") : null,
                 rs.getString("furnishing_status"),
                 createdAt,
@@ -857,7 +973,13 @@ public class CityAreaListingsService {
                 // #2433: canonicalised here for the same reason TrustBadge.publicBadge and
                 // GeoCoarsener.coarsen are — so this read path and DiscoverListingsService
                 // cannot emit different spellings of the same subtype for the same listing.
-                normalizeCommercialSubtype(rs.getString("commercial_subtype"))
+                normalizeCommercialSubtype(rs.getString("commercial_subtype")),
+                // #2516/#2506: the SAME reader the authenticated feed uses, so the two feeds
+                // cannot report different facts for the same listing. Gated on the Commercial
+                // family because the authority's legacy fallback reads flat columns that
+                // Residential rows also populate — an ungated call would give a house a
+                // commercialFacts object and a Commercial summary row on its card.
+                isCommercial ? CommercialFactAuthority.readFrom(rs) : null
         );
     }
 
@@ -958,7 +1080,6 @@ public class CityAreaListingsService {
                     pl.built_area_unit,
                     pl.land_area,
                     pl.land_area_unit,
-                    pl.total_floors,
                     pl.parking_count,
                     pl.furnishing_status,
                     pl.created_at,
@@ -966,13 +1087,40 @@ public class CityAreaListingsService {
                     pl.latitude,
                     pl.longitude,
                     pl.monthly_rent,
-                    lcsd.commercial_subtype
+                    lcsd.commercial_subtype,
+                    -- #2516: byte-for-byte the same alias contract as the area-grouped path,
+                    -- because both are consumed by CommercialFactAuthority.readFrom. Each
+                    -- path needs its own copy of the projection for the same reason each
+                    -- needs its own test arm — they are separate hand-built SQL shapes, and
+                    -- fixing one does not imply the other is correct.
+                    pl.floor_choice,
+                    pl.floor_mode,
+                    pl.hub_type,
+                    pl.office_seats,
+                    pl.occupancy_status,
+                    pl.warehouse_clear_height_ft,
+                    pl.warehouse_loading_bays,
+                    pl.commercial_zoning,
+                    lcsd.floor_number AS commercial_floor_number,
+                    pl.floor_number AS legacy_floor_number,
+                    COALESCE(lcsd.total_floors, lcbd.total_floors, lwd.total_floors)
+                        AS typed_total_floors,
+                    pl.total_floors AS legacy_total_floors,
+                    COALESCE(lcsd.road_frontage_ft, lcbd.road_frontage_ft,
+                             lwd.road_frontage_ft, lcld.road_frontage_ft)
+                        AS typed_road_frontage_ft,
+                    pl.road_frontage_ft AS legacy_road_frontage_ft
                 FROM property_listings pl
                 JOIN areas a ON a.area_key = pl.area_key
                 JOIN cities c ON c.id = a.city_id
                 -- #2433: same 1:0..1 PK join as the area-keyed query above. LEFT so a
                 -- non-Commercial listing keeps its row with a NULL subtype.
                 LEFT JOIN listing_commercial_space_details lcsd ON lcsd.listing_id = pl.id
+                -- #2516: same 1:0..1 PK argument; these carry the Building / Warehouse /
+                -- Commercial-Land facts lcsd does not hold.
+                LEFT JOIN listing_commercial_building_details lcbd ON lcbd.listing_id = pl.id
+                LEFT JOIN listing_warehouse_details lwd ON lwd.listing_id = pl.id
+                LEFT JOIN listing_commercial_land_details lcld ON lcld.listing_id = pl.id
                 WHERE c.slug = ?
                   AND pl.status = 'LIVE'""" + where.sql() + """
 

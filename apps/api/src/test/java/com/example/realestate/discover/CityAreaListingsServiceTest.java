@@ -88,7 +88,21 @@ class CityAreaListingsServiceTest {
                     when(rs.getString("built_area_unit")).thenReturn("sq ft");
                     when(rs.getObject("land_area")).thenReturn(null);
                     when(rs.getString("land_area_unit")).thenReturn(null);
-                    when(rs.getObject("total_floors")).thenReturn(null);
+                    // #2516: the card's totalFloors is no longer read straight off a
+                    // `total_floors` column. It is resolved by CommercialFactAuthority from
+                    // BOTH stored copies, so the mock answers the alias contract the SQL
+                    // actually exposes. The old single-column stub is gone rather than kept
+                    // alongside: under STRICT_STUBS a stub nothing calls is itself a failure,
+                    // which is the one useful thing this mock can tell us about the change.
+                    //
+                    // What this mock CANNOT tell us, and why the real proof of #2516/#2506
+                    // lives in CityAreaListingsCommercialFacts2516IT: a stub returns whatever
+                    // it is told for a column name, so it cannot distinguish "the query
+                    // SELECTed this column" from "the query forgot to" — and it cannot
+                    // reproduce the pgjdbc `numeric` abort at all, because that throw keys on
+                    // the column's TYPE, which a mock has no notion of.
+                    when(rs.getObject("typed_total_floors", Integer.class)).thenReturn(null);
+                    when(rs.getObject("legacy_total_floors", Integer.class)).thenReturn(null);
                     when(rs.getObject("parking_count")).thenReturn(null);
                     when(rs.getString("furnishing_status")).thenReturn(null);
                     when(rs.getTimestamp("created_at")).thenReturn(Timestamp.from(Instant.now()));

@@ -24,7 +24,15 @@ import java.util.UUID;
  * @param listingPurpose  "sale" or "rent"
  * @param bedrooms        bedroom count, or null when not set
  * @param title             listing title, or null
- * @param bathrooms         bathroom count, or null
+ * @param bathrooms         bathroom count, or null. RESIDENTIAL-ONLY (#2516): always null for a
+ *                          Commercial listing. {@code property_listings.bathrooms} is not nullable
+ *                          in practice for commercial inventory — it stores {@code 0} — so passing
+ *                          it through rendered "0 bathrooms" on a live Showroom card. A commercial
+ *                          space has washrooms, not bathrooms, and the two are different facts;
+ *                          projecting one as the other is a Residential semantic leaking into
+ *                          Commercial. Washrooms are NOT substituted here: they are not in the
+ *                          #2433 allowlist that {@link DiscoverCommercialFacts} carries, and
+ *                          widening that allowlist is a privacy-review decision, not a bug fix.
  * @param builtArea         built-up area value, or null
  * @param builtAreaUnit     unit for builtArea (e.g. "sq ft"), or null
  * @param landArea          land area value, or null (agricultural / land plots)
@@ -90,5 +98,25 @@ public record AreaListingCard(
          * <p>APPEND ONLY. Every field above keeps its position; the frontend and the
          * OpenSearch/Postgres parity tests read this record positionally.
          */
-        String commercialSubtype
+        String commercialSubtype,
+        /**
+         * #2516 — the allowlisted Commercial facts, populated ONLY for a Commercial-family
+         * listing and {@code null} for every other row (omitted by {@code NON_NULL}).
+         *
+         * <p><b>Why this is the same record the authenticated feed uses.</b> Before this
+         * field existed, {@code PropertyCard} was fed by two backends that converge on one
+         * component: {@code DiscoverListingResponse} (facts) and this card (identity only).
+         * In {@code DiscoverRightPanel}, {@code areaListings}, {@code schoolListings},
+         * {@code authViewportListings} and {@code polygonListings} are ALL typed
+         * {@code DiscoverCityListingItem}, so a signed-in shopper saw Commercial facts on one
+         * panel and a thinner card on another — same session, same listing. Sharing the
+         * record rather than mirroring its fields is what makes that divergence
+         * unrepresentable instead of merely tested for.
+         *
+         * <p>Both feeds populate it through {@link CommercialFactAuthority#readFrom}, which
+         * is also where the V102-vs-V104 source precedence lives (#2506).
+         *
+         * <p>APPEND ONLY — see the note on {@code commercialSubtype} above.
+         */
+        DiscoverCommercialFacts commercialFacts
 ) {}
