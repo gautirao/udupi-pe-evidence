@@ -255,6 +255,21 @@ describe('AreaSelectedPanel — #2450 family / subtype filters', () => {
    * literally rather than deferred. It flips to true when the card path can actually consume a
    * subtype, which is #2533's work. (Line citations deliberately omitted: the earlier revision
    * carried `:142`/`:223`/`:317-322`, all of which this issue's own implementation then moved.)
+   *
+   * ── A TRAP FOR WHOEVER ADDS THE NEXT ARM HERE (#2552) ─────────────────────────────────────
+   *
+   * `onFiltersChange` below is a bare `vi.fn()`, so emitted filters are OBSERVED but never
+   * APPLIED — the panel never re-renders with the state it just asked for. Every arm in this file
+   * is written against that, and all 43 still pass.
+   *
+   * Since #2552 the panel consults `familyOverride` only while the filters are family-SILENT, so
+   * clicking Commercial **no longer opens the subtype row when `propertyTypes` is non-empty**.
+   * Every existing arm that clicks Commercial happens to start from `filters: {}` or from an
+   * already-commercial-deriving object, which is why none of them noticed. A NEW arm that clicks
+   * Commercial from a non-empty Residential selection will fail here — for a correct reason, but a
+   * confusing one, because the non-committing mock cannot show you the round trip that resolves it.
+   * Use the controlled host in `AreaSelectedPanel.familyResync.test.tsx` for anything that depends
+   * on emitted filters coming back as props.
    */
   const renderPanel = (
     props: Partial<PanelProps> = {},

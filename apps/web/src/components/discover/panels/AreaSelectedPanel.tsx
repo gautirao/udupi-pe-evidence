@@ -72,6 +72,13 @@ type PropertyFamily = 'residential' | 'commercial';
  * contradiction #2450 exists to remove (`type=commercial&subtype=WAREHOUSE` asks for a set no
  * row is in, because `commercial` rows never carry WAREHOUSE). Mirrors the server's
  * `DiscoverFilterNormalizer.BUYER_SUBTYPE_TO_PROPERTY_TYPE` value set.
+ *
+ * DRIFT WARNING (#2552). These are the same four values as the commercial members of
+ * `PROPERTY_TYPES` in `lib/listing-constants.ts`. That duplication predates this file, but #2552
+ * promoted this constant from READ-only (deriving which chip reads as active) to the WRITE path
+ * (`withoutCommercialFamilyTokens` strips exactly these on a switch to Residential), which raises
+ * the cost of the two lists drifting apart: a commercial type added there and not here would stop
+ * being stripped, and the contradictory-family state this issue removes would come back.
  */
 const COMMERCIAL_FAMILY_TOKENS: readonly string[] = [
   'commercial',
@@ -79,6 +86,21 @@ const COMMERCIAL_FAMILY_TOKENS: readonly string[] = [
   'warehouse',
   'commercial_land',
 ];
+
+/**
+ * Issue #2552 — drops the Commercial FAMILY tokens from a property-type selection while preserving
+ * every Residential one.
+ *
+ * Returns `undefined` rather than `[]` when nothing survives, matching how every other handler in
+ * this file expresses "no property-type narrowing" (see `handleTogglePropertyType`); an empty array
+ * would instead read as a narrowing to zero types.
+ */
+const withoutCommercialFamilyTokens = (
+  types: PropertyFilters['propertyTypes'],
+): PropertyFilters['propertyTypes'] => {
+  const kept = (types ?? []).filter((type) => !COMMERCIAL_FAMILY_TOKENS.includes(type));
+  return kept.length > 0 ? kept : undefined;
+};
 
 /**
  * #2450's approved buyer wording for the Commercial subtype row.
@@ -361,6 +383,16 @@ export function AreaSelectedPanel({
       const updated = activePropertyTypes.has(type)
         ? current.filter((t) => t !== type)
         : [...current, type];
+      // Issue #2552 — while the capability is ON this row renders only while Residential is the
+      // active family, so the click is an unambiguous Residential statement. (With the capability
+      // OFF the type chips render regardless of the derived family — see the `familySubtype` arm
+      // "keeps the Residential type chips on an inbound subtype URL while the capability is off" —
+      // but there is no family row, so the override is unobservable and recording it is inert.)
+      // Recording it matters on the DESELECT path: if
+      // this empties `propertyTypes`, the filters fall silent on family again, and a stale
+      // `'commercial'` override left over from an earlier click would otherwise resurrect and
+      // throw the buyer into Commercial from inside the Residential row.
+      setFamilyOverride('residential');
       onFiltersChange({ ...filters, propertyTypes: updated.length > 0 ? updated : undefined });
     },
     [filters, activePropertyTypes, onFiltersChange],
@@ -370,6 +402,10 @@ export function AreaSelectedPanel({
   const handleSelectAllTypes = useCallback(() => {
     if (!onFiltersChange) return;
     if (allTypesActive) return; // already all
+    // Issue #2552 — see `handleTogglePropertyType`. This emission ALWAYS empties `propertyTypes`,
+    // so it is the most direct route back to family-silent filters, and the one that resurrected a
+    // stale Commercial override most visibly.
+    setFamilyOverride('residential');
     onFiltersChange({ ...filters, propertyTypes: undefined });
   }, [filters, allTypesActive, onFiltersChange]);
 
@@ -423,8 +459,39 @@ export function AreaSelectedPanel({
   // on the FIRST Commercial click there is no subtype yet, so derivation alone would leave the row
   // closed and the chip unpressed. `null` means "no click yet — trust the filters".
   const [familyOverride, setFamilyOverride] = useState<PropertyFamily | null>(null);
-  const activeFamily: PropertyFamily =
-    familyOverride ?? (commercialFromFilters ? 'commercial' : 'residential');
+
+  // Issue #2552 — the override is consulted ONLY while the filters are family-SILENT.
+  //
+  // It previously won unconditionally (`familyOverride ?? derived`), permanently and for the life
+  // of the mount, with nothing clearing it when `filters` changed underneath. That left the
+  // displayed family and the emitted predicate free to disagree: the panel could read Residential
+  // while the query still selected Commercial rows. A wrong-RESULTS defect, not a stale display —
+  // which is why the #2552 spec asserts emitted filters rather than which chip is highlighted.
+  //
+  // THIS CONDITION IS ONLY HALF THE FIX, and the other half is easy to miss — exact-head review of
+  // PR #2582 found it after this comment first claimed the invariant was complete. Scoping the
+  // override here makes "the override cannot contradict the FILTERS" true, but the override is
+  // still WRITTEN in only one place unless the Residential-row handlers also record intent. A
+  // stale `'commercial'` then outlives the state that superseded it and resurrects the moment the
+  // filters fall silent again — clear the type chips from inside the Residential row and the panel
+  // jumps to Commercial over a predicate carrying no narrowing at all. `handleSelectAllTypes`,
+  // `handleTogglePropertyType` and `handleClearPropertyFilters` close those paths; see each.
+  //
+  // WHY RECONCILIATION RATHER THAN AN EFFECT OR A KEY RESET. An effect keyed on `filters` would
+  // also clear the override on the panel's OWN emission, slamming the subtype row shut on the very
+  // first Commercial click — that emission is `propertyTypes: undefined` with no subtype yet, so
+  // derivation alone yields Residential, which is the whole reason the override exists. Scoping it
+  // to the ambiguous case needs no extra state, no basis-tracking and no render pass: the override
+  // CANNOT contradict the filters, because it only speaks when they say nothing about family.
+  // `allTypesActive` is this file's canonical reader for "no property-type narrowing"
+  // (`activePropertyTypes.size === 0`, memoised above). Re-deriving it inline would be a second
+  // expression of one predicate, and the two would then be free to drift.
+  const familyIsUnset = activeCommercialSubtypes.size === 0 && allTypesActive;
+  const activeFamily: PropertyFamily = commercialFromFilters
+    ? 'commercial'
+    : familyIsUnset && familyOverride !== null
+      ? familyOverride
+      : 'residential';
 
   // ANON POSTURE — owner ruling on PR #2500. This SUPERSEDES the disabled-with-explanation posture
   // this panel previously implemented, and the earlier one is described below rather than deleted
@@ -456,7 +523,23 @@ export function AreaSelectedPanel({
       // CAPABILITY guard only — auth is deliberately not consulted (see the anon-posture note
       // above). Mirrors `handleToggleReadyToMove`: bail out even if a click somehow reaches the
       // control while this surface cannot consume the axis, so no unconsumable request is emitted.
-      if (family === 'commercial' && !isCommercialSubtypeSupported) return;
+      //
+      // Issue #2552 — this tests the CAPABILITY, not the family. It previously read
+      // `family === 'commercial' && !isCommercialSubtypeSupported`, so a RESIDENTIAL chip rendered
+      // while the capability was off would sail straight past it and set the override. Only the
+      // row-level `isCommercialSubtypeSupported &&` gate stood between that and a live control —
+      // one call away from the thing it guards, and it would fall to any future widening of that
+      // gate. `handleToggleSubtype` and `handleToggleReadyToMove` both test their capability
+      // unconditionally; this now matches them.
+      if (!isCommercialSubtypeSupported) return;
+      // Issue #2552 (review NIT) — this records the override BEFORE the `onFiltersChange` guard,
+      // while the four other sites that write it record AFTER their own guard. The asymmetry is
+      // deliberate rather than drift: the family chip must still respond on an UNCONTROLLED panel
+      // (no `onFiltersChange`), where the filters never move and the override is the only thing
+      // driving `activeFamily`. The other sites record intent that ACCOMPANIES a real filter
+      // change, so recording it where nothing can change would mean nothing. Unobservable either
+      // way — with no filter owner `familyIsUnset` is constant — which is why this is a documented
+      // choice and not a behavioural fix.
       setFamilyOverride(family);
       if (!onFiltersChange) return;
       onFiltersChange(
@@ -464,7 +547,17 @@ export function AreaSelectedPanel({
           ? // Residential types do not survive the switch, but everything else does: Budget and
             // Bedrooms are family-independent, and silently dropping them is its own defect.
             { ...filters, propertyTypes: undefined }
-          : { ...filters, commercialSubtypes: undefined },
+          : // Issue #2552 — the mirror image, which was missing. Clearing `commercialSubtypes`
+            // alone left any inbound Commercial FAMILY TOKEN (`commercial`, `warehouse`, ...) sitting
+            // in `propertyTypes`, so "switch to Residential" produced a Residential-looking panel
+            // over a Commercial result set. Only the family tokens are stripped: a genuine
+            // Residential type the buyer still holds survives, because dropping `propertyTypes`
+            // wholesale would trade one wrong-results defect for another.
+            {
+              ...filters,
+              commercialSubtypes: undefined,
+              propertyTypes: withoutCommercialFamilyTokens(filters.propertyTypes),
+            },
       );
     },
     [filters, onFiltersChange, isCommercialSubtypeSupported],
@@ -476,6 +569,18 @@ export function AreaSelectedPanel({
   const handleToggleSubtype = useCallback(
     (value: CommercialSubtype | null) => {
       if (!onFiltersChange || !isCommercialSubtypeSupported) return;
+      // Issue #2552 — the mirror of the Residential-row handlers, and it closes the one case they
+      // cannot. This row renders only while Commercial is the active family, so any click in it is
+      // an unambiguous Commercial statement; recording it is what keeps the family when the click
+      // removes the only evidence OF that family.
+      //
+      // The shape that needs it is the canonical one. Under the one-axis contract a restored link
+      // carries `commercialSubtypes` ALONE, so the family is DERIVED and the override is still
+      // `null`. Clearing via "All commercial" — documented right below as clearing the narrowing
+      // WITHOUT leaving the family — then emptied the last thing saying "commercial" and dropped
+      // the buyer into Residential, closing the row they were working in. Recording intent here
+      // makes the doc comment below true rather than aspirational.
+      setFamilyOverride('commercial');
       if (value === null) {
         // "All commercial" clears the narrowing WITHOUT leaving the family, so any inbound
         // `propertyTypes` is preserved exactly as it arrived rather than rewritten.
@@ -497,6 +602,11 @@ export function AreaSelectedPanel({
   // Clear property-type filters only; preserve school, polygon, city, date, and other active filters
   const handleClearPropertyFilters = useCallback(() => {
     if (!onFiltersChange) return;
+    // Issue #2552 — `null`, not `'residential'`: clearing expresses no family at all, so the
+    // derivation should own the answer from here. Without this, the affordance whose entire
+    // promise is an unfiltered state would deposit the buyer in Commercial — it empties BOTH
+    // axes, and a stale override would then be the only thing left speaking.
+    setFamilyOverride(null);
     onFiltersChange({
       ...filters,
       propertyTypes: undefined,
@@ -1386,7 +1496,28 @@ export function AreaSelectedPanel({
                 scopeKind={resultScopeKind}
                 resultScope={activeScope}
                 onAdjustBoundary={onRedrawPolygon}
-                onApplyFilters={onFiltersChange}
+                // Issue #2552 — WRAPPED, not forwarded raw, and this was the last path by which a
+                // stale family override could resurrect. `AreaZeroResultRecovery` emits through
+                // this prop directly, so a relaxation click bypassed every `setFamilyOverride` the
+                // family controls make. `applyRelaxationPreview`'s empty PROPERTY_TYPES offer
+                // returns `propertyTypes: undefined` — a DESIGNED offer, shown to the buyer as
+                // "Include every property type" — which makes the filters family-silent and hands
+                // the family back to whatever override was last set. A relaxation expresses no
+                // family intent, so it clears the override exactly like `handleClearPropertyFilters`.
+                //
+                // The ternary preserves the prop's OPTIONALITY deliberately: that component gates
+                // its entire relaxation block on `onApplyFilters` being defined, so wrapping
+                // unconditionally would offer a relaxation on a panel with no filter owner — a
+                // control that cannot do anything, which is the dead-control class this panel
+                // refuses elsewhere (`onRetryListings`, `onAddSchool`).
+                onApplyFilters={
+                  onFiltersChange
+                    ? (next) => {
+                        setFamilyOverride(null);
+                        onFiltersChange(next);
+                      }
+                    : undefined
+                }
                 onClearFilters={onClearFilters}
                 onClearSearch={onClearSearch}
               />
