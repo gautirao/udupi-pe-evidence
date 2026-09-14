@@ -204,7 +204,7 @@ describe('useDiscoverCityListings', () => {
         useDiscoverCityListings({
           city: 'udupi',
           areaKeys: ['udupi|manipal'],
-          bedrooms: 3,
+          bedrooms: [3],
         }),
       { wrapper: makeWrapper() },
     );
@@ -224,7 +224,7 @@ describe('useDiscoverCityListings', () => {
         useDiscoverCityListings({
           city: 'udupi',
           areaKeys: ['udupi|manipal'],
-          propertyType: 'house',
+          propertyType: ['house'],
         }),
       { wrapper: makeWrapper() },
     );
@@ -245,7 +245,7 @@ describe('useDiscoverCityListings', () => {
       React.createElement(QueryClientProvider, { client: qc }, children);
 
     const { rerender } = renderHook(
-      ({ bedrooms }: { bedrooms?: number }) =>
+      ({ bedrooms }: { bedrooms?: number[] }) =>
         useDiscoverCityListings({
           city: 'udupi',
           areaKeys: ['udupi|manipal'],
@@ -255,12 +255,14 @@ describe('useDiscoverCityListings', () => {
     );
 
     // Change bedrooms — should create a new query key and trigger a new fetch
-    rerender({ bedrooms: 2 });
+    rerender({ bedrooms: [2] });
 
     // Both the initial (no bedrooms) and the re-rendered (bedrooms=2) are distinct keys,
     // so we verify the key segments contain the filter value.
     const keys = qc.getQueryCache().getAll().map((q) => q.queryKey);
-    const withBedrooms = keys.find((k) => k.includes(2));
+    // Issue #2533 — multi-value filters enter the key as a sorted JOIN, so the segment
+    // is the string '2', not the number 2.
+    const withBedrooms = keys.find((k) => k.includes('2'));
     expect(withBedrooms).toBeDefined();
   });
 
@@ -275,7 +277,7 @@ describe('useDiscoverCityListings', () => {
           minPrice: undefined,
           maxPrice: undefined,
           bedrooms: undefined,
-          propertyType: '',
+          propertyType: [],
         }),
       { wrapper: makeWrapper() },
     );
@@ -384,7 +386,7 @@ describe('useDiscoverCityListings', () => {
           city: 'udupi',
           areaKeys: ['udupi|manipal'],
           q: 'pool',
-          propertyType: 'apartment',
+          propertyType: ['apartment'],
         }),
       { wrapper },
     );

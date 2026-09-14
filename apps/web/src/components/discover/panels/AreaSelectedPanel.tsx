@@ -198,10 +198,14 @@ interface AreaSelectedPanelProps {
    * same honesty reason, but **defaults FALSE** where that one defaults true.
    *
    * WHY FALSE IS THE RIGHT DEFAULT HERE. This panel's card list is fed by
-   * `useDiscoverCityListings`, whose signature takes a SINGULAR `propertyType` and no
-   * `commercialSubtypes` at all. So on today's surfaces a buyer picking Commercial → Warehouse
-   * would see results **unchanged** — not zero. That is worse than an empty list: zero at least
-   * signals that something happened, whereas unchanged results signal a control that did nothing.
+   * `useDiscoverCityListings`, which carries no `commercialSubtypes` param at all. So on
+   * today's surfaces a buyer picking Commercial → Warehouse would see results **unchanged** —
+   * not zero. That is worse than an empty list: zero at least signals that something happened,
+   * whereas unchanged results signal a control that did nothing.
+   *
+   * Issue #2533 removed the OTHER half of this reasoning: that hook's `propertyType` was also
+   * SINGULAR, so a multi-select dropped the type filter outright. It now accepts and sends the
+   * full selection. The subtype gap above is what still keeps this flag false.
    * Shipping it reachable would pin exactly the inert-control class #2450 exists to remove.
    *
    * GATE-OFF IS "NO FAMILY ROW", NOT "RESIDENTIAL ALONE" (owner ruling on PR #2500, Option A).

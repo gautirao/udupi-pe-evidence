@@ -233,11 +233,15 @@ describe('AreaSelectedPanel — #2450 family / subtype filters', () => {
   /**
    * THE CAPABILITY GATE — why every behaviour arm below opts in explicitly.
    *
-   * The panel's card list is fed by `useDiscoverCityListings`, whose signature
-   * (`useDiscoverCityListings.ts:142`) takes a SINGULAR `propertyType` and **no
-   * `commercialSubtypes` at all**. So the subtype axis this panel emits is not consumed by
-   * the panel's own results: a buyer picking Commercial → Warehouse would see results
-   * **unchanged**, not zero.
+   * The panel's card list is fed by `useDiscoverCityListings`, which carries **no
+   * `commercialSubtypes` param at all** (cited by name, not by line — the `:142` this
+   * paragraph used to carry had drifted off the field it named). So the subtype axis this
+   * panel emits is not consumed by the panel's own results: a buyer picking
+   * Commercial → Warehouse would see results **unchanged**, not zero.
+   *
+   * Issue #2533 removed the OTHER half of this argument — that hook's `propertyType` was
+   * also SINGULAR, so a multi-select dropped the type filter outright. It now takes the
+   * full selection. The missing subtype param above is what still holds this gate shut.
    *
    * That is worse than an empty list. Zero at least signals that something happened;
    * unchanged results signal that the control did nothing — the inert-control class this
@@ -616,8 +620,10 @@ describe('AreaSelectedPanel — #2450 family / subtype filters', () => {
       const onFiltersChange = vi.fn();
       renderPanel({
         // One axis. An earlier revision wrote `propertyTypes: ['commercial','warehouse']`
-        // here, which is the superseded two-axis shape AND a two-type selection — the exact
-        // input that #2533's single-type collapse turns into an unfiltered list.
+        // here, which is the superseded two-axis shape — still the reason not to use it.
+        // It was ALSO a two-type selection, which #2533's single-type collapse turned into
+        // an unfiltered list; that half no longer applies, since the #2533 frontend half
+        // now sends every selected type.
         filters: { ...commercialFilters(['WAREHOUSE']), priceMax: 12_000_000 },
         onFiltersChange,
       });

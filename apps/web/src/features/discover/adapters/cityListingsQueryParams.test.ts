@@ -11,11 +11,21 @@ describe('buildCityListingsQueryParams (#2142 Commit 2 — moved verbatim from M
     expect(result.listingPurpose).toBe('sale');
   });
 
-  it('forwards only the FIRST propertyType/bedrooms value (useDiscoverCityListings single-value limitation)', () => {
+  // Issue #2533 — was "forwards only the FIRST value". useDiscoverCityListings now sends
+  // the full selection as repeated params, so the adapter forwards both arrays whole.
+  it('forwards the FULL propertyType/bedrooms selection', () => {
     const filters: PropertyFilters = { propertyTypes: ['house', 'apartment'], bedrooms: [2, 3] };
     const result = buildCityListingsQueryParams('udupi', [], filters, 'sale');
-    expect(result.propertyType).toBe('house');
-    expect(result.bedrooms).toBe(2);
+    expect(result.propertyType).toEqual(['house', 'apartment']);
+    expect(result.bedrooms).toEqual([2, 3]);
+  });
+
+  // Falsifiability control: an absent selection must stay undefined, not become an
+  // empty array that a future caller could mistake for "match none".
+  it('leaves propertyType/bedrooms undefined when nothing is selected', () => {
+    const result = buildCityListingsQueryParams('udupi', [], {}, 'sale');
+    expect(result.propertyType).toBeUndefined();
+    expect(result.bedrooms).toBeUndefined();
   });
 
   it('converts priceMin/priceMax from rupees to paise (x100)', () => {

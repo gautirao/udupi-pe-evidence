@@ -350,22 +350,27 @@ test.describe('hotfix — a picked Commercial subtype reaches its own inventory'
     //     requests. The card list is never refetched for a MIXED selection, so it continues to
     //     show whatever the previous state returned.
     //
-    // The cause is in the card source, not in this test: the single-type collapse at
-    // `useDiscoverMapData.ts:699-703`, feeding the card query at `:743-756`, sends
-    // `propertyTypes?.length === 1 ? propertyTypes[0] : undefined` — so a two-type selection sends
-    // NO property type. With it undefined the query key reverts to the unfiltered shape already
-    // cached at page load, React Query serves it from cache (hence the zero requests), and
-    // `keepPreviousData` keeps the old rows on screen.
+    // The cause was in the card source, not in this test: `useDiscoverMapData`'s
+    // `discoverPropertyType`/`discoverBedrooms` derivations, feeding the `useDiscoverCityListings`
+    // card query, sent `propertyTypes?.length === 1 ? propertyTypes[0] : undefined` — so a two-type
+    // selection sent NO property type. With it undefined the query key reverted to the unfiltered
+    // shape already cached at page load, React Query served it from cache (hence the zero
+    // requests), and `keepPreviousData` kept the old rows on screen. On the CARD LIST a mixed
+    // Commercial selection therefore showed apartments, houses and land — gross over-inclusion.
     //
-    // THE CONSEQUENCE IS WORSE THAN A TEST PROBLEM, so it is not filed here as one. On the CARD
-    // LIST a mixed Commercial selection now shows apartments, houses and land — gross
-    // over-inclusion, where pre-fix it showed commercial rows with warehouses missing. The
-    // collapse pre-dates this PR, but pre-fix a subtype PAIR produced only ONE type and therefore
-    // never reached it; this change is what makes a two-type selection reachable from two subtype
-    // clicks. Tracked as #2533 and deliberately not fixed here.
+    // FIXED in the #2533 frontend half: that hook now accepts and sends the buyer's FULL selection
+    // as repeated `?propertyType=`/`?bedrooms=` params (the backend half, cdf36c8a, widened the
+    // endpoint to accept them). Deliberately cited by SYMBOL rather than line number — the two
+    // `:NNN` citations this paragraph used to carry had already drifted off the code they named.
+    //
+    // WHAT THAT DOES NOT LICENSE. A mixed selection now issues a real request, so the row-level
+    // foil ruled out above may well be viable today. That was NOT re-measured — this Playwright
+    // arm needs credentials and a running stack, and the #2533 frontend PR verified at the unit
+    // layer only. So the assertions below are left exactly as they were, still a smoke check and
+    // still not the proof. Re-measuring the foil is tracked on #2533, not silently assumed here.
     //
     // Single-subtype selections — the three that were returning nothing, which is what this hotfix
-    // is for — are unaffected, because one subtype collapses to exactly one type.
+    // is for — were unaffected throughout, because one subtype collapses to exactly one type.
     //
     // So the emitted contract is the only sound target here. That is weaker than a row assertion
     // and it is stated rather than hidden: the union's RESULT MEMBERSHIP is proven at the unit

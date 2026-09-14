@@ -706,15 +706,18 @@ export function useDiscoverMapData({
   // Area listing cards (right panel detail view)
   const discoverMinPrice = filters.priceMin != null ? filters.priceMin * 100 : undefined;
   const discoverMaxPrice = filters.priceMax != null ? filters.priceMax * 100 : undefined;
-  const discoverBedrooms = filters.bedrooms?.length === 1 ? filters.bedrooms[0] : undefined;
+  // Issue #2533 — the buyer's FULL selection is forwarded. These previously collapsed
+  // with `length === 1 ? [0] : undefined`, which on a multi-select dropped the filter
+  // rather than narrowing it (see useDiscoverCityListings' propertyType doc).
+  // An empty array is normalised to undefined so "nothing selected" omits the param.
+  const discoverBedrooms = filters.bedrooms?.length ? filters.bedrooms : undefined;
   // Issue #1371 (AC6): in agri-first journey, force propertyType='agricultural_land'
   // for the area-click listing fetch regardless of what filters.propertyTypes contains.
-  // The non-agri derivation (single-element filter wins) is left untouched for all
-  // other journeys.
+  // The non-agri derivation is left untouched for all other journeys.
   const discoverPropertyType = isAgriJourney
-    ? AGRICULTURAL_LAND_PROPERTY_TYPE
-    : filters.propertyTypes?.length === 1
-    ? filters.propertyTypes[0]
+    ? [AGRICULTURAL_LAND_PROPERTY_TYPE]
+    : filters.propertyTypes?.length
+    ? filters.propertyTypes
     : undefined;
 
   // Issue #2017 (owner manual-test fix) — a committed multi-area AREA_SET

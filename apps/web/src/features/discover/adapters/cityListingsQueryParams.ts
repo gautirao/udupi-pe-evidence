@@ -15,11 +15,13 @@ type BuiltCityListingsQueryParams = Pick<
  * whether a `q` (debounced search) value was threaded through. Both moved
  * verbatim here — no logic changed.
  *
- * `useDiscoverCityListings` only accepts a single `propertyType`/`bedrooms`
- * value; the first value from `PropertyFilters`' array fields is forwarded
- * and remaining values are filtered client-side elsewhere
- * (`applyAnonPropertyFilters`) — this adapter does not change that
- * limitation, only relocates the params-construction expression.
+ * Issue #2533 — `useDiscoverCityListings` now accepts the FULL
+ * `propertyType`/`bedrooms` selection and sends it as repeated params, so this
+ * adapter forwards `PropertyFilters`' arrays whole. It previously forwarded
+ * only the first value of each and left the rest to a client-side pass
+ * (`applyAnonPropertyFilters`), which under-included: the server's
+ * 20-per-area teaser cap was applied to the over-broad single-value result set
+ * before the client narrowed it.
  *
  * Per-area teaser cap: the backend clamps server-side to MAX_LIMIT=20 per
  * area (CityAreaListingsService.java `Math.min(raw, 20)`), so `limitPerArea`
@@ -40,8 +42,8 @@ export function buildCityListingsQueryParams(
     city,
     areaKeys,
     limitPerArea: 20,
-    propertyType: filters.propertyTypes?.[0],
-    bedrooms: filters.bedrooms?.[0],
+    propertyType: filters.propertyTypes?.length ? filters.propertyTypes : undefined,
+    bedrooms: filters.bedrooms?.length ? filters.bedrooms : undefined,
     minPrice: filters.priceMin != null ? filters.priceMin * 100 : undefined,
     maxPrice: filters.priceMax != null ? filters.priceMax * 100 : undefined,
     q,

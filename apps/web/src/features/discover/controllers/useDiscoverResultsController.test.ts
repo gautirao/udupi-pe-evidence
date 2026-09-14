@@ -145,7 +145,10 @@ describe('useDiscoverResultsController (#2142 Commit 3 — moved verbatim from M
         city: 'udupi',
         areaKeys: ['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Tiger Circle'],
         limitPerArea: 20,
-        propertyType: 'house',
+        // Issue #2533 — was the bare string 'house'. useDiscoverCityListings now takes the
+        // FULL selection and sends it as repeated params, so the adapter forwards the array
+        // whole rather than its first element.
+        propertyType: ['house'],
         listingPurpose: 'sale',
       }),
     );

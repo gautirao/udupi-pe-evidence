@@ -152,10 +152,12 @@ export function NodeListingsSurface({
     city: nav.city,
     areaKeys: !isAuthenticated ? nodeAreaKeys : [],
     limitPerArea: 20, // server caps at 20 anyway (MAX_LIMIT in CityAreaListingsService)
-    // Forward the first propertyType/bedrooms value; remaining are filtered
-    // client-side below via applyAnonPropertyFilters (same recipe as group results).
-    propertyType: effectiveFilters.propertyTypes?.[0],
-    bedrooms: effectiveFilters.bedrooms?.[0],
+    // Issue #2533 — the FULL selection is forwarded (repeated params). This previously
+    // sent only `?.[0]`, leaning on applyAnonPropertyFilters below to drop the rest
+    // client-side; that under-included, because the server's 20-per-area teaser cap was
+    // applied to the over-broad single-value result set BEFORE the client narrowed it.
+    propertyType: effectiveFilters.propertyTypes?.length ? effectiveFilters.propertyTypes : undefined,
+    bedrooms: effectiveFilters.bedrooms?.length ? effectiveFilters.bedrooms : undefined,
     // priceMin/priceMax: convert from rupees (PropertyFilters unit) to paise (backend unit).
     minPrice: effectiveFilters.priceMin != null ? effectiveFilters.priceMin * 100 : undefined,
     maxPrice: effectiveFilters.priceMax != null ? effectiveFilters.priceMax * 100 : undefined,
@@ -180,10 +182,11 @@ export function NodeListingsSurface({
     // anon (unauthenticated) response contract deliberately returns `priceBand` instead
     // (never `pricePaise` — see DiscoverCityListingItem's mutually-exclusive contract), so
     // re-applying it would wrongly discard every server-correct row a second time whenever a
-    // min/max price filter is active. propertyTypes/bedrooms are still applied here because the
-    // server call above only forwards the FIRST selected value of each (single-value params),
-    // while the user may have selected multiple — so client-side filtering still needs to
-    // enforce the full multi-select set.
+    // min/max price filter is active. propertyTypes/bedrooms are still applied here, but as of
+    // Issue #2533 they are no longer LOAD-BEARING: the server call above now forwards every
+    // selected value, so this pass is an idempotent no-op over an already-narrowed set. It is
+    // kept rather than deleted because it is the only guard if a future caller regresses to
+    // forwarding a partial selection.
     //
     // Issue #2023 — readyToMove is ALSO excluded here (not just price), for the same
     // reason: it is already sent to and authoritatively filtered by the public

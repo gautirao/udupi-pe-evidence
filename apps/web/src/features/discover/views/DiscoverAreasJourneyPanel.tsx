@@ -986,9 +986,10 @@ function AreaLeafListingsSurface({
     // regardless).
     areaKeys: hasMapAreaListings || isScopeSubstituted ? [] : [areaPoint.areaKey],
     limitPerArea: 50,
-    propertyType:
-      effectiveFilters.propertyTypes?.length === 1 ? effectiveFilters.propertyTypes[0] : undefined,
-    bedrooms: effectiveFilters.bedrooms?.length === 1 ? effectiveFilters.bedrooms[0] : undefined,
+    // Issue #2533 — full selection forwarded; see useDiscoverCityListings' propertyType
+    // doc for why the previous `length === 1` collapse dropped the filter outright.
+    propertyType: effectiveFilters.propertyTypes?.length ? effectiveFilters.propertyTypes : undefined,
+    bedrooms: effectiveFilters.bedrooms?.length ? effectiveFilters.bedrooms : undefined,
     minPrice: effectiveFilters.priceMin != null ? effectiveFilters.priceMin * 100 : undefined,
     maxPrice: effectiveFilters.priceMax != null ? effectiveFilters.priceMax * 100 : undefined,
     q: debouncedSearch?.trim() || undefined,

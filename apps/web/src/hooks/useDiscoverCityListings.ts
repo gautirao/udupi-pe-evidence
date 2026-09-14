@@ -128,10 +128,29 @@ export interface DiscoverCityListingsParams {
   minPrice?: number;
   /** Price upper bound in paise (backend unit). */
   maxPrice?: number;
-  /** BHK count; 4 means "4 or more". Only sent when a single value is selected. */
-  bedrooms?: number;
-  /** Property type string (case-insensitive on backend). Only sent when a single value is selected. */
-  propertyType?: string;
+  /**
+   * BHK counts; 4 means "4 or more". Every selected value is sent, as a REPEATED
+   * `?bedrooms=2&bedrooms=3` param — see {@link DiscoverCityListingsParams.propertyType}
+   * for why the name stayed singular.
+   */
+  bedrooms?: number[];
+  /**
+   * Property type strings (case-insensitive on backend). Every selected value is sent,
+   * as a REPEATED `?propertyType=commercial&propertyType=warehouse` param.
+   *
+   * Issue #2533 — this was a single `string` until the backend half (cdf36c8a) widened
+   * the endpoint to `List<String>`. The param NAME is deliberately still the singular
+   * `propertyType`, not `propertyTypes`: the backend binds the one-element and repeated
+   * forms to the same name, so widening here did not change the wire shape of any
+   * request that was already being sent.
+   *
+   * Callers must pass the buyer's FULL selection. Collapsing it (`?.[0]`, or
+   * `length === 1 ? [0] : undefined`) is the defect #2533 exists to remove: the
+   * all-or-nothing form yielded `undefined` on a multi-select, which does not narrow
+   * the query — it DROPS the filter, reverting the query key to the unfiltered shape
+   * already cached at page load and showing the buyer unrelated property types.
+   */
+  propertyType?: string[];
   /** Free-text keyword search forwarded to the backend FTS endpoint. */
   q?: string;
   /** Issue #1494 — buy/rent intent mapped to listingPurpose for the backend. */
@@ -205,8 +224,15 @@ export function useDiscoverCityListings({
       limitPerArea,
       minPrice ?? null,
       maxPrice ?? null,
-      bedrooms ?? null,
-      propertyType ?? null,
+      // Issue #2533 — multi-value filters participate in the key as a SORTED join, not
+      // the raw array. Sorting means two selections of the same set in a different click
+      // order share one cache entry (the backend's IN-list is order-insensitive, so they
+      // are genuinely the same result set); joining keeps the key a primitive, so a
+      // caller that rebuilds the array each render (e.g. the agri branch's literal
+      // `[AGRICULTURAL_LAND_PROPERTY_TYPE]`) cannot fragment the cache by identity.
+      // The WIRE order below is left as the caller supplied it.
+      bedrooms?.length ? [...bedrooms].sort((a, b) => a - b).join(',') : null,
+      propertyType?.length ? [...propertyType].sort().join(',') : null,
       q?.trim() || null,
       listingPurpose ?? null,
       readyToMove ?? null,
@@ -244,8 +270,11 @@ export function useDiscoverCityListings({
       params.set('limitPerArea', String(limitPerArea));
       if (minPrice != null) params.append('minPrice', String(minPrice));
       if (maxPrice != null) params.append('maxPrice', String(maxPrice));
-      if (bedrooms != null) params.append('bedrooms', String(bedrooms));
-      if (propertyType) params.append('propertyType', propertyType);
+      // Issue #2533 — repeated params, one per selected value. An empty array appends
+      // nothing, so "nothing selected" stays indistinguishable from "param absent"
+      // (the backend treats a missing param as "no narrowing", never as "match none").
+      bedrooms?.forEach((b) => params.append('bedrooms', String(b)));
+      propertyType?.forEach((t) => params.append('propertyType', t));
       if (q?.trim()) params.append('q', q.trim());
       if (listingPurpose) params.append('listingPurpose', listingPurpose);
       if (readyToMove) params.append('readyToMove', 'true');
