@@ -88,9 +88,10 @@ export interface DiscoverCityListingItem {
    *     `discoverListingToCityListing`) — carries the subtype AND the facts. Feeds
    *     `authViewportListings` (#2015) and `polygonListings` (#2461).
    *   - `/api/discover/cities/{city}/listings` → `AreaListingCard` — **carries the
-   *     SUBTYPE** as of `e3aab5f` (`AreaListingCard.java:93`). What it does not carry is
-   *     the allowlisted FACT columns, which are #2516's scope. Feeds `areaListings`, the
-   *     default AREA journey. (#2509 covers the query direction.)
+   *     SUBTYPE** as of `e3aab5f` (`AreaListingCard.java:93`). It does not *yet* carry the
+   *     allowlisted FACT columns: #2516 is projecting them onto this feed, so treat that
+   *     half as changing rather than settled. Feeds `areaListings`, the default AREA
+   *     journey. (#2509 covers the query direction.)
    *   - `/school-radius-listings` → `PublicSchoolRadiusListingCard` — carries neither.
    *     Feeds `schoolListings`.
    *
@@ -105,7 +106,17 @@ export interface DiscoverCityListingItem {
   commercialSubtype?: string | null;
   /**
    * Issue #2433 — allowlisted Commercial facts for the card summary. Same three-feed
-   * caveat as `commercialSubtype` above: only the authenticated feed populates it.
+   * caveat as `commercialSubtype` above.
+   *
+   * **Which feeds populate this is CHANGING — do not read absence as feed identity.** The
+   * authenticated feed populates it today. #2516 is projecting the same facts onto
+   * `AreaListingCard` / `CityAreaListingsService`, i.e. the anon city-listings feed, so an
+   * earlier revision of this line reading "only the authenticated feed populates it" holds
+   * only until that lands. Worded this way deliberately: a comment that states a feed-set
+   * as settled is exactly how the three-feed caveat above drifts out of date, and a
+   * confidently-wrong comment in this repo has already manufactured one phantom blocker.
+   *
+   * `/school-radius-listings` remains the one feed that structurally cannot carry it.
    */
   commercialFacts?: DiscoverCommercialFactsDto | null;
 }

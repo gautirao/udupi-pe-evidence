@@ -156,7 +156,7 @@ describe('#2531 — urlDiscoverFilters carries the Commercial subtype', () => {
    * keep serving the PREVIOUS subtype: correct code, stale value.
    *
    * So this arm holds every other axis constant and varies ONLY the subtype across a
-   * rerender. A literal-only fix passes all six assertions above and fails this one — which
+   * rerender. A literal-only fix passes all five assertions above and fails this one — which
    * is what makes the two halves independently falsifiable rather than jointly assumed.
    */
   it('re-derives on a subtype-only change, with every other axis held constant', () => {

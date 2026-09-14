@@ -249,10 +249,21 @@ describe('#2459 AC2 — which selections are commercial-only ("Commercial never 
    *
    * SCOPE — read the assertion, not the title. `wireParamsFor` builds
    * `buildDiscoverSearchParams`, i.e. the AUTHENTICATED listings/markers wire, which is one of
-   * the three boundaries that gate on `shouldSubmitBedrooms`. It does NOT cover the anon
-   * city-listings path: `buildCityListingsQueryParams` forwards `bedrooms` unconditionally and
-   * is not among the censused boundaries, so this same link still carries `bedrooms` there. That
-   * gap is #2531 review FINDING 1b and is deliberately NOT claimed closed by this arm.
+   * the FOUR boundaries that gate on `shouldSubmitBedrooms`. This arm does not reach the ANON
+   * city-listings boundary; that one has its own arms in
+   * `hooks/__tests__/useDiscoverCityListings.test.ts`.
+   *
+   * **An earlier revision of this block was falsified by the very commit that carried it**, and
+   * is corrected here rather than deleted. It claimed the anon path "is not among the censused
+   * boundaries", that "this same link still carries `bedrooms` there", and that #2531's FINDING
+   * 1b was "deliberately NOT claimed closed by this arm". All three were already false when it
+   * shipped: that same change added the fourth census entry AND the gate, closing 1b. A
+   * confident, specific, plausible comment describing code that does not exist is this repo's
+   * signature defect; leaving it would have been worse than no comment at all.
+   *
+   * What remains true: `buildCityListingsQueryParams` does still return `bedrooms`
+   * unconditionally, by design, because the gate lives one layer down in the hook — the single
+   * point all six production call sites pass through.
    */
   it('a composed ?subtype=OFFICE&beds=3 link puts NO bedrooms on the AUTHENTICATED wire', () => {
     const { result } = renderFacade('/discover?city=bangalore&subtype=OFFICE&beds=3');
@@ -264,6 +275,40 @@ describe('#2459 AC2 — which selections are commercial-only ("Commercial never 
     // Same-shape control: the subtype itself still reaches the wire, so the empty bedrooms above
     // is suppression rather than an unbuilt param set.
     expect(wireParamsFor(restored).getAll('commercialSubtypes')).toEqual(['OFFICE']);
+  });
+
+  /**
+   * The WRITE leg of the same predicate — a live behaviour change that shipped with #2531
+   * unasserted, which is how intentional behaviour becomes tomorrow's mystery regression.
+   *
+   * `shouldSubmitBedrooms` is shared, so extending it to the one-axis shape also reaches
+   * `serializeFilters` (`state/url/filters.ts`): a subtype-only selection carrying a bedroom
+   * value now drops `beds=` on the next URL write, and the else-branch actively deletes an
+   * inherited one. That is the contract this module's header already adopts for plot-only — "a
+   * plot-only URL could be reloaded or shared with `beds=3` still on it: invisible, unremovable,
+   * and silently reapplied by whatever reads it next" — extended to a shape that could not
+   * previously exist, because before #2531 a subtype could not stand alone on the wire.
+   *
+   * Correct and deliberate; this arm is what makes it *provably* deliberate. The buyer's value
+   * is not destroyed — it stays in PropertyFilters state, which is why switching back to a
+   * dwelling re-emits it.
+   */
+  it('a committed subtype-only selection drops beds= from the URL on write', () => {
+    const { result } = renderFacade('/discover?city=bangalore&type=apartment&beds=3');
+    expect(result.current.urlState[0].filters.bedrooms).toEqual([3]);
+
+    act(() => {
+      result.current.urlState[1].setFiltersCommitted({
+        commercialSubtypes: ['OFFICE'],
+        bedrooms: [3],
+      });
+    });
+
+    const params = new URLSearchParams(result.current.location.search);
+    expect(params.has('beds')).toBe(false);
+    // Same-shape control: the subtype IS written, so the missing `beds=` is suppression rather
+    // than a params object that was never built.
+    expect(params.get('subtype')).toBe('OFFICE');
   });
 });
 
