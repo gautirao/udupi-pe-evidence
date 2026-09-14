@@ -16,6 +16,7 @@ import { toSelectedListingPreview } from '@/features/discover/navigation/selecte
 import { AreaSelectedPanel } from '@/components/discover/panels/AreaSelectedPanel';
 import { CITY_CONFIG } from '@/lib/localityUtils';
 import { discoverListingToCityListing } from '@/lib/discoverMappers';
+import { toCommittedUrlFilters } from '@/features/discover/selectors/effectiveDiscoverContext';
 
 export interface NodeListingsSurfaceProps {
   node: NavigationNodeResponse;
@@ -64,6 +65,12 @@ export function NodeListingsSurface({
       committedFilters
         ? {
             propertyTypes: committedFilters.propertyTypes,
+            // Issue #2553 — was missing from this projection, so a committed
+            // Commercial subtype never reached AreaSelectedPanel's chip-display
+            // `filters` prop. Without it the write-path fix alone is not enough:
+            // the chip could be toggled but never render as selected, because the
+            // panel derives `activeCommercialSubtypes` from exactly this prop.
+            commercialSubtypes: committedFilters.commercialSubtypes,
             bedrooms: committedFilters.bedrooms,
             priceMin: committedFilters.priceMin,
             priceMax: committedFilters.priceMax,
@@ -74,6 +81,7 @@ export function NodeListingsSurface({
           }
         : {
             propertyTypes: nav.filters.propertyTypes as PropertyFilters['propertyTypes'],
+            commercialSubtypes: nav.filters.commercialSubtypes as PropertyFilters['commercialSubtypes'],
             bedrooms: nav.filters.bedrooms,
             priceMin: nav.filters.priceMin,
             priceMax: nav.filters.priceMax,
@@ -82,6 +90,7 @@ export function NodeListingsSurface({
     [
       committedFilters,
       nav.filters.propertyTypes,
+      nav.filters.commercialSubtypes,
       nav.filters.bedrooms,
       nav.filters.priceMin,
       nav.filters.priceMax,
@@ -94,6 +103,9 @@ export function NodeListingsSurface({
   const resetKey = [
     intentListingPurpose,
     effectiveFilters.propertyTypes?.join(',') ?? '',
+    // Issue #2553 — a subtype change narrows the result set exactly like a
+    // property-type change, so it must reset paging for the same reason.
+    effectiveFilters.commercialSubtypes?.join(',') ?? '',
     effectiveFilters.bedrooms?.join(',') ?? '',
     effectiveFilters.priceMin ?? '',
     effectiveFilters.priceMax ?? '',
@@ -337,27 +349,21 @@ export function NodeListingsSurface({
         isAuthenticated={isAuthenticated}
         filters={effectiveFilters}
         onFiltersChange={(next) => {
+          // Issue #2553 — forward what the panel actually emitted instead of
+          // rebuilding the committed object from a key allowlist. The allowlist
+          // shape silently dropped two separate axes over its life (readyToMove,
+          // Issue #2023; commercialSubtypes, Issue #2553). The failure mode is
+          // invisible at the point of loss and only shows up as a filter that
+          // appears to do nothing, so it survives review every time. `next` is a
+          // full PropertyFilters the panel derived from the `filters` prop this
+          // surface gave it, so spreading it over the committed base carries every
+          // axis — including ones added after this line was written — while the
+          // base still supplies anything outside this surface's own projection.
           if (onCommittedFiltersChange) {
-            onCommittedFiltersChange({
-              ...(committedFilters ?? {}),
-              propertyTypes: next.propertyTypes,
-              bedrooms: next.bedrooms,
-              priceMin: next.priceMin,
-              priceMax: next.priceMax,
-              // Issue #2023 — was missing, so a readyToMove toggle from
-              // AreaSelectedPanel's quick-filter chip was silently dropped on commit.
-              readyToMove: next.readyToMove,
-            });
+            onCommittedFiltersChange({ ...(committedFilters ?? {}), ...next });
             return;
           }
-          actions.setFiltersCommitted({
-            ...nav.filters,
-            propertyTypes: next.propertyTypes,
-            bedrooms: next.bedrooms,
-            priceMin: next.priceMin,
-            priceMax: next.priceMax,
-            readyToMove: next.readyToMove,
-          });
+          actions.setFiltersCommitted(toCommittedUrlFilters(nav.filters, next));
         }}
         searchQuery={searchQuery}
         onSearchChange={handleSearchChange}

@@ -59,6 +59,29 @@ describe('resolveEffectiveAreaLeafFilters (#2353 — single source for the AreaL
     });
   });
 
+  /**
+   * Issue #2553 — the projection dropped `commercialSubtypes`, so a committed
+   * Commercial subtype never reached AreaSelectedPanel's chip-display `filters`
+   * prop (nor the AREA-leaf surface's own listings query). Same omission class
+   * the Issue #2023 comment above `readyToMove` in this function records.
+   */
+  it('projects commercialSubtypes from committedFilters (#2553)', () => {
+    const committedFilters: PropertyFilters = {
+      propertyTypes: ['commercial'],
+      commercialSubtypes: ['WAREHOUSE'],
+    };
+    expect(resolveEffectiveAreaLeafFilters(committedFilters, navFilters).commercialSubtypes).toEqual([
+      'WAREHOUSE',
+    ]);
+  });
+
+  it('projects commercialSubtypes from navFilters on the fallback path (#2553)', () => {
+    expect(
+      resolveEffectiveAreaLeafFilters(undefined, { ...navFilters, commercialSubtypes: ['SHOP'] })
+        .commercialSubtypes,
+    ).toEqual(['SHOP']);
+  });
+
   it('projects navFilters fields as undefined when absent', () => {
     const emptyNavFilters: DiscoverUrlFilters = {};
     expect(resolveEffectiveAreaLeafFilters(undefined, emptyNavFilters)).toEqual({

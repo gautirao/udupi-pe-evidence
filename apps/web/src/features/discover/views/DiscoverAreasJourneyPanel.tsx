@@ -44,6 +44,7 @@ import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import {
   resolveEffectiveCity,
   resolveEffectiveAreaLeafFilters,
+  toCommittedUrlFilters,
 } from '@/features/discover/selectors/effectiveDiscoverContext';
 import { toSelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
@@ -920,6 +921,10 @@ function AreaLeafListingsSurface({
     [
       committedFilters,
       nav.filters.propertyTypes,
+      // Issue #2553 — resolveEffectiveAreaLeafFilters now projects this axis, so
+      // the memo must recompute when it changes or the panel would keep rendering
+      // a stale subtype selection.
+      nav.filters.commercialSubtypes,
       nav.filters.bedrooms,
       nav.filters.priceMin,
       nav.filters.priceMax,
@@ -1203,23 +1208,18 @@ function AreaLeafListingsSurface({
           onClearArea={() => undefined}
           filters={effectiveFilters}
           onFiltersChange={(next) => {
+            // Issue #2553 — forward what the panel emitted instead of rebuilding
+            // from a key allowlist. This pair was the WORST instance of the class:
+            // it never received the Issue #2023 `readyToMove` fix that the AREA-leaf
+            // pair below did, so it silently dropped TWO axes rather than one. That
+            // is the whole argument against enumerating keys at a commit boundary —
+            // a fix applied to one copy does not reach its siblings, and nothing
+            // fails when it doesn't.
             if (onCommittedFiltersChange) {
-              onCommittedFiltersChange({
-                ...(committedFilters ?? {}),
-                propertyTypes: next.propertyTypes,
-                bedrooms: next.bedrooms,
-                priceMin: next.priceMin,
-                priceMax: next.priceMax,
-              });
+              onCommittedFiltersChange({ ...(committedFilters ?? {}), ...next });
               return;
             }
-            actions.setFiltersCommitted({
-              ...nav.filters,
-              propertyTypes: next.propertyTypes,
-              bedrooms: next.bedrooms,
-              priceMin: next.priceMin,
-              priceMax: next.priceMax,
-            });
+            actions.setFiltersCommitted(toCommittedUrlFilters(nav.filters, next));
           }}
           isAuthenticated={isAuthenticated}
           onStartOver={onStartOver}
@@ -1357,27 +1357,19 @@ function AreaLeafListingsSurface({
           // `setFiltersCommitted` write only when no caller-supplied handler
           // is present (defensive — production always supplies one via
           // `DiscoverRightPanelContainer`).
+          // Issue #2553 — forward what the panel emitted rather than rebuilding
+          // the committed object from a key allowlist. The allowlist dropped
+          // readyToMove (Issue #2023) and then commercialSubtypes (Issue #2553);
+          // each loss is invisible where it happens and only surfaces as a filter
+          // that appears to do nothing. `next` is a full PropertyFilters derived
+          // from the `filters` prop this surface passed down, so the spread carries
+          // every axis the panel can emit — including future ones — while the base
+          // still supplies whatever sits outside `effectiveFilters`' projection.
           if (onCommittedFiltersChange) {
-            onCommittedFiltersChange({
-              ...(committedFilters ?? {}),
-              propertyTypes: next.propertyTypes,
-              bedrooms: next.bedrooms,
-              priceMin: next.priceMin,
-              priceMax: next.priceMax,
-              // Issue #2023 — was missing, so a readyToMove toggle from
-              // AreaSelectedPanel's quick-filter chip was silently dropped on commit.
-              readyToMove: next.readyToMove,
-            });
+            onCommittedFiltersChange({ ...(committedFilters ?? {}), ...next });
             return;
           }
-          actions.setFiltersCommitted({
-            ...nav.filters,
-            propertyTypes: next.propertyTypes,
-            bedrooms: next.bedrooms,
-            priceMin: next.priceMin,
-            priceMax: next.priceMax,
-            readyToMove: next.readyToMove,
-          });
+          actions.setFiltersCommitted(toCommittedUrlFilters(nav.filters, next));
         }}
         searchQuery={searchQuery}
         onSearchChange={handleSearchChange}
