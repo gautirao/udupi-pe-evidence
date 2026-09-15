@@ -1,5 +1,5 @@
-<!-- @dsCard group="Discover" viewport="1440x900" name="Discover V2 — Interactive experience" subtitle="One persistent Discover shell — Areas · Schools · Agricultural journey cards, city + Buy/Rent, browse all listings, directional Areas hierarchy, visual area clusters, multi-area draft/commit, polygon and viewport scopes, zero-result recovery, alerts — desktop 1366×768 and mobile 390×844" -->
-<!-- FROZEN 27 Jul 2026 — customer-facing states approved for CLI investigation. No further product or interaction changes; see FUNCTIONAL_AUDIT.html for the audit, correction delta and verdict. -->
+<!-- @dsCard group="Discover" viewport="1440x900" name="Discover V2 — Interactive experience" subtitle="One persistent Discover shell — Areas · Schools · Agricultural journey cards, city + Buy/Rent, browse all listings, directional Areas hierarchy, visual area clusters, multi-area draft/commit, polygon and viewport scopes, zero-result recovery, alerts — plus a three-level property filter: family (Residential | Commercial) over family-scoped subtypes over context-sensitive attributes (Beds + Carpet area + Budget for dwellings, Plot size + Budget for plots, Budget alone for Commercial), each family remembering its own subtype and budget. Desktop 1366×768 and mobile 390×844." -->
+<!-- Baseline FROZEN 27 Jul 2026 and preserved byte-for-byte in experience-discover-v2-frozen.html. Commercial (4 Sep 2026) is ADDITIVE ONLY: no existing hierarchy, component, interaction or count is replaced. Agricultural and Schools remain separate journeys, never property families. Review the "Family switching" and "Preserved" scenarios in the review strip. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -69,26 +69,62 @@
     <circle cx="420" cy="400" r="22" fill="#F6F5F2"/>
   </svg>
 </template>
-<div id="root"></div>
+<!-- Container is #app, not #root, on purpose: the design-system compiler also bundles
+     src/Experience.jsx into _ds_bundle.js and runs it before the data modules load. If
+     that copy ever mounts, its getElementById("root") returns null and it bails
+     harmlessly instead of claiming this container and clearing it on error. -->
+<div id="app"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 <script src="../../_ds_bundle.js"></script>
-<script src="src/data.js?v=e29"></script>
-<script src="src/geo.js?v=e29"></script>
-<script type="text/babel" src="src/components/shared.jsx?v=e29"></script>
-<script type="text/babel" src="src/components/cards.jsx?v=e29"></script>
-<script src="src/exp-data.js?v=e29"></script>
-<script src="src/exp-journeys.js?v=e29"></script>
-<script type="text/babel" src="src/ExpMap.jsx?v=e29"></script>
-<script type="text/babel" src="src/ExpModeBar.jsx?v=e29"></script>
-<script type="text/babel" src="src/ExpSchools.jsx?v=e29"></script>
-<script type="text/babel" src="src/ExpAgri.jsx?v=e29"></script>
-<script type="text/babel" src="src/ExpPanel.jsx?v=e29"></script>
-<script type="text/babel" src="src/Experience.jsx?v=e29"></script>
-<script type="text/babel">
-  ReactDOM.createRoot(document.getElementById("root")).render(<window.Experience />);
+<script src="src/data.js?v=e58"></script>
+<script src="src/geo.js?v=e58"></script>
+<script type="text/babel" src="src/components/shared.jsx?v=e58"></script>
+<script type="text/babel" src="src/components/cards.jsx?v=e58"></script>
+<script src="src/exp-commercial.js?v=e58"></script>
+<script src="src/exp-data.js?v=e58"></script>
+<script src="src/exp-journeys.js?v=e58"></script>
+<script type="text/babel" src="src/ExpMap.jsx?v=e58"></script>
+<script type="text/babel" src="src/ExpModeBar.jsx?v=e58"></script>
+<script type="text/babel" src="src/ExpSchools.jsx?v=e58"></script>
+<script type="text/babel" src="src/ExpAgri.jsx?v=e58"></script>
+<script type="text/babel" src="src/ExpPanel.jsx?v=e58"></script>
+<script type="text/babel" src="src/Experience.jsx?v=e58"></script>
+<!-- The mount lives HERE, not inside Experience.jsx: the design-system compiler also
+     bundles src/*.jsx into _ds_bundle.js, which loads before the data modules, so a
+     mount inside a bundled file runs once with its dependencies missing. A plain
+     inline script is never bundled, and polling for the dependencies removes the
+     script-ordering race that Babel's async src loading would otherwise create. -->
+<script>
+  (function () {
+    var tries = 0;
+    function attempt() {
+      // Wait for window.ExperienceReady, NOT window.Experience: the design-system
+      // bundle defines Experience (and ExpPanel/ExpMap/…) early, before the data
+      // modules load, so those globals are not evidence that the app can render.
+      // src/Experience.jsx sets ExperienceReady only when its dependencies are real.
+      if (!window.ExperienceReady || !window.React || !window.ReactDOM) {
+        if (++tries > 600) { console.error("Discover: Experience never became ready"); return; }
+        return setTimeout(attempt, 25);
+      }
+      var el = document.getElementById("app");
+      if (!el || el.__expRoot) return;
+      el.__expRoot = ReactDOM.createRoot(el);
+      el.__expRoot.render(React.createElement(window.ExperienceReady));
+    }
+    // Mount once the document has finished loading and one task has been yielded, so
+    // layout has settled before Leaflet reads its container geometry. Deliberately a
+    // timer, NOT requestAnimationFrame: rAF does not fire in an iframe that is not
+    // painting, which would leave the artifact permanently blank.
+    function start() { setTimeout(attempt, 0); }
+    if (document.readyState === "complete") start();
+    else window.addEventListener("load", start);
+    // Belt and braces: if `load` never arrives (throttled or already dispatched
+    // before this script parsed), poll anyway rather than never mounting.
+    setTimeout(attempt, 400);
+  })();
 </script>
 </body>
 </html>

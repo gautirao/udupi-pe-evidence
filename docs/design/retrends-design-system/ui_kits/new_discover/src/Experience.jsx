@@ -11,7 +11,10 @@
 // Switching journeys never writes into another journey's state. Map and panel are
 // two renderings of the same `st`; committed transitions push browser history,
 // presentation-only changes (cluster zoom, chip focus, pan, Map/List) never do.
-const EX = window.EXP;
+/* Lazy view of window.EXP: the design-system bundle evaluates this file
+// before EXP exists, so a value capture here would be undefined forever in that copy.
+// A Proxy resolves each property at access time instead. */
+const EX = new Proxy({}, { get: (_t, k) => (window.EXP ? window.EXP[k] : undefined), has: (_t, k) => !!window.EXP && k in window.EXP });
 
 const SCENARIOS = [
   { id: "guided-areas", label: "Areas-first" },
@@ -23,9 +26,71 @@ const SCENARIOS = [
   { id: "viewport", label: "Search this area" },
   { id: "zero-results", label: "Zero results" },
   { id: "alert", label: "Alert" },
-  { id: "mobile", label: "Mobile" }
+  { id: "mobile", label: "Mobile" },
+  // Commercial — additive states, each one the existing shell with the property
+  // FAMILY set to Commercial. No scenario below introduces a screen, a hierarchy or
+  // a component that the baseline does not already have.
+  { id: "com-broad", label: "All commercial", group: "com" },
+  { id: "com-shop", label: "Shop", group: "com" },
+  { id: "com-office", label: "Office", group: "com" },
+  { id: "com-multi", label: "Multi-subtype", group: "com" },
+  { id: "com-cleared-subs", label: "Subtypes cleared", group: "com" },
+  { id: "com-zero", label: "Com. zero", group: "com" },
+  { id: "com-detail", label: "Com. detail", group: "com" },
+  { id: "com-mobile", label: "Com. mobile", group: "com" },
+  // Family switching — the same canonical context on both sides; only the family,
+  // its subtype row, the result membership, the cards and the markers change.
+  { id: "fam-res-all", label: "Res: all", group: "fam" },
+  { id: "fam-res-sub", label: "Res: Villas", group: "fam" },
+  { id: "fam-res-to-com", label: "Res → Com", group: "fam" },
+  { id: "fam-com-to-res", label: "Com → Res", group: "fam" },
+  // Context-sensitive attribute filters — bedrooms, plot area and budget each
+  // appear only where they actually apply.
+  { id: "attr-dwelling", label: "Beds + Carpet", group: "attr" },
+  { id: "attr-plot", label: "Plot size", group: "attr" },
+  { id: "attr-plot-to-dwelling", label: "Plot → dwelling", group: "attr" },
+  { id: "attr-com-buy", label: "Com. Buy budget", group: "attr" },
+  { id: "attr-com-rent", label: "Com. Rent budget", group: "attr" },
+  { id: "attr-com-sub-budget", label: "Budget retained", group: "attr" },
+  { id: "attr-plot-mobile", label: "Plot mobile", group: "attr" },
+  { id: "attr-res-mobile", label: "Res. mobile", group: "attr" },
+  // Commercial area + budget refinement frames — one canonical context throughout,
+  // so a pair differs only by the filter under review.
+  { id: "ca-all", label: "All + Area", group: "carea" },
+  { id: "ca-shop", label: "Shop built-up", group: "carea" },
+  { id: "ca-office", label: "Office built-up", group: "carea" },
+  { id: "ca-building", label: "Building built-up", group: "carea" },
+  { id: "ca-warehouse", label: "Warehouse area", group: "carea" },
+  { id: "ca-land", label: "Land plot size", group: "carea" },
+  { id: "ca-multi", label: "Multi → generic area", group: "carea" },
+  { id: "ca-lease", label: "Rent / Lease budget", group: "carea" },
+  { id: "ca-anon", label: "Anonymous", group: "carea" },
+  { id: "ca-zero", label: "Zero results", group: "carea" },
+  { id: "ca-one", label: "Singular copy", group: "carea" },
+  { id: "ca-mobile", label: "Mobile filters", group: "carea" },
+  // Preserved — the non-regression set: the original behaviour, reached through the
+  // original components, with the Residential family selected.
+  { id: "pre-default", label: "Baseline", group: "pre" },
+  { id: "pre-hierarchy", label: "Hierarchy", group: "pre" },
+  { id: "pre-residential", label: "Residential", group: "pre" },
+  { id: "pre-schools", label: "Schools", group: "pre" },
+  { id: "pre-agri", label: "Agricultural", group: "pre" },
+  { id: "pre-listmap", label: "List / Map", group: "pre" },
+  { id: "pre-marker", label: "Marker", group: "pre" },
+  { id: "pre-cleared", label: "Com. cleared", group: "pre" }
+];
+const SCENARIO_GROUPS = [
+  { key: null, label: "Existing Discover" },
+  { key: "com", label: "Commercial — added" },
+  { key: "fam", label: "Family switching" },
+  { key: "attr", label: "Contextual attributes" },
+  { key: "carea", label: "Commercial area & budget" },
+  { key: "pre", label: "Preserved behaviour" }
 ];
 const TRIO = ["hebbal", "nagawara", "jakkur"];
+// Commercial review scopes — real areas from the canonical catalogue, chosen because
+// they actually carry the subtype being demonstrated.
+const COM_TRIO = ["indiranagar", "whitefield", "jpnagar"];
 const AGRI_DEFAULT_KM = () => window.BLR_DATA.agri.defaultMaxKm;
 
 function schBase() {
@@ -43,6 +108,9 @@ function baseState() {
     detail: null, dirty: false, dirtyBounds: null, confirm: null, polyDraft: null,
     alerts: [], alertDraft: null, alertPhase: null, view: null, deleteAsk: null, query: "",
     shown: 8, saved: [], hover: null, device: "desktop", note: null,
+    // Commercial listings are price-gated for anonymous buyers; this is the only
+    // state Commercial adds to the shell, and it changes nothing for residential.
+    signedIn: false,
     sch: schBase(), ag: agBase()
   };
 }
@@ -59,6 +127,66 @@ function scenarioState(id) {
     sch: { ...schBase(), nodeKey: "hebbal", areaKey: "hebbal", areaKeys: ["hebbal"], returnTo: ["hebbal"] }
   });
   else if (id === "agri") Object.assign(s, { journey: "agri" });
+  // ---- Commercial / family switching -----------------------------------------
+  // Every scenario below shares ONE canonical context — the same city, the same
+  // three committed areas, the same scope mode, camera and breadcrumb — so a pair
+  // of them isolates exactly the family delta and nothing else.
+  else if (id.indexOf("com-") === 0 || id.indexOf("fam-") === 0 || id.indexOf("attr-") === 0 || id.indexOf("ca-") === 0) {
+    const ctx = { nodeKey: "indiranagar", scope: { kind: "AREA_SET", areaKeys: COM_TRIO.slice() }, committed: COM_TRIO.slice() };
+    // both families' subtype state travels together; `family` picks which is live
+    const ff = (patch) => ({ ...EX.DEFAULT_FILTERS, family: "Commercial", comSubs: [], ...patch });
+    Object.assign(s, ctx, { filters: ff() });
+    if (id === "com-shop") s.filters = ff({ comSubs: ["shop"] });
+    else if (id === "com-office") s.filters = ff({ comSubs: ["office"] });
+    else if (id === "com-multi") s.filters = ff({ comSubs: ["shop", "office", "warehouse"] });
+    else if (id === "com-cleared-subs") s.filters = ff({ comSubs: [] });
+    else if (id === "com-zero") Object.assign(s, { nodeKey: "hebbal", scope: { kind: "AREA_SET", areaKeys: TRIO.slice() }, committed: TRIO.slice(), filters: ff({ comSubs: ["warehouse"] }) });
+    else if (id === "com-detail") {
+      const first = EX.inAreas(COM_TRIO, s.filters)[0];
+      if (first) s.detail = first.id;
+    } else if (id === "com-mobile") Object.assign(s, { device: "mobile", filters: ff({ comSubs: ["shop"] }) });
+    // family-switch pairs: identical context, identical retained subtype state on
+    // BOTH sides — only `family` differs, which is the whole point of the pair.
+    else if (id === "fam-res-all") s.filters = ff({ family: "Residential", ptype: "Any type" });
+    else if (id === "fam-res-sub") s.filters = ff({ family: "Residential", ptype: "Villa" });
+    else if (id === "fam-res-to-com") s.filters = ff({ family: "Commercial", ptype: "Villa", comSubs: ["shop", "office"] });
+    else if (id === "fam-com-to-res") s.filters = ff({ family: "Residential", ptype: "Villa", comSubs: ["shop", "office"] });
+    // contextual attributes — same context throughout, so only the attribute row moves
+    else if (id === "attr-dwelling") s.filters = ff({ family: "Residential", ptype: "Apartment", beds: 2, carpetArea: 1000, maxPrice: 12000000 });
+    else if (id === "attr-plot") s.filters = ff({ family: "Residential", ptype: "Plot", plotArea: 1200, maxPrice: 12000000, beds: 2, carpetArea: 1000 });
+    else if (id === "attr-plot-to-dwelling") s.filters = ff({ family: "Residential", ptype: "Apartment", beds: 2, carpetArea: 1000, plotArea: 1200, maxPrice: 12000000 });
+    else if (id === "attr-com-buy") s.filters = ff({ family: "Commercial", purpose: "Buy", comMaxPrice: 25000000, maxPrice: 12000000 });
+    else if (id === "attr-com-rent") s.filters = ff({ family: "Commercial", purpose: "Rent", comMaxPrice: 150000, maxPrice: 35000 });
+    else if (id === "attr-com-sub-budget") s.filters = ff({ family: "Commercial", purpose: "Rent", comSubs: ["office"], comMaxPrice: 150000 });
+    else if (id === "attr-plot-mobile") Object.assign(s, { device: "mobile", filters: ff({ family: "Residential", ptype: "Plot", plotArea: 600 }) });
+    else if (id === "attr-res-mobile") Object.assign(s, { device: "mobile", filters: ff({ family: "Residential", ptype: "Apartment", beds: 2, carpetArea: 900 }) });
+    // ---- Commercial area & budget ------------------------------------------
+    else if (id === "ca-all") s.filters = ff({ comArea: 1000, comMaxPrice: 25000000 });
+    else if (id === "ca-shop") s.filters = ff({ comSubs: ["shop"], comArea: 1000 });
+    else if (id === "ca-office") s.filters = ff({ comSubs: ["office"], comArea: 1000 });
+    else if (id === "ca-building") s.filters = ff({ comSubs: ["building"], comArea: 5000 });
+    else if (id === "ca-warehouse") s.filters = ff({ comSubs: ["warehouse"], comArea: 2500, purpose: "Rent" });
+    else if (id === "ca-land") {
+      // Commercial land genuinely sits on the city edge, not in the central trio, so
+      // this one frame carries its own areas rather than showing an empty result set.
+      // It is a demonstration frame, not one half of a comparison pair.
+      Object.assign(s, { nodeKey: "hebbal", scope: { kind: "AREA_SET", areaKeys: ["hebbal", "krpuram", "budigere"] }, committed: ["hebbal", "krpuram", "budigere"] });
+      s.filters = ff({ comSubs: ["land"], comArea: 1000 });
+    }
+    else if (id === "ca-multi") s.filters = ff({ comSubs: ["shop", "office", "warehouse"], comArea: 1000 });
+    else if (id === "ca-lease") s.filters = ff({ purpose: "Rent", comMaxPrice: 100000, comArea: 1000 });
+    else if (id === "ca-anon") Object.assign(s, { signedIn: false, filters: ff({ comSubs: ["office"] }) });
+    else if (id === "ca-zero") s.filters = ff({ comSubs: ["building"], comArea: 2500, comMaxPrice: 10000000 });
+    else if (id === "ca-one") s.filters = ff({ comSubs: ["shop"], comArea: 1000 });
+    else if (id === "ca-mobile") Object.assign(s, { device: "mobile", filters: ff({ comSubs: ["shop"], comArea: 1000, comMaxPrice: 50000000 }) });  }
+  // ---- Preserved: original behaviour, reached through the original components
+  else if (id === "pre-hierarchy") Object.assign(s, { nodeKey: "north" });
+  else if (id === "pre-schools") Object.assign(s, { journey: "schools" });
+  else if (id === "pre-residential") Object.assign(s, { nodeKey: "hebbal", scope: { kind: "AREA_SET", areaKeys: TRIO.slice() }, committed: TRIO.slice(), filters: { ...EX.DEFAULT_FILTERS, ptype: "Apartment", beds: 2 } });
+  else if (id === "pre-agri") Object.assign(s, { journey: "agri" });
+  else if (id === "pre-listmap") Object.assign(s, { device: "mobile", presentation: "map", nodeKey: "hebbal", scope: { kind: "AREA_SET", areaKeys: TRIO.slice() }, committed: TRIO.slice() });
+  else if (id === "pre-marker") Object.assign(s, { nodeKey: "hebbal", scope: { kind: "AREA_SET", areaKeys: ["hebbal"] }, committed: ["hebbal"] });
+  else if (id === "pre-cleared") Object.assign(s, { nodeKey: "indiranagar", scope: { kind: "AREA_SET", areaKeys: COM_TRIO.slice() }, committed: COM_TRIO.slice(), filters: { ...EX.DEFAULT_FILTERS, comSubs: ["shop", "office"] } });
   return s;
 }
 const HINTS = {
@@ -83,7 +211,57 @@ const HINTS = {
   viewport: (st) => st.scope && st.scope.kind === "VIEWPORT" ? "Return to Hebbal + Nagawara + Jakkur when you are done." : "Pan or zoom the map: results stay. Then press Search this area.",
   "zero-results": () => "Nothing widened itself. The recovery offered matches the scope you are actually in.",
   alert: (st) => st.alertDraft ? "Check the scope and filters, pick a frequency, then Create alert. Tick the failure box to see the honest failure path." : st.view === "alerts" ? "Pause, resume, delete or open a saved alert." : "Press Create alert in the scope bar.",
-  mobile: (st) => st.presentation === "map" ? "Tap the cluster to zoom — the breadcrumb does not change. List returns to the same state." : "Journeys, list and map all switch at 390 × 844."
+  mobile: (st) => st.presentation === "map" ? "Tap the cluster to zoom — the breadcrumb does not change. List returns to the same state." : "Journeys, list and map all switch at 390 × 844.",
+
+  // ---- Commercial — additive states -----------------------------------------
+  "com-broad": (st) => st.filters.family !== "Commercial" ? "Residential is selected again — this is the untouched baseline. Press Commercial in the Type row to switch family."
+    : "Type holds the property FAMILY — Residential or Commercial, nothing else. Choosing Commercial swapped the subtype row beneath it; the city, the areas, the breadcrumb and the map are exactly as they were.",
+  "com-shop": () => "Shop selected inside the Commercial family. Card facts are built-up area and floor or hub; the pin carries the label, never a gated price.",
+  "com-office": () => "Office selected. Shop and Office are told apart by label, not by colour — both read in greyscale.",
+  "com-multi": () => "Three subtypes at once. Each chip in the scope bar removes only itself.",
+  "com-cleared-subs": () => "Subtypes cleared, still in Commercial: All commercial is a family-LOCAL state. Clearing subtypes never leaves the family, the geography or the search behind.",
+  "com-zero": () => "Zero results keeps the selection and claims no count. Widening never switches family on its own — that offer is explicit and labelled.",
+  "com-detail": () => "Subtype-aware detail in the existing detail view. Broker-entered claims are boxed and labelled; absent fields are omitted, never stubbed.",
+  "com-mobile": (st) => st.presentation === "map" ? "Commercial pins and popovers at 390 × 844 — the existing map behaviour, unchanged." : "Residential | Commercial stays at the top; the commercial subtype chips sit directly below it and wrap over two rows. Refinements are one tap away under More filters.",
+
+  // ---- family switching — subtype state is scoped per family ------------------
+  "fam-res-all": () => "Residential family, All residential. Beds and budget belong to this family and are offered only here.",
+  "fam-res-sub": () => "Residential + Villas. Now press Commercial — this Villas selection is remembered, not carried across.",
+  "fam-res-to-com": () => "Switched to Commercial with Shop + Office. The Villas selection still exists, parked in the Residential family. Same city, areas, breadcrumb, camera and Buy/Rent as the Residential frame.",
+  "fam-com-to-res": () => "Switched back: Villas is restored exactly as it was, and Shop + Office are parked in Commercial. Neither family ever reinterprets the other's subtypes.",
+
+  // ---- Commercial area & budget ----------------------------------------------
+  "ca-all": () => "All Commercial with both attribute filters: AREA (SQ FT) because the selection spans subtypes, plus the Buy budget on the Commercial ladder. Illustrative thresholds, not market data.",
+  "ca-shop": () => "One subtype selected, so the area label names what it measures: BUILT-UP AREA (SQ FT). The number in the field is unchanged — only the label follows the subtype.",
+  "ca-office": () => "Office keeps BUILT-UP AREA. Same field, same value, subtype-appropriate label.",
+  "ca-building": () => "Commercial Building keeps BUILT-UP AREA at a larger threshold.",
+  "ca-warehouse": () => "Warehouse / Godown reads WAREHOUSE AREA, on Rent / Lease with monthly budget bands.",
+  "ca-land": () => "Commercial Land reads PLOT SIZE. This frame uses Hebbal · KR Puram · Budigere Cross because commercial land really does sit on the city edge — showing an empty central result set would prove nothing. Note the imagery: a cleared development plot, never green farmland, which belongs to Agricultural.",
+  "ca-multi": () => "Three subtypes selected, so the label falls back to the generic AREA (SQ FT): one number cannot mean built-up and plot size at once.",
+  "ca-lease": () => "Rent / Lease: the budget switches to explicit monthly bands (≤ ₹50K / month …). Purchase bands are never reused here. Cards still show each listing's own For Rent or For Lease.",
+  "ca-anon": () => "Anonymous Commercial: price band or sign-in gate, coarsened location, no phone or email. Signing in reveals the broker's figures — it does not verify them.",
+  "ca-zero": () => "Zero results, Commercial recovery order: drop the subtype, widen the budget, widen the area, create an alert. Leaving Commercial is offered last and separately. No nearby areas, no invented counts.",
+  "ca-one": () => "Singular copy: 1 commercial property for sale, not 1 commercial properties. Watch the count line and the card action.",
+  "ca-mobile": () => "Commercial filters at 390 × 844: family selector, subtype row, then area and budget — Type and Commercial type stay open, Area and Budget sit behind More filters with a count. Every group label sits directly above its own chips, chips wrap, 44px tap targets, nothing covers the search or List/Map.",
+
+  // ---- contextual attribute filters ------------------------------------------
+  "attr-dwelling": () => "A dwelling offers Beds, Carpet area and Budget. Area is available to every Residential subtype — it is the unit that changes, not its presence.",
+  "attr-plot": () => "Plots swap Beds for Plot size in the same place, and keep Budget. A plot has no bedrooms, so none are offered, claimed on a card, or shown in the detail. The 2 BHK and carpet-area selections are parked, not applied.",
+  "attr-plot-to-dwelling": () => "Back on a dwelling: Beds returns at 2+ and Carpet area at 1,000+ sq ft, exactly as they were. Plot size is parked at 1,200+ sq ft. Carpet area and plot size are separate state and never stand in for each other.",  "attr-com-buy": () => "Commercial Buy budget — sale-price thresholds on the Commercial ladder. Illustrative values, not derived from verified listings. The Residential budget is untouched underneath.",
+  "attr-com-rent": () => "Same control on Rent: monthly-rent thresholds, and the label reads Monthly rent with Any rent as the default.",
+  "attr-com-sub-budget": () => "Budget is independent of subtype: add or remove Commercial subtype chips and it stays put. Reset commercial filters is the one action that clears both.",
+  "attr-res-mobile": () => "Residential filters at 390 × 844: Type and Residential type stay open, the refinements sit behind More filters with a count. Open it — Bedrooms, Carpet area and Budget each keep their own label directly above their own chips.",
+  "attr-plot-mobile": () => "Plot filters at 390 × 844 — Plot size and Budget as their own stacked groups, tap-only, with no bedrooms and no carpet area anywhere.",
+
+  // ---- Preserved — non-regression -------------------------------------------
+  "pre-default": () => "Baseline, Residential family: the Type row offers Residential | Commercial, and Residential type below it holds the original subtypes. Every count is the pre-Commercial count.",
+  "pre-hierarchy": () => "Canonical hierarchy, unchanged: City → Direction → Local destination → Area, with the original breadcrumb and Back.",
+  "pre-residential": () => "Existing residential filtering — Apartments, 2+ BHK. Beds and budget still apply, and Commercial stock is invisible to these counts.",
+  "pre-schools": () => "The Schools journey, untouched. Agricultural and Schools stay separate journeys — neither is a property family.",
+  "pre-agri": () => "The Agricultural journey, untouched — its own parcel model, its own counts. It is a journey, never a third property type.",
+  "pre-listmap": () => "List / Map switching at 390 × 844, exactly as before. Switch to List and back.",
+  "pre-marker": () => "Existing price pins, clusters and marker selection. Click a pin to open the original listing detail.",
+  "pre-cleared": (st) => st.filters.family === "Commercial" ? "Now press Residential in the Type row." : "Back in the Residential family: same three areas, same camera, same breadcrumb, residential counts restored. This is the baseline experience."
 };
 
 function Experience() {
@@ -179,7 +357,12 @@ function Experience() {
     hover: (k) => setHover(k),
     setCity: (c) => commit({ city: c, journey: "areas", nodeKey: "blr", scope: null, committed: [], sch: schBase(), ag: agBase(), note: null }),
     setFilters: (patch) => set({ filters: { ...st.filters, ...patch }, shown: 8, phase: "idle" }),
-    resetFilters: () => set({ filters: { ...EX.DEFAULT_FILTERS, purpose: st.filters.purpose }, shown: 8, phase: "idle" }),
+    // Switching family swaps which subtype row is offered and which catalogue is
+    // searched. It touches nothing else — not the journey, city, search, hierarchy,
+    // breadcrumb, selected areas, scope mode, camera, List/Map or Buy/Rent — and it
+    // leaves BOTH families' subtype selections in place, so each is restored on return.
+    setFamily: (fam) => set({ filters: { ...st.filters, family: fam }, shown: 8, phase: "idle" }),
+    resetFilters: () => set({ filters: { ...EX.DEFAULT_FILTERS, purpose: st.filters.purpose, family: st.filters.family }, shown: 8, phase: "idle" }),
 
     // ---- journey switching: each journey keeps its own state ----------------
     setJourney: (j) => {
@@ -401,6 +584,7 @@ function Experience() {
     showMore: () => set({ shown: st.shown + 8 }),
     toggleSave: (id) => set({ saved: st.saved.indexOf(id) !== -1 ? st.saved.filter((x) => x !== id) : st.saved.concat(id) }),
     setPresentation: (p) => set({ presentation: p }),
+    toggleSignedIn: () => set({ signedIn: !st.signedIn }),
     openAlerts: () => set({ view: "alerts" })
   };
 
@@ -421,48 +605,181 @@ function Experience() {
     <div style={{ minHeight: "100vh", background: "var(--canvas-200)", display: "flex", flexDirection: "column" }}>
       <ExpReviewerBar st={st} setSt={setSt} hint={hint} onScenario={(id) => { snapRef.current = []; setSt(scenarioState(id)); }} />
       <div style={{ flex: 1, display: "grid", placeItems: "start center", padding: isMobile ? "24px 16px 40px" : "18px 16px 32px" }}>
-        <ExpShell st={st} view={view} act={act} isMobile={isMobile} />
+        <ExpErrorBoundary>
+          <ExpShell st={st} view={view} act={act} isMobile={isMobile} />
+        </ExpErrorBoundary>
       </div>
+    </div>
+  );
+}
+
+// ---- BEFORE / AFTER comparison (review chrome, not product UI) --------------
+// The two scenarios below share ONE scope: the same city, the same three committed
+// areas, the same camera and the same breadcrumb. Switching between them therefore
+// shows the additive delta and nothing else.
+const COMPARE_ROWS = [
+  ["Canonical hierarchy", "City → Direction → Local destination → Area", "Identical — family is a filter, not a level"],
+  ["Breadcrumb and Back", "Original breadcrumb, original history", "Identical"],
+  ["Search input", "Interactive, opens area suggestions", "Identical — same component, same behaviour"],
+  ["Buy / Rent", "Buy shows sale stock, Rent shows rental stock", "Identical — Lease listings surface under Rent"],
+  ["Top-level TYPE row", "Residential subtypes sat here", "Holds the FAMILY only: Residential | Commercial"],
+  ["Subtype row", "Residential type — All residential, Apartments, Villas, Plots", "Commercial type — All commercial + the five subtypes"],
+  ["Subtype memory", "One selection", "One per family, retained independently"],
+  ["Attribute row", "Beds + Carpet area + Budget · Plot size + Budget on Plots", "Budget only — bedrooms never apply"],
+  ["Budget state", "Residential ladder (≤ ₹50 L … ₹1.2 Cr)", "Own Commercial ladder, own field, own memory"],
+  ["Result scope", "Selected areas, chips removable", "Identical — subtype chips join the same row"],
+  ["Result cards", "Existing listing card", "Same card, three content slots swapped"],
+  ["Map markers", "Price pin, cluster disc, selection", "Same pin carrying the subtype label"],
+  ["Clustering and camera", "Proximity clusters, fly-to-bounds", "Identical — untouched"],
+  ["List / Map switching", "Available at 390 × 844", "Identical"],
+  ["Schools / Agricultural", "Separate Discover journeys", "Identical — neither is a property family"],
+  ["Existing counts", "807 listings city-wide", "807 — Commercial stock is invisible to the Residential family"]
+];
+function ExpCompare({ st, setSt, onScenario }) {
+  // `open` lives in shared state, not local: ExpShell's fit must re-run when this
+  // expands, and a component-local toggle would not re-render it.
+  const open = !!st.compareOpen;
+  const setOpen = (v) => setSt((s) => ({ ...s, compareOpen: v }));
+  const before = st.scenario === "pre-cleared", after = st.scenario === "com-broad";
+  return (
+    <div style={{ background: "var(--navy-800)", borderTop: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.85)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "6px 16px", flexWrap: "wrap" }}>
+        <span style={{ fontSize: "9.5px", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "rgba(255,255,255,0.45)" }}>Before / after</span>
+        <button onClick={() => onScenario("pre-cleared")} style={{ padding: "4px 11px", borderRadius: "var(--radius-full)", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "11.5px", fontWeight: 700, border: "1px solid " + (before ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.22)"), background: before ? "#fff" : "transparent", color: before ? "var(--navy-900)" : "rgba(255,255,255,0.85)" }}>Residential family</button>
+        <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)" }}>↔</span>
+        <button onClick={() => onScenario("com-broad")} style={{ padding: "4px 11px", borderRadius: "var(--radius-full)", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "11.5px", fontWeight: 700, border: "1px solid " + (after ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.22)"), background: after ? "#fff" : "transparent", color: after ? "var(--navy-900)" : "rgba(255,255,255,0.85)" }}>Commercial family</button>
+        <span style={{ fontSize: "11.5px", color: "rgba(255,255,255,0.62)", minWidth: "200px", flex: 1 }}>Same city, same three areas, same camera, same breadcrumb, same Buy/Rent — only the property family, its subtype row and the result membership change.</span>
+        <button onClick={() => setOpen(!open)} style={{ padding: "4px 10px", borderRadius: "var(--radius-full)", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "11.5px", fontWeight: 600, border: "1px solid rgba(255,255,255,0.22)", background: "transparent", color: "rgba(255,255,255,0.85)", whiteSpace: "nowrap" }}>{open ? "Hide the element-by-element check" : "Element-by-element check"}</button>
+      </div>
+      {open && (
+        <div data-review-expand="true" style={{ padding: "0 16px 12px" }}>
+          {/* Bounded and scrollable: this table is sticky review chrome, and an
+              unbounded one steals the whole viewport from the shell it frames. */}
+          <div style={{ maxHeight: "38vh", overflowY: "auto", borderRadius: "var(--radius-md)", border: "1px solid rgba(255,255,255,0.12)" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(150px,1fr) minmax(180px,1.3fr) minmax(180px,1.4fr)", gap: "1px", background: "rgba(255,255,255,0.12)" }}>
+            {["Element", "Residential family", "Commercial family"].map((c) => (
+              <div key={c} style={{ background: "var(--navy-900)", padding: "7px 11px", fontSize: "9.5px", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "rgba(255,255,255,0.55)" }}>{c}</div>
+            ))}
+            {COMPARE_ROWS.map((r) => r.map((cell, i) => {
+              const added = i === 2 && /Holds the FAMILY|Commercial type|per family|bedrooms never|own field|Same card|Same pin|slots swapped|subtype label/.test(cell);
+              return (
+                <div key={r[0] + i} style={{ background: "var(--navy-800)", padding: "7px 11px", fontSize: "11px", lineHeight: 1.4, color: i === 0 ? "rgba(255,255,255,0.92)" : added ? "var(--gold-100)" : "rgba(255,255,255,0.66)", fontWeight: i === 0 ? 700 : 400 }}>{cell}</div>
+              );
+            }))}
+          </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ---- reviewer strip (not product UI) ---------------------------------------
 function ExpReviewerBar({ st, setSt, onScenario, hint }) {
+  // The scenario set has grown to five groups; showing every pill at once made the
+  // chrome taller than the shell it frames. One group at a time keeps it to two rows.
+  const groupOf = (id) => { const s = SCENARIOS.filter((x) => x.id === id)[0]; return s ? (s.group || null) : null; };
+  const [grp, setGrp] = React.useState(() => groupOf(st.scenario));
+  React.useEffect(() => { setGrp(groupOf(st.scenario)); }, [st.scenario]);
+  const pill = (on) => ({ padding: "4px 10px", borderRadius: "var(--radius-full)", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "11.5px", fontWeight: 600, border: "1px solid " + (on ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.2)"), background: on ? "#fff" : "transparent", color: on ? "var(--navy-900)" : "rgba(255,255,255,0.8)", whiteSpace: "nowrap" });
   return (
-    <div style={{ position: "sticky", top: 0, zIndex: 900, background: "var(--navy-900)", color: "rgba(255,255,255,0.82)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "7px 16px", flexWrap: "wrap" }}>
+    <div style={{ position: "sticky", top: 0, zIndex: 900, background: "var(--navy-900)", color: "rgba(255,255,255,0.82)" }} data-review-chrome="true">
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 16px", flexWrap: "wrap" }}>
         <span style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "var(--tracking-caps)", textTransform: "uppercase", color: "rgba(255,255,255,0.5)" }}>Review</span>
-        <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-          {SCENARIOS.map((j) => (
-            <button key={j.id} onClick={() => onScenario(j.id)} style={{ padding: "4px 10px", borderRadius: "var(--radius-full)", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "11.5px", fontWeight: 600, border: "1px solid " + (st.scenario === j.id ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.2)"), background: st.scenario === j.id ? "#fff" : "transparent", color: st.scenario === j.id ? "var(--navy-900)" : "rgba(255,255,255,0.8)" }}>{j.label}</button>
-          ))}
-        </div>
-        <div style={{ display: "flex", gap: "4px", marginLeft: "6px" }}>
+        {SCENARIO_GROUPS.map((g) => {
+          const on = (g.key || null) === grp;
+          return (
+            <button key={g.label} onClick={() => setGrp(g.key || null)}
+              style={{ padding: "4px 10px", borderRadius: "var(--radius-full)", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "11px", fontWeight: 700, border: "1px solid " + (on ? "rgba(255,255,255,0.55)" : "transparent"), background: on ? "rgba(255,255,255,0.14)" : "transparent", color: on ? "#fff" : "rgba(255,255,255,0.55)", whiteSpace: "nowrap" }}>{g.label}</button>
+          );
+        })}
+        <span style={{ marginLeft: "auto", display: "flex", gap: "4px" }}>
           {["desktop", "mobile"].map((d) => (
             <button key={d} onClick={() => setSt((s) => ({ ...s, device: d, presentation: "list" }))} style={{ padding: "4px 10px", borderRadius: "var(--radius-full)", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "11.5px", fontWeight: 600, border: "1px solid rgba(255,255,255,0.2)", background: st.device === d ? "rgba(255,255,255,0.16)" : "transparent", color: "rgba(255,255,255,0.85)" }}>{d === "desktop" ? "1366 × 768" : "390 × 844"}</button>
           ))}
-        </div>
-        <span style={{ flex: 1, minWidth: "220px", fontSize: "12px", color: "rgba(255,255,255,0.72)" }}>{hint}</span>
-        <a href="transitions.html" style={{ fontSize: "11.5px", fontWeight: 600, color: "var(--copper-400)", whiteSpace: "nowrap" }}>Storyboard ↗</a>
+          {/* Commercial listings are price-gated for anonymous buyers, so the review needs
+              both sides. This is review chrome, never product UI — the product decides
+              anonymity from the session, not from a control in the filter toolbar. */}
+          {[["Anon", false], ["Signed in", true]].map(([lbl, v]) => (
+            <button key={lbl} onClick={() => setSt((s) => ({ ...s, signedIn: v }))} style={{ padding: "4px 10px", borderRadius: "var(--radius-full)", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "11.5px", fontWeight: 600, border: "1px solid rgba(255,255,255,0.2)", background: !!st.signedIn === v ? "rgba(255,255,255,0.16)" : "transparent", color: "rgba(255,255,255,0.85)", whiteSpace: "nowrap" }}>{lbl}</button>
+          ))}
+          <a href="transitions.html" style={{ alignSelf: "center", fontSize: "11.5px", fontWeight: 600, color: "var(--copper-400)", whiteSpace: "nowrap", marginLeft: "4px" }}>Storyboard ↗</a>
+        </span>
       </div>
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "0 16px 7px", flexWrap: "wrap" }}>
+        {SCENARIOS.filter((j) => (j.group || null) === grp).map((j) => (
+          <button key={j.id} onClick={() => onScenario(j.id)} style={pill(st.scenario === j.id)}>{j.label}</button>
+        ))}
+        <span style={{ flex: 1, minWidth: "200px", fontSize: "11.5px", color: "rgba(255,255,255,0.72)", paddingLeft: "6px" }}>{hint}</span>
+      </div>
+      <ExpCompare st={st} setSt={setSt} onScenario={onScenario} />
     </div>
   );
+}
+
+// A map hiccup must never cost the whole artifact. Without a boundary, Leaflet
+// throwing from inside a commit effect makes React discard the entire tree, and the
+// reviewer gets a blank page with no clue what happened.
+class ExpErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { err: null, attempt: 0 }; }
+  static getDerivedStateFromError(err) { return { err: err }; }
+  componentDidCatch(err, info) { console.error("Discover shell error:", err, info && info.componentStack); }
+  render() {
+    if (!this.state.err) return <React.Fragment key={this.state.attempt}>{this.props.children}</React.Fragment>;
+    return (
+      <div style={{ maxWidth: "560px", margin: "40px auto", padding: "20px 22px", background: "var(--surface-card)", border: "1px solid var(--brick-600)", borderRadius: "var(--radius-lg)", fontFamily: "var(--font-sans)" }}>
+        <h2 style={{ margin: "0 0 8px", fontFamily: "var(--font-serif)", fontSize: "20px", fontWeight: 600, color: "var(--text-strong)" }}>The Discover shell stopped rendering</h2>
+        <p style={{ margin: "0 0 14px", fontSize: "13px", lineHeight: 1.5, color: "var(--text-body)" }}>This is a failure in the review harness, not a designed state. Try again re-mounts the shell in place; most transient errors clear on the retry.</p>
+        <pre style={{ margin: "0 0 14px", padding: "10px 12px", background: "var(--surface-subtle)", borderRadius: "var(--radius-md)", fontFamily: "var(--font-mono)", fontSize: "11.5px", lineHeight: 1.45, color: "var(--brick-600)", whiteSpace: "pre-wrap" }}>{String(this.state.err && this.state.err.message || this.state.err)}</pre>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          {/* Clearing err and bumping the key remounts the subtree, so a transient
+              error does not latch the reviewer on this card for the whole session. */}
+          <button onClick={() => this.setState((s) => ({ err: null, attempt: s.attempt + 1 }))} style={{ padding: "9px 15px", borderRadius: "var(--radius-md)", border: "none", cursor: "pointer", background: "var(--accent)", color: "#fff", fontFamily: "var(--font-sans)", fontSize: "13px", fontWeight: 700 }}>Try again</button>
+          <button onClick={() => window.location.reload()} style={{ padding: "9px 15px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-strong)", cursor: "pointer", background: "var(--paper)", color: "var(--text-strong)", fontFamily: "var(--font-sans)", fontSize: "13px", fontWeight: 600 }}>Reload the artifact</button>
+        </div>
+      </div>
+    );
+  }
 }
 
 // ---- shell: fixed target sizes, scaled to fit ------------------------------
 function ExpShell({ st, view, act, isMobile }) {
   const W = isMobile ? 390 : 1366, H = isMobile ? 844 : 768;
   const [scale, setScale] = React.useState(1);
+  // The review chrome is MEASURED, never hardcoded — a constant here went stale twice.
+  // But measuring is not enough on its own: the chrome's height also changes when the
+  // hint text re-wraps on a scenario switch, and a ResizeObserver did not fire for
+  // that. So the fit runs after EVERY commit via a dep-less layout effect (two
+  // getBoundingClientRect reads; setScale no-ops when the value is unchanged), which
+  // cannot go stale, with the observer and resize listener kept for changes that
+  // originate outside React.
+  const fit = React.useCallback(() => {
+    const chrome = document.querySelector("[data-review-chrome]");
+    let chromeH = chrome ? chrome.getBoundingClientRect().height : 0;
+    // The element-by-element table is an OPT-IN reference panel. Fitting against it
+    // would crush the shell to an unreadable scale on a short viewport, so it is
+    // excluded: the shell keeps a sensible size and the page scrolls by the table's
+    // height while it is open, which is the normal answer for expanded chrome.
+    const expand = document.querySelector("[data-review-expand]");
+    if (expand) chromeH -= expand.getBoundingClientRect().height;
+    const availW = window.innerWidth - 40;
+    // the shell sits in a padded container: 18/32 desktop, 24/40 mobile. The extra 4px
+    // is slack: the chrome's height is fractional and can settle a pixel late (hint
+    // reflow, font swap), and without slack that remainder becomes page overflow.
+    const availH = window.innerHeight - chromeH - (isMobile ? 64 : 50) - 4;
+    const next = Math.max(0.2, Math.min(1, availW / W, availH / H));
+    setScale((s) => (Math.abs(s - next) < 0.0005 ? s : next));
+  }, [W, H, isMobile]);
+  React.useLayoutEffect(fit);
   React.useEffect(() => {
-    const fit = () => {
-      const availW = window.innerWidth - 40, availH = window.innerHeight - 130;
-      setScale(Math.min(1, availW / W, availH / H));
-    };
-    fit();
+    // one deferred pass for anything that settles after the commit
+    const raf = requestAnimationFrame(fit);
     window.addEventListener("resize", fit);
-    return () => window.removeEventListener("resize", fit);
-  }, [W, H]);
+    let ro = null;
+    const chrome = document.querySelector("[data-review-chrome]");
+    if (chrome && typeof ResizeObserver !== "undefined") { ro = new ResizeObserver(fit); ro.observe(chrome); }
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", fit); ro && ro.disconnect(); };
+  }, [fit]);
   return (
     <div style={{ width: W * scale + "px", height: H * scale + "px" }}>
       <div style={{ width: W + "px", height: H + "px", transform: "scale(" + scale + ")", transformOrigin: "top left", borderRadius: isMobile ? "26px" : "var(--radius-lg)", overflow: "hidden", background: "var(--paper)", border: "1px solid var(--border-strong)", boxShadow: "var(--shadow-xl)", display: "flex", flexDirection: "column", position: "relative" }}>
@@ -570,7 +887,7 @@ function ExpSheet({ st, view, act }) {
               <span style={{ fontFamily: "var(--font-mono)", fontSize: "17px", fontWeight: 700, color: "var(--text-strong)" }}>{EX.priceText(l, st.filters)}</span>
               <button onClick={act.closePeek} aria-label="Close" style={{ flex: "none", width: "26px", height: "26px", borderRadius: "var(--radius-full)", border: "1px solid var(--border)", background: "var(--surface-subtle)", color: "var(--text-muted)", cursor: "pointer", lineHeight: 1, fontSize: "14px" }}>×</button>
             </div>
-            <div style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--text-strong)", marginTop: "3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.propType} · {l.beds} BHK</div>
+            <div style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--text-strong)", marginTop: "3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{EX.isCom(l) ? EX.comLabel(l.comSub) + " · " + l.deal : l.propType === "Plot" ? "Plot · " + l.sqft.toLocaleString("en-IN") + " sq.ft" : l.propType + " · " + l.beds + " BHK"}</div>
             <div style={{ fontSize: "11.5px", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.locality}, {l.area}</div>
           </div>
         </div>
@@ -620,7 +937,7 @@ function buildView(st, results, act) {
 
   const v = {
     journey: "areas", level, crumb, scopeKind, committed: st.committed, focusChip: st.focusChip, hover: st.hover, filters: st.filters,
-    noun: st.filters.purpose === "Rent" ? "rentals" : "listings",
+    noun: EX.nounsOf(st.filters).plural, nouns: EX.nounsOf(st.filters),
     clusterFocus: st.clusterFocus, presentation: st.presentation, results, notes: [],
     destinations: [], areaList: [], mapClusters: [], areaMarkers: [], pins: [], discs: [],
     poly: st.polyDraft || (scopeKind === "POLYGON" ? st.scope.poly : null), polyDraft: !!st.polyDraft,
@@ -646,10 +963,10 @@ function buildView(st, results, act) {
     v.maxZoom = level === "city" ? 11 : level === "direction" ? 12 : 14;
     const total = kids.reduce((s, k) => s + k.n, 0);
     v.heading = level === "city"
-      ? { eyebrow: "Areas · Bangalore", title: "Where in Bangalore?", stat: { v: total, l: v.noun }, sub: "Five directions, positioned as they really lie. Each card names the areas with matching homes inside it." }
+      ? { eyebrow: "Areas · Bangalore", title: "Where in Bangalore?", stat: { v: total, l: v.nouns.count(total) }, sub: "Five directions, positioned as they really lie. Each card names the areas with matching listings inside it." }
       : level === "direction"
-        ? { eyebrow: "Direction · " + crumb[crumb.length - 1].label, title: crumb[crumb.length - 1].label, stat: { v: total, l: v.noun }, sub: areaKids ? "This direction goes straight to its areas — no extra layer is invented." : "Local destinations, named by their prominent areas." }
-        : { eyebrow: "Local destination", title: crumb[crumb.length - 1].label, stat: { v: total, l: v.noun }, sub: "Pick an area to see its homes. The dashed cluster on the map only zooms." };
+        ? { eyebrow: "Direction · " + crumb[crumb.length - 1].label, title: crumb[crumb.length - 1].label, stat: { v: total, l: v.nouns.count(total) }, sub: areaKids ? "This direction goes straight to its areas — no extra layer is invented." : "Local destinations, named by their prominent areas." }
+        : { eyebrow: "Local destination", title: crumb[crumb.length - 1].label, stat: { v: total, l: v.nouns.count(total) }, sub: "Pick an area to see its listings. The dashed cluster on the map only zooms." };
     if (areaKids) {
       v.notes.push(focusMembers
         ? { tone: "info", text: focusMembers.length + " areas in this map view — the breadcrumb did not change.", action: "Show all " + kids.length + " areas", onAction: act.showAllAreas }
@@ -672,17 +989,17 @@ function buildView(st, results, act) {
     v.returnAreaKeys = st.prevScope && st.prevScope.kind === "AREA_SET" ? st.prevScope.areaKeys.slice() : st.committed.slice();
     const rent = st.filters.purpose === "Rent";
     v.heading = single
-      ? { eyebrow: "Areas · " + areaObjs[0].name, title: (rent ? "Homes to rent in " : "Properties in ") + areaObjs[0].name, stat: { v: results.length, l: rent ? (results.length === 1 ? "home to rent" : "homes to rent") : results.length === 1 ? "home for sale" : "homes for sale" } }
+      ? { eyebrow: "Areas · " + areaObjs[0].name, title: v.nouns.inPlace(areaObjs[0].name), stat: { v: results.length, l: v.nouns.deal(results.length) } }
       : scopeKind === "CITY"
-        ? { eyebrow: "Browse all listings", title: rent ? "All homes to rent in Bangalore" : "All homes in Bangalore", stat: { v: results.length, l: v.noun }, sub: "Every listing in the city on one filterable list — the funnel skipped, filters and alerts unchanged." }
+        ? { eyebrow: "Browse all " + v.nouns.plural, title: v.nouns.allCity, stat: { v: results.length, l: v.nouns.count(results.length) }, sub: "Every listing in the city on one filterable list — the funnel skipped, filters and alerts unchanged." }
         : scopeKind === "HIERARCHY"
-          ? { eyebrow: "Result scope — " + (st.scope.level === "direction" ? "Direction" : "Local destination"), title: (rent ? "Homes to rent in " : "Properties in ") + crumb[crumb.length - 1].label, stat: { v: results.length, l: rent ? (results.length === 1 ? "home to rent" : "homes to rent") : results.length === 1 ? "home for sale" : "homes for sale" }, sub: "Every area in " + crumb[crumb.length - 1].label + " on one filterable list." }
+          ? { eyebrow: "Result scope — " + (st.scope.level === "direction" ? "Direction" : "Local destination"), title: v.nouns.inPlace(crumb[crumb.length - 1].label), stat: { v: results.length, l: v.nouns.deal(results.length) }, sub: "Every area in " + crumb[crumb.length - 1].label + " on one filterable list." }
           : {
-            eyebrow: scopeKind === "AREA_SET" ? "Selected areas · " + st.committed.length : (rent ? "Homes to rent · " : "Homes for sale · ") + (scopeKind === "POLYGON" ? "Drawn area" : "Visible map area"),
+            eyebrow: scopeKind === "AREA_SET" ? "Selected areas · " + st.committed.length : v.nouns.dealScope + (scopeKind === "POLYGON" ? "Drawn area" : "Visible map area"),
             title: scopeKind === "AREA_SET" ? areaObjs.map((a) => a.name).join(", ") : scopeKind === "POLYGON" ? "Inside your drawn boundary" : "On screen right now",
-            stat: { v: results.length, l: v.noun }
+            stat: { v: results.length, l: v.nouns.count(results.length) }
           };
-    if (st.query) v.notes.push({ tone: "info", text: "Filtered to “" + st.query + "” within " + (single ? areaObjs[0].name : v.scopeLabel) + " — " + results.length + " of " + (single ? EX.countIn(st.committed[0], st.filters) : "the") + " homes.", action: "Clear search", onAction: () => act.setQuery("") });
+    if (st.query) v.notes.push({ tone: "info", text: "Filtered to “" + st.query + "” within " + (single ? areaObjs[0].name : v.scopeLabel) + " — " + results.length + " of " + (single ? EX.countIn(st.committed[0], st.filters) : "the") + " " + v.nouns.unitPlural + ".", action: "Clear search", onAction: () => act.setQuery("") });
     if (scopeKind === "HIERARCHY") v.schoolsBlock = { n: areaObjs.reduce((s, a) => s + a.schools, 0), names: crumb[crumb.length - 1].label };
     else if (scopeKind === "AREA_SET" && st.committed.length > 1) v.schoolsBlock = { n: areaObjs.reduce((s, a) => s + a.schools, 0), names: areaObjs.map((a) => a.name).join(", ") };
     if (st.focusChip) v.notes.push({ tone: "info", text: "Map focused on " + focusArea.name + ". All " + results.length + " listings from " + st.committed.length + " areas are still in this list." });
@@ -748,3 +1065,14 @@ function buildView(st, results, act) {
 }
 
 Object.assign(window, { Experience, ExpBuildView: buildView });
+
+// This file is deliberately side-effect-free: the design-system compiler also bundles
+// it into _ds_bundle.js, which runs BEFORE the data modules load, so any mount here
+// would execute once with its dependencies missing.
+//
+// Instead it publishes a readiness handle that ONLY a copy with real dependencies can
+// set. The bundled copy runs while window.EXP is undefined and so never sets it;
+// experience.html waits for this handle rather than for `window.Experience`, which
+// the bundle also defines. Because this is the last .jsx the page loads, every other
+// real module has already executed by the time it resolves.
+if (window.EXP && window.EXP.DEFAULT_FILTERS && window.EXP.listings) window.ExperienceReady = Experience;

@@ -325,15 +325,28 @@ function SchoolCard({ school, radiusKm, onView, onHover }) {
 }
 
 // ---------- Residential listing card (optional distance chip in school journey) ----------
-function ListingCard({ listing, onHover, onOpen, saved, onToggleSave, distanceKm, priceText }) {
+function ListingCard({ listing, onHover, onOpen, saved, onToggleSave, distanceKm, priceText, signedIn }) {
   const [h, setH] = React.useState(false);
+  // Commercial listings use this same card: same shell, image, save control and
+  // action. Only three content slots change — the price line becomes the price
+  // treatment, the type badge becomes the subtype label, and the bed/bath/size
+  // row becomes at most two subtype facts.
+  const com = listing.kind === "commercial";
+  const comPrice = com && window.EXP.comPriceText(listing, signedIn);
+  // A plot has no bedrooms or bathrooms — it reports land area, never "0 BHK".
+  const isPlot = !com && listing.propType === "Plot";
   return (
     <div onMouseEnter={() => { setH(true); onHover && onHover(listing.id); }} onMouseLeave={() => { setH(false); onHover && onHover(null); }}
       data-design-component="listing-card"
       style={{ background: "var(--surface-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden", boxShadow: h ? "var(--shadow-lg)" : "var(--shadow-sm)", transform: h ? "translateY(-2px)" : "none", transition: "box-shadow var(--dur-normal) var(--ease-standard), transform var(--dur-normal) var(--ease-standard)", display: "flex", flexDirection: "column" }}>
       <div style={{ position: "relative", height: "168px", background: "var(--surface-muted)", overflow: "hidden" }}>
         <img src={listing.image} alt={listing.title} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", transform: h ? "scale(1.05)" : "scale(1)", transition: "transform var(--dur-slow) var(--ease-standard)" }} />
-        <div style={{ position: "absolute", top: "11px", left: "11px" }}><CTrust tier={listing.trustTier} size="sm" /></div>
+        <div style={{ position: "absolute", top: "11px", left: "11px" }}>{com
+          ? <span title={window.EXP.com ? window.EXP.com.tierNote(listing.trustTier) : ""} style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "3px 9px", borderRadius: "var(--radius-full)", background: "rgba(255,255,255,0.94)", backdropFilter: "blur(4px)", boxShadow: "var(--shadow-sm)", fontSize: "10.5px", fontWeight: 700, color: "var(--text-strong)", whiteSpace: "nowrap" }}>
+              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: listing.trustTier === "verified" ? "var(--evergreen-600)" : listing.trustTier === "trusted" ? "var(--ochre-600)" : "var(--grey-400)", flex: "none" }} />
+              {window.EXP.com ? window.EXP.com.tierText(listing.trustTier) : "Broker-submitted listing"}
+            </span>
+          : <CTrust tier={listing.trustTier} size="sm" />}</div>
         <button onClick={(e) => { e.stopPropagation(); onToggleSave && onToggleSave(listing.id); }} aria-label="Save" style={{ position: "absolute", top: "10px", right: "10px", width: "32px", height: "32px", borderRadius: "var(--radius-full)", border: "none", cursor: "pointer", background: "rgba(255,255,255,0.92)", backdropFilter: "blur(4px)", boxShadow: "var(--shadow-sm)", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <CIcon name="heart" size={16} color={saved ? "var(--accent)" : "var(--grey-500)"} style={{ fill: saved ? "var(--accent)" : "none" }} />
         </button>
@@ -345,16 +358,46 @@ function ListingCard({ listing, onHover, onOpen, saved, onToggleSave, distanceKm
       </div>
       <div style={{ padding: "15px", display: "flex", flexDirection: "column", flex: 1 }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "8px" }}>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: "19px", fontWeight: 600, color: "var(--text-strong)" }}>{priceText || inr(listing.price)}</span>
-          <CBadge tone={TYPE_TONE[listing.propType] || "neutral"} pill>{listing.propType}</CBadge>
+          {com ? (
+            signedIn || comPrice
+              ? <span style={{ display: "inline-flex", alignItems: "baseline", gap: "6px", flexWrap: "wrap", minWidth: 0 }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: signedIn ? "19px" : "17px", fontWeight: 600, color: "var(--text-strong)" }}>{comPrice}</span>
+                  {!signedIn && <span style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "var(--tracking-caps)", textTransform: "uppercase", color: "var(--text-muted)" }}>Price band</span>}
+                </span>
+              : <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "5px 10px", borderRadius: "var(--radius-md)", background: "var(--surface-subtle)", border: "1px solid var(--border)", fontSize: "12.5px", fontWeight: 600, color: "var(--text-body)", whiteSpace: "nowrap" }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--grey-500)" strokeWidth="2" strokeLinecap="round"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>Sign in to view price
+                </span>
+          ) : <span style={{ fontFamily: "var(--font-mono)", fontSize: "19px", fontWeight: 600, color: "var(--text-strong)" }}>{priceText || inr(listing.price)}</span>}
+          {com
+            ? <span style={{ flex: "none", display: "inline-flex", alignItems: "center", gap: "5px", padding: "3px 9px", borderRadius: "var(--radius-full)", background: "var(--gold-100)", color: "var(--text-strong)", fontSize: "11px", fontWeight: 700, whiteSpace: "nowrap" }}>
+                <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "var(--gold-600)", flex: "none" }} />{window.EXP.comLabel(listing.comSub)}
+              </span>
+            : <CBadge tone={TYPE_TONE[listing.propType] || "neutral"} pill>{listing.propType}</CBadge>}
         </div>
+        {com && <div style={{ marginTop: "6px", fontSize: "12px", fontWeight: 600, color: "var(--text-muted)" }}>{listing.deal}</div>}
         <h3 style={{ margin: "8px 0 4px", fontSize: "14.5px", fontWeight: 600, color: "var(--text-strong)", lineHeight: 1.3 }}>{listing.title}</h3>
-        <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12.5px", color: "var(--text-muted)" }}><CIcon name="map-pin" size={13} color="var(--grey-400)" />{listing.locality}, {listing.area}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12.5px", color: "var(--text-muted)" }}><CIcon name="map-pin" size={13} color="var(--grey-400)" />{com && !signedIn ? listing.coarse : listing.locality + ", " + listing.area}</div>
+        {com ? (
+          <div style={{ display: "flex", alignItems: "center", gap: "7px", fontSize: "12.5px", color: "var(--text-body)", margin: "12px 0 14px", flexWrap: "wrap" }}>
+            {listing.facts.map((ft, i) => (
+              <React.Fragment key={ft}>
+                {i > 0 && <span style={{ width: "3px", height: "3px", borderRadius: "50%", background: "var(--grey-400)" }} />}
+                <span style={{ fontFamily: i === 0 ? "var(--font-mono)" : "var(--font-sans)", fontWeight: i === 0 ? 600 : 500 }}>{ft}</span>
+              </React.Fragment>
+            ))}
+          </div>
+        ) : isPlot ? (
+          <div style={{ display: "flex", gap: "14px", fontSize: "12.5px", color: "var(--text-body)", margin: "12px 0 14px" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "5px" }}><CIcon name="maximize" size={15} color="var(--grey-400)" />{listing.sqft.toLocaleString("en-IN")} sq.ft plot</span>
+            <span style={{ display: "flex", alignItems: "center", gap: "5px" }}><CIcon name="map-pin" size={15} color="var(--grey-400)" />Land</span>
+          </div>
+        ) : (
         <div style={{ display: "flex", gap: "14px", fontSize: "12.5px", color: "var(--text-body)", margin: "12px 0 14px" }}>
           <span style={{ display: "flex", alignItems: "center", gap: "5px" }}><CIcon name="bed" size={15} color="var(--grey-400)" />{listing.beds} BHK</span>
           <span style={{ display: "flex", alignItems: "center", gap: "5px" }}><CIcon name="bath" size={15} color="var(--grey-400)" />{listing.baths}</span>
           <span style={{ display: "flex", alignItems: "center", gap: "5px" }}><CIcon name="maximize" size={15} color="var(--grey-400)" />{listing.sqft} sq.ft</span>
         </div>
+        )}
         <div style={{ marginTop: "auto" }}><CButton variant="outline" size="sm" fullWidth onClick={() => onOpen && onOpen(listing.id)}>View details</CButton></div>
       </div>
     </div>

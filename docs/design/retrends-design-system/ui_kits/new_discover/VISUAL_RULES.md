@@ -41,7 +41,7 @@ component uses a literal, the literal is quoted here.
 | `--copper-500` | `#B05C3A` | **accent** (Areas mode) |
 | `--copper-400` | `#C2734F` | |
 | `--copper-100` | `#F2E8E1` | accent tint |
-| `--gold-600` / `--gold-100` | `#8A6A22` / `#F4EEDD` | premium highlight (unused in Discover) |
+| `--gold-600` / `--gold-100` | `#8A6A22` / `#F4EEDD` | Commercial property-type identity |
 
 **Neutrals**
 
@@ -318,6 +318,223 @@ role — the thing that carries the action — swaps `copper → plum` and the Z
 `copper-100 → plum-tint`. View homes/schools swaps its entire solid-footer role the same way
 (`navy-800 → plum-600`), since that footer *is* the journey-specific action. No green is ever used
 here — green stays reserved for Agricultural.
+
+### One filter group per row
+
+The filter toolbar is a stack of labelled **groups**, desktop-only layout: a fixed 96px
+label column on the left, then the group's chips wrapping freely in the remaining width
+(`EPGroup`). A group heading therefore always owns the chips beside it, and no heading is
+ever pushed into another group's leftover horizontal space. Groups, in order:
+`TYPE` (family + `Ready to move`/`Ready to occupy` + `Broker identity verified`),
+`<FAMILY> TYPE`, then one group per attribute that applies — a hairline separates the
+two blocks. Units live on the chips (`600+ sq ft`), so headings stay short
+(`CARPET AREA`, `PLOT SIZE`, `BUILT-UP AREA`, `AREA`, `BUDGET`). Long headings
+(`HOME CARPET AREA`) wrap inside the label column without changing row height.
+On **mobile** (390px) the same groups are re-laid-out rather than compressed: the label
+sits **on top of** its own chips (it can never scroll away from them or read as
+belonging to the next group), chips **wrap** onto as many rows as they need at a
+**44px** tap height, and nothing scrolls sideways. Because six full-height groups plus
+results do not fit 390 × 844, the two decisions that change which inventory you are
+looking at — `TYPE` and `<FAMILY> TYPE` — stay open, and the refinements
+(`ONLY SHOW`, bedrooms/area, budget, reset) sit behind one **More filters**
+disclosure carrying a count of how many are set. Collapsed is the default even with
+refinements active: what is applied is already stated by the active-filter chips under
+the result heading, so nothing is hidden. The mobile filter block rides at the top of
+the scrolling results body — every group is reachable by the scroll a phone user
+already makes, while the search, breadcrumb and List/Map stay pinned above it.
+Contextual visibility is identical to desktop: plots show `PLOT SIZE` and never
+bedrooms or carpet area.
+
+### Commercial attribute filters, terminology and trust
+
+Commercial carries **both** an area filter and a budget filter, each as its own labelled
+filter group (`commercial-area-group`, `budget-group`). Both are independent of each other,
+of the subtype selection and of the geographic scope; `Clear commercial types` touches
+neither, and **`Reset commercial filters`** is the one action that drops subtypes, area,
+budget and the broker-check chip together.
+
+**Area** — one field (`comArea`), but the LABEL follows the selected subtype, because the
+same number means a different thing per subtype:
+
+| Selection | Label |
+|-----------|-------|
+| All Commercial · multiple subtypes · unknown subtype | `AREA (SQ FT)` |
+| Shop · Office · Commercial Building | `BUILT-UP AREA (SQ FT)` |
+| Warehouse / Godown | `WAREHOUSE AREA (SQ FT)` |
+| Commercial Land | `PLOT SIZE (SQ FT)` |
+
+Thresholds `Any size · 1,000+ · 2,500+ · 5,000+ sq ft` — illustrative.
+
+**Budget** — own field (`comMaxPrice`), own ladder, own per-family memory, and it never
+reuses purchase bands in a rental state:
+
+- Buy: `Any price · ≤ ₹1 Cr · ≤ ₹2.5 Cr · ≤ ₹5 Cr`
+- Rent / Lease: `Any rent · ≤ ₹50K / month · ≤ ₹1L / month · ≤ ₹2L / month` — the unit is
+  spelled out, and the label reads `Monthly rent`.
+
+**Rent / Lease.** Commercial stock carries `For Sale`, `For Rent` and `For Lease`. The
+existing two-value intent model is unchanged; in Commercial the Rent option is *labelled*
+`Rent / Lease`. **IMPLEMENTATION NOTE:** that label is presentation only — Lease must map
+to the transaction value the record already carries and must never be inferred from other
+fields. Cards, popovers and details always show the listing's own precise purpose.
+
+**Card hierarchy** (at most two primary facts): price treatment → subtype → deal type →
+title → coarsened location → area + one subtype fact → save and View details. Titles read
+`Shop in Indiranagar`, `Commercial land in Hebbal` — the area appears in the fact row, so
+the title never repeats it.
+
+**Imagery** is per subtype: retail frontage, office floor, whole building, loading/storage,
+and for Commercial Land a **cleared, kerbed development plot — never green farmland**,
+which would read as Agricultural. No image implies zoning, ownership or approval status.
+
+**Trust language states only what is actually checked.** The tiers render as
+`Broker identity verified` / `Listing details reviewed` / `Broker-submitted listing`, each
+with a plain-language note, and the detail carries a `trust-scope` block spelling out that
+ownership, approvals, zoning and legal status are **not** checked. The filter chip reads
+`Broker identity verified`, not “Verified only”. Signing in reveals the figures the broker
+supplied — it never makes a listing more verified.
+
+**Terminology.** Inside Commercial: *commercial property / properties*, *commercial
+listing / listings*, *Ready to occupy*. Never *home*, *homes for sale/rent* or *Ready to
+move*. Counts are singular-aware via `nounsOf().count(n)` — `1 commercial listing`,
+`2 commercial listings`. Subtype labels keep their exact spacing: `Commercial Land`,
+`Commercial Building`.
+
+**Zero results keeps the buyer inside Commercial**, in this order: drop the subtype → show
+all Commercial types → widen the budget → widen the area → `Show all Commercial in these
+areas` (always available when anything is narrowed) → create an alert. Leaving Commercial
+appears last, under its own `Or leave Commercial` heading. Nearby-area suggestions are
+**not** offered in Commercial (they change the geography), nothing widens itself, and every
+count shown is a real count of real fixtures. `Simulate a backend failure` has been removed
+from the product frame.
+
+### Context-sensitive attribute filters
+
+Beneath family and subtype sits one attribute row, holding only refinements that apply to what is
+selected. Each control keeps its **own field**, so no selection is ever reinterpreted as another:
+
+| Selected state               | Attribute row                              | Fields |
+|------------------------------|--------------------------------------------|--------|
+| Residential — Apartment / Villa / House | `BEDS` + `CARPET AREA (SQ FT)` + `BUDGET` | `beds`, `carpetArea`, `maxPrice` |
+| Residential — Plots           | `PLOT SIZE (SQ FT)` + `BUDGET` — **never bedrooms** | `plotArea`, `maxPrice` |
+| Residential — All residential | `HOME BEDROOMS` + `HOME CARPET AREA` + `PLOT SIZE` + `BUDGET` | all, each scoped by label |
+| Commercial — any subtype      | `BUDGET` — **never bedrooms**               | `comMaxPrice` |
+
+- **One source for scoping.** `EXP.showsHomes(f)` and `EXP.showsPlots(f)` decide which controls apply,
+  and the filter row, the selected-filter chips, `filterLabels` and the zero-result widenings all read
+  those two predicates. `passes` keys off the per-listing kind, so any site that re-derived the test
+  locally could report a narrower search than the one applied — which is exactly how plot size once
+  became applied-but-unreported in the mixed state. Note plots are sale-only stock, so a Rent search
+  never offers or reports plot size.
+- **Area is available to every Residential subtype** — what changes is the unit, not
+  its presence: `CARPET AREA (SQ FT)` for dwellings, `PLOT SIZE (SQ FT)` for plots.
+  They are separate fields (`carpetArea`, `plotArea`) and never stand in for each other.
+- **`PLOT SIZE (SQ FT)`** replaces `BEDS` in the same position, same chip style:
+  `Any size` · `600+ sq ft` · `1,200+ sq ft` · `2,400+ sq ft`. Carpet area runs its own
+  ladder (`600+` · `1,000+` · `1,500+ sq ft`) because the two measure different things.
+  Both are illustrative thresholds, with `sq ft` visible on every non-default choice.
+  Switching between plots and dwellings restores each selection exactly as it was.
+- **No bedrooms for a plot, anywhere:** not in filters, selected-filter chips, cards, map peek,
+  detail summary or mobile. A plot card reads land area and `Land`; the detail reads
+  `N sq.ft plot · Land · Ready to register`. "0 BHK" can no longer appear.
+- **`All residential` covers dwellings and plots together**, so the controls are labelled
+  `HOME BEDROOMS`, `HOME CARPET AREA` and `PLOT SIZE`, and each filters **only its own inventory** — a
+  bedroom or carpet-area selection no longer silently removes every plot from the results, which
+  those labels would otherwise misstate.
+- **Commercial keeps `BUDGET`** as its own labelled group, with its own ladder (illustrative, not from verified
+  listings): Buy `Any price` · `≤ ₹1 Cr` · `≤ ₹2.5 Cr` · `≤ ₹5 Cr`; Rent `Any rent` · `≤ ₹75k/mo` ·
+  `≤ ₹1.5L/mo` · `≤ ₹3L/mo`. The label switches between `Budget` and `Monthly rent` with Buy/Rent.
+- **Commercial budget is independent** of Commercial subtype selection and of the Residential budget:
+  it survives adding, removing and clearing subtype chips, and each family restores its own last
+  budget on return. `Clear commercial types` never touches it; **`Reset commercial filters`** is the
+  one explicit action that clears subtypes, budget and the verified chip together.
+- Bedrooms are **never** offered under Commercial.
+
+### Result language
+
+Nouns follow the family and subtype — `EXP.nounsOf(filters)` is the single source, so no surface can
+drift. Commercial never borrows a residential noun, and a plot is never called a home:
+
+| State | Count noun | Heading | Deal phrasing |
+|-------|-----------|---------|---------------|
+| Residential dwelling | `listings` / `rentals` | `Properties in X` | `homes for sale` / `homes to rent` |
+| Residential — Plots | `plots` | `Plots in X` | `plots for sale` |
+| Commercial | `commercial listings` | `Commercial properties in X` | `commercial properties for sale` / `… to rent` |
+
+The map cluster caption follows the same rule: `homes` → `plots` → `listings`.
+
+### Property family and subtype — two separate concepts
+
+The top-level `TYPE` control holds the **property family** and nothing else:
+
+```
+TYPE                 Residential | Commercial
+RESIDENTIAL TYPE     All residential · Apartments · Villas · Plots        (single-select)
+COMMERCIAL TYPE      All commercial · Shop · Office · Commercial Building
+                     · Warehouse / Godown · Commercial Land               (multi-select)
+```
+
+- **A family is not a subtype.** `Residential` and `Commercial` are families; `Villas` and `Shop`
+  are subtypes. The two never share a row, and no family ever appears in a subtype row.
+- **Subtype state is scoped to its family** and lives in its own field — `filters.ptype` for
+  Residential, `filters.comSubs` for Commercial. Because they are different fields, **each family's
+  last selection is retained independently**: pick Villas, switch to Commercial, pick Shop + Office,
+  switch back — Villas is exactly as you left it, and returning to Commercial restores Shop + Office.
+  A Residential subtype is never reinterpreted as a Commercial one, or the reverse.
+- **`All residential` and `All commercial` are family-local states** — no subtype narrowing inside
+  that family. Clearing subtypes returns to the family-wide state; it never leaves the family.
+- **Separate, unambiguous clear actions:** `Clear residential types` / `Clear commercial types`.
+  Neither clears the family, the geography, the search query, the journey or unrelated filters.
+- **Beds and budget are family-local** to Residential; Commercial has its own budget field and is
+  never offered bedrooms. See *Context-sensitive attribute filters* above.
+- **Changing family or subtype changes only** result membership, count, cards, markers, popovers and
+  subtype-specific detail. It never touches journey, city, search input, canonical hierarchy,
+  breadcrumb, selected areas or polygon, result-scope mode, map camera or bounds, List/Map mode,
+  Buy/Rent, or unrelated filters.
+- **Agricultural is a Discover journey, not a family.** So is Schools. Neither appears in `TYPE`, and
+  no agricultural classification appears in a Residential or Commercial subtype row.
+
+On mobile the family selector stays put at the top of the filter block with its subtype row directly
+below; both scroll sideways rather than wrapping, so the first result stays above the fold and neither
+row obscures the search input or the List/Map control.
+
+### Commercial identity (a property family) — `data-design-component="property-family-row"` / `"residential-subtype-row"` / `"commercial-subtype-row"` / `"commercial-detail"` / `"commercial-summary"` / `"price-gate"` / `"broker-disclosure"` / `"contact-block"` (`src/exp-commercial.js`)
+
+Commercial is **additive**: it adds records to the one catalogue and one option to the top-level
+family control. It adds **no** journey, hierarchy, component, screen or map behaviour. Every
+pre-Commercial count is unchanged — a Commercial record fails `passes` unless `filters.family` is
+`Commercial`, and `EXP.residentialCount` (not `listings.length`) feeds the existing cues.
+
+- **Buyer-facing labels (the only strings that render):** Shop · Office · Commercial Building ·
+  Warehouse / Godown · Commercial Land. Missing, legacy or unrecognised subtype values render as
+  **`Commercial`**. `Other`, raw enum values and inferred subtypes never appear.
+- **Progressive disclosure:** exactly one subtype row is shown at a time, and it always belongs to the
+  selected family. Choosing `Residential` restores the pre-Commercial experience — no Commercial
+  control occupies space, no placeholder is reserved.
+- **Identity colour:** `--gold-600 #8A6A22`, tint `--gold-100` — the one brand hue Discover had not
+  claimed (Areas copper, Schools plum, Agricultural evergreen). **Subtype is carried by the label**,
+  never by hue, so Shop and Office stay distinguishable in greyscale.
+- **Marker:** the existing `pricePinHTML` leaf pin with one branch — Commercial carries the **subtype
+  label instead of a price**, so nothing price-gated reaches the map. Footprint, tail, selected
+  treatment, clustering, collision handling and camera behaviour are untouched; only the cluster
+  caption reads “listings”.
+- **Card:** the existing `listing-card`, three content slots swapped — price line → price treatment,
+  type badge → subtype label, bed/bath/size row → **at most two** subtype facts (Shop: area + floor or
+  hub · Office: area + floor or seats · Building: area + floors · Warehouse: area + clear height ·
+  Land: area + frontage or zoning).
+- **Price treatment** — exactly three: anonymous band (mono + `PRICE BAND` caps), anonymous gate
+  (`price-gate`: lock glyph + “Sign in to view price”), authenticated exact figure. Location is
+  coarsened when anonymous, street-level when signed in. Signing in reveals data; it never verifies.
+- **Detail:** the existing detail view, made subtype-aware. Absent fields are omitted outright — never
+  a placeholder, never a dash. Broker-entered claims (ownership, zoning, income, yield, occupancy,
+  suitability) live only inside `broker-disclosure`, an `--ochre-50` block headed “Broker-provided
+  information”. No guaranteed ROI, rent, footfall, verified approvals or verified ownership anywhere.
+- **Deal types** Sale / Rent / Lease are per-listing labels; the Buy/Rent toggle is unchanged, and
+  Lease listings surface under Rent.
+
+Non-regression states are the **Preserved behaviour** scenarios in the review strip; the
+**Before / after** band pairs the same scope with and without Commercial. The approved pre-Commercial
+shell is preserved byte-for-byte in `experience-discover-v2-frozen.html`.
 
 ### Directional marker (map) — `data-design-component="directional-marker"` (`src/NDMap.jsx` `dirCard`)
 - A region/cluster **card**, not a pin. Width scales with inventory: `130 + weight*40` → **130–170px**.

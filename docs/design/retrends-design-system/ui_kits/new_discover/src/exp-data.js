@@ -109,28 +109,138 @@
         id: a.key + "-" + i, areaKey: a.key, area: a.name, locality: a.name + (i % 3 === 0 ? " Main Road" : i % 3 === 1 ? " Ring Road" : " Layout"),
         lat: a.lat + (rnd() - 0.5) * 0.018, lon: a.lon + (rnd() - 0.5) * 0.02,
         price, propType, beds: beds || 0, baths: Math.max(1, beds - (rnd() > 0.6 ? 1 : 0)), sqft,
-        title: (propType === "Plot" ? sqft + " sq.ft plot" : beds + " BHK " + propType.toLowerCase()) + " · " + a.name,
+        title: (propType === "Plot" ? sqft.toLocaleString("en-IN") + " sq.ft plot" : beds + " BHK " + propType.toLowerCase()) + " · " + a.name,
         image: IMG[Math.floor(rnd() * IMG.length)],
         trustTier: rnd() > 0.62 ? "verified" : rnd() > 0.4 ? "trusted" : "listed",
         ready: rnd() > 0.45, tag: rnd() > 0.86 ? "New" : null
       });
     }
   });
+  // Commercial inventory is appended to the SAME catalogue (additive). It is invisible
+  // to every existing count because `passes` rejects it unless the property-type filter
+  // is on Commercial — see src/exp-commercial.js.
+  if (window.EXP_COM) listings.push.apply(listings, window.EXP_COM.build(areas));
+  // The pre-Commercial catalogue size, captured before the append, so every existing
+  // "N listings" cue keeps reporting exactly what it reported before Commercial.
+  const residentialCount = listings.filter((l) => l.kind !== "commercial").length;
 
   // ---- filters ---------------------------------------------------------------
-  const DEFAULT_FILTERS = { purpose: "Buy", beds: 0, maxPrice: 0, ptype: "Any type", ready: false, verified: false };
+  // Two independent axes:
+  //   family  — "Residential" | "Commercial" (the top-level TYPE control)
+  //   subtype — scoped to its family and remembered per family:
+  //             ptype   holds the Residential subtype (single-select, unchanged)
+  //             comSubs holds the Commercial subtypes  (multi-select)
+  // Attribute filters are context-sensitive and each keeps its own field, so no
+  // selection is ever reinterpreted as another:
+  //             beds        dwelling bedrooms   (Apartment / Villa / House)
+  //             carpetArea  minimum carpet sq ft (Apartment / Villa / House)
+  //             plotArea    minimum plot sq ft   (Plots)
+  //             maxPrice    Residential budget
+  //             comMaxPrice Commercial budget   (independent of the Residential one)
+  // Area is available to EVERY Residential subtype — carpet area for dwellings, plot
+  // size for plots — and the two are separate fields, never each other's stand-in.
+  // Because the two families' budgets live in different fields, switching family
+  // restores that family's last budget selection untouched.
+  // Agricultural is NOT a family — it remains its own Discover journey.
+  const DEFAULT_FILTERS = { family: "Residential", purpose: "Buy", beds: 0, carpetArea: 0, plotArea: 0, maxPrice: 0, comMaxPrice: 0, comArea: 0, ptype: "Any type", ready: false, verified: false, comSubs: [] };
+
+  // Illustrative budget thresholds — chosen to span the fixture set, not derived
+  // from verified listing data. Commercial stock sits an order of magnitude above
+  // residential, so the two families carry their own ladders.
+  const BUDGETS = {
+    Residential: {
+      Buy: [{ k: 0, l: "Any price" }, { k: 5000000, l: "≤ ₹50 L" }, { k: 8000000, l: "≤ ₹80 L" }, { k: 12000000, l: "≤ ₹1.2 Cr" }],
+      Rent: [{ k: 0, l: "Any rent" }, { k: 20000, l: "≤ ₹20k/mo" }, { k: 35000, l: "≤ ₹35k/mo" }, { k: 60000, l: "≤ ₹60k/mo" }]
+    },
+    Commercial: {
+      Buy: [{ k: 0, l: "Any price" }, { k: 10000000, l: "≤ ₹1 Cr" }, { k: 25000000, l: "≤ ₹2.5 Cr" }, { k: 50000000, l: "≤ ₹5 Cr" }],
+      // Monthly values with the unit spelled out, so a Rent / Lease state can never be
+      // mistaken for purchase bands.
+      Rent: [{ k: 0, l: "Any rent" }, { k: 50000, l: "≤ ₹50K / month" }, { k: 100000, l: "≤ ₹1L / month" }, { k: 200000, l: "≤ ₹2L / month" }]
+    }
+  };
+  const budgetsFor = (f) => BUDGETS[f.family === "Commercial" ? "Commercial" : "Residential"][f.purpose === "Rent" ? "Rent" : "Buy"];
+  const budgetLabel = (f, v) => {
+    const hit = budgetsFor(f).filter((b) => b.k === v)[0];
+    return hit ? hit.l : "≤ " + (f.purpose === "Rent" ? rentShort(v) : inrShort(v));
+  };
+  // Illustrative area thresholds. "sq ft" is visible on every non-default choice.
+  // Carpet area governs dwellings; plot size governs plots. Separate ladders because
+  // the two measure different things.
+  const CARPET_AREAS = [{ k: 0, l: "Any size" }, { k: 600, l: "600+ sq ft" }, { k: 1000, l: "1,000+ sq ft" }, { k: 1500, l: "1,500+ sq ft" }];
+  const PLOT_AREAS = [{ k: 0, l: "Any size" }, { k: 600, l: "600+ sq ft" }, { k: 1200, l: "1,200+ sq ft" }, { k: 2400, l: "2,400+ sq ft" }];
+  // Commercial area — one field, but the LABEL follows the selected subtype because
+  // the same number means a different thing per subtype. Illustrative thresholds.
+  const COM_AREAS = [{ k: 0, l: "Any size" }, { k: 1000, l: "1,000+ sq ft" }, { k: 2500, l: "2,500+ sq ft" }, { k: 5000, l: "5,000+ sq ft" }];
+  const COM_AREA_LABEL = { shop: "Built-up area (sq ft)", office: "Built-up area (sq ft)", building: "Built-up area (sq ft)", warehouse: "Warehouse area (sq ft)", land: "Plot size (sq ft)" };
+  const comAreaLabel = (f) => {
+    const subs = (f && f.comSubs) || [];
+    return subs.length === 1 ? (COM_AREA_LABEL[subs[0]] || "Area (sq ft)") : "Area (sq ft)";
+  };
+
+  // Result nouns follow the selected family and subtype: Commercial never borrows a
+  // residential noun, and a plot is never called a home.
+  function nounsOf(f) {
+    const rent = f.purpose === "Rent";
+    const com = f.family === "Commercial";
+    const plot = !com && f.ptype === "Plot";
+    const base = com ? "commercial listing" : plot ? "plot" : rent ? "rental" : "listing";
+    const unit = com ? "commercial property" : plot ? "plot" : "home";
+    // "commercial property" does not pluralise by adding s — the plural is carried
+    // explicitly rather than derived, so no surface can print "commercial propertys".
+    const units = com ? "commercial properties" : plot ? "plots" : "homes";
+    const suffix = rent ? " to rent" : " for sale";
+    return {
+      plural: base + "s",
+      count: (k) => (k === 1 ? base : base + "s"),
+      deal: (k) => (k === 1 ? unit : units) + suffix,
+      dealPlural: units + suffix,
+      inPlace: (p) => (com ? "Commercial properties in " : plot ? "Plots in " : rent ? "Homes to rent in " : "Properties in ") + p,
+      allCity: com ? "All commercial properties in Bangalore" : plot ? "All plots in Bangalore" : rent ? "All homes to rent in Bangalore" : "All homes in Bangalore",
+      dealScope: (com ? (rent ? "Commercial to rent · " : "Commercial for sale · ") : plot ? "Plots for sale · " : rent ? "Homes to rent · " : "Homes for sale · "),
+      unitPlural: units
+    };
+  }
+
+  // Which inventories the current selection can actually return. `passes` keys off
+  // the per-listing kind, so every REPORTING site (filter labels, scope chips, the
+  // filter row itself) must key off these same predicates — re-deriving the test
+  // locally is how the plot-size narrowing came to be applied but never reported.
+  // Plots are sale-only stock, so a Rent search never returns them.
+  const showsHomes = (f) => f.family !== "Commercial" && f.ptype !== "Plot";
+  const showsPlots = (f) => f.family !== "Commercial" && (f.ptype === "Plot" || (f.ptype === "Any type" && f.purpose !== "Rent"));
+
   const filterLabels = (f) => {
     const out = [f.purpose];
-    if (f.beds) out.push(f.beds + "+ BHK");
+    if (window.EXP_COM && f.family === "Commercial") {
+      const l = out.concat(window.EXP_COM.labels(f));
+      if (f.comArea) l.push(f.comArea.toLocaleString("en-IN") + "+ sq ft");
+      if (f.comMaxPrice) l.push("up to " + budgetLabel(f, f.comMaxPrice).replace("≤ ", ""));
+      if (f.verified) l.push("Broker identity verified");
+      return l;
+    }
+    if (showsHomes(f) && f.beds) out.push(f.beds + "+ BHK");
+    if (showsHomes(f) && f.carpetArea) out.push(f.carpetArea.toLocaleString("en-IN") + "+ sq ft carpet");
+    if (showsPlots(f) && f.plotArea) out.push(f.plotArea.toLocaleString("en-IN") + "+ sq ft plot");
     if (f.maxPrice) out.push("up to " + (f.purpose === "Rent" ? rentShort(f.maxPrice) : inrShort(f.maxPrice)));
     if (f.ptype !== "Any type") out.push(f.ptype);
     if (f.ready) out.push("Ready to move");
-    if (f.verified) out.push("Verified only");
+    if (f.verified) out.push("Broker identity verified");
     return out;
   };
   const passes = (l, f) => {
+    // The family decides which catalogue is in play. A Commercial record is invisible
+    // to the Residential family and vice versa, so every pre-Commercial count holds.
+    const com = f.family === "Commercial";
+    if (com || l.kind === "commercial") return com && window.EXP_COM ? window.EXP_COM.passes(l, f) : false;
     if (f.purpose === "Rent" && !l.forRent) return false;
-    if (f.beds && l.beds < f.beds) return false;
+    // Bedrooms and carpet area apply to dwellings only, and plot size to plots only —
+    // the controls are labelled that way, so neither may quietly filter the other's
+    // inventory out.
+    const isPlot = l.propType === "Plot";
+    if (!isPlot && f.beds && l.beds < f.beds) return false;
+    if (!isPlot && f.carpetArea && l.sqft < f.carpetArea) return false;
+    if (isPlot && f.plotArea && l.sqft < f.plotArea) return false;
     if (f.maxPrice && (f.purpose === "Rent" ? l.rent : l.price) > f.maxPrice) return false;
     if (f.ptype !== "Any type" && l.propType !== f.ptype) return false;
     if (f.ready && !l.ready) return false;
@@ -154,8 +264,16 @@
   const areasOfDirection = (d) => areas.filter((a) => a.direction === d);
   const areasOfLocal = (l) => areas.filter((a) => a.local === l);
   const localsOfDirection = (d) => locals.filter((l) => l.direction === d);
+  // Math.min.apply(null, []) is Infinity and Math.max.apply(null, []) is -Infinity, so
+  // an empty list would return bounds that PASS Leaflet's isValid() (it tests isNaN,
+  // and Infinity is not NaN) and then yield NaN from getCenter() deep inside the camera
+  // effect. Guarded at the source, mirroring centerOf below, so every caller — areas,
+  // hierarchy, schools, agri — is covered. The filter also survives a committed key
+  // that is missing from byKey, which would otherwise map to undefined and throw.
   const boundsOf = (list) => {
-    const lats = list.map((a) => a.lat), lons = list.map((a) => a.lon);
+    const pts = (list || []).filter((a) => a && Number.isFinite(a.lat) && Number.isFinite(a.lon));
+    if (!pts.length) return [[12.78, 77.44], [13.28, 77.79]];
+    const lats = pts.map((a) => a.lat), lons = pts.map((a) => a.lon);
     return [[Math.min.apply(null, lats) - 0.02, Math.min.apply(null, lons) - 0.02], [Math.max.apply(null, lats) + 0.02, Math.max.apply(null, lons) + 0.02]];
   };
   const reps = (list, k) => list.slice().sort((a, b) => b.n - a.n).slice(0, k || 2).map((a) => a.name);
@@ -258,6 +376,54 @@
   // one filter change at a time, each with its real resulting count
   function relaxations(keys, f) {
     const out = [];
+    // Commercial: bed and budget chips belong to the Residential family, so the only
+    // honest widenings are dropping the subtype narrowing or the verified-only chip.
+    // Widening never switches family by itself — that offer is explicit and labelled.
+    // Commercial recovery keeps the buyer INSIDE Commercial: subtype first, then the
+    // two attribute filters, and only then, clearly secondary, the other family.
+    // Nothing here widens the search on its own or touches the selected areas.
+    if (f.family === "Commercial") {
+      const subs = f.comSubs || [];
+      if (subs.length === 1) {
+        const n = inAreas(keys, { ...f, comSubs: [] }).length;
+        if (n > 0) out.push({ label: "Remove " + window.EXP_COM.label(subs[0]), patch: { comSubs: [] }, n });
+      } else if (subs.length > 1) {
+        const dropped = subs.slice(0, -1);
+        const nOne = inAreas(keys, { ...f, comSubs: subs.slice(0, -1) }).length;
+        if (nOne > 0) out.push({ label: "Remove " + window.EXP_COM.label(subs[subs.length - 1]), patch: { comSubs: dropped }, n: nOne });
+        const nAll = inAreas(keys, { ...f, comSubs: [] }).length;
+        if (nAll > 0) out.push({ label: "Show all Commercial types", patch: { comSubs: [] }, n: nAll });
+      }
+      if (f.comMaxPrice) {
+        const wider = budgetsFor(f).filter((b) => b.k === 0 || b.k > f.comMaxPrice)[0];
+        const patch = { comMaxPrice: wider && wider.k ? wider.k : 0 };
+        const n = inAreas(keys, { ...f, ...patch }).length;
+        if (n > 0) out.push({ label: patch.comMaxPrice ? "Raise the budget to " + budgetLabel(f, patch.comMaxPrice).replace("≤ ", "") : (f.purpose === "Rent" ? "Accept any monthly figure" : "Accept any price"), patch, n });
+      }
+      if (f.comArea) {
+        const smaller = COM_AREAS.filter((a) => a.k < f.comArea).slice(-1)[0];
+        const patch = { comArea: smaller ? smaller.k : 0 };
+        const n = inAreas(keys, { ...f, ...patch }).length;
+        if (n > 0) out.push({ label: patch.comArea ? "Accept " + patch.comArea.toLocaleString("en-IN") + "+ sq ft" : "Accept any size", patch, n });
+      }
+      if (f.verified) {
+        const n = inAreas(keys, { ...f, verified: false }).length;
+        if (n > 0) out.push({ label: "Include listings without broker identity checks", patch: { verified: false }, n });
+      }
+      // When two narrowings bind at once, no single change helps and the buyer would be
+      // left with nothing but "leave Commercial". This always-available action keeps
+      // them in the family, and its count is the real number of records it would show.
+      if ((f.comSubs || []).length || f.comArea || f.comMaxPrice || f.verified) {
+        const wide = { ...f, comSubs: [], comArea: 0, comMaxPrice: 0, verified: false };
+        const n = inAreas(keys, wide).length;
+        if (n > 0 && !out.some((r) => r.n === n && r.patch.comSubs)) {
+          out.push({ label: "Show all Commercial in these areas", patch: { comSubs: [], comArea: 0, comMaxPrice: 0, verified: false }, n });
+        }
+      }
+      const other = inAreas(keys, { ...f, family: "Residential" }).length;
+      if (other > 0) out.push({ label: "Switch to Residential listings here", patch: { family: "Residential" }, n: other, secondary: true });
+      return out.slice(0, 6);
+    }
     if (f.maxPrice) {
       for (const mult of [1.2, 1.6, 2, 3]) {
         const next = Math.round((f.maxPrice * mult) / 100000) * 100000;
@@ -266,14 +432,22 @@
       }
     }
     if (f.ready) { const n = inAreas(keys, { ...f, ready: false }).length; if (n > 0) out.push({ label: "Remove Ready to move", patch: { ready: false }, n }); }
-    if (f.beds > 0) {
+    if (showsPlots(f) && f.plotArea) {
+      const n = inAreas(keys, { ...f, plotArea: 0 }).length;
+      if (n > 0) out.push({ label: "Accept any plot size", patch: { plotArea: 0 }, n });
+    }
+    if (showsHomes(f) && f.carpetArea) {
+      const n = inAreas(keys, { ...f, carpetArea: 0 }).length;
+      if (n > 0) out.push({ label: "Accept any carpet area", patch: { carpetArea: 0 }, n });
+    }
+    if (f.ptype !== "Plot" && f.beds > 0) {
       for (let b = f.beds - 1; b >= 0; b--) {
         const n = inAreas(keys, { ...f, beds: b }).length;
         if (n > 0) { out.push({ label: b === 0 ? "Accept any number of bedrooms" : "Include " + b + " BHK", patch: { beds: b }, n }); break; }
       }
     }
-    if (f.verified) { const n = inAreas(keys, { ...f, verified: false }).length; if (n > 0) out.push({ label: "Include Trusted and Listed homes", patch: { verified: false }, n }); }
-    if (f.ptype !== "Any type") { const n = inAreas(keys, { ...f, ptype: "Any type" }).length; if (n > 0) out.push({ label: "Include every property type", patch: { ptype: "Any type" }, n }); }
+    if (f.verified) { const n = inAreas(keys, { ...f, verified: false }).length; if (n > 0) out.push({ label: "Include listings without broker identity checks", patch: { verified: false }, n }); }
+    if (f.ptype !== "Any type") { const n = inAreas(keys, { ...f, ptype: "Any type" }).length; if (n > 0) out.push({ label: "Include every residential type", patch: { ptype: "Any type" }, n }); }
     return out.slice(0, 4);
   }
 
@@ -334,10 +508,16 @@
 
   window.EXP = {
     city: { key: "blr", label: "Bangalore", lat: 12.9716, lon: 77.5946, bounds: [[12.78, 77.44], [13.28, 77.79]] },
-    areas, byKey, directions, locals, clusters, listings, DEFAULT_FILTERS,
+    areas, byKey, directions, locals, clusters, listings, DEFAULT_FILTERS, residentialCount,
+    BUDGETS, budgetsFor, budgetLabel, PLOT_AREAS, CARPET_AREAS, COM_AREAS, comAreaLabel, nounsOf, showsHomes, showsPlots,
     childrenOf, clustersFor, ancestry, parentOf, levelOf, areasOfLocal, areasOfDirection,
     boundsOf, centerOf, reps, countIn, inAreas, inBounds, inPoly, passes, filterLabels,
     nearbyFor, relaxations, searchAreas, dist, inr, inrShort, rentShort, priceText, bearingOf, schoolsOf, searchWithin,
-    boardsIn, levelsIn, filterSchools, homesNearSchool
+    boardsIn, levelsIn, filterSchools, homesNearSchool,
+    // Commercial helpers, re-exported so panel/map/cards reach them through EXP
+    com: window.EXP_COM || null,
+    comLabel: (k) => (window.EXP_COM ? window.EXP_COM.label(k) : "Commercial"),
+    comPriceText: (l, signedIn) => (window.EXP_COM ? window.EXP_COM.priceText(l, signedIn) : null),
+    isCom: (l) => (window.EXP_COM ? window.EXP_COM.isCom(l) : false)
   };
 })();

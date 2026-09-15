@@ -2,7 +2,22 @@
 // grammar as ui_kits/new_discover (directional card, area pill, price pin) plus
 // the dashed visual-cluster chip and the drawn-boundary layer.
 // The map owns no product state: everything it draws comes from `view`.
-const EM = window.EXP;
+/* Lazy view of window.EXP: the design-system bundle evaluates this file
+// before EXP exists, so a value capture here would be undefined forever in that copy.
+// A Proxy resolves each property at access time instead. */
+// ---- coordinate fence -------------------------------------------------------
+// ExpMap feeds roughly a dozen Leaflet consumers (markers, clusters, polygons,
+// circles, rectangles, polylines, container-point maths). EVERY one of them throws
+// "Invalid LatLng object: (NaN, NaN)" on a single non-finite value, and because they
+// run inside commit effects React responds by unmounting the entire shell. Rather
+// than guard each consumer, coordinates are screened at the choke points: EXP_OK
+// rejects a bad point, EXP_PTS filters a list, and safeLL (defined per-effect, since
+// it needs the map for its fallback) sanitises an individual pair.
+const EXP_OK = (o) => !!o && Number.isFinite(o.lat) && Number.isFinite(o.lon);
+const EXP_PTS = (list) => (list || []).filter(EXP_OK);
+const EXP_CENTRED = (list) => (list || []).filter((x) => x && EXP_OK(x.center));
+
+const EM = new Proxy({}, { get: (_t, k) => (window.EXP ? window.EXP[k] : undefined), has: (_t, k) => !!window.EXP && k in window.EXP });
 
 const MG = {
   zoom: (c) => `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M20 20l-3.5-3.5"/></svg>`,
@@ -161,7 +176,17 @@ function areaPinHTML(o) {
     <div class="am-tail" style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid ${primary};margin:0 auto;"></div>
   </div>`;
 }
+// Commercial identity on the map: the SAME leaf pin, carrying the subtype label
+// instead of a price — nothing price-gated ever reaches the map layer. Footprint,
+// tail, selected treatment, clustering and camera behaviour are unchanged.
 function pricePinHTML(l, on, f) {
+  if (l.kind === "commercial") {
+    const gold = "#8A6A22";
+    return `<div style="transform:translate(-50%,-100%);font-family:var(--font-sans);text-align:center;">
+      <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:var(--radius-full);background:${on ? gold : "var(--paper)"};color:${on ? "#fff" : "var(--navy-800)"};border:1px solid ${on ? gold : "rgba(138,106,34,0.32)"};box-shadow:${on ? "var(--shadow-lg)" : "var(--shadow-sm)"};font-size:11.5px;font-weight:700;white-space:nowrap;">
+        <span style="width:7px;height:7px;border-radius:50%;background:${on ? "#fff" : gold};flex:none;"></span>${EM.comLabel(l.comSub)}</span>
+    </div>`;
+  }
   return `<div style="transform:translate(-50%,-100%);font-family:var(--font-sans);">
     <span style="display:inline-block;padding:5px 10px;border-radius:var(--radius-full);background:${on ? "var(--accent)" : "var(--paper)"};color:${on ? "#fff" : "var(--navy-800)"};border:${on ? "none" : "1px solid var(--border)"};box-shadow:${on ? "var(--shadow-lg)" : "var(--shadow-sm)"};font-family:var(--font-mono);font-size:11.5px;font-weight:700;white-space:nowrap;">${EM.priceText(l, f)}</span>
   </div>`;
@@ -177,7 +202,7 @@ function discHTML(n) {
 function clusterBubbleHTML(count, tone) {
   const size = Math.round(42 + Math.min(count, 24) * 0.8);
   const bg = tone === "agri" ? "var(--evergreen-600)" : "var(--navy-800)";
-  const cap = tone === "agri" ? "parcels" : "homes";
+  const cap = tone === "agri" ? "parcels" : tone === "commercial" ? "listings" : tone === "plot" ? "plots" : "homes";
   return `<div class="nd-cluster" data-design-component="listing-cluster" style="transform:translate(-50%,-50%);font-family:var(--font-sans);text-align:center;cursor:pointer;">
     <div class="nd-cluster-disc" style="width:${size}px;height:${size}px;border-radius:var(--radius-full);background:${bg};color:#fff;box-shadow:var(--shadow-lg);border:3px solid rgba(255,255,255,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;margin:0 auto;transition:transform .18s cubic-bezier(.4,0,.2,1);">
       <span style="font-family:var(--font-mono);font-size:17px;font-weight:700;">${count}</span>
@@ -185,7 +210,10 @@ function clusterBubbleHTML(count, tone) {
     </div></div>`;
 }
 function clusterLeaves(items, map, px) {
-  const pts = items.map((it) => ({ it, p: map.latLngToContainerPoint([it.lat, it.lon]) }));
+  // latLngToContainerPoint throws "Invalid LatLng object" on a non-finite pair, from
+  // inside a commit effect, which React answers by discarding the whole tree. Every
+  // item is screened here so no caller has to remember to.
+  const pts = (items || []).filter(EXP_OK).map((it) => ({ it, p: map.latLngToContainerPoint([it.lat, it.lon]) }));
   const used = new Array(pts.length).fill(false), out = [];
   for (let i = 0; i < pts.length; i++) {
     if (used[i]) continue;
@@ -285,11 +313,37 @@ function ExpMap({ view, isMobile, onPick, onCluster, onArea, onOpenListing, hove
   React.useEffect(() => {
     const map = mapRef.current;
     if (!map || !view.fitBounds || fitRef.current === view.fitKey) return;
+    // Leaflet's isValid() only rejects NaN, so ±Infinity bounds pass validation and
+    // then throw "Invalid LatLng object: (NaN, NaN)" from inside this commit effect.
+    // Producers are guarded at source; this refuses to move the camera rather than
+    // take the whole shell down if a non-finite pair ever reaches it.
+    const flat = [].concat.apply([], view.fitBounds);
+    if (flat.length !== 4 || !flat.every(Number.isFinite)) {
+      console.warn("ExpMap: ignoring non-finite fitBounds", view.fitBounds);
+      return;
+    }
+    // The bounds are finite, but flyToBounds DIVIDES BY the container size when it
+    // computes its target centre, so a 0×0 container (cold load, before this flex
+    // chain has been laid out) makes Leaflet itself produce (NaN, NaN) and throw from
+    // inside this commit effect. Input validation cannot reach that — the geometry is
+    // the problem — so the guard is on the container. fitRef is deliberately left
+    // unset so the next render retries this same fitKey once the size resolves.
+    // (fitBounds is safe at 0×0; only the animated flyToBounds is not.)
+    let sz = map.getSize();
+    if (!sz.x || !sz.y) {
+      map.invalidateSize();
+      sz = map.getSize();
+    }
+    if (!sz.x || !sz.y) {
+      fitRef.current = null;
+      setTimeout(() => { const m = mapRef.current; if (m) { m.invalidateSize(); setTick((t) => t + 1); } }, 120);
+      return;
+    }
     fitRef.current = view.fitKey;
     progRef.current = true;
     map.flyToBounds(view.fitBounds, { paddingTopLeft: [56, isMobile ? 108 : 82], paddingBottomRight: [40, isMobile ? 168 : 56], duration: 0.65, easeLinearity: 0.25, maxZoom: view.maxZoom || 15 });
     // eslint-disable-next-line
-  }, [view.fitKey]);
+  }, [view.fitKey, tick]);
 
   // markers — rebuilt only when the marker SET changes (hover is a class toggle below,
   // so the element under the cursor is never replaced mid-click)
@@ -304,6 +358,19 @@ function ExpMap({ view, isMobile, onPick, onCluster, onArea, onOpenListing, hove
     const v = viewRef.current, cb = cbRef.current;
     g.clearLayers(); lg.clearLayers();
     markersRef.current = {};
+    // Sanitises a single pair; falls back to the map centre so a marker is still
+    // placed (visibly wrong beats a dead shell) rather than throwing.
+    const safeLL = (lat, lon) => (Number.isFinite(lat) && Number.isFinite(lon) ? L.latLng(lat, lon) : map.getCenter());
+    // Average of a cluster group — a reduce over an empty group yields NaN.
+    const groupLL = (grp) => {
+      const ok = (grp || []).filter((x) => EXP_OK(x.it));
+      if (!ok.length) return map.getCenter();
+      return L.latLng(ok.reduce((a, x) => a + x.it.lat, 0) / ok.length, ok.reduce((a, x) => a + x.it.lon, 0) / ok.length);
+    };
+    const safeBounds = (pairsIn) => {
+      const good = (pairsIn || []).filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+      return good.length ? L.latLngBounds(good) : map.getBounds();
+    };
     const icon = (html, cls) => L.divIcon({ html, className: "upt-pin " + (cls || ""), iconSize: [0, 0] });
     const wire = (mk, key) => { markersRef.current[key] = mk; mk.on("mouseover", () => cb.onHover(key)); mk.on("mouseout", () => cb.onHover(null)); };
     // keyboard activation — the focusable card inside the divIcon has tabindex=0;
@@ -313,15 +380,24 @@ function ExpMap({ view, isMobile, onPick, onCluster, onArea, onOpenListing, hove
     // the map centre (an orientation canvas), exactly as in the approved V2 map.
     const size = map.getSize();
     const SLOT = { N: [0.5, 0.17], E: [0.83, 0.46], S: [0.5, 0.81], W: [0.17, 0.46], C: [0.5, 0.5] };
+    // Every coordinate handed to Leaflet passes through here. A non-finite value
+    // (a letter bearing reaching the numeric branch, an unresolved container size,
+    // an empty bounds list) makes Leaflet throw from inside a commit effect, which
+    // React answers by discarding the whole tree — a blank artifact. So the synthesis
+    // is fenced: anything not finite falls back to the map centre.
     const compassAt = (d, i, total) => {
       let fx, fy;
       if (d.slot && SLOT[d.slot]) { fx = SLOT[d.slot][0]; fy = SLOT[d.slot][1]; }
       else {
-        const b = ((d.bearing != null ? d.bearing : (360 / total) * i) * Math.PI) / 180;
+        const raw = d.bearing != null && Number.isFinite(+d.bearing) ? +d.bearing : (360 / (total || 1)) * i;
+        const b = (raw * Math.PI) / 180;
         fx = 0.5 + Math.sin(b) * 0.3;
         fy = 0.5 - Math.cos(b) * 0.31;
       }
-      return map.containerPointToLatLng([fx * size.x, fy * size.y]);
+      const px = fx * size.x, py = fy * size.y;
+      if (!Number.isFinite(px) || !Number.isFinite(py)) return map.getCenter();
+      const ll = map.containerPointToLatLng([px, py]);
+      return ll && Number.isFinite(ll.lat) && Number.isFinite(ll.lng) ? ll : map.getCenter();
     };
     // dense-map collision handling: nodes without a fixed compass slot (regional
     // clusters, e.g. Hebbal · Yelahanka / Devanahalli · Airport / Hennur · Thanisandra)
@@ -330,14 +406,14 @@ function ExpMap({ view, isMobile, onPick, onCluster, onArea, onOpenListing, hove
     const noSlot = (v.destinations || []).filter((d) => !d.slot);
     if (noSlot.length > 1) {
       const MIN_GAP = 30;
-      const order = noSlot.map((d) => ({ d, b: ((d.bearing || 0) % 360 + 360) % 360 })).sort((a, b) => a.b - b.b);
+      const order = noSlot.map((d) => ({ d, b: ((Number.isFinite(+d.bearing) ? +d.bearing : 0) % 360 + 360) % 360 })).sort((a, b) => a.b - b.b);
       for (let k = 1; k < order.length; k++) { const gap = order[k].b - order[k - 1].b; if (gap < MIN_GAP) order[k].b = order[k - 1].b + MIN_GAP; }
       const wrap = order[0].b + 360 - order[order.length - 1].b;
       if (wrap < MIN_GAP) order[order.length - 1].b -= (MIN_GAP - wrap);
       order.forEach((o) => (o.d.__bearing = o.b));
     }
     (v.destinations || []).forEach((d, i) => {
-      const ll = v.compass ? compassAt({ ...d, bearing: d.__bearing != null ? d.__bearing : d.bearing }, i, v.destinations.length) : L.latLng(d.center.lat, d.center.lon);
+      const ll = v.compass ? compassAt({ ...d, bearing: d.__bearing != null ? d.__bearing : d.bearing }, i, v.destinations.length) : safeLL(d.center && d.center.lat, d.center && d.center.lon);
       const schoolsJ = v.journey === "schools";
       if (d.kind === "local") {
         const mk = L.marker(ll, { icon: icon(regionalClusterCardHTML({ names: d.names.join(" · "), n: d.n, noun: schoolsJ ? "schools" : (v.noun || "listings"), domain: schoolsJ ? "schools" : "homes", exact: d.matchAreas || 0, sel: !!d.sel })), zIndexOffset: d.sel ? 260 : 200, riseOnHover: true });
@@ -355,77 +431,73 @@ function ExpMap({ view, isMobile, onPick, onCluster, onArea, onOpenListing, hove
       mk.addTo(g);
       wireKeyboard(mk, () => cb.onPick(d));
     });
-    (v.mapClusters || []).forEach((c) => {
-      const mk = L.marker([c.center.lat, c.center.lon], { icon: icon(clusterChipHTML({ names: c.names.join(" · "), more: c.more, members: c.members.length, n: v.journey === "schools" ? (c.listings || 0) : c.n, schools: c.schools, noun: v.noun || "listings", tone: v.journey === "schools" ? "schools" : null })), zIndexOffset: 300, riseOnHover: true });
+    EXP_CENTRED(v.mapClusters).forEach((c) => {
+      const mk = L.marker(safeLL(c.center.lat, c.center.lon), { icon: icon(clusterChipHTML({ names: c.names.join(" · "), more: c.more, members: c.members.length, n: v.journey === "schools" ? (c.listings || 0) : c.n, schools: c.schools, noun: v.noun || "listings", tone: v.journey === "schools" ? "schools" : null })), zIndexOffset: 300, riseOnHover: true });
       mk.on("click", () => cb.onCluster(c));
       wire(mk, c.key);
       mk.addTo(g);
       wireKeyboard(mk, () => cb.onCluster(c));
     });
-    (v.areaMarkers || []).forEach((a) => {
-      const mk = L.marker([a.center.lat, a.center.lon], { icon: icon(areaPinHTML({ name: a.label, n: a.n, listings: a.listings, schools: a.schools, schoolsMode: v.journey === "schools" && !a.candidate, sel: a.selected, candidate: a.candidate })), zIndexOffset: a.selected ? 900 : a.candidate ? 300 : 400, riseOnHover: !a.candidate });
+    EXP_CENTRED(v.areaMarkers).forEach((a) => {
+      const mk = L.marker(safeLL(a.center.lat, a.center.lon), { icon: icon(areaPinHTML({ name: a.label, n: a.n, listings: a.listings, schools: a.schools, schoolsMode: v.journey === "schools" && !a.candidate, sel: a.selected, candidate: a.candidate })), zIndexOffset: a.selected ? 900 : a.candidate ? 300 : 400, riseOnHover: !a.candidate });
       if (!a.candidate) mk.on("click", () => cb.onArea(a.key));
       if (!a.candidate) wire(mk, a.key);
       mk.addTo(g);
       if (!a.candidate) wireKeyboard(mk, () => cb.onArea(a.key));
     });
-    (v.discs || []).forEach((d) => {
-      const mk = L.marker([d.center.lat, d.center.lon], { icon: icon(discHTML(d.n)), zIndexOffset: 250 });
+    EXP_CENTRED(v.discs).forEach((d) => {
+      const mk = L.marker(safeLL(d.center.lat, d.center.lon), { icon: icon(discHTML(d.n)), zIndexOffset: 250 });
       mk.on("click", () => (d.areaKey ? cb.onArea(d.areaKey) : null));
       mk.addTo(g);
     });
-    (v.schoolPins || []).forEach((s) => {
+    EXP_PTS(v.schoolPins).forEach((s) => {
       const interactive = !!cb.onSchool;
-      const mk = L.marker([s.lat, s.lon], { icon: icon(schoolPinHTML(s, !!(v.school && v.school.id === s.id), schoolHover === s.id)), zIndexOffset: schoolHover === s.id ? 900 : 500, interactive });
+      const mk = L.marker(safeLL(s.lat, s.lon), { icon: icon(schoolPinHTML(s, !!(v.school && v.school.id === s.id), schoolHover === s.id)), zIndexOffset: schoolHover === s.id ? 900 : 500, interactive });
       if (interactive) { mk.on("click", () => cb.onSchool(s.id)); mk.on("mouseover", () => cb.onSchoolHover(s.id)); mk.on("mouseout", () => cb.onSchoolHover(null)); markersRef.current["sch-" + s.id] = mk; }
       mk.addTo(g);
     });
     // agri: outbound-direction cards, town discs, parcel pins, origin marker
-    (v.navCards || []).forEach((c) => {
-      const mk = L.marker([c.center.lat, c.center.lon], { icon: icon(agriCardHTML({ label: c.label, n: c.n, range: c.range })), zIndexOffset: 200 });
+    EXP_CENTRED(v.navCards).forEach((c) => {
+      const mk = L.marker(safeLL(c.center.lat, c.center.lon), { icon: icon(agriCardHTML({ label: c.label, n: c.n, range: c.range })), zIndexOffset: 200 });
       mk.on("click", () => cb.onAgriNav && cb.onAgriNav(c.key));
       wire(mk, c.key);
       mk.addTo(g);
     });
-    (v.townDiscs || []).forEach((t) => {
-      const mk = L.marker([t.center.lat, t.center.lon], { icon: icon(townDiscHTML({ name: t.name, n: t.n })), zIndexOffset: 300 });
+    EXP_CENTRED(v.townDiscs).forEach((t) => {
+      const mk = L.marker(safeLL(t.center.lat, t.center.lon), { icon: icon(townDiscHTML({ name: t.name, n: t.n })), zIndexOffset: 300 });
       mk.on("click", () => cb.onAgriTown && cb.onAgriTown(t.key));
       wire(mk, t.key);
       mk.addTo(g);
     });
-    if (v.originMarker) L.marker([v.originMarker.lat, v.originMarker.lon], { icon: icon(originPinHTML(v.originMarker.name)), zIndexOffset: 150, interactive: false }).addTo(g);
-    (v.parcelPins || []).length && clusterLeaves(v.parcelPins, map, CLUSTER_PX).forEach((grp) => {
+    if (EXP_OK(v.originMarker)) L.marker(safeLL(v.originMarker.lat, v.originMarker.lon), { icon: icon(originPinHTML(v.originMarker.name)), zIndexOffset: 150, interactive: false }).addTo(g);
+    EXP_PTS(v.parcelPins).length && clusterLeaves(v.parcelPins, map, CLUSTER_PX).forEach((grp) => {
       if (grp.length === 1) {
         const p = grp[0].it;
-        const mk = L.marker([p.lat, p.lon], { icon: icon(parcelPinHTML(p, p.id === agriActive)), zIndexOffset: p.id === agriActive ? 900 : 100 });
+        const mk = L.marker(safeLL(p.lat, p.lon), { icon: icon(parcelPinHTML(p, p.id === agriActive)), zIndexOffset: p.id === agriActive ? 900 : 100 });
         mk.on("click", () => cb.onParcel && cb.onParcel(p.id));
         mk.addTo(lg);
         return;
       }
-      const lat = grp.reduce((s, x) => s + x.it.lat, 0) / grp.length;
-      const lon = grp.reduce((s, x) => s + x.it.lon, 0) / grp.length;
-      const mk = L.marker([lat, lon], { icon: icon(clusterBubbleHTML(grp.length, "agri")), zIndexOffset: 60 });
+      const mk = L.marker(groupLL(grp), { icon: icon(clusterBubbleHTML(grp.length, "agri")), zIndexOffset: 60 });
       mk.on("click", () => {
         progRef.current = true;
-        map.flyToBounds(L.latLngBounds(grp.map((x) => [x.it.lat, x.it.lon])).pad(0.25), { duration: 0.55, maxZoom: 16 });
+        map.flyToBounds(safeBounds(grp.map((x) => [x.it.lat, x.it.lon])).pad(0.25), { duration: 0.55, maxZoom: 16 });
       });
       mk.addTo(lg);
     });
-    (v.pins || []).length && clusterLeaves(v.pins, map, CLUSTER_PX).forEach((grp) => {
+    EXP_PTS(v.pins).length && clusterLeaves(v.pins, map, CLUSTER_PX).forEach((grp) => {
       if (grp.length === 1) {
         const l = grp[0].it;
-        const mk = L.marker([l.lat, l.lon], { icon: icon(pricePinHTML(l, false, v.filters)), zIndexOffset: 100 });
+        const mk = L.marker(safeLL(l.lat, l.lon), { icon: icon(pricePinHTML(l, false, v.filters)), zIndexOffset: 100 });
         mk.on("click", () => cb.onOpenListing(l.id));
         wire(mk, l.id);
         mk.addTo(lg);
         return;
       }
-      const lat = grp.reduce((s, g) => s + g.it.lat, 0) / grp.length;
-      const lon = grp.reduce((s, g) => s + g.it.lon, 0) / grp.length;
-      const mk = L.marker([lat, lon], { icon: icon(clusterBubbleHTML(grp.length)), zIndexOffset: 60 });
+      const mk = L.marker(groupLL(grp), { icon: icon(clusterBubbleHTML(grp.length, v.filters && v.filters.family === "Commercial" ? "commercial" : v.filters && v.filters.ptype === "Plot" ? "plot" : null)), zIndexOffset: 60 });
       mk.on("click", () => {
         progRef.current = true;
-        map.flyToBounds(L.latLngBounds(grp.map((g) => [g.it.lat, g.it.lon])).pad(0.25), { duration: 0.55, maxZoom: 17 });
+        map.flyToBounds(safeBounds(grp.map((g) => [g.it.lat, g.it.lon])).pad(0.25), { duration: 0.55, maxZoom: 17 });
       });
       mk.addTo(lg);
     });
@@ -456,19 +528,22 @@ function ExpMap({ view, isMobile, onPick, onCluster, onArea, onOpenListing, hove
     const g = shapeG.current;
     if (!g) return;
     g.clearLayers();
-    if (view.poly) {
+    // Shapes are the remaining Leaflet consumers; same fence as the markers.
+    const finPair = (p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]);
+    const finPairs = (l) => Array.isArray(l) && l.length > 0 && l.every(finPair);
+    if (finPairs(view.poly)) {
       L.polygon(view.poly, view.polyDraft
         ? { color: "#1B2A45", weight: 2, dashArray: "6 5", fillColor: "#1B2A45", fillOpacity: 0.05 }
         : { color: "#B05C3A", weight: 2.4, fillColor: "#B05C3A", fillOpacity: 0.1 }).addTo(g);
     }
-    if (view.scopeRect) L.rectangle(view.scopeRect, { color: "#1B2A45", weight: 1.5, dashArray: "5 4", fill: false }).addTo(g);
-    if (view.radiusRing) L.circle([view.radiusRing.lat, view.radiusRing.lon], { radius: view.radiusRing.km * 1000, color: "#5E5286", weight: 1.6, dashArray: "5 4", fillColor: "#5E5286", fillOpacity: 0.07 }).addTo(g);
+    if (finPairs(view.scopeRect)) L.rectangle(view.scopeRect, { color: "#1B2A45", weight: 1.5, dashArray: "5 4", fill: false }).addTo(g);
+    if (EXP_OK(view.radiusRing) && Number.isFinite(view.radiusRing.km)) L.circle([view.radiusRing.lat, view.radiusRing.lon], { radius: view.radiusRing.km * 1000, color: "#5E5286", weight: 1.6, dashArray: "5 4", fillColor: "#5E5286", fillOpacity: 0.07 }).addTo(g);
     // agri directional search SECTOR + cumulative distance bands (scope overlay only)
     if (view.wedge) {
       const w = view.wedge;
       const arc = (km) => {
         const pts = [];
-        for (let a = -w.half; a <= w.half; a += 6) { const p = window.EXJ.offsetPt(w.origin, w.bearing + a, km); pts.push([p.lat, p.lon]); }
+        for (let a = -w.half; a <= w.half; a += 6) { const p = window.EXJ.offsetPt(w.origin, w.bearing + a, km); if (EXP_OK(p)) pts.push([p.lat, p.lon]); }
         return pts;
       };
       L.polygon(window.EXJ.wedge(w.origin, w.bearing, w.half, w.km), { color: "#1F7A5C", weight: 2, dashArray: "5 4", fillColor: "#1F7A5C", fillOpacity: 0.06 }).addTo(g);
@@ -478,8 +553,13 @@ function ExpMap({ view, isMobile, onPick, onCluster, onArea, onOpenListing, hove
 
   const navFade = view.level === "city" || view.level === "direction" || view.level === "agri-corridors" || (view.level === "schools-nav" && !(view.areaList || []).length);
   return (
-    <div data-design-component="map-surface" style={{ position: "relative", height: "100%", width: "100%", overflow: "hidden" }}>
-      <div ref={elRef} className={navFade ? "nd-navmode" : ""} style={{ position: "absolute", inset: 0 }} />
+    <div data-design-component="map-surface" className={navFade ? "nd-navmode" : ""} style={{ position: "relative", height: "100%", width: "100%", overflow: "hidden" }}>
+      {/* navFade sits on the WRAPPER, never on the element Leaflet initialises: React
+          owns `class` on the elements it renders, so toggling it here would wipe every
+          class Leaflet added (leaflet-container and friends) and strip the map's own
+          styling — including the grab cursor. The .nd-navmode CSS targets descendant
+          tile panes, so it works identically from the wrapper. */}
+      <div ref={elRef} style={{ position: "absolute", inset: 0 }} />
       <div style={{ position: "absolute", left: "14px", top: "14px", zIndex: 500, display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-start", maxWidth: "calc(100% - 28px)" }}>
         {!isMobile && (
         <div data-design-component="breadcrumb" style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "9px 14px", borderRadius: "var(--radius-full)", background: "var(--paper)", border: "1px solid var(--border)", boxShadow: "var(--shadow-md)", fontSize: "13.5px", fontWeight: 600, maxWidth: "100%", overflow: "hidden", whiteSpace: "nowrap", transition: "all var(--dur-normal) var(--ease-standard)" }}>

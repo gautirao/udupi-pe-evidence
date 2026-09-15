@@ -1,0 +1,94 @@
+<!-- @dsCard group="Discover" viewport="1440x900" name="Discover V2 — Interactive experience (frozen 27 Jul 2026)" subtitle="Preserved copy of the approved residential/schools/agricultural shell — One persistent Discover shell — Areas · Schools · Agricultural journey cards, city + Buy/Rent, browse all listings, directional Areas hierarchy, visual area clusters, multi-area draft/commit, polygon and viewport scopes, zero-result recovery, alerts — desktop 1366×768 and mobile 390×844" -->
+<!-- FROZEN 27 Jul 2026 — customer-facing states approved for CLI investigation. No further product or interaction changes; see FUNCTIONAL_AUDIT.html for the audit, correction delta and verdict. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Discover V2 — interactive experience</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  html, body { margin: 0; height: 100%; background: var(--canvas-200); }
+  body { font-family: var(--font-sans); color: var(--text-strong); }
+  * { box-sizing: border-box; }
+  ::selection { background: var(--accent); color: #fff; }
+  :root { --plum-600: #5E5286; --plum-500: #7E6BA8; --plum-100: #DED7EC; --plum-tint: #F1EDF7; --evergreen-100: #CFE6D9; --evergreen-700: #1F694A; }
+  a { color: var(--accent); text-decoration: none; } a:hover { color: var(--accent-hover); text-decoration: underline; }
+  button { font-family: var(--font-sans); }
+  .upt-pin { background: transparent !important; border: none !important; }
+  .leaflet-container { font-family: var(--font-sans); background: #EDEBE6; }
+  .leaflet-bar a { color: var(--navy-800); }
+  .leaflet-control-attribution { font-size: 10px; background: rgba(255,255,255,0.7) !important; }
+  .leaflet-tile-pane { transition: opacity .35s ease, filter .35s ease; }
+  .nd-navmode .leaflet-tile-pane { opacity: 0.64; filter: saturate(0.75); }
+  .nd-nav { cursor: pointer; }
+  .nd-nav:hover .nd-navcore, .nd-nav.nd-nav-on .nd-navcore { box-shadow: 0 12px 30px rgba(18,24,38,0.42) !important; transform: scale(1.05) !important; }
+  .nd-nav:active .nd-navcore { transform: scale(0.96) !important; box-shadow: var(--shadow-md) !important; transition: transform .08s ease, box-shadow .08s ease; }
+  .nd-nav[data-design-component="regional-cluster-marker"]:active .rc-shell { transform: scale(0.97) !important; transition: transform .08s ease; }
+  .nd-nav[data-design-component="regional-cluster-marker"]:focus-visible { outline: none; }
+  .nd-nav[data-design-component="regional-cluster-marker"].nd-nav-on .rc-shell { transform: translateY(-2px); }
+  /* Explore — dark navy body, SOLID accent footer: hover/focus deepen the footer, never repaint the body */
+  .nd-nav.mk-explore:hover .rc-shell, .nd-nav.mk-explore.nd-nav-on .rc-shell { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(18,24,38,0.4) !important; }
+  .nd-nav.mk-explore:hover .rc-footer, .nd-nav.mk-explore.nd-nav-on .rc-footer { filter: brightness(1.1); }
+  .nd-nav.mk-explore:focus-visible .rc-shell { box-shadow: 0 0 0 3px var(--copper-500), var(--shadow-lg) !important; }
+  .nd-nav.mk-explore.mk-schools:focus-visible .rc-shell { box-shadow: 0 0 0 3px var(--plum-600), var(--shadow-lg) !important; }
+  /* Zoom in — light cream/lavender body, WHITE footer that tints toward the accent on hover */
+  .nd-nav.mk-zoom:hover .rc-shell, .nd-nav.mk-zoom.nd-nav-on .rc-shell { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(18,24,38,0.22) !important; }
+  .nd-nav.mk-zoom:hover .rc-footer, .nd-nav.mk-zoom.nd-nav-on .rc-footer { background: var(--copper-100) !important; }
+  .nd-nav.mk-zoom.mk-schools:hover .rc-footer, .nd-nav.mk-zoom.mk-schools.nd-nav-on .rc-footer { background: var(--plum-tint) !important; }
+  .nd-nav.mk-zoom:focus-visible .rc-shell { box-shadow: 0 0 0 3px var(--copper-500), var(--shadow-lg) !important; }
+  .nd-nav.mk-zoom.mk-schools:focus-visible .rc-shell { box-shadow: 0 0 0 3px var(--plum-600), var(--shadow-lg) !important; }
+  /* View homes / View schools — white body, SOLID footer carries the colour; footer deepens on hover */
+  .nd-nav.am-leaf:hover .am-shell, .nd-nav.am-leaf.nd-nav-on .am-shell { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(18,24,38,0.22) !important; }
+  .nd-nav.am-leaf:hover .am-action, .nd-nav.am-leaf.nd-nav-on .am-action { filter: brightness(1.15); }
+  .nd-nav.am-leaf:active .am-shell { transform: scale(0.97) !important; transition: transform .08s ease; }
+  .nd-nav.am-leaf:focus-visible { outline: none; }
+  .nd-nav.am-leaf.am-leaf-home:focus-visible .am-shell { box-shadow: 0 0 0 3px var(--navy-800), var(--shadow-lg) !important; }
+  .nd-nav.am-leaf.am-leaf-school:focus-visible .am-shell { box-shadow: 0 0 0 3px var(--plum-600), var(--shadow-lg) !important; }
+  .nd-nav[data-design-component="directional-marker"]:hover .nd-cap { box-shadow: 0 6px 16px rgba(18,24,38,0.28); transform: translateY(-1px) !important; }
+  .nd-nav[data-design-component="directional-marker"]:active .nd-cap { transform: scale(0.94) !important; }
+  .nd-cap { opacity: 0; transform: translateY(-3px); transition: opacity .16s ease, transform .16s ease; pointer-events: none; }
+  .nd-nav:hover .nd-cap, .nd-nav.nd-nav-on .nd-cap { opacity: 1; transform: translateY(0); }
+  .nd-nav:focus-visible { outline: none; }
+  .nd-nav:focus-visible .nd-navcore { box-shadow: 0 0 0 3px var(--accent), var(--shadow-lg) !important; transform: scale(1.05) !important; }
+  .nd-nav:focus-visible .nd-cap { opacity: 1; transform: translateY(0); }
+  .upt-scroll::-webkit-scrollbar { width: 10px; }
+  .upt-scroll::-webkit-scrollbar-thumb { background: var(--stone-400); border-radius: 999px; border: 3px solid var(--background); }
+  @keyframes expFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .nd-cap, .leaflet-tile-pane { transition: none; } .upt-scroll { animation: none !important; } }
+</style>
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#1B2A45">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#1B2A45"/>
+    <rect x="180" y="230" width="480" height="340" rx="24" fill="#F6F5F2"/>
+    <rect x="700" y="230" width="320" height="340" rx="24" fill="#B05C3A"/>
+    <circle cx="420" cy="400" r="58" fill="#1B2A45"/>
+    <circle cx="420" cy="400" r="22" fill="#F6F5F2"/>
+  </svg>
+</template>
+<div id="root"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script src="src/data.js?v=e29"></script>
+<script src="src/geo.js?v=e29"></script>
+<script type="text/babel" src="src/components/shared.jsx?v=e29"></script>
+<script type="text/babel" src="src/components/cards.jsx?v=e29"></script>
+<script src="src/exp-data.js?v=e29"></script>
+<script src="src/exp-journeys.js?v=e29"></script>
+<script type="text/babel" src="src/ExpMap.jsx?v=e29"></script>
+<script type="text/babel" src="src/ExpModeBar.jsx?v=e29"></script>
+<script type="text/babel" src="src/ExpSchools.jsx?v=e29"></script>
+<script type="text/babel" src="src/ExpAgri.jsx?v=e29"></script>
+<script type="text/babel" src="src/ExpPanel.jsx?v=e29"></script>
+<script type="text/babel" src="src/Experience.jsx?v=e29"></script>
+<script type="text/babel">
+  ReactDOM.createRoot(document.getElementById("root")).render(<window.Experience />);
+</script>
+</body>
+</html>

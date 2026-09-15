@@ -57,7 +57,7 @@ function MBCues({ journey }) {
     ? [{ icon: "building", t: window.EXJ.schoolsUnder("blr") + " schools" }, { icon: "route", t: "Homes nearby" }, { icon: "map-pin", t: "Radius 3 / 5 / 10 km" }]
     : journey === "agri"
       ? [{ icon: "compass", t: "By direction" }, { icon: "route", t: "By distance from origin" }, { icon: "sprout", t: window.BLR_AGRI.totalParcels + " parcels" }]
-      : [{ icon: "map-pin", t: EXd.areas.length + " areas" }, { icon: "building", t: EXd.listings.length + " listings" }, { icon: "trending-up", t: "Up to 3 selected areas" }];
+      : [{ icon: "map-pin", t: EXd.areas.length + " areas" }, { icon: "building", t: EXd.residentialCount + " listings" }, { icon: "trending-up", t: "Up to 3 selected areas" }];
   const tint = MB_TINT[journey];
   return (
     <div data-design-component="metadata-strip" style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "6px 10px", padding: "6px 11px", background: MB_BG[journey], borderRadius: "var(--radius-md)" }}>
@@ -111,12 +111,18 @@ function MBCityPill({ city, onCity }) {
   );
 }
 
-function MBBuyRent({ value, onChange }) {
+// Buy / Rent — the existing two-value intent model, unchanged. In Commercial the Rent
+// option is labelled "Rent / Lease" because Commercial stock carries both For Rent and
+// For Lease, and both are served by this one existing intent. IMPLEMENTATION NOTE: the
+// label is presentation only — Lease must map to the transaction value the record
+// already carries and must never be inferred from other fields.
+function MBBuyRent({ value, onChange, com }) {
   return (
     <div data-design-component="buy-rent-toggle" style={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: "3px", padding: "0 7px", borderRight: "1px solid var(--border)" }}>
       {["Buy", "Rent"].map((o) => {
         const on = value === o;
-        return <button key={o} onClick={() => onChange(o)} style={{ border: "none", cursor: "pointer", padding: "6px 12px", borderRadius: "var(--radius-full)", fontFamily: "var(--font-sans)", fontSize: "12.5px", fontWeight: 600, background: on ? "var(--navy-800)" : "transparent", color: on ? "#fff" : "var(--text-muted)", transition: "background var(--dur-fast)" }}>{o}</button>;
+        const label = com && o === "Rent" ? "Rent / Lease" : o;
+        return <button key={o} onClick={() => onChange(o)} style={{ border: "none", cursor: "pointer", padding: "6px 12px", borderRadius: "var(--radius-full)", fontFamily: "var(--font-sans)", fontSize: "12.5px", fontWeight: 600, background: on ? "var(--navy-800)" : "transparent", color: on ? "#fff" : "var(--text-muted)", whiteSpace: "nowrap", transition: "background var(--dur-fast)" }}>{label}</button>;
       })}
     </div>
   );
@@ -199,7 +205,7 @@ function ExpModeBar({ st, act, view, isMobile }) {
     <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
       <div data-design-component="global-control-bar" style={{ display: "flex", flexWrap: "wrap", alignItems: "stretch", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", background: "var(--surface-card)", boxShadow: "var(--shadow-xs)", minHeight: "42px" }}>
         <MBCityPill city={st.city} onCity={act.setCity} />
-        {st.journey !== "agri" && <MBBuyRent value={st.filters.purpose} onChange={(v) => act.setFilters({ purpose: v, maxPrice: 0, ptype: v === "Rent" && st.filters.ptype === "Plot" ? "Any type" : st.filters.ptype })} />}
+        {st.journey !== "agri" && <MBBuyRent value={st.filters.purpose} com={st.filters.family === "Commercial"} onChange={(v) => act.setFilters({ purpose: v, maxPrice: 0, comMaxPrice: 0, ptype: v === "Rent" && st.filters.ptype === "Plot" ? "Any type" : st.filters.ptype })} />}
         <MBSearch st={st} act={act} />
       </div>
       <div role="tablist" data-design-component="mode-selector" aria-label="Search journey" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: "6px" }}>
