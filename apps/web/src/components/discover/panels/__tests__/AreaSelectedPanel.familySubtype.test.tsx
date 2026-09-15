@@ -462,11 +462,25 @@ describe('AreaSelectedPanel — #2450 family / subtype filters', () => {
 
       const emitted = onFiltersChange.mock.calls.at(-1)?.[0];
       expect(emitted.commercialSubtypes ?? []).toEqual([]);
-      expect(emitted.propertyTypes ?? []).not.toEqual(
-        expect.arrayContaining(['commercial_building', 'warehouse', 'commercial_land']),
+      // Issue #2572 — this asserted the OPPOSITE until now: that the three non-`commercial` family
+      // tokens were NOT emitted. That encoded "All commercial" as "clear the subtype and narrow by
+      // nothing", and the cost was measured in a browser against the seeded fixture: the chip read
+      // aria-pressed=true while the list returned 10 rows — three of them Residential [BEDS]
+      // listings and one a Residential apartment. "Without leaving the family", the name of this
+      // test, was true of the CHIP and false of the RESULTS.
+      //
+      // The whole family is the honest expression of "all commercial", and it is safe in exactly
+      // this branch: the auto-add trap documented below needs a SUBTYPE to contradict, and this
+      // branch has just cleared it. That contradiction arm is asserted, unchanged, in that block —
+      // so widening here cannot quietly license the shape #2450 removed.
+      expect(emitted.propertyTypes ?? []).toEqual(
+        expect.arrayContaining([
+          'commercial',
+          'commercial_building',
+          'warehouse',
+          'commercial_land',
+        ]),
       );
-      // ...and the family itself is retained.
-      expect(emitted.propertyTypes).toEqual(expect.arrayContaining(['commercial']));
     });
   });
 

@@ -424,6 +424,21 @@ export function NodeListingsSurface({
         // filtered server-side by `CityAreaListingsService`). No longer
         // gated on `isAuthenticated` — prop omitted, relying on
         // AreaSelectedPanel's own `= true` default.
+        //
+        // Issue #2572 — COMMERCIAL CAPABILITY ENABLEMENT. This prop defaults
+        // FALSE in the panel, and until now NO production call site passed it,
+        // so the TYPE family row and the Commercial subtype row rendered for
+        // nobody: the whole family was unreachable on the real buyer surface
+        // while every test that exercised it passed the prop explicitly. The
+        // three preconditions the panel's own gate comment names are now met on
+        // main — #2552 (family resync), #2553 (commit boundaries stopped
+        // discarding the axis, PR #2564), #2555 (panel mock parity) — and the
+        // anon wire that #2509 described as missing is present: the endpoint
+        // binds `commercialSubtypes` and `propertyType` is `List<String>`, so a
+        // subtype and a multi-select family both reach the server rather than
+        // being silently discarded. Enabling it here is what makes the control
+        // buyer-reachable.
+        isCommercialSubtypeSupported
       />
       {totalPages > 1 ? (
         <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border bg-card shrink-0">

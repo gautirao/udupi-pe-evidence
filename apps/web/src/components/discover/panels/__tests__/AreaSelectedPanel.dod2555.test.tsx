@@ -185,13 +185,151 @@ describe('AreaSelectedPanel — #2555 DoD items', () => {
       expect(restored).toContain('WAREHOUSE');
     });
 
+    /**
+     * Issue #2572 — the branch that restores the FAMILY when the LAST subtype chip is dismissed.
+     *
+     * It had no coverage at all: the removal arm elsewhere in this file starts from two subtypes
+     * and removes one, so it only ever reaches the "subtypes remain" branch. The empty branch is
+     * the defect that was found by clicking in a real browser, not by reading — dismissing the last
+     * chip put neither a subtype nor a family token on the wire, so the list fell back to every row
+     * in the area, Residential ones included, while the panel still read Commercial. The toggle
+     * path's own tests stayed green throughout, which is precisely why this arm exists.
+     *
+     * Delete the `: [...COMMERCIAL_FAMILY_TOKENS]` branch of `handleRemoveSubtype` and this fails.
+     */
+    it('dismissing the LAST subtype chip falls back to the whole Commercial family, never to no filter', () => {
+      const onEmit = vi.fn();
+      renderHost({ initialFilters: { commercialSubtypes: ['SHOP'] }, onEmit });
+
+      fireEvent.click(screen.getByTestId('selected-chip-subtype-SHOP-dismiss'));
+
+      const emitted = lastEmit(onEmit);
+      expect(emitted.commercialSubtypes ?? []).toEqual([]);
+      expect(
+        emitted.propertyTypes ?? [],
+        'removing the last subtype must land on the Commercial family, not on an unnarrowed list',
+      ).toEqual(
+        expect.arrayContaining([
+          'commercial',
+          'commercial_building',
+          'warehouse',
+          'commercial_land',
+        ]),
+      );
+    });
+
+    /**
+     * Issue #2572 (review finding) — the family tokens are a DERIVED expression of "Commercial, no
+     * subtype yet", not four buyer selections.
+     *
+     * Rendering them as four individually removable chips opened a route straight back into the
+     * defect this issue removes: every chip carries a dismiss button wired to
+     * `handleRemovePropertyType`, so dismissing all four left `propertyTypes: undefined` while the
+     * override still said 'commercial' — the panel read Commercial with "All commercial" pressed
+     * over an unnarrowed list, four clicks from the default. No chips, no route.
+     */
+    it('renders no removable type chips for the derived Commercial family selection', () => {
+      renderHost();
+
+      fireEvent.click(screen.getByTestId('quick-chip-family-commercial'));
+
+      expect(screen.getByTestId('quick-chip-family-commercial')).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      for (const token of ['commercial', 'commercial_building', 'warehouse', 'commercial_land']) {
+        expect(
+          screen.queryByTestId(`selected-chip-type-${token}`),
+          `the derived family token ${token} must not render as a removable chip`,
+        ).not.toBeInTheDocument();
+      }
+    });
+
+    /**
+     * FALSIFIABILITY GUARD for the arm above. Without it, "suppress the chips" could be implemented
+     * as "never render a chip for a commercial token", which would strand a buyer who reached a
+     * genuine mixed selection (the `type=` param is parsed with no allowlist, so
+     * `?type=warehouse,apartment` is reachable) with no way to remove the commercial half.
+     * Suppression is keyed on the selection being EXACTLY the derived family set with no subtype.
+     */
+    it('still renders removable type chips for a genuine mixed selection carrying a commercial token', () => {
+      renderHost({ initialFilters: { propertyTypes: ['warehouse', 'apartment'] } });
+
+      expect(screen.getByTestId('selected-chip-type-warehouse')).toBeInTheDocument();
+      expect(screen.getByTestId('selected-chip-type-apartment')).toBeInTheDocument();
+    });
+
+    /**
+     * Issue #2572 (re-review MEDIUM) — the THIRD door on the removal surface.
+     *
+     * A SINGLE inbound commercial token renders one chip, and length 1 fails the suppression
+     * predicate above, so that chip stays removable by design. Dismissing it used to empty the axis
+     * while `setFamilyOverride('commercial')` kept the family — Commercial pressed, "All commercial"
+     * pressed, nothing on the wire. Reachable by ticking one box in `PropertyTypeFilter`, no URL
+     * editing required.
+     *
+     * Explicitly NOT covered by the suppression arm: suppression applies only to the exact
+     * four-token set, which is precisely why this door survived it. Both doors found on this lane
+     * were on the removal surface, and this PR is what quadrupled that surface.
+     */
+    it('dismissing the LAST commercial type chip falls back to the family, not to no filter', () => {
+      const onEmit = vi.fn();
+      renderHost({ initialFilters: { propertyTypes: ['commercial'] }, onEmit });
+
+      fireEvent.click(screen.getByTestId('selected-chip-type-commercial-dismiss'));
+
+      expect(
+        lastEmit(onEmit).propertyTypes ?? [],
+        'emptying the type axis by removing a COMMERCIAL token must land on the whole family',
+      ).toEqual(
+        expect.arrayContaining([
+          'commercial',
+          'commercial_building',
+          'warehouse',
+          'commercial_land',
+        ]),
+      );
+    });
+
+    /**
+     * FALSIFIABILITY GUARD for the arm above. The fallback is keyed on WHAT WAS REMOVED, not on the
+     * control: removing the last RESIDENTIAL type must still clear the axis. Widening it there
+     * would invent a Commercial narrowing the buyer never asked for — the mirror defect, and the
+     * one a careless "always fall back to the family" fix would introduce.
+     */
+    it('dismissing the last RESIDENTIAL type chip still clears the axis', () => {
+      const onEmit = vi.fn();
+      renderHost({ initialFilters: { propertyTypes: ['apartment'] }, onEmit });
+
+      fireEvent.click(screen.getByTestId('selected-chip-type-apartment-dismiss'));
+
+      expect(lastEmit(onEmit).propertyTypes ?? []).toEqual([]);
+    });
+
     /** The mirror. Restoration that only works one way is half the feature. */
     it('restores the Residential type selection when switching back to Residential', () => {
       const onEmit = vi.fn();
       renderHost({ initialFilters: { propertyTypes: ['apartment'] }, onEmit });
 
       fireEvent.click(screen.getByTestId('quick-chip-family-commercial'));
-      expect(lastEmit(onEmit).propertyTypes ?? []).toEqual([]);
+      // Issue #2572 — was `.toEqual([])`, i.e. "switching to Commercial narrows by nothing", which
+      // is precisely what let a Commercial selection render Residential rows. The load-bearing half
+      // of the original assertion is kept verbatim in meaning: the Residential type the buyer held
+      // must NOT survive the switch. What changes is that the emission now expresses the Commercial
+      // family itself instead of an empty narrowing, so this arm is strictly stronger than the one
+      // it replaces rather than a relaxation of it.
+      const onCommercial = lastEmit(onEmit).propertyTypes ?? [];
+      expect(onCommercial, 'the Residential type must not survive a switch to Commercial').not.toContain(
+        'apartment',
+      );
+      expect(onCommercial).toEqual(
+        expect.arrayContaining([
+          'commercial',
+          'commercial_building',
+          'warehouse',
+          'commercial_land',
+        ]),
+      );
 
       fireEvent.click(screen.getByTestId('quick-chip-family-residential'));
       expect(

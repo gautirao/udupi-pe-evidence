@@ -21,9 +21,24 @@ export interface DiscoverBadgeInput {
   selectedArea: { listingCount?: number | null } | null;
   filters: {
     propertyTypes?: unknown[];
+    /**
+     * Issue #2572 — the Commercial subtype axis. Absent from this shape until now, which is the
+     * other half of why the badge ignored a subtype-only selection: the predicate below could not
+     * have read it even had it tried. Typed `unknown[]` to match `propertyTypes`/`bedrooms` — this
+     * module only ever asks whether the axis is non-empty, never what is in it.
+     */
+    commercialSubtypes?: unknown[];
     bedrooms?: unknown[];
     priceMin?: number;
     priceMax?: number;
+    /**
+     * Issue #2572 — the AREA (SQ FT) axis, absent from this shape for the same reason
+     * `commercialSubtypes` was: the predicate below could not have read it had it tried. Unlike the
+     * subtype axis this row is UNGATED in the panel, so it reaches every buyer rather than only
+     * Commercial ones, and #2591 made the bound genuinely narrow.
+     */
+    areaMinSqft?: number;
+    areaMaxSqft?: number;
     sellerTypes?: string[];
     dateFrom?: Date | null;
     dateTo?: Date | null;
@@ -134,7 +149,44 @@ export function deriveDiscoverBadge({
     !!filters.backOnMarket ||
     !!filters.newToMarket ||
     !!filters.reraRegistered ||
-    !!filters.readyToMove;
+    !!filters.readyToMove ||
+    // Issue #2572 — the Commercial SUBTYPE axis, absent here while the panel's twin predicate
+    // (`AreaSelectedPanel`'s own `hasPropertyFilters`) has carried it since #2450.
+    //
+    // WHY THE DIVERGENCE WAS INVISIBLE UNTIL NOW. Under the one-axis contract a subtype selection
+    // rides `commercialSubtypes` ALONE and sets no `propertyTypes`, so this predicate saw no
+    // filters at all and every branch below fell back to the unfiltered copy. Before the Commercial
+    // family was buyer-reachable nobody could produce that state, so the omission cost nothing.
+    //
+    // MEASURED, on the desktop Shop arm against the seeded fixture: the map overlay read
+    // "10 verified properties in Sanjeevini Nagar" while the list read "3 verified properties for
+    // sale in Sanjeevini Nagar" and the map legend itself read Commercial 3 — two counts asserted
+    // about one area at the same moment. It was a REVERSION, not a constant: "All commercial" and a
+    // mixed `?type=warehouse,apartment` selection both set `propertyTypes`, so both rendered the
+    // filter-aware "M of N match your filters" form correctly. Only the subtype-only path fell
+    // through, which is what made it a one-condition fix rather than a feature.
+    //
+    // SAME KEY-ENUMERATION CLASS AS #2553: a predicate that lists the axes it knows and silently
+    // omits the newest one, where the failure is invisible at the point of loss and only surfaces
+    // as copy that contradicts the numbers beside it. This list and the panel's are twins kept in
+    // step by hand — they are not shared because this module is page-owned and that one is
+    // panel-owned — so a new axis must be added to BOTH.
+    //
+    (filters.commercialSubtypes?.length ?? 0) > 0 ||
+    // Issue #2572 — the AREA (SQ FT) axis: the FIFTH instance of the class above, and the one that
+    // reaches EVERY buyer rather than only Commercial ones. The panel's AREA row is ungated, the
+    // panel's twin predicate gained these bounds under #2555 item 7, and #2591 made them genuinely
+    // narrow — this list simply never caught up.
+    //
+    // REPRODUCED BEFORE BEING FIXED, and deliberately IN ISOLATION: an area bound with no family,
+    // no subtype and no budget, because the `commercialSubtypes` clause immediately above would
+    // otherwise have masked it and produced a fix that fixed nothing. Measured against the seeded
+    // fixture — baseline 10 rows with the overlay reading "10 verified properties in Sanjeevini
+    // Nagar"; then "1,000+ sq ft" alone narrowed the list to a single row while the overlay went on
+    // reading "10 verified properties" beside a list reading "1 verified property for sale". Ten
+    // and one, asserted about one area at the same moment.
+    filters.areaMinSqft != null ||
+    filters.areaMaxSqft != null;
   const hasSearch = !!searchQuery && searchQuery.trim() !== '';
   const hasActiveFilters = hasPropertyFilters || hasSearch;
   const zeroState: DiscoverBadgeState = hasPropertyFilters

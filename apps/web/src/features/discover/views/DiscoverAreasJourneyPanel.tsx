@@ -1326,6 +1326,13 @@ function AreaLeafListingsSurface({
       ) : (
       <AreaSelectedPanel
         selectedArea={areaPoint}
+        // Issue #2572 — COMMERCIAL CAPABILITY ENABLEMENT. See the twin comment
+        // at the NodeListingsSurface call site. This is the AREA-leaf surface of
+        // the area-first journey and the second of the two production render
+        // sites; both must pass it or the family row stays dark on whichever one
+        // was missed, which is exactly the omission class this call site has
+        // been bitten by twice before (see the breadcrumb notes below).
+        isCommercialSubtypeSupported
         // FIX CYCLE 2 (opus review, nit) — was omitted, so AreaSelectedPanel's
         // breadcrumb fell back to the area label for cityLabel too, rendering
         // "Manipal › Manipal" instead of "Udupi › Manipal". Same

@@ -183,11 +183,18 @@ type PropertyFamily = 'residential' | 'commercial';
 /**
  * Stored `property_type` tokens that mean "this selection is in the Commercial family".
  *
- * Used ONLY to DERIVE which family chip reads as active from inbound URL/filter state. It is
- * deliberately never used to WRITE: emitting one of these alongside a subtype is the auto-add
- * contradiction #2450 exists to remove (`type=commercial&subtype=WAREHOUSE` asks for a set no
- * row is in, because `commercial` rows never carry WAREHOUSE). Mirrors the server's
- * `DiscoverFilterNormalizer.BUYER_SUBTYPE_TO_PROPERTY_TYPE` value set.
+ * Used to DERIVE which family chip reads as active from inbound URL/filter state, and — since
+ * Issue #2572 — WRITTEN in one narrow case: to express "the Commercial family, no subtype yet".
+ *
+ * This paragraph previously read "deliberately never used to WRITE". That absolute was superseded,
+ * not forgotten. The hazard it guarded is real and unchanged: emitting one of these ALONGSIDE a
+ * subtype is the auto-add contradiction #2450 exists to remove (`type=commercial&subtype=WAREHOUSE`
+ * asks for a set no row is in, because `commercial` rows never carry WAREHOUSE — reproduced against
+ * the fixture as zero rows). That hazard requires a subtype to exist. With none held there is
+ * nothing to contradict, and writing nothing at all was itself the defect: the family control
+ * narrowed nothing and Residential rows stayed on screen under a Commercial selection. Every write
+ * site is therefore conditional on no subtype being held, and strips these tokens when one arrives.
+ * Mirrors the server's `DiscoverFilterNormalizer.BUYER_SUBTYPE_TO_PROPERTY_TYPE` value set.
  *
  * DRIFT WARNING (#2552). These are the same four values as the commercial members of
  * `PROPERTY_TYPES` in `lib/listing-constants.ts`. That duplication predates this file, but #2552
@@ -203,7 +210,13 @@ type PropertyFamily = 'residential' | 'commercial';
  * obvious from the two refs sitting side by side, and mistaking it for symmetry invites either a
  * pointless strip on the commercial side or a missing one here.
  */
-const COMMERCIAL_FAMILY_TOKENS: readonly string[] = [
+// Issue #2572 — typed from `PropertyFilters['propertyTypes']` rather than `readonly string[]`.
+// While these were only ever READ (membership tests), `string[]` cost nothing. #2572 made them a
+// WRITTEN value, and `string[]` is not assignable to `PropertyType[]`, so every emission site
+// raised TS2322/TS2345. Deriving the element type from the filter contract keeps the two in step by
+// construction: a property type added or removed there cannot leave this list mistyped, and no
+// `PropertyType` import is needed because `PropertyFilters` is already in scope.
+const COMMERCIAL_FAMILY_TOKENS: readonly NonNullable<PropertyFilters['propertyTypes']>[number][] = [
   'commercial',
   'commercial_building',
   'warehouse',
@@ -342,16 +355,25 @@ interface AreaSelectedPanelProps {
    * SUBTYPE narrowing. Follows the `isReadyToMoveSupported` precedent directly above, and for the
    * same honesty reason, but **defaults FALSE** where that one defaults true.
    *
-   * WHY FALSE IS THE RIGHT DEFAULT HERE. This panel's card list is fed by
-   * `useDiscoverCityListings`, which carries no `commercialSubtypes` param at all. So on
-   * today's surfaces a buyer picking Commercial → Warehouse would see results **unchanged** —
-   * not zero. That is worse than an empty list: zero at least signals that something happened,
-   * whereas unchanged results signal a control that did nothing.
+   * WHY FALSE WAS THE RIGHT DEFAULT, AND WHY BOTH PRODUCTION SITES NOW PASS IT TRUE (#2572). The
+   * original reasoning: this panel's card list is fed by `useDiscoverCityListings`, which carried
+   * no `commercialSubtypes` param at all, so a buyer picking Commercial → Warehouse would see
+   * results **unchanged** — worse than an empty list, because zero at least signals that something
+   * happened while unchanged results signal a control that did nothing.
    *
-   * Issue #2533 removed the OTHER half of this reasoning: that hook's `propertyType` was also
-   * SINGULAR, so a multi-select dropped the type filter outright. It now accepts and sends the
-   * full selection. The subtype gap above is what still keeps this flag false.
-   * Shipping it reachable would pin exactly the inert-control class #2450 exists to remove.
+   * BOTH HALVES OF THAT PREMISE HAVE SINCE GONE, and this is the block a reader consults to decide
+   * whether the flag may be passed, so it must not keep arguing against the answer:
+   *   - #2533 removed the singular-`propertyType` half: the hook now accepts and sends the full
+   *     multi-value selection.
+   *   - #2509 removed the subtype half. `useDiscoverCityListings` DOES carry `commercialSubtypes`
+   *     (a repeated param, and in the react-query key), and `CityAreaListingsController` binds,
+   *     validates and forwards it. The sentence that stood here — "the subtype gap above is what
+   *     still keeps this flag false" — described a gap that no longer exists.
+   *
+   * So shipping it reachable now AVOIDS the inert-control class #2450 exists to remove, rather
+   * than pinning it: the control narrows. The DEFAULT stays false, because a surface whose hook
+   * cannot consume the axis must still be able to say so; what changed is that the two production
+   * call sites (`NodeListingsSurface`, `DiscoverAreasJourneyPanel`) pass it true.
    *
    * GATE-OFF IS "NO FAMILY ROW", NOT "RESIDENTIAL ALONE" (owner ruling on PR #2500, Option A).
    * While this is false the panel renders NO family row and NO Commercial subtype control — no
@@ -432,8 +454,13 @@ interface AreaSelectedPanelProps {
    * a comment stops describing the code. The only defence is to treat a behaviour change and its
    * comment as one edit, which is why the fix commit and these corrections are recorded together.
    *
-   * It flips to true once the card path can consume a subtype — which is #2533's multi-value
-   * narrowing work. #2533 must land before this is ENABLED; it does not block this being built.
+   * IT HAS NOW FLIPPED (Issue #2572). This previously read "It flips to true once the card path
+   * can consume a subtype — which is #2533's multi-value narrowing work. #2533 must land before
+   * this is ENABLED". #2533 landed, #2509 landed, and #2552 / #2553 / #2555 closed the enablement
+   * gate, so both production call sites now pass this true and the Commercial family is reachable.
+   * The paragraph is kept in its corrected form rather than deleted because the CONDITION it named
+   * is the right one to re-check if anyone adds a third call site: pass this true only from a
+   * surface whose listings hook actually consumes the subtype.
    */
   isCommercialSubtypeSupported?: boolean;
   /**
@@ -806,10 +833,13 @@ export function AreaSelectedPanel({
   // through a shared `appendPropertyTypeClause` emitting `IN (...)` on both the areaKeys and
   // bbox-only paths. The premise is gone, so the gate built on it is gone with it.
   //
-  // REACHABILITY IS GOVERNED BY THE CAPABILITY ALONE, and it defaults FALSE — see
-  // `isCommercialSubtypeSupported`. Enablement additionally waits on #2509 making the anonymous
-  // city-listings path express family/subtype/multi-select truthfully and cache-safely. Nothing
-  // here is buyer-reachable today.
+  // REACHABILITY IS GOVERNED BY THE CAPABILITY ALONE — see `isCommercialSubtypeSupported`. It
+  // still defaults FALSE, but Issue #2572 passes it at BOTH production call sites
+  // (`NodeListingsSurface` and `DiscoverAreasJourneyPanel`), so this IS buyer-reachable now; the
+  // preceding sentence used to end "Nothing here is buyer-reachable today" and no longer holds.
+  // The #2509 precondition it waited on is met on main: the anonymous city-listings endpoint binds
+  // `commercialSubtypes` and takes `propertyType` as a list, so family, subtype and multi-select
+  // all reach the server rather than being silently discarded.
   const showSubtypeRow = isCommercialSubtypeSupported && activeFamily === 'commercial';
 
   const handleSelectFamily = useCallback(
@@ -845,7 +875,22 @@ export function AreaSelectedPanel({
             // bare `commercialSubtypes: undefined` here is what made the round trip lossy.
             {
               ...filters,
-              propertyTypes: undefined,
+              // Issue #2572 — the family must NARROW, not merely relabel. This emitted
+              // `propertyTypes: undefined`, so with no remembered subtype the panel said
+              // "Commercial" while asking the server for nothing: measured on the fixture, the chip
+              // read aria-pressed=true and the list still returned 10 rows, three of them [BEDS]
+              // Residential. The family tokens are the only way to say "the Commercial family, no
+              // subtype yet" on the wire.
+              //
+              // WRITING THESE IS PERMITTED IN EXACTLY THIS SHAPE. COMMERCIAL_FAMILY_TOKENS
+              // documents itself as never-written because a token emitted ALONGSIDE a subtype is
+              // the #2450 contradiction — `type=commercial&subtype=WAREHOUSE` matches nothing
+              // (measured: zero rows on this fixture). That hazard requires a subtype to exist;
+              // where there is none there is nothing to contradict. When a remembered subtype does
+              // come back the tokens stay off, so the one-axis contract is untouched.
+              propertyTypes: commercialMemoryRef.current?.length
+                ? undefined
+                : [...COMMERCIAL_FAMILY_TOKENS],
               commercialSubtypes: commercialMemoryRef.current,
             }
           : // Issue #2552 — the mirror image, which was missing. Clearing `commercialSubtypes`
@@ -909,9 +954,16 @@ export function AreaSelectedPanel({
     [filters, onFiltersChange, isCommercialSubtypeSupported],
   );
 
-  // ONE AXIS. The selection rides `commercialSubtypes` and nothing else — no family token is ever
-  // auto-added. See `COMMERCIAL_FAMILY_TOKENS` for why doing so matches zero rows and fails
-  // silently for BUILDING / WAREHOUSE / LAND.
+  // ONE AXIS WHILE A SUBTYPE IS HELD. A subtype selection rides `commercialSubtypes` and carries
+  // no family token, because a token emitted ALONGSIDE a subtype matches zero rows and fails
+  // silently for BUILDING / WAREHOUSE / LAND — see `COMMERCIAL_FAMILY_TOKENS`.
+  //
+  // Issue #2572 superseded the absolute form of this rule, which read "no family token is ever
+  // auto-added". That was true and was also the defect: with no subtype selected it left the
+  // emission empty, so "Commercial" narrowed nothing and Residential rows stayed on screen. The
+  // tokens ARE now written in exactly the no-subtype case, where there is nothing to contradict,
+  // and stripped again the moment a subtype arrives. The invariant a reader should carry away is
+  // the conditional one: tokens and a subtype never travel together.
   const handleToggleSubtype = useCallback(
     (value: CommercialSubtype | null) => {
       if (!onFiltersChange || !isCommercialSubtypeSupported) return;
@@ -928,13 +980,28 @@ export function AreaSelectedPanel({
       // makes the doc comment below true rather than aspirational.
       setFamilyOverride('commercial');
       if (value === null) {
-        // "All commercial" clears the narrowing WITHOUT leaving the family, so any inbound
-        // `propertyTypes` is preserved exactly as it arrived rather than rewritten.
+        // "All commercial" clears the SUBTYPE narrowing without leaving the family.
+        //
+        // Issue #2572 — this previously said any inbound `propertyTypes` was "preserved exactly as
+        // it arrived rather than rewritten", which the code below no longer does and which was the
+        // defect: on the canonical one-axis link (subtype alone, no property type) preserving it
+        // meant emitting nothing, so the chip read pressed over an unnarrowed list. It is rewritten
+        // to the family set deliberately.
         //
         // Issue #2555 item 1 — and it is an EXPLICIT choice to hold no subtype, so it replaces
         // this family's memory. The mirror of `handleSelectAllTypes`; see the note there.
         commercialMemoryRef.current = undefined;
-        onFiltersChange({ ...filters, commercialSubtypes: undefined });
+        // Issue #2572 — "All commercial" means the WHOLE FAMILY, not "no filter". This cleared the
+        // subtype and preserved any inbound `propertyTypes` exactly as it arrived, which on the
+        // canonical one-axis link (subtype alone, no property type) left NOTHING on the wire: the
+        // chip read selected and the results still carried Residential rows. Emitting the family
+        // tokens is what makes this branch's own promise — "clears the narrowing WITHOUT leaving
+        // the family" — true of the RESULTS and not merely of the chip.
+        onFiltersChange({
+          ...filters,
+          propertyTypes: [...COMMERCIAL_FAMILY_TOKENS],
+          commercialSubtypes: undefined,
+        });
         return;
       }
       const current = filters.commercialSubtypes ?? [];
@@ -947,6 +1014,21 @@ export function AreaSelectedPanel({
       commercialMemoryRef.current = updated.length > 0 ? updated : undefined;
       onFiltersChange({
         ...filters,
+        // Issue #2572 — strip the family tokens the "All commercial" branch above now writes.
+        // Without this, picking Shop straight after "All commercial" would emit
+        // `propertyType=commercial,...` TOGETHER WITH `subtype=SHOP`. The four-token set happens to
+        // still return the right rows (measured), but the single-token form of that same shape is
+        // the #2450 contradiction that matches zero rows, so the invariant worth holding is the
+        // simple one: while a subtype is active, no family token rides with it.
+        //
+        // Toggling the LAST subtype off falls to the zero-length case and restores the family
+        // tokens, so clearing the final chip lands back on the whole Commercial family rather than
+        // on no filter at all — which is the defect this issue exists to remove, and it would
+        // otherwise reappear by the back door.
+        propertyTypes:
+          updated.length > 0
+            ? withoutCommercialFamilyTokens(filters.propertyTypes)
+            : [...COMMERCIAL_FAMILY_TOKENS],
         commercialSubtypes: updated.length > 0 ? updated : undefined,
       });
     },
@@ -1038,7 +1120,24 @@ export function AreaSelectedPanel({
       setFamilyOverride('commercial');
       // Removing a chip is an explicit edit of this family's selection, so the memory tracks it.
       commercialMemoryRef.current = next;
-      onFiltersChange({ ...filters, commercialSubtypes: next });
+      onFiltersChange({
+        ...filters,
+        // Issue #2572 — the SAME family-fallback rule as `handleToggleSubtype`, reached through a
+        // SECOND path, exactly as the #2552 note above this line records for its own invariant.
+        // Measured in a browser before this fix: dismissing the last subtype chip emitted neither a
+        // subtype nor a family token, and the list went straight back to all 10 rows — three
+        // Residential [BEDS] listings among them — while the chip row still read "All commercial".
+        // That is the defect the toggle path was fixed for, arriving through the back door that
+        // fix's own comment warned about, and the toggle-path tests stayed green while it shipped.
+        //
+        // The two paths must agree: while a subtype survives, no family token rides with it (the
+        // #2450 contradiction); when the last one goes, the selection lands on the whole Commercial
+        // family, never on no filter at all.
+        propertyTypes: next
+          ? withoutCommercialFamilyTokens(filters.propertyTypes)
+          : [...COMMERCIAL_FAMILY_TOKENS],
+        commercialSubtypes: next,
+      });
     },
     [filters, onFiltersChange, isCommercialSubtypeSupported],
   );
@@ -1057,9 +1156,18 @@ export function AreaSelectedPanel({
       // dismissing it emptied the axis, and the override then said Residential over what had been
       // a Commercial selection, closing the subtype row under the buyer. That is F2's class on the
       // neighbouring axis.
-      setFamilyOverride(
-        COMMERCIAL_FAMILY_TOKENS.includes(type) ? 'commercial' : 'residential',
-      );
+      // Issue #2572 — `type` is a plain `string` here: the chip's stored token, which this
+      // handler's own note below points out is parsed with NO allowlist, so it cannot be assumed to
+      // be a valid PropertyType. Typing COMMERCIAL_FAMILY_TOKENS from the filter contract (so it
+      // could be written) made the bare `.includes(type)` a type error. Widening the ARRAY for the
+      // membership test is the correct direction: "is this arbitrary string one of the four" is
+      // precisely the question being asked. Casting `type` instead would assert a validity this
+      // handler is documented not to have.
+      //
+      // Hoisted from the `setFamilyOverride` argument because the emission below needs the same
+      // answer. Computing it twice is how the two would drift.
+      const removedFamilyToken = (COMMERCIAL_FAMILY_TOKENS as readonly string[]).includes(type);
+      setFamilyOverride(removedFamilyToken ? 'commercial' : 'residential');
       // THE MEMORY IS FILTERED, NOT BANKED WHOLE (third-cycle review finding), and the previous
       // revision fixed the line ABOVE while leaving this one unconditional — the same class, one
       // line apart.
@@ -1079,7 +1187,29 @@ export function AreaSelectedPanel({
       // or future writer banks; filtering here keeps the banked value clean at the point of action
       // rather than being the thing that makes it safe.
       residentialMemoryRef.current = withoutCommercialFamilyTokens(next);
-      onFiltersChange({ ...filters, propertyTypes: next });
+      onFiltersChange({
+        ...filters,
+        // Issue #2572 (re-review) — the THIRD door on the removal surface, and the one the
+        // chip-suppression fix deliberately does not reach. A SINGLE inbound commercial token
+        // (`?type=commercial`, reachable by ticking one box in `PropertyTypeFilter` — no URL
+        // editing) renders exactly one chip, and length 1 fails the suppression predicate, so that
+        // chip stays removable by design. Dismissing it emptied the axis while `setFamilyOverride`
+        // above kept the family, so `familyIsUnset` made `activeFamily` resolve to 'commercial':
+        // Commercial pressed, "All commercial" pressed, and NOTHING on the wire.
+        //
+        // The mechanism predates this issue. The VISIBLE lie is new, and that is what makes it
+        // ours: enabling the family row is what puts a Commercial chip on screen to contradict the
+        // results, so a pre-existing emission became a buyer-facing contradiction at the moment of
+        // the flip.
+        //
+        // Same rule the other two removal paths already follow, keyed on WHAT WAS REMOVED rather
+        // than on the control: emptying the axis by removing a FAMILY token lands on the whole
+        // Commercial family. Removing the last RESIDENTIAL type still clears to `undefined` — that
+        // is a Residential selection going away, which the family row reports honestly, and
+        // widening it to the commercial tokens there would invent a narrowing the buyer never
+        // asked for.
+        propertyTypes: next ?? (removedFamilyToken ? [...COMMERCIAL_FAMILY_TOKENS] : undefined),
+      });
     },
     [filters, onFiltersChange],
   );
@@ -2144,17 +2274,50 @@ export function AreaSelectedPanel({
                 onRemove: () => void;
               }[] = [];
 
-              (filters.propertyTypes ?? []).forEach((type) => {
-                selectedChips.push({
-                  key: `type-${type}`,
-                  // #2430's shared authority, NOT this file's private map: that one covers only
-                  // apartment/villa/land, so a Commercial family token from a URL rendered as the
-                  // raw stored string.
-                  label: getPropertyTypeLabel(type),
-                  testId: `selected-chip-type-${type}`,
-                  onRemove: () => handleRemovePropertyType(type),
+              // Issue #2572 — the four Commercial FAMILY TOKENS are a DERIVED expression of
+              // "Commercial, no subtype yet", not four buyer selections, so they do not render as
+              // four individually removable chips.
+              //
+              // THIS IS A CORRECTNESS FIX, NOT TIDYING. Every entry in this array gets a dismiss
+              // button routed at `handleRemovePropertyType`. Emitting the family tokens therefore
+              // created a removal path that did not exist before this issue: dismissing all four
+              // left `propertyTypes: undefined` while `familyOverride` still said 'commercial', so
+              // the panel read Commercial with "All commercial" pressed and NOTHING on the wire —
+              // the exact unnarrowed state this issue exists to remove, reachable in four clicks
+              // from the new default. Dismissing only some was a weaker form of the same lie: the
+              // wire carried a partial family while "All commercial" still read pressed, because
+              // that chip keys off `activeCommercialSubtypes.size === 0` and never off the tokens.
+              //
+              // Suppressing the chips closes the removal path, the partial-family state and the
+              // four-chips-for-one-concept noise together, instead of teaching a FOURTH handler the
+              // same rule — which would leave the intermediate partial states standing. The family
+              // row above already shows Commercial as pressed, so nothing is concealed: the
+              // selection stays visible, it simply cannot be dismantled into a state no control can
+              // express. `hasPropertyFilters` still counts the axis, so it is not trapped either.
+              //
+              // EXACTLY the family set, and only while no subtype is held. A genuine buyer
+              // selection that merely happens to contain a commercial token — a mixed
+              // `?type=warehouse,apartment` link, or a subtype-narrowed selection — is untouched
+              // and still renders its chips normally.
+              const propertyTypeChips = filters.propertyTypes ?? [];
+              const isDerivedCommercialFamilySelection =
+                (filters.commercialSubtypes?.length ?? 0) === 0 &&
+                propertyTypeChips.length === COMMERCIAL_FAMILY_TOKENS.length &&
+                COMMERCIAL_FAMILY_TOKENS.every((token) => propertyTypeChips.includes(token));
+
+              if (!isDerivedCommercialFamilySelection) {
+                propertyTypeChips.forEach((type) => {
+                  selectedChips.push({
+                    key: `type-${type}`,
+                    // #2430's shared authority, NOT this file's private map: that one covers only
+                    // apartment/villa/land, so a Commercial family token from a URL rendered as the
+                    // raw stored string.
+                    label: getPropertyTypeLabel(type),
+                    testId: `selected-chip-type-${type}`,
+                    onRemove: () => handleRemovePropertyType(type),
+                  });
                 });
-              });
+              }
 
               // Subtype chips are CAPABILITY-GATED (review finding). Rendering them while the flag
               // is off would put a working Commercial subtype control on the surface the owner
@@ -2308,45 +2471,17 @@ export function AreaSelectedPanel({
               );
             })()}
 
-            {/* ── Issue #2555 item 3 — NON-REMOVABLE SUBTYPE DISCLOSURE (owner ruling) ──────────
-                WHY THIS EXISTS. While `isCommercialSubtypeSupported` is false the panel renders no
-                Commercial control and no subtype chip, per the owner's gate-off ruling. But an
-                inbound `?subtype=SHOP` is NOT inert: it survives in URL state, so it persists,
-                reloads and travels in a shared link, and it reaches the markers endpoint for
-                signed-in buyers. Saying nothing leaves the buyer with a narrowing they cannot see.
-
-                A LABEL, NOT A CONTROL — this is the whole point of the ruling and the reason it is
-                not rendered as a selected-filter chip. No dismiss button, no click handler, no
-                tabIndex, no role that implies an action: a `<div>` of text. A dismissable subtype
-                affordance would BE the Commercial control the gate-off ruling forbids, which is why
-                the chip above is capability-gated and this is not.
-
-                OUTSIDE THE CHIP-ROW IIFE, deliberately. That block returns null when
-                `selectedChips` is empty, and the exact state this discloses — an inbound subtype
-                with the capability off and nothing else applied — produces precisely zero chips, so
-                nesting it there would silence it in the one case it exists for.
-
-                THE COPY CLAIMS ONLY WHAT HOLDS IN BOTH SESSIONS. It does not say the map is
-                narrowed: markers are auth-gated, so that is true for a signed-in buyer and false
-                for an anonymous one, and this panel takes no auth prop to tell them apart. Nor does
-                it point at "Clear filters", which renders only in the zero-result branch and is
-                absent while results are on screen — naming an off-screen control would be worse
-                than naming none. Clearing remains available by the existing routes.
-
-                TRANSITIONAL. This whole block is removed by the lane that flips
-                `isCommercialSubtypeSupported` to true: once the card path consumes a subtype there
-                is no divergence to disclose, and the subtype chip above starts rendering instead.
-                Delete it with the flip — do not leave it standing as a permanent explanation of a
-                state that no longer occurs. */}
-            {!isCommercialSubtypeSupported && (filters.commercialSubtypes?.length ?? 0) > 0 && (
-              <div
-                className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground"
-                data-testid="commercial-subtype-disclosure"
-              >
-                A commercial property type from your link is still applied to this search and will
-                travel with the page if you share it. These results are not narrowed by it yet.
-              </div>
-            )}
+            {/* Issue #2572 — the #2555 item-3 NON-REMOVABLE SUBTYPE DISCLOSURE stood here and is
+                deleted with the capability flip, exactly as its own closing paragraph instructed.
+                It existed to narrate a divergence that can no longer occur: while the capability
+                was false an inbound `?subtype=SHOP` survived in URL state and reached the markers
+                endpoint while narrowing no cards, so the panel owed the buyer a sentence saying the
+                narrowing was carried but not applied. Now that both production call sites pass
+                `isCommercialSubtypeSupported`, the card path consumes the subtype and the removable
+                subtype chip above renders instead — so the disclosure would have become a standing
+                explanation of a state that no longer happens, which is what it told us not to leave
+                behind. Nothing asserted it: its `data-testid` had exactly one occurrence in the
+                repository, its own. */}
           </div>
         </div>
       </div>
