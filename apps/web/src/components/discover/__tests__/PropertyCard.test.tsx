@@ -94,6 +94,70 @@ const renderCardInPreview = (props: React.ComponentProps<typeof PropertyCard>) =
     </QueryClientProvider>,
   );
 
+/**
+ * Issue #2596 — the anonymous price BAND is labelled, and it is rendered in the mono face.
+ *
+ * VISUAL_RULES §Commercial identity names exactly three price treatments, the first being
+ * "anonymous band (mono + `PRICE BAND` caps)". Both halves matter and neither is decoration: the
+ * mono face is what the design language gives every price/count/measurement, and the caps label is
+ * what makes the COARSENING legible — an unlabelled band reads as an exact price the product is
+ * merely being vague about.
+ *
+ * The third arm is the control. Without it these would pass over a card that labelled every price
+ * a band, including the authenticated exact figure, which would be a false statement about the
+ * data the buyer is looking at.
+ */
+describe('PropertyCard — #2596 anonymous price band', () => {
+  it('labels the anonymous sale band and renders the figure in the mono face', () => {
+    renderCard({
+      listing: makeListing({ pricePaise: null, priceBand: '₹25–50L' }),
+      isAuthenticated: false,
+      onNavigate: vi.fn(),
+    });
+
+    expect(screen.getByTestId('listing-price-band-label')).toHaveTextContent('Price band');
+    const figure = screen.getByTestId('listing-price-band-figure');
+    expect(figure).toHaveTextContent('₹25–50L');
+    expect(figure).toHaveClass('font-mono');
+  });
+
+  it('labels the anonymous rent band the same way, in the same mono face', () => {
+    renderCard({
+      listing: makeListing({
+        pricePaise: null,
+        listingPurpose: 'rent',
+        monthlyRentBand: '₹20–30K',
+      }),
+      isAuthenticated: false,
+      onNavigate: vi.fn(),
+    });
+
+    expect(screen.getByTestId('listing-price-band-label')).toHaveTextContent('Price band');
+    // Review `5210502635` (F6): this arm previously asserted the label alone, so the rent branch's
+    // mono face was unpinned — dropping `font-mono` there regressed only the rent band and no test
+    // reddened. The figure carries a testid because the rendered text is `₹20–30K/mo`, which makes
+    // an exact getByText awkward and would otherwise invite a substring match.
+    const figure = screen.getByTestId('listing-price-band-figure');
+    expect(figure).toHaveTextContent('₹20–30K/mo');
+    expect(figure).toHaveClass('font-mono');
+  });
+
+  it('never labels an EXACT price a band', () => {
+    // Retitled after review `5210279153` (F5): the price chain branches purely on FIELD PRESENCE
+    // (`pricePaise != null`), never on `isAuthenticated`, so calling this the "authenticated"
+    // branch would invite a later reader to infer an auth gate this component does not have.
+    // The `isAuthenticated` prop is passed only because it is required by PropertyCardProps.
+    // makeListing defaults to a real pricePaise, i.e. the exact-price branch.
+    renderCard({
+      listing: makeListing(),
+      isAuthenticated: true,
+      onNavigate: vi.fn(),
+    });
+
+    expect(screen.queryByTestId('listing-price-band-label')).not.toBeInTheDocument();
+  });
+});
+
 describe('PropertyCard', () => {
   beforeEach(() => {
     mockSavedIds.current = new Set<string>();

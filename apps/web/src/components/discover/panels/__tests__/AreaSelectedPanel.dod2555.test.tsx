@@ -701,6 +701,56 @@ describe('AreaSelectedPanel — #2555 DoD items', () => {
       expect(screen.getByTestId('quick-chip-2-bhk')).toBeInTheDocument();
     });
 
+    /**
+     * Issue #2596 — #2459 AC2's FIRST sentence, which the row was not implementing.
+     *
+     * The Commercial half above was enforced; the Plot half was not. `showBedroomsRow` read
+     * `activeFamily !== 'commercial'` alone, so a Residential PLOT selection — still the
+     * Residential family — kept its Bedrooms row while `shouldSubmitBedrooms` had already
+     * stopped sending `beds=` for it. The control therefore offered a narrowing the request
+     * did not carry, which is the same dishonesty the Bedrooms CHIP refuses two blocks down.
+     *
+     * Measured on the running app at the merge base (1366x768 and 390x844, Sanjeevini Nagar):
+     * with `quick-chip-land` pressed and `aria-pressed="true"`, `quick-bedrooms-row` was
+     * present in the same frame whose area control already read "PLOT SIZE (SQ FT)".
+     *
+     * MUTATION PROOF. Restoring `showBedroomsRow = activeFamily !== 'commercial'` must make
+     * this arm FAIL. It cannot pass both ways: the positive controls below prove the panel and
+     * the Residential family really rendered, so the absence asserted here is a real absence
+     * and not a panel that failed to mount or a selection that silently fell back to Commercial.
+     */
+    it('hides the Bedrooms row for a Residential PLOT selection, whose request carries no beds=', () => {
+      renderHost({ initialFilters: { propertyTypes: ['land'] } });
+
+      // Positive controls: the panel rendered, the family is RESIDENTIAL (not Commercial — the
+      // other route to a hidden row), and the selection really is the plot shape.
+      expect(screen.getByTestId('quick-family-row')).toBeInTheDocument();
+      expect(screen.getByTestId('quick-chip-family-residential')).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      expect(screen.queryByTestId('quick-subtype-row')).not.toBeInTheDocument();
+      expect(screen.getByTestId('quick-area-row')).toHaveTextContent('PLOT SIZE (SQ FT)');
+
+      // The rule itself.
+      expect(screen.queryByTestId('quick-bedrooms-row')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('quick-chip-2-bhk')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('quick-chip-3-bhk')).not.toBeInTheDocument();
+    });
+
+    /**
+     * The control arm for the rule above, and the reason it is not merely "plot hides the row":
+     * a MIXED dwelling+plot selection still contains a shape that HAS bedrooms, so the row must
+     * stay. `isPlotOnlySelection` is plot-ONLY by design (#2537 owns mixed-shape semantics), and
+     * this pins that the row follows the same predicate rather than a looser "contains a plot".
+     */
+    it('keeps the Bedrooms row for a MIXED dwelling + plot selection', () => {
+      renderHost({ initialFilters: { propertyTypes: ['apartment', 'land'] } });
+
+      expect(screen.getByTestId('quick-bedrooms-row')).toBeInTheDocument();
+      expect(screen.getByTestId('quick-chip-2-bhk')).toBeInTheDocument();
+    });
+
     /** #2450 copy rule: "Prefer `Ready to occupy` in Commercial contexts." */
     it('labels the possession chip "Ready to occupy" in Commercial', () => {
       renderHost({ initialFilters: { commercialSubtypes: ['SHOP'] } });
@@ -714,6 +764,214 @@ describe('AreaSelectedPanel — #2555 DoD items', () => {
       expect(screen.getByTestId('quick-chip-ready-to-move').textContent?.trim()).toBe(
         'Ready to move',
       );
+    });
+  });
+
+  /**
+   * Issue #2596 — RESULT LANGUAGE FOLLOWS THE FAMILY.
+   *
+   * The updated design kit (main @ `ebe1320c`, #2599) specifies in §Result language that
+   * Commercial reads "Commercial properties in X" with the count noun "commercial listings", and
+   * that Commercial never borrows a Residential noun. Confirmed against the served kit, whose
+   * Commercial state renders the count as "N commercial listings".
+   *
+   * STRINGS ONLY. `count` is still `areaListings.length`; none of these arms touches how the
+   * number is produced, and each pairs the Commercial assertion with its Residential counterpart
+   * so a change that flattened BOTH families to one noun would fail rather than pass.
+   */
+  describe('#2596 — result language follows the family', () => {
+    it('heads Commercial results "Commercial properties in {area}"', () => {
+      renderHost({ initialFilters: { commercialSubtypes: ['SHOP'] } });
+
+      // Positive control: this really is the Commercial surface.
+      expect(screen.getByTestId('quick-subtype-row')).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: 'Commercial properties in Test Area' }),
+      ).toBeInTheDocument();
+    });
+
+    it('leaves the Residential heading exactly "Properties in {area}"', () => {
+      renderHost({ initialFilters: { propertyTypes: ['apartment'] } });
+
+      expect(screen.getByRole('heading', { name: 'Properties in Test Area' })).toBeInTheDocument();
+      expect(
+        screen.queryByRole('heading', { name: /Commercial properties/ }),
+      ).not.toBeInTheDocument();
+    });
+
+    /**
+     * The noun node is read EXACTLY, not by containment.
+     *
+     * CORRECTED after exact-head review `5210279153` (F1). This arm previously asserted
+     * `toHaveTextContent('commercial listing')`, which is a SUBSTRING match — and
+     * "commercial listings" contains "commercial listing", so it passed for both forms while its
+     * comment claimed to pin the singular. Concretely, mutating `countNoun` to the constant
+     * `'commercial listings'` passed this arm AND the plural arm below, leaving the
+     * `count === 1` branch with no coverage at all. That was a false claim inside this PR's own
+     * mutation-proof narrative, which is worse than a missing test.
+     *
+     * Reading the noun `<p>` and comparing with `toBe` makes the two forms mutually exclusive, so
+     * a constant in either direction now fails one arm or the other.
+     *
+     * The node is addressed STRUCTURALLY, by testid. Review `5210502635` (F4) noted that the first
+     * fix reached it as `querySelectorAll('p')[1]` — correct while the hero holds exactly two
+     * paragraphs, but a third one added above it would silently shift the index and leave these
+     * arms asserting the wrong node while still passing. The testid cannot drift that way.
+     */
+    const countNounText = () => screen.getByTestId('area-header-count-noun').textContent?.trim();
+
+    it('counts a single Commercial result as "commercial listing", not the plural', () => {
+      // renderHost defaults to exactly one listing.
+      renderHost({ initialFilters: { commercialSubtypes: ['SHOP'] } });
+
+      expect(countNounText()).toBe('commercial listing');
+    });
+
+    it('counts Commercial in the plural once there is more than one', () => {
+      renderHost({
+        initialFilters: { commercialSubtypes: ['SHOP'] },
+        areaListings: [mockListing, { ...mockListing, id: '2' }],
+      });
+
+      expect(countNounText()).toBe('commercial listings');
+    });
+
+    /**
+     * Issue #2596 — the family nouns must hold when the buyer CLICKS the family, not only when a
+     * subtype is seeded into initial filters.
+     *
+     * Added after review `5210279153` (F2). Every other arm here seeds `commercialSubtypes`, which
+     * makes `commercialFromFilters` true directly. But `showSubtypeRow` keys off `activeFamily`
+     * (which a click sets immediately via `familyOverride`) while these nouns key off
+     * `commercialFromFilters` (which only becomes true once the emission round-trips). On a
+     * CONTROLLED panel the two converge in the same batched render, because `handleSelectFamily`
+     * emits either the family tokens or a remembered subtype — but nothing asserted that
+     * convergence, so a regression in it would have been invisible.
+     *
+     * SUPERSEDED PARAGRAPH, corrected rather than deleted. An earlier revision of this docstring
+     * said the uncontrolled-panel divergence was "a known, documented divergence… recorded rather
+     * than silently re-keyed". That stopped being true when the nouns were converged onto
+     * `activeFamily`: there is no divergence left to document. The claim is corrected here because
+     * a comment asserting behaviour the code no longer has is the same defect as F1 — it stops the
+     * next reader from checking.
+     */
+    it('follows the family when the buyer CLICKS Commercial, not only on a seeded subtype', () => {
+      renderHost({ initialFilters: { propertyTypes: ['apartment'] } });
+      expect(screen.getByRole('heading', { name: 'Properties in Test Area' })).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId('quick-chip-family-commercial'));
+
+      expect(
+        screen.getByRole('heading', { name: 'Commercial properties in Test Area' }),
+      ).toBeInTheDocument();
+    });
+
+    /**
+     * THE ARM THAT ACTUALLY DISCRIMINATES — and the reason the one above did not answer F2.
+     *
+     * On a CONTROLLED panel both predicates converge whatever the code keys off, because the
+     * emission round-trips and makes `commercialFromFilters` true in the same batched render. So
+     * the arm above passes under either implementation: it pins the behaviour but cannot detect
+     * the divergence F2 named.
+     *
+     * An UNCONTROLLED panel (no `onFiltersChange`) is the shape that separates them. The filters
+     * never move, so `commercialFromFilters` stays false forever while `familyOverride` drives
+     * `activeFamily` to Commercial. Under the old keying this rendered an open Commercial subtype
+     * row with the chip pressed, above a heading reading "Properties in Test Area" — "Commercial
+     * never borrows a Residential noun" failing in a state this file explicitly supports (see
+     * `handleSelectFamily` on why the override must still respond with no filter owner).
+     *
+     * This arm is therefore its own mutation proof: it fails before the convergence and passes
+     * after, so reverting `commercialFamilyActive` to `commercialFromFilters` reddens it while
+     * every other arm in this block stays green.
+     */
+    it('keeps heading and subtype row on one family even on an UNCONTROLLED panel', () => {
+      renderWithProviders(
+        <DiscoverProvider>
+          <AreaSetDraftProvider>
+            <AreaSelectedPanel
+              selectedArea={mockArea}
+              areaListings={[mockListing]}
+              filters={{}}
+              isCommercialSubtypeSupported
+            />
+          </AreaSetDraftProvider>
+        </DiscoverProvider>,
+        { router: 'browser' },
+      );
+
+      expect(screen.getByRole('heading', { name: 'Properties in Test Area' })).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId('quick-chip-family-commercial'));
+
+      // The override alone drives the family here — no emission ever round-trips.
+      expect(screen.getByTestId('quick-subtype-row')).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: 'Commercial properties in Test Area' }),
+      ).toBeInTheDocument();
+    });
+
+    it('keeps the Residential count noun as "shown for sale"', () => {
+      renderHost({ initialFilters: { propertyTypes: ['apartment'] } });
+
+      const hero = screen.getByTestId('area-header-count');
+      expect(hero).toHaveTextContent('shown for sale');
+      expect(hero).not.toHaveTextContent('commercial');
+    });
+
+    /**
+     * The kit names the two type rows RESIDENTIAL TYPE and COMMERCIAL TYPE, because a family is
+     * not a subtype: with a Commercial family control one row above it, "Property type" reads as
+     * the family. The label is rendered uppercase via CSS, so the assertion reads the DOM text.
+     */
+    it('labels the Residential type row "Residential type", not "Property type"', () => {
+      renderHost({ initialFilters: { propertyTypes: ['apartment'] } });
+
+      const row = screen.getByTestId('quick-chip-apartment').closest('div')?.parentElement;
+      expect(row).toBeTruthy();
+      expect(row).toHaveTextContent('Residential type');
+      expect(row).not.toHaveTextContent('Property type');
+    });
+
+    /**
+     * Issue #2596 — ONE FILTER GROUP PER ROW.
+     *
+     * Found by exact-head review `5210126806`, and confirmed against the synced VISUAL_RULES
+     * §"One filter group per row" before acting on it: "A group heading therefore always owns the
+     * chips beside it, and no heading is ever pushed into another group's leftover horizontal
+     * space." The BUDGET heading used to sit `ml-auto` on the trailing edge of the AREA row —
+     * #2555 parity with the older mock, which the updated kit contradicts.
+     *
+     * NOTHING IN THE SUITE ASSERTED THIS, which is why it survived a design sync and had to be
+     * caught by a reviewer reading the rules rather than by a red test. The negative half is the
+     * whole point: it is not enough that Budget appears somewhere on the card, it must not appear
+     * inside the AREA group.
+     */
+    it("gives Budget its own group instead of the AREA row's trailing edge", () => {
+      renderHost({ initialFilters: { commercialSubtypes: ['SHOP'] } });
+
+      expect(screen.getByTestId('quick-budget-row')).toHaveTextContent('Budget');
+      expect(screen.getByTestId('quick-area-row')).not.toHaveTextContent('Budget');
+    });
+
+    /**
+     * The kit: "the label reads `Monthly rent`" in the Rent / Lease state. Reusing "Budget" there
+     * would present a monthly rent ceiling in the register of a purchase price — the same class of
+     * error as reusing purchase bands in a rental state, which `QUICK_BUDGET_BANDS` already avoids.
+     * Both directions are asserted so a label hardcoded either way fails.
+     */
+    it('labels the budget group "Monthly rent" under Rent / Lease, and "Budget" under Buy', () => {
+      const { unmount } = renderHost({
+        initialFilters: { commercialSubtypes: ['SHOP'] },
+        intent: 'rent',
+      });
+      expect(screen.getByTestId('quick-budget-row')).toHaveTextContent('Monthly rent');
+      unmount();
+
+      renderHost({ initialFilters: { commercialSubtypes: ['SHOP'] }, intent: 'buy' });
+      const buyRow = screen.getByTestId('quick-budget-row');
+      expect(buyRow).toHaveTextContent('Budget');
+      expect(buyRow).not.toHaveTextContent('Monthly rent');
     });
   });
 

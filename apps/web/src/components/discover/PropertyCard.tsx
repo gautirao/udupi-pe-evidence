@@ -409,6 +409,13 @@ export function PropertyCard({
             Issue #1616 — three-way price render, extended by Issue #2051 (AC4/AC6):
             1. pricePaise present (authed sale path): render exact formatted price.
             2. priceBand present (anon sale path): render the coarse band label.
+               Issue #2596 — the BAND takes the mono face too. Every branch here is a price,
+               and the design language puts prices/counts/measurements in Geist Mono; only the
+               two authed branches did, so the surface most buyers actually see (anonymous)
+               rendered its price in the UI sans face. Measured at the merge base: the card
+               price computed "Plus Jakarta Sans" 16px while the panel's result count computed
+               "Geist Mono" 24px in the same frame. Presentation only — the band value, its
+               coarsening and the auth gate are untouched.
             3. monthlyRentRupees present (authed rent/lease path): exact rupee amount
                via formatPrice — NO division by 100 (monthlyRentRupees is already in
                RUPEES, unlike pricePaise; see [critical_finding_units]) — suffixed '/mo'.
@@ -420,13 +427,43 @@ export function PropertyCard({
               {formatPrice(Math.round(listing.pricePaise / 100), 'INR')}
             </p>
           ) : listing.priceBand != null ? (
-            <p className="text-base font-semibold text-foreground">{listing.priceBand}</p>
+            // Issue #2596 — the kit labels the anonymous band "PRICE BAND" in caps above the
+            // figure. The label is what makes the coarsening legible: without it a band reads as
+            // an exact price the product is simply being vague about. It names the treatment the
+            // buyer is already receiving and asserts nothing new about the listing.
+            <div>
+              <p
+                className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground"
+                data-testid="listing-price-band-label"
+              >
+                Price band
+              </p>
+              <p
+                className="text-base font-mono font-semibold tracking-[-0.01em] text-foreground tabular-nums"
+                data-testid="listing-price-band-figure"
+              >
+                {listing.priceBand}
+              </p>
+            </div>
           ) : listing.monthlyRentRupees != null ? (
             <p className="text-xl font-mono font-semibold tracking-[-0.01em] text-foreground tabular-nums">
               {formatPrice(listing.monthlyRentRupees, 'INR')}/mo
             </p>
           ) : listing.monthlyRentBand != null ? (
-            <p className="text-base font-semibold text-foreground">{listing.monthlyRentBand}/mo</p>
+            <div>
+              <p
+                className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground"
+                data-testid="listing-price-band-label"
+              >
+                Price band
+              </p>
+              <p
+                className="text-base font-mono font-semibold tracking-[-0.01em] text-foreground tabular-nums"
+                data-testid="listing-price-band-figure"
+              >
+                {listing.monthlyRentBand}/mo
+              </p>
+            </div>
           ) : (
             <p className="text-xs text-muted-foreground">Price on request</p>
           )}

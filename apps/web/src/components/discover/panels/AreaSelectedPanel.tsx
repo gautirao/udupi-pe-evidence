@@ -1309,10 +1309,74 @@ export function AreaSelectedPanel({
   // `hasPropertyFilters` counts `bedrooms` unconditionally and `handleClearPropertyFilters` clears
   // it, and switching back to Residential re-renders this row with the value still pressed — so it
   // is never both invisible and effective. See the chip's own note below.
-  const showBedroomsRow = activeFamily !== 'commercial';
+  // Issue #2596 — the ROW must follow the SUBMITTED rule, not just the family half of it.
+  //
+  // This read `activeFamily !== 'commercial'` alone, which implements only the Commercial
+  // sentence of #2459 AC2 while looking complete. The Plot sentence was missing, and the gap
+  // is buyer-visible: `resolvePrimaryAreaMeaning('land') === 'PLOT'` (primaryAreaLabels.ts), so
+  // selecting the Residential "Plots" chip already suppresses `beds=` on the wire and already
+  // relabels the area control to PLOT SIZE (SQ FT) — while this row went on rendering BHK
+  // chips above it. Measured at the merge base: with `quick-chip-land` pressed,
+  // `quick-bedrooms-row` was present and the area label read "PLOT SIZE (SQ FT)" in the same
+  // frame. #2596's AC is explicit: Residential Plot has "no Bedrooms row, Bedroom chip or
+  // `beds=` request".
+  //
+  // `shouldSubmitBedrooms` is the SAME predicate the chip and the four submission boundaries
+  // already consult, so row visibility can no longer disagree with what the request carries —
+  // the disagreement was the defect. Deliberately NOT a second, local re-derivation of the
+  // rule: that is how the Commercial half went missing in the first place (see
+  // bedroomApplicability.ts's header).
+  //
+  // Emission is UNCHANGED by this line. Bedrooms were already suppressed for a plot-only
+  // selection; only the control's visibility moves. The buyer's value is not cleared either —
+  // it stays in filter state and re-applies on the way back to a dwelling selection, exactly
+  // as the hidden-under-Commercial case already behaves.
+  const showBedroomsRow = activeFamily !== 'commercial' && shouldSubmitBedrooms(filters);
 
   const resolvedCityLabel = cityLabel ?? city ?? '';
   const count = areaListings?.length ?? 0;
+
+  // Issue #2596 — result language follows the family, per the updated kit's §Result language:
+  // Commercial reads "Commercial properties in X" with the count noun "commercial listings",
+  // and never borrows a Residential noun.
+  //
+  // STRINGS ONLY, deliberately. `count` is still `areaListings.length` and nothing about how it
+  // is computed, fetched or filtered changes here — this renames what the buyer reads, not what
+  // the number means.
+  //
+  // ONE FAMILY AUTHORITY PER RENDER (review 5210279153, F2). These previously keyed off
+  // `commercialFromFilters` while `showSubtypeRow` keys off `activeFamily`. Those are NOT the
+  // same predicate: `activeFamily` is Commercial the moment the buyer CLICKS the chip (via
+  // `familyOverride`), whereas `commercialFromFilters` only becomes true once that emission
+  // round-trips back as props. The two could therefore disagree inside a single render — an open
+  // Commercial subtype row with the chip pressed, above a heading still reading
+  // "Properties in {area}".
+  //
+  // CONVERGED RATHER THAN DOCUMENTED. The alternative was to pin the divergence with a test, but
+  // that would promote an incoherent frame into the contract. Keying both off `activeFamily`
+  // makes the heading, the count noun and the subtype row describe the same family by
+  // construction, which is the property actually wanted.
+  //
+  // This is not only a test-shape concern. Both production call sites are controlled, so the
+  // emission does round-trip — but not until the NEXT render, and the old predicate made that one
+  // render say Residential over an already-open Commercial subtype row.
+  //
+  // The empty-state and zero-result nouns still read `commercialFromFilters`, deliberately: they
+  // describe a result set already FETCHED under the emitted filters, so the filters are the honest
+  // source there, while these two describe the control surface the buyer is looking at right now.
+  // They agree in every state a production call site can reach.
+  //
+  // The Residential wording is untouched, so the existing heading and hero assertions (which all
+  // render the Residential default) keep passing on their own terms.
+  const commercialFamilyActive = activeFamily === 'commercial';
+  const headingNoun = commercialFamilyActive ? 'Commercial properties' : 'Properties';
+  const countNoun = commercialFamilyActive
+    ? count === 1
+      ? 'commercial listing'
+      : 'commercial listings'
+    : intentNoun === 'rent'
+      ? 'shown for rent'
+      : 'shown for sale';
 
   // Issue #2017 — plural committed-header/two-tile-row for a multi-area
   // AREA_SET result scope. `nav.resultScope?.active` is the confirmed real
@@ -1653,8 +1717,8 @@ export function AreaSelectedPanel({
                   {isViewportScope
                     ? 'On screen right now'
                     : resultScopeKind === 'POLYGON'
-                      ? 'Properties in your drawn area'
-                      : `Properties in ${areaLabel}`}
+                      ? `${headingNoun} in your drawn area`
+                      : `${headingNoun} in ${areaLabel}`}
                 </h1>
               </div>
               {!isLoadingListings && (
@@ -1662,8 +1726,11 @@ export function AreaSelectedPanel({
                   <p className="font-mono text-2xl font-semibold leading-none tabular-nums text-foreground">
                     {count}
                   </p>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    {intentNoun === 'rent' ? 'shown for rent' : 'shown for sale'}
+                  <p
+                    className="mt-0.5 text-[11px] text-muted-foreground"
+                    data-testid="area-header-count-noun"
+                  >
+                    {countNoun}
                   </p>
                 </div>
               )}
@@ -1800,9 +1867,20 @@ export function AreaSelectedPanel({
       {/* Quick filter card — property type + bedrooms (the school CTA above is
           now a separate, full-width card — see #2084 AC8). */}
       {/* F2 — outer section keeps border-b layout; inner white card matches the controls card surface. */}
-      <div className="border-b border-border px-4 py-3">
-        <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
-          <div className="space-y-3">
+      {/* Issue #2596 — the filter block carries ONE separation, not three.
+          The merge base nested a bordered, rounded, shadowed card (1px #D7D6D0, 12px radius,
+          12px padding) inside a section that ALREADY had a bottom hairline of the same colour
+          and 12px/16px padding — two borders and two paddings around one group of controls,
+          which is the "redundant nested borders" #2596 names. The frozen kit's equivalent block
+          measures padding 0, no background, no border, no radius and no shadow: the controls sit
+          directly on the panel surface and the row rhythm alone groups them.
+          The inner element keeps `bg-card` (the panel surface behind it is the canvas, not
+          paper) and loses the border, radius, shadow and its own padding, so the rows now align
+          to the panel's existing px-4 rhythm instead of being inset twice. Row gap follows the
+          kit's measured 6px. */}
+      <div className="border-b border-border px-4 py-2.5">
+        <div className="bg-card">
+          <div className="space-y-1.5">
             {/* Issue #2450 — TYPE family. Rendered ONLY when the calling surface can actually
                 consume a Commercial subtype: while the capability is off the owner ruling is that
                 today's buyer surface is preserved unchanged, so there is no family row at all
@@ -1817,14 +1895,14 @@ export function AreaSelectedPanel({
                 className="flex flex-wrap items-center gap-x-2 gap-y-1.5"
                 data-testid="quick-family-row"
               >
-                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
                   Type
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
                   className={cn(
-                    'h-8 rounded-full px-3.5 text-xs',
+                    'h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
                     activeFamily === 'residential'
                       ? 'border-gold bg-gold text-gold-foreground shadow-sm hover:bg-gold/90'
                       : '',
@@ -1842,7 +1920,7 @@ export function AreaSelectedPanel({
                   variant="outline"
                   size="sm"
                   className={cn(
-                    'h-8 rounded-full px-3.5 text-xs',
+                    'h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
                     activeFamily === 'commercial'
                       ? 'border-gold bg-gold text-gold-foreground shadow-sm hover:bg-gold/90'
                       : '',
@@ -1880,7 +1958,7 @@ export function AreaSelectedPanel({
                   size="sm"
                   disabled={!isReadyToMoveSupported}
                   className={cn(
-                    'ml-auto h-8 rounded-full px-3.5 text-xs',
+                    'ml-auto h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
                     !isReadyToMoveSupported
                       ? 'cursor-not-allowed opacity-50'
                       : activeReadyToMove
@@ -1906,11 +1984,18 @@ export function AreaSelectedPanel({
                   subtype row below carries the approved "COMMERCIAL TYPE" one. Only one of the two
                   ever renders (see the mutual-exclusion note below), so the card shows exactly one
                   type control at a time, as the mock does. The label is suppressed while the
-                  subtype row owns this slot. */}
+                  subtype row owns this slot.
+
+                  Issue #2596 — the label reads "Residential type", not "Property type". The updated
+                  kit names the two rows RESIDENTIAL TYPE and COMMERCIAL TYPE precisely because a
+                  family is not a subtype: with Commercial present, "Property type" would read as
+                  the family control one row above it. Renaming the label changes nothing about what
+                  the row emits — the kit's single-select behaviour for this row is NOT adopted here
+                  (see the scope note on the chips below). */}
               {!showSubtypeRow && (
-                <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                <span className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
                   <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-                  Property type
+                  Residential type
                 </span>
               )}
               <div className="flex flex-wrap gap-1.5">
@@ -1935,7 +2020,7 @@ export function AreaSelectedPanel({
                       variant="outline"
                       size="sm"
                       className={cn(
-                        'h-8 px-3 text-xs',
+                        'h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
                         allTypesActive
                           ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
                           : '',
@@ -1952,7 +2037,7 @@ export function AreaSelectedPanel({
                         variant="outline"
                         size="sm"
                         className={cn(
-                          'h-8 px-3 text-xs',
+                          'h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
                           activePropertyTypes.has(type)
                             ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
                             : '',
@@ -1976,7 +2061,7 @@ export function AreaSelectedPanel({
                     size="sm"
                     disabled={!isReadyToMoveSupported}
                     className={cn(
-                      'h-8 px-3 text-xs ml-auto',
+                      'ml-auto h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
                       !isReadyToMoveSupported
                         ? 'cursor-not-allowed opacity-50'
                         : activeReadyToMove
@@ -2013,7 +2098,7 @@ export function AreaSelectedPanel({
                       desktop target; "Warehouse / Godown" and "Commercial Land" flow to a second
                       line and stay fully readable because the chips size to their content rather
                       than being truncated. */}
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
                     Commercial type
                   </span>
                   {COMMERCIAL_SUBTYPE_CHOICES.map((choice) => {
@@ -2029,7 +2114,7 @@ export function AreaSelectedPanel({
                         variant="outline"
                         size="sm"
                         className={cn(
-                          'h-8 rounded-full px-3.5 text-xs',
+                          'h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
                           pressed
                             ? 'border-gold bg-gold text-gold-foreground shadow-sm hover:bg-gold/90'
                             : '',
@@ -2057,7 +2142,7 @@ export function AreaSelectedPanel({
                 "suppression is about submission, not about the buyer's state" note requires. */}
             {showBedroomsRow && (
               <div className="space-y-2" data-testid="quick-bedrooms-row">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
                   Bedrooms
                 </span>
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -2068,7 +2153,7 @@ export function AreaSelectedPanel({
                       variant="outline"
                       size="sm"
                       className={cn(
-                        'h-8 px-3 text-xs',
+                        'h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
                         activeBedrooms.has(bed)
                           ? 'border-copper bg-copper-tint text-[hsl(var(--copper))] shadow-sm hover:bg-copper-tint/80'
                           : '',
@@ -2156,7 +2241,7 @@ export function AreaSelectedPanel({
                 className="flex flex-wrap items-center gap-x-2 gap-y-1.5"
                 data-testid="quick-area-row"
               >
-                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
                   {areaControlLabel}
                 </span>
                 {QUICK_AREA_PRESETS.map((preset) => {
@@ -2169,7 +2254,7 @@ export function AreaSelectedPanel({
                       variant="outline"
                       size="sm"
                       className={cn(
-                        'h-8 rounded-full px-3.5 text-xs',
+                        'h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
                         pressed
                           ? 'border-gold bg-gold text-gold-foreground shadow-sm hover:bg-gold/90'
                           : '',
@@ -2182,9 +2267,6 @@ export function AreaSelectedPanel({
                     </Button>
                   );
                 })}
-                <span className="ml-auto text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                  Budget
-                </span>
               </div>
 
               {/* Issue #2459 D1, the LABEL half of "meaning DISCLOSED in label and chip".
@@ -2218,12 +2300,33 @@ export function AreaSelectedPanel({
               {/* Issue #2555 item 3 — purpose- and family-aware bands; see QUICK_BUDGET_BANDS.
                   COPPER active state, per the approved mock, which deliberately distinguishes
                   Budget from the gold family/subtype/area controls. */}
-              <div className="flex flex-wrap items-center gap-1.5" data-testid="quick-budget-row">
+              {/* Issue #2596 — ONE FILTER GROUP PER ROW, and Budget owns its own heading.
+                  The synced kit's §"One filter group per row" is explicit: "A group heading
+                  therefore always owns the chips beside it, and no heading is ever pushed into
+                  another group's leftover horizontal space." The BUDGET label previously sat
+                  `ml-auto` on the trailing edge of the AREA row — #2555 parity with the older mock,
+                  which the updated kit contradicts — so the two groups shared one row and the
+                  heading floated away from the chips it names. §Commercial attribute filters says
+                  the same thing from the other direction: Commercial carries area and budget "each
+                  as its own labelled filter group".
+
+                  The wording follows Buy/Rent because the kit requires it: "the label reads
+                  `Monthly rent`" in the Rent / Lease state, where the ladder is monthly and reusing
+                  "Budget" would present a rent ceiling in the register of a purchase price. Label
+                  only — `budgetIntent` already drives the BANDS and the selected-chip suffix, so
+                  this reads the same source rather than introducing a second one. */}
+              <div
+                className="flex flex-wrap items-center gap-x-2 gap-y-1.5"
+                data-testid="quick-budget-row"
+              >
+                <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                  {budgetIntent === 'rent' ? 'Monthly rent' : 'Budget'}
+                </span>
                 <Button
                   variant="outline"
                   size="sm"
                   className={cn(
-                    'h-8 rounded-full px-3.5 text-xs',
+                    'h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
                     activePriceMax == null
                       ? 'border-copper bg-copper text-copper-foreground shadow-sm hover:bg-copper-hover'
                       : '',
@@ -2240,7 +2343,7 @@ export function AreaSelectedPanel({
                     variant="outline"
                     size="sm"
                     className={cn(
-                      'h-8 rounded-full px-3.5 text-xs',
+                      'h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
                       activePriceMax === budget.max
                         ? 'border-copper bg-copper text-copper-foreground shadow-sm hover:bg-copper-hover'
                         : '',
@@ -2679,7 +2782,7 @@ export function AreaSelectedPanel({
             )}
             {/* Intent-aware verified result summary (Issue #1494 / #1606) */}
             {/* a4 — warm evergreen-tint/60 strip instead of near-invisible bg-muted/20 */}
-            <div className="flex items-center gap-1.5 border-b border-border bg-evergreen-tint/60 px-4 py-2.5" data-testid="area-result-summary">
+            <div className="flex items-center gap-1.5 border-b border-border bg-evergreen-tint/60 px-4 py-2" data-testid="area-result-summary">
               <ShieldCheck className="h-4 w-4 shrink-0 text-evergreen" aria-hidden="true" />
               <p className="text-xs font-medium text-foreground" data-testid="area-result-summary-text">
                 {areaResultSummaryText ??
@@ -2701,7 +2804,14 @@ export function AreaSelectedPanel({
                 `@tailwindcss/container-queries` plugin, so a plain native CSS
                 container query does the job instead — see `.area-panel-container`
                 / `.area-listings-grid` in src/index.css. */}
-            <div className="area-listings-grid grid grid-cols-1 gap-3 p-4">
+            {/* Issue #2596 — close the dead band between the controls and the results.
+                Measured at the merge base: 66px from the filter card's bottom edge to the first
+                card's top, accumulated from three separate paddings (the filter section's py-3,
+                this grid's uniform p-4, and the summary strip between them). #2596 asks for
+                "meaningful results high in the desktop viewport" and no "unexplained dead band
+                between filters and results". The grid keeps its full side and bottom padding and
+                only loses the redundant top inset, so card spacing itself is unchanged. */}
+            <div className="area-listings-grid grid grid-cols-1 gap-3 px-4 pb-4 pt-2">
               {areaListings.map((listing) => (
                 <div
                   key={listing.id}

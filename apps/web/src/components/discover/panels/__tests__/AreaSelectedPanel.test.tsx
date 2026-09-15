@@ -735,7 +735,14 @@ describe('AreaSelectedPanel', () => {
       expect(screen.getByTestId('area-intent-helper')).toBeInTheDocument();
     });
 
-    it('property-type filter is wrapped in a white card (rounded-xl bg-card)', () => {
+    // Issue #2596 — retitled. This read "wrapped in a white card (rounded-xl bg-card)", which
+    // documented a decision the reskin deliberately reversed: the inner card lost its border,
+    // radius, shadow and padding so the filter block carries ONE separation rather than three.
+    // The assertion itself never reddened, because it only walks up for `bg-card`, which is kept —
+    // so the title and comment were asserting a removed design while the test stayed green.
+    // Renamed in the same change that reversed it, per this file's own "a behaviour change and its
+    // comment are one edit" standard.
+    it('property-type filter sits on the card surface (bg-card)', () => {
       const { container } = renderWithProviders(
         <DiscoverProvider>
           <AreaSelectedPanel
