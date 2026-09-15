@@ -82,8 +82,8 @@ NINETYNINE_RESIDENTIAL_AMBIGUOUS = {"Other", "Studio Apartment", "Builder Floor"
 NINETYNINE_COMMERCIAL_TYPE_MAP = {
     "Commercial Shops": ("commercial", "COMMERCIAL"),
     "Commercial Showrooms": ("commercial", "COMMERCIAL"),
-    "Ready to move office space": ("commercial_building", "COMMERCIAL"),
-    "Bare shell office space": ("commercial_building", "COMMERCIAL"),
+    "Ready to move office space": ("commercial", "COMMERCIAL"),
+    "Bare shell office space": ("commercial", "COMMERCIAL"),
     "Ware House": ("warehouse", "COMMERCIAL"),
     "Commercial Land/Inst. Land": ("commercial_land", "COMMERCIAL"),
     "Industrial Lands/Plots": ("commercial_land", "COMMERCIAL"),
@@ -172,9 +172,15 @@ PROPERTY_TYPE_TO_SUBTYPE = {
 
 
 def map_commercial_subtype(property_type, raw_99acres_ptype):
-    if property_type in PROPERTY_TYPE_TO_SUBTYPE:
-        return PROPERTY_TYPE_TO_SUBTYPE[property_type]
-    return NINETYNINE_COMMERCIAL_SUBTYPE_MAP.get(raw_99acres_ptype)
+    # Explicit raw-label mapping takes precedence over the property_type fallback.
+    # (#2575) "Ready to move office space" / "Bare shell office space" both mapped
+    # property_type -> 'commercial_building', which previously short-circuited here
+    # via PROPERTY_TYPE_TO_SUBTYPE before the raw label could resolve to OFFICE,
+    # silently misclassifying both labels as commercial_subtype='BUILDING'.
+    explicit = NINETYNINE_COMMERCIAL_SUBTYPE_MAP.get(raw_99acres_ptype)
+    if explicit is not None:
+        return explicit
+    return PROPERTY_TYPE_TO_SUBTYPE.get(property_type)
 
 
 # CommercialFieldOptions.VALID_COMMERCIAL_FURNISHING_STATUSES = {UNFURNISHED, SEMI_FURNISHED,
