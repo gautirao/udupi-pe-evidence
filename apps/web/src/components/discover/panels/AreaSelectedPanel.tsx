@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
@@ -1513,24 +1513,114 @@ export function AreaSelectedPanel({
   }, [actions, previousAreas, previousResultScope, shell]);
 
   // "Edit areas" / "Add nearby areas" open the AREA_SET draft (Issue #2017;
-  // desktop rework owner-directed) — `openAreaSetDraft()` is the single
-  // cross-tree open signal both surfaces read: on mobile it drives
-  // AreaSetChips's map-anchored popover (paired with `setMobileView('MAP')`
-  // to reveal the map surface first); on desktop DiscoverRightPanel reads
-  // the same flag directly to swap this panel for AreaSetDraftPanel in
-  // place — `setMobileView('MAP')` is a no-op there since desktop already
-  // shows map and panel together.
+  // Issue #2596 owner-directed rework) — `openAreaSetDraft()` is the single
+  // cross-tree open signal all surfaces read to swap to AreaSetDraftPanel in-panel.
   const handleEditAreas = useCallback(() => {
-    shell.setMobileView('MAP');
     shell.openAreaSetDraft();
   }, [shell]);
   const handleClearAreas = useCallback(() => {
     actions.commitResultScope(null);
   }, [actions]);
+
+  /**
+   * Issue #2596 — remove ONE committed area from the right panel's chips.
+   *
+   * Commits the REMAINING keys, so the panel's chips, heading and count update immediately. This
+   * is deliberately NOT the map overlay's behaviour: those chips edit the uncommitted DRAFT via
+   * `commands.remove` and take effect only on "Show listings". Both read the same AREA_SET state,
+   * so this introduces no second selection state — it acts at the committed layer rather than the
+   * draft layer.
+   *
+   * Removing the LAST area clears the scope instead of committing an empty AREA_SET, which is not
+   * a state the rest of the app models — the same call `handleClearAreas` makes above.
+   */
+  const handleRemoveCommittedArea = useCallback(
+    (areaKey: string) => {
+      const remaining = (multiAreaKeys ?? []).filter((key) => key !== areaKey);
+      if (remaining.length === 0) {
+        actions.commitResultScope(null);
+        return;
+      }
+      actions.commitResultScope({ kind: 'AREA_SET', areaKeys: remaining });
+    },
+    [multiAreaKeys, actions],
+  );
+
   const handleAddNearbyAreas = useCallback(() => {
-    shell.setMobileView('MAP');
     shell.openAreaSetDraft();
   }, [shell]);
+
+  /**
+   * The recommendation tiles that ride under the property search (Issue #2596).
+   * Extracted to a local rather than inlined so the workflow group below can
+   * ask whether it has ANY child before rendering its bordered container —
+   * otherwise a caller that supplies neither `onSearchChange` nor a tile state
+   * would paint an empty hairlined strip.
+   *
+   * AREA_SET (single committed area) ONLY. VIEWPORT scope renders the separate
+   * CTA below instead — see that constant for why it is not in this group.
+   */
+  const areaRecommendationTiles: ReactNode =
+    multiAreaKeys || isViewportScope ? null : (
+      <AreaSetTwoTileRow
+        primaryAreaName={selectedArea.areaLabel}
+        primaryAreaKey={selectedArea.areaKey}
+        // Same `city || nav.city || DEFAULT_CITY` resolution the plural header
+        // above uses, for the same reason: `AreaLeafListingsSurface` passes
+        // `cityLabel` but not `city`, and at a bare `/discover` URL `nav.city`
+        // is itself `''`. See that prop's comment for the full rationale.
+        city={city || nav.city || DEFAULT_CITY}
+        // The AreaPoint the map journey supplies already carries the count;
+        // `deriveAreaPointFromNode` (the node journey) does not. Passed as a
+        // fallback so the tile can render a count on the very first paint,
+        // before the shared areas query this row self-sources has resolved.
+        fallbackSchoolCount={selectedArea.schoolCount}
+        onAddSchool={onAddSchool ? handleAddSchool : undefined}
+        onAddNearbyAreas={handleAddNearbyAreas}
+      />
+    );
+
+  /**
+   * VIEWPORT-scope "Add a school in this area" CTA (Issue #2015), kept at its
+   * MERGE-BASE presentation — own bordered/padded wrapper, sitting directly
+   * below the heading and above the property search.
+   *
+   * WHY THIS IS DELIBERATELY NOT IN THE WORKFLOW GROUP (#2601, owner ruling
+   * "option D"). An earlier revision folded this CTA into the shared search +
+   * tiles group, which stripped its standalone wrapper and moved it below the
+   * search. That is a user-visible change to a surface NOBODY HAS BEEN ABLE TO
+   * WITNESS: three gates independently failed to find any reachable route to
+   * VIEWPORT scope, at either viewport, in either arm. Code review 5219381573
+   * put the choice plainly — preserve the prior presentation, or owner-scope
+   * the changed surface out; do not certify a PASS on a surface no one has
+   * seen. The owner chose preserve.
+   *
+   * So this branch carries NO visual delta in this PR by construction, and
+   * whoever fixes VIEWPORT reachability can re-open the question against a
+   * surface that is still where they left it. The wrapper below is restored
+   * byte-for-byte from `cdb3c7d0`.
+   *
+   * `isViewportScope` and `multiAreaKeys` are mutually exclusive in practice,
+   * but the `!multiAreaKeys` guard is kept explicit so this can never
+   * double-render alongside the plural header's own action row.
+   */
+  const viewportSchoolCta: ReactNode =
+    !multiAreaKeys && isViewportScope && onAddSchool ? (
+      <div className="border-b border-border px-4 py-3">
+        <button
+          type="button"
+          onClick={handleAddSchool}
+          data-testid="add-school-cta"
+          className="flex w-full items-center gap-3 rounded-xl border border-plum/20 bg-plum-tint p-3 text-left shadow-sm transition-colors hover:border-plum/50"
+        >
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-plum text-plum-foreground">
+            <Plus className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <span className="flex-1 text-sm font-semibold text-foreground">Add a school in this area</span>
+          <span className="shrink-0 text-xs text-muted-foreground">Optional</span>
+        </button>
+      </div>
+    ) : null;
 
   return (
     <div className="area-panel-container flex flex-1 flex-col overflow-y-auto">
@@ -1548,9 +1638,17 @@ export function AreaSelectedPanel({
         />
       </div>
 
-      {/* Header — journey pill row, headline, subcopy */}
-      <div className="border-b border-border px-4 pb-4 pt-3.5">
-        <div className="mb-2.5 flex items-center justify-between gap-2">
+      {/* Toolbar — journey pill + Trends / Filters / Back / Start over.
+          Issue #2596: this row is the app's counterpart to the kit's
+          `ExpModeBar`, which sits in the panel's FIXED top section directly
+          above the filters (ExpPanel.jsx L884-887). The headline, count and
+          sub-copy that used to share this container now render BELOW the
+          quick-filter card, matching the kit's scrolling body — see the
+          heading section further down. */}
+      <div className="px-4 pb-2 pt-3.5">
+        {/* No `mb-*` here any more: this row is now the section's only child,
+            so the container's own `pb-3` supplies the whole gap. */}
+        <div className="flex items-center justify-between gap-2">
           {journey === 'area-first' ? (
             <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-secondary-foreground">
               <Layers className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1608,279 +1706,11 @@ export function AreaSelectedPanel({
             )}
           </div>
         </div>
-
-        {/* Issue #2159 reskin — mock density rule (VISUAL_RULES §3): the scope
-            eyebrow, area title and result count read as ONE compact block
-            instead of a full-bleed hero headline. Count sits outside the <h1>
-            (a sibling, not a child) so the heading's accessible name stays
-            exactly "Properties in {areaLabel}" for existing tests/consumers.
-
-            PR #2180 review fix — `count` is areaListings.length, the length
-            of the bounded per-area fetch slice (caller wires
-            useDiscoverCityListings with limitPerArea: 50), NOT an
-            authoritative total. The evergreen result-summary strip further
-            below gets to say "X verified properties" safely because it has
-            an escape hatch to the caller-precomputed `areaResultSummaryText`
-            (same formatDiscoverBadgeCopy(...) call the map badge uses — see
-            the prop's own JSDoc above). This hero block does not have that
-            wiring, so for any area with >50 matches, labelling this number
-            "for sale"/"for rent" would silently understate the true total.
-            Labelled "shown" instead — true regardless of whether the area
-            has more matches than the fetch limit. */}
-        {multiAreaKeys ? (
-          <AreaSetSelectedHeader
-            areaKeys={multiAreaKeys}
-            // Issue #2017 — fall back to the authoritative `nav.city` slug
-            // (already read above for `activeScope`/`multiAreaKeys`) when the
-            // caller omits the `city` prop entirely. `DiscoverAreasJourneyPanel`'s
-            // `AreaLeafListingsSurface` (the default AREA-leaf render path — the
-            // component this panel most commonly mounts under) passes
-            // `cityLabel` but not `city`, which otherwise silently collapsed to
-            // `''` here and sat below `useDiscoverAreas`'s `enabled: city.length
-            // > 0` guard inside AreaSetSelectedHeader — the areas query never
-            // fired, so the plural header always rendered its generic
-            // "N areas" fallback instead of resolved names/counts, even once
-            // listings had loaded. `nav.city` is the same city slug every
-            // caller (this one included) already derives `cityLabel` from via
-            // `CITY_CONFIG[nav.city]`, so this cannot diverge from what the
-            // panel is actually displaying. Explicit `city` props (e.g.
-            // NodeListingsSurface's `city={nav.city}`) still take precedence.
-            //
-            // Uses `||` (not `??`) and falls back through to DEFAULT_CITY, matching
-            // the established `nav.city || DEFAULT_CITY` idiom used everywhere else
-            // in Discover (see useDiscoverPageComposition.ts,
-            // useDiscoverAreaGroupsController.ts, useDiscoverJourneySwitchController.ts,
-            // useDiscoverNavigationController.ts). At a plain `/discover` URL with no
-            // `?city=` param, `nav.city` itself is `''` (documented in
-            // useDiscoverAgriController.ts and CityLaunchPreview.test.tsx) — a `??`
-            // fallback never catches that empty string, so it silently reached
-            // `useDiscoverAreas('')` and sat below its `enabled: city.length > 0`
-            // guard, same failure mode as the missing-prop case above.
-            city={city || nav.city || DEFAULT_CITY}
-            count={count}
-            intentNoun={intentNoun}
-            isLoadingListings={isLoadingListings}
-            onEditAreas={handleEditAreas}
-            onClearAreas={handleClearAreas}
-            // Issue #2017 (Fit all / focus-one) — camera-only actions
-            // registered by useDiscoverMapDataController; see
-            // DiscoverShellContextValue's AreaSetCameraActions doc. Neither
-            // call touches `resultScope`/`rareas`.
-            onFitAll={shell.fitAreaSet}
-            onFocusArea={shell.focusAreaSetMember}
-            // Issue #2419 (PR-2) — "Draw search area". Same shell-registered
-            // indirection as the two camera actions above; unlike them it
-            // enters draw mode rather than moving the camera, and still
-            // commits nothing on its own.
-            onDrawSearchArea={shell.startDrawSearchArea}
-            // Below the mobile breakpoint the map canvas is not mounted until
-            // the Map view is open, so the draw tool must have a surface to
-            // arm on. A no-op on desktop, where the map is always present.
-            onRevealMap={shell.isMobileShell ? () => shell.setMobileView('MAP') : undefined}
-          />
-        ) : (
-          <>
-            {/* Issue #2419 (PR-2) — the draw entry belongs in EVERY eligible
-                residential listing state, not only the multi-area one. It
-                previously lived inline in AreaSetSelectedHeader above, so a
-                SINGLE committed area — much the more common state, and the
-                one the #2016 contract spec reaches — had no entry at all.
-                Hidden by its own eligibility rule for VIEWPORT scope, agri
-                and anonymous shoppers, so this placement adds a control only
-                where drawing genuinely applies. */}
-            {!isViewportScope && (
-              <div className="mb-2 flex flex-wrap items-center gap-1.5" data-testid="area-single-action-row">
-                <DrawSearchAreaEntry
-                  hasResidentialListingScope
-                  onDrawSearchArea={shell.startDrawSearchArea}
-                  onRevealMap={
-                    shell.isMobileShell ? () => shell.setMobileView('MAP') : undefined
-                  }
-                />
-              </div>
-            )}
-            <div className="flex items-end justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-                  {isViewportScope
-                    ? `Result scope — ${SCOPE_TITLE.VIEWPORT}`
-                    : resultScopeKind === 'POLYGON'
-                      ? 'Result scope — Drawn area'
-                      : 'Result scope — Selected area'}
-                </p>
-                <h1 className="mt-0.5 font-['Fraunces',_ui-serif,_Georgia,_serif] text-[1.625rem] font-semibold leading-[1.15] tracking-[-0.02em] text-foreground">
-                  {/* Issue #2461 — a committed POLYGON now renders the
-                      polygon-scoped card list, so the heading must stop
-                      attributing those results to the previously-selected
-                      area. Keyed off the same `resultScopeKind` the
-                      zero-result recovery already reads. */}
-                  {isViewportScope
-                    ? 'On screen right now'
-                    : resultScopeKind === 'POLYGON'
-                      ? `${headingNoun} in your drawn area`
-                      : `${headingNoun} in ${areaLabel}`}
-                </h1>
-              </div>
-              {!isLoadingListings && (
-                <div className="shrink-0 text-right" data-testid="area-header-count">
-                  <p className="font-mono text-2xl font-semibold leading-none tabular-nums text-foreground">
-                    {count}
-                  </p>
-                  <p
-                    className="mt-0.5 text-[11px] text-muted-foreground"
-                    data-testid="area-header-count-noun"
-                  >
-                    {countNoun}
-                  </p>
-                </div>
-              )}
-            </div>
-            {/* R-C — sub-copy: 15px, 1.55 line-height, --text-body colour. */}
-            <p className="mt-1.5 text-[15px] leading-[1.55] text-[hsl(var(--text-body))]">
-              {isViewportScope
-                ? 'Explore verified listings in this map area, with map context and area-first filters.'
-                : resultScopeKind === 'POLYGON'
-                  ? 'Explore verified listings inside the area you drew, with map context and area-first filters.'
-                  : `Explore verified listings around ${areaLabel}, with map context and area-first filters.`}
-            </p>
-            <AreaSelectedPanelScopeBar
-              resultScopeKind={resultScopeKind}
-              returnLabel={returnLabel}
-              onReturn={handleReturnToPreviousScope}
-              onRedrawPolygon={onRedrawPolygon}
-            />
-          </>
-        )}
-
-        {/* Controls card — REMOVED (product-owner ruling, #1953 follow-up).
-            City was already removed from this card in build step 6, leaving
-            Buy/Rent as its only occupant; now that Buy/Rent is ALSO removed
-            (the persistent DiscoverControlBar is the SOLE Buy/Rent control
-            on /discover, same ownership rationale as the prior city
-            removal), the `onIntentChange &&`-gated card has nothing left to
-            hold and is retired with it — leaving it in place would render
-            an empty bordered "Looking to" box whenever `onIntentChange` is
-            supplied, which is worse than not rendering at all. The intent-
-            aware price helper directly below is UNCHANGED (it was already a
-            separate, unconditional element, not part of this gate).
-            `intent`/`onIntentChange` remain accepted (now JSX-unused) props
-            — kept threaded through unchanged, mirroring the existing
-            `onCityChange` convention already established on this exact
-            component, so no prop-interface churn ripples into
-            DiscoverRightPanel / DiscoverRightPanelContainer for this file. */}
-
-        <p className="mt-2.5 text-xs text-muted-foreground" data-testid="area-intent-helper">
-          {isViewportScope
-            ? `Showing ${intentNoun} prices in ₹ for this area.`
-            : resultScopeKind === 'POLYGON'
-              ? `Showing ${intentNoun} prices in ₹ for your drawn area.`
-              : `Showing ${intentNoun} prices in ₹ for ${areaLabel}.`}
-        </p>
-
-        {activeContextChips != null && (
-          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">{activeContextChips}</div>
-        )}
       </div>
 
-      {/* Issue #2084 (AC8) — school-shortcut CTA, promoted OUT of the quick-
-          filter box below into its own full-width card, positioned directly
-          under the header (before search/filters). A single modest button
-          row (icon + label + "Optional" hint) — not a hero/image block — so
-          it never competes with the listing list for visual weight.
-
-          Issue #2017 (release-blocking fix) — the mock's own state machine
-          (Experience.jsx: `single = scopeKind === "AREA_SET" && committed.length
-          === 1`, `v.areaActions = single`) gates the two-tile "Schools in X /
-          Add nearby areas" row on exactly ONE committed area, not on an
-          already-committed multi-area set. The previous `multiAreaKeys ?
-          <AreaSetTwoTileRow/> : <plain CTA/>` gate here was inverted relative
-          to that: it only showed the two-tile row (and therefore the "Add
-          nearby areas" entry point) once a 2-3 area AREA_SET was ALREADY
-          committed — the single-Area state a shopper actually starts from
-          had no path in at all (confirmed live: JP Nagar single-Area select
-          showed only "Add a school in this area"). The committed multi-area
-          state's own action surface is the ghost-button row already rendered
-          inside `AreaSetSelectedHeader` above (Edit areas / Clear selected
-          areas / Draw search area / Create alert) — matching the mock's
-          `EPScopeBar` AREA_SET row — so nothing else is needed there.
-
-          VIEWPORT scope (`isViewportScope`, Issue #2015) is deliberately
-          excluded from the two-tile swap: "Add nearby areas" extends an
-          AREA_SET chip selection, which is not what a viewport-bounds
-          "Search this area" result represents. VIEWPORT keeps the original
-          plain "Add a school" CTA unchanged — out of this fix's investigated
-          scope (see PR #2424 STATE MAP/VISUAL CONTRACT comment). */}
-      {multiAreaKeys ? null : !isViewportScope ? (
-        <AreaSetTwoTileRow
-          primaryAreaName={selectedArea.areaLabel}
-          onAddSchool={onAddSchool ? handleAddSchool : undefined}
-          onAddNearbyAreas={handleAddNearbyAreas}
-        />
-      ) : (
-        onAddSchool && (
-          <div className="border-b border-border px-4 py-3">
-            <button
-              type="button"
-              onClick={handleAddSchool}
-              data-testid="add-school-cta"
-              className="flex w-full items-center gap-3 rounded-xl border border-plum/20 bg-plum-tint p-3 text-left shadow-sm transition-colors hover:border-plum/50"
-            >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-plum text-plum-foreground">
-                <Plus className="h-4 w-4" aria-hidden="true" />
-              </span>
-              <span className="flex-1 text-sm font-semibold text-foreground">Add a school in this area</span>
-              <span className="shrink-0 text-xs text-muted-foreground">Optional</span>
-            </button>
-          </div>
-        )
-      )}
-
-      {/* Search — moved ABOVE the quick-filter card (Issue #2084 AC8: heading
-          -> school CTA -> search -> filters -> result-count -> cards). */}
-      {onSearchChange && (
-        <div className="border-b border-border px-4 py-3">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder={`Search properties in ${areaLabel}`}
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              className="h-9 pl-8 pr-8 text-sm"
-              data-testid="area-search-input"
-            />
-            {searchQuery && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2"
-                onClick={() => onSearchChange('')}
-                aria-label="Clear search"
-                data-testid="area-search-clear"
-              >
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Quick filter card — property type + bedrooms (the school CTA above is
-          now a separate, full-width card — see #2084 AC8). */}
-      {/* F2 — outer section keeps border-b layout; inner white card matches the controls card surface. */}
-      {/* Issue #2596 — the filter block carries ONE separation, not three.
-          The merge base nested a bordered, rounded, shadowed card (1px #D7D6D0, 12px radius,
-          12px padding) inside a section that ALREADY had a bottom hairline of the same colour
-          and 12px/16px padding — two borders and two paddings around one group of controls,
-          which is the "redundant nested borders" #2596 names. The frozen kit's equivalent block
-          measures padding 0, no background, no border, no radius and no shadow: the controls sit
-          directly on the panel surface and the row rhythm alone groups them.
-          The inner element keeps `bg-card` (the panel surface behind it is the canvas, not
-          paper) and loses the border, radius, shadow and its own padding, so the rows now align
-          to the panel's existing px-4 rhythm instead of being inset twice. Row gap follows the
-          kit's measured 6px. */}
-      <div className="border-b border-border px-4 py-2.5">
-        <div className="bg-card">
-          <div className="space-y-1.5">
+      {/* Quick filter block — property type + bedrooms directly on clean canvas background. */}
+      <div className="border-b border-border px-4 py-1.5">
+        <div className="space-y-1 flex flex-col gap-[11px] md:gap-[5px]" data-design-component="filter-toolbar">
             {/* Issue #2450 — TYPE family. Rendered ONLY when the calling surface can actually
                 consume a Commercial subtype: while the capability is off the owner ruling is that
                 today's buyer surface is preserved unchanged, so there is no family row at all
@@ -1892,181 +1722,79 @@ export function AreaSelectedPanel({
                 approved wording, not the "Property family" this previously read. */}
             {isCommercialSubtypeSupported && (
               <div
-                className="flex flex-wrap items-center gap-x-2 gap-y-1.5"
+                className="flex flex-col gap-[7px] md:grid md:grid-cols-[96px_minmax(0,1fr)] md:gap-x-[9px] md:items-start"
                 data-testid="quick-family-row"
               >
-                <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                <span className="pt-2 text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground leading-[1.25]">
                   Type
                 </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={cn(
-                    'h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
-                    activeFamily === 'residential'
-                      ? 'border-gold bg-gold text-gold-foreground shadow-sm hover:bg-gold/90'
-                      : '',
-                  )}
-                  onClick={() => handleSelectFamily('residential')}
-                  data-testid="quick-chip-family-residential"
-                  aria-pressed={activeFamily === 'residential'}
-                >
-                  Residential
-                </Button>
-                {/* Structurally identical to the Residential chip above, and that is the ruling
-                    expressed in markup rather than asserted in a comment: same browsing posture
-                    for both families, no auth condition, no disabled branch, no gate copy. */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={cn(
-                    'h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
-                    activeFamily === 'commercial'
-                      ? 'border-gold bg-gold text-gold-foreground shadow-sm hover:bg-gold/90'
-                      : '',
-                  )}
-                  onClick={() => handleSelectFamily('commercial')}
-                  data-testid="quick-chip-family-commercial"
-                  aria-pressed={activeFamily === 'commercial'}
-                >
-                  Commercial
-                </Button>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      'h-11 min-h-[44px] px-[14px] text-[13px] font-semibold rounded-full md:min-h-0 md:h-auto md:py-[6px] md:px-[12px] md:text-[12.5px] md:leading-normal',
+                      activeFamily === 'residential'
+                        ? 'border-copper bg-copper text-copper-foreground shadow-sm hover:bg-copper-hover'
+                        : 'border-border bg-card text-[hsl(var(--text-body))] hover:border-border-strong',
+                    )}
+                    onClick={() => handleSelectFamily('residential')}
+                    data-testid="quick-chip-family-residential"
+                    aria-pressed={activeFamily === 'residential'}
+                  >
+                    Residential
+                  </Button>
+                  {/* Structurally identical to the Residential chip above, and that is the ruling
+                      expressed in markup rather than asserted in a comment: same browsing posture
+                      for both families, no auth condition, no disabled branch, no gate copy. */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      'h-11 min-h-[44px] px-[14px] text-[13px] font-semibold rounded-full md:min-h-0 md:h-auto md:py-[6px] md:px-[12px] md:text-[12.5px] md:leading-normal',
+                      activeFamily === 'commercial'
+                        ? 'border-gold bg-gold text-gold-foreground shadow-sm hover:bg-gold/90'
+                        : 'border-border bg-card text-[hsl(var(--text-body))] hover:border-border-strong',
+                    )}
+                    onClick={() => handleSelectFamily('commercial')}
+                    data-testid="quick-chip-family-commercial"
+                    aria-pressed={activeFamily === 'commercial'}
+                  >
+                    Commercial
+                  </Button>
 
-                {/* Issue #2023 — possession chip, moved onto the TYPE row's trailing edge to match
-                    the approved mock. `ml-auto` keeps it right-aligned when the row has room and
-                    lets it wrap naturally when it does not.
+                  {/* Issue #2023 — possession chip, moved onto the TYPE row's trailing edge to match
+                      the approved mock. `ml-auto` keeps it right-aligned when the row has room and
+                      lets it wrap naturally when it does not.
 
-                    Code-review follow-up (unchanged): not every calling surface can actually
-                    filter on this (see `isReadyToMoveSupported`). When unsupported the chip renders
-                    muted/disabled with an explanatory title instead of toggling into an active
-                    state that has no effect on the listings shown — an active-looking chip that
-                    does nothing is a UX-honesty bug, not a cosmetic one. A stale
-                    `filters.readyToMove=true` from a prior session/URL still renders inert rather
-                    than silently clearing the user's URL state as a side effect.
+                      Code-review follow-up (unchanged): not every calling surface can actually
+                      filter on this (see `isReadyToMoveSupported`). When unsupported the chip renders
+                      muted/disabled with an explanatory title instead of toggling into an active
+                      state that has no effect on the listings shown — an active-looking chip that
+                      does nothing is a UX-honesty bug, not a cosmetic one. A stale
+                      `filters.readyToMove=true` from a prior session/URL still renders inert rather
+                      than silently clearing the user's URL state as a side effect.
 
-                    THE MOCK'S SECOND TRAILING CHIP ("Broker identity verified") IS DELIBERATELY
-                    ABSENT, and this is the one place this panel knowingly departs from the approved
-                    design. `PropertyFilters` carries no broker-identity field (its booleans are
-                    backOnMarket / newToMarket / reraRegistered / readyToMove), so the control could
-                    not narrow anything. Rendering it would ship precisely the inert design-only
-                    control #2450 forbids, and wiring it to `reraRegistered` would be worse: RERA
-                    registration is a property's statutory registration, not a broker's identity, so
-                    the chip would make a verification claim the data does not support. Raised with
-                    the owner rather than resolved here. */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!isReadyToMoveSupported}
-                  className={cn(
-                    'ml-auto h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
-                    !isReadyToMoveSupported
-                      ? 'cursor-not-allowed opacity-50'
-                      : activeReadyToMove
-                        ? 'border-evergreen bg-evergreen-tint text-evergreen shadow-sm hover:bg-evergreen-tint/80'
-                        : '',
-                  )}
-                  onClick={isReadyToMoveSupported ? handleToggleReadyToMove : undefined}
-                  data-testid="quick-chip-ready-to-move"
-                  aria-pressed={isReadyToMoveSupported && activeReadyToMove}
-                  title={
-                    isReadyToMoveSupported
-                      ? undefined
-                      : "Ready-to-move filtering isn't available in this view yet — try Browse all listings"
-                  }
-                >
-                  {possessionLabel}
-                </Button>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              {/* Issue #2555 — the Residential type row keeps its own label, and the Commercial
-                  subtype row below carries the approved "COMMERCIAL TYPE" one. Only one of the two
-                  ever renders (see the mutual-exclusion note below), so the card shows exactly one
-                  type control at a time, as the mock does. The label is suppressed while the
-                  subtype row owns this slot.
-
-                  Issue #2596 — the label reads "Residential type", not "Property type". The updated
-                  kit names the two rows RESIDENTIAL TYPE and COMMERCIAL TYPE precisely because a
-                  family is not a subtype: with Commercial present, "Property type" would read as
-                  the family control one row above it. Renaming the label changes nothing about what
-                  the row emits — the kit's single-select behaviour for this row is NOT adopted here
-                  (see the scope note on the chips below). */}
-              {!showSubtypeRow && (
-                <span className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-                  <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-                  Residential type
-                </span>
-              )}
-              <div className="flex flex-wrap gap-1.5">
-                {/* Issue #2450 — the Residential type chips and the Commercial subtype row are
-                    MUTUALLY EXCLUSIVE, and this condition is what makes that true rather than a
-                    comment claiming it. Rendered together, a buyer can hold
-                    `propertyTypes:['apartment']` AND `commercialSubtypes:['SHOP']` at the same
-                    time, which `DiscoverListingPredicateBuilder` ANDs into a query no row can
-                    satisfy — the contradictory-selection class this issue exists to remove,
-                    reintroduced through the UI instead of through emission.
-
-                    Gated on `showSubtypeRow` (capability AND commercial family), NOT on
-                    `activeFamily` alone. While the capability is off the family is still DERIVED
-                    from an inbound `subtype=` URL, so keying off it there would hide the type
-                    chips on the surface the owner ruled must stay exactly as it is today. Auth is
-                    not a factor in either direction — signed-out and signed-in buyers get the
-                    same row (see the anon-posture note above). */}
-                {!showSubtypeRow && (
-                  <>
-                    {/* R-C — "All" chip: NAVY (--primary) when active. Mock spec uses navy for property-type chips. */}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={cn(
-                        'h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
-                        allTypesActive
-                          ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
-                          : '',
-                      )}
-                      onClick={handleSelectAllTypes}
-                      data-testid="quick-chip-all"
-                      aria-pressed={allTypesActive}
-                    >
-                      All
-                    </Button>
-                    {QUICK_PROPERTY_TYPES.map((type) => (
-                      <Button
-                        key={type}
-                        variant="outline"
-                        size="sm"
-                        className={cn(
-                          'h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
-                          activePropertyTypes.has(type)
-                            ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
-                            : '',
-                        )}
-                        onClick={() => handleTogglePropertyType(type)}
-                        data-testid={`quick-chip-${type}`}
-                        aria-pressed={activePropertyTypes.has(type)}
-                      >
-                        {PROPERTY_TYPE_LABELS[type]}
-                      </Button>
-                    ))}
-                  </>
-                )}
-                {/* Issue #2555 — the possession chip moved to the TYPE row's trailing edge to
-                    match the approved mock; see its note there. It is no longer rendered here.
-                    While the capability is OFF there is no TYPE row, so it is re-rendered below
-                    instead — today's buyer surface must keep the control it has. */}
-                {!isCommercialSubtypeSupported && (
+                      THE MOCK'S SECOND TRAILING CHIP ("Broker identity verified") IS DELIBERATELY
+                      ABSENT, and this is the one place this panel knowingly departs from the approved
+                      design. `PropertyFilters` carries no broker-identity field (its booleans are
+                      backOnMarket / newToMarket / reraRegistered / readyToMove), so the control could
+                      not narrow anything. Rendering it would ship precisely the inert design-only
+                      control #2450 forbids, and wiring it to `reraRegistered` would be worse: RERA
+                      registration is a property's statutory registration, not a broker's identity, so
+                      the chip would make a verification claim the data does not support. Raised with
+                      the owner rather than resolved here. */}
                   <Button
                     variant="outline"
                     size="sm"
                     disabled={!isReadyToMoveSupported}
                     className={cn(
-                      'ml-auto h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
+                      'h-11 ml-auto min-h-[44px] px-[14px] text-[13px] font-semibold rounded-full md:min-h-0 md:h-auto md:py-[6px] md:px-[12px] md:text-[12.5px] md:leading-normal',
                       !isReadyToMoveSupported
                         ? 'cursor-not-allowed opacity-50'
                         : activeReadyToMove
                           ? 'border-evergreen bg-evergreen-tint text-evergreen shadow-sm hover:bg-evergreen-tint/80'
-                          : '',
+                          : 'border-border bg-card text-[hsl(var(--text-body))] hover:border-border-strong',
                     )}
                     onClick={isReadyToMoveSupported ? handleToggleReadyToMove : undefined}
                     data-testid="quick-chip-ready-to-move"
@@ -2079,28 +1807,102 @@ export function AreaSelectedPanel({
                   >
                     {possessionLabel}
                   </Button>
-                )}
+                </div>
               </div>
+            )}
 
-              {/* Commercial subtype row — family-local, so it appears only while Commercial is the
-                  active family and never alongside the Residential type chips. The second half of
-                  that sentence is enforced by the `!showSubtypeRow` guard on those chips above, on
-                  this same condition; an earlier revision asserted it in prose while the two rows
-                  rendered in the same block, which is how the contradictory selection stayed
-                  reachable. */}
-              {showSubtypeRow && (
-                <div
-                  className="flex flex-wrap items-center gap-x-2 gap-y-1.5"
-                  data-testid="quick-subtype-row"
-                >
-                  {/* Issue #2555 mock parity — the approved "COMMERCIAL TYPE" label, inline at the
-                      left of its own chips. The row wraps after "Commercial Building" at the
-                      desktop target; "Warehouse / Godown" and "Commercial Land" flow to a second
-                      line and stay fully readable because the chips size to their content rather
-                      than being truncated. */}
-                  <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-                    Commercial type
-                  </span>
+            {!showSubtypeRow && (
+              <div className="flex flex-col gap-[7px] md:grid md:grid-cols-[96px_minmax(0,1fr)] md:gap-x-[9px] md:items-start">
+                <span className="pt-2 text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground leading-[1.25]">
+                  Residential type
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      'h-11 min-h-[44px] px-[14px] text-[13px] font-semibold rounded-full md:min-h-0 md:h-auto md:py-[6px] md:px-[12px] md:text-[12.5px] md:leading-normal',
+                      allTypesActive
+                        ? 'border-copper bg-copper text-copper-foreground shadow-sm hover:bg-copper-hover'
+                        : 'border-border bg-card text-[hsl(var(--text-body))] hover:border-border-strong',
+                    )}
+                    onClick={handleSelectAllTypes}
+                    data-testid="quick-chip-all"
+                    aria-pressed={allTypesActive}
+                  >
+                    All
+                  </Button>
+                  {QUICK_PROPERTY_TYPES.map((type) => (
+                    <Button
+                      key={type}
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        'h-11 min-h-[44px] px-[14px] text-[13px] font-semibold rounded-full md:min-h-0 md:h-auto md:py-[6px] md:px-[12px] md:text-[12.5px] md:leading-normal',
+                        activePropertyTypes.has(type)
+                          ? 'border-copper bg-copper text-copper-foreground shadow-sm hover:bg-copper-hover'
+                          : 'border-border bg-card text-[hsl(var(--text-body))] hover:border-border-strong',
+                      )}
+                      onClick={() => handleTogglePropertyType(type)}
+                      data-testid={`quick-chip-${type}`}
+                      aria-pressed={activePropertyTypes.has(type)}
+                    >
+                      {PROPERTY_TYPE_LABELS[type]}
+                    </Button>
+                  ))}
+                  {/* Issue #2555 — the possession chip moved to the TYPE row's trailing edge to
+                      match the approved mock; see its note there. It is no longer rendered here.
+                      While the capability is OFF there is no TYPE row, so it is re-rendered below
+                      instead — today's buyer surface must keep the control it has. */}
+                  {!isCommercialSubtypeSupported && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!isReadyToMoveSupported}
+                      className={cn(
+                        'h-11 ml-auto min-h-[44px] px-[14px] text-[13px] font-semibold rounded-full md:min-h-0 md:h-auto md:py-[6px] md:px-[12px] md:text-[12.5px] md:leading-normal',
+                        !isReadyToMoveSupported
+                          ? 'cursor-not-allowed opacity-50'
+                          : activeReadyToMove
+                            ? 'border-evergreen bg-evergreen-tint text-evergreen shadow-sm hover:bg-evergreen-tint/80'
+                            : 'border-border bg-card text-[hsl(var(--text-body))] hover:border-border-strong',
+                      )}
+                      onClick={isReadyToMoveSupported ? handleToggleReadyToMove : undefined}
+                      data-testid="quick-chip-ready-to-move"
+                      aria-pressed={isReadyToMoveSupported && activeReadyToMove}
+                      title={
+                        isReadyToMoveSupported
+                          ? undefined
+                          : "Ready-to-move filtering isn't available in this view yet — try Browse all listings"
+                      }
+                    >
+                      {possessionLabel}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Commercial subtype row — family-local, so it appears only while Commercial is the
+                active family and never alongside the Residential type chips. The second half of
+                that sentence is enforced by the `!showSubtypeRow` guard on those chips above, on
+                this same condition; an earlier revision asserted it in prose while the two rows
+                rendered in the same block, which is how the contradictory selection stayed
+                reachable. */}
+            {showSubtypeRow && (
+              <div
+                className="flex flex-col gap-[7px] md:grid md:grid-cols-[96px_minmax(0,1fr)] md:gap-x-[9px] md:items-start"
+                data-testid="quick-subtype-row"
+              >
+                {/* Issue #2555 mock parity — the approved "COMMERCIAL TYPE" label, inline at the
+                    left of its own chips. The row wraps after "Commercial Building" at the
+                    desktop target; "Warehouse / Godown" and "Commercial Land" flow to a second
+                    line and stay fully readable because the chips size to their content rather
+                    than being truncated. */}
+                <span className="pt-2 text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground leading-[1.25]">
+                  Commercial type
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
                   {COMMERCIAL_SUBTYPE_CHOICES.map((choice) => {
                     // "All commercial" is the active chip precisely when no subtype narrows the
                     // family — it is the absence of a narrowing, not a sixth subtype.
@@ -2114,10 +1916,10 @@ export function AreaSelectedPanel({
                         variant="outline"
                         size="sm"
                         className={cn(
-                          'h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
+                          'h-11 min-h-[44px] px-[14px] text-[13px] font-semibold rounded-full md:min-h-0 md:h-auto md:py-[6px] md:px-[12px] md:text-[12.5px] md:leading-normal',
                           pressed
                             ? 'border-gold bg-gold text-gold-foreground shadow-sm hover:bg-gold/90'
-                            : '',
+                            : 'border-border bg-card text-[hsl(var(--text-body))] hover:border-border-strong',
                         )}
                         onClick={() => handleToggleSubtype(choice.value)}
                         data-testid={choice.testId}
@@ -2128,8 +1930,11 @@ export function AreaSelectedPanel({
                     );
                   })}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
+            {/* Separator between TYPE / subtype block and attribute groups */}
+            <div className="my-[3px] hidden h-px bg-border md:block" data-testid="filter-divider" />
 
             {/* Issue #2555 / #2459 AC2 — Bedrooms is RESIDENTIAL-ONLY. A commercial row carries
                 `bedrooms` NULL, so this control could only ever narrow the results to nothing; the
@@ -2141,22 +1946,24 @@ export function AreaSelectedPanel({
                 filter state and re-applies on the way back to Residential, exactly as that module's
                 "suppression is about submission, not about the buyer's state" note requires. */}
             {showBedroomsRow && (
-              <div className="space-y-2" data-testid="quick-bedrooms-row">
-                <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+              <div
+                className="flex flex-col gap-[7px] md:grid md:grid-cols-[96px_minmax(0,1fr)] md:gap-x-[9px] md:items-start"
+                data-testid="quick-bedrooms-row"
+              >
+                <span className="pt-2 text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground leading-[1.25]">
                   Bedrooms
                 </span>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  {/* R-C — BHK chips: copper-tint active (mock uses copper-tint for BHK). */}
                   {QUICK_BEDROOMS.map((bed) => (
                     <Button
                       key={bed}
                       variant="outline"
                       size="sm"
                       className={cn(
-                        'h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
+                        'h-11 min-h-[44px] px-[14px] text-[13px] font-semibold rounded-full md:min-h-0 md:h-auto md:py-[6px] md:px-[12px] md:text-[12.5px] md:leading-normal',
                         activeBedrooms.has(bed)
-                          ? 'border-copper bg-copper-tint text-[hsl(var(--copper))] shadow-sm hover:bg-copper-tint/80'
-                          : '',
+                          ? 'border-copper bg-copper text-copper-foreground shadow-sm hover:bg-copper-hover'
+                          : 'border-border bg-card text-[hsl(var(--text-body))] hover:border-border-strong',
                       )}
                       onClick={() => handleToggleBedroom(bed)}
                       data-testid={`quick-chip-${bed}-bhk`}
@@ -2171,79 +1978,15 @@ export function AreaSelectedPanel({
 
             {/* Issue #2555 — AREA (SQ FT) presets. Each writes `areaMinSqft` through #2459's own
                 `applyAreaBound`, the same writer the numeric AreaRangeFilter uses, and the label
-                comes from #2459's resolver.
-
-                THE ROW IS LIVE ON BOTH SURFACES AS OF `65b5dc7c`. Everything below is the RECORD of
-                a defect that commit CLOSED, kept in past tense because the reasoning is what the
-                five insertion points were chosen against — not a description of today's behaviour.
-                This block has now been rewritten four times: twice because it was WRONG, and once
-                because it was RIGHT WHEN WRITTEN and was overtaken by a fix two commits later in
-                this same branch. If you change the area wiring, change this paragraph in the same
-                commit; nothing in the tooling catches a comment that quietly stops being true.
-
-                THE DEFECT, as it stood before `65b5dc7c`: a cards/markers DIVERGENCE, not a dead
-                control. Both earlier claims were wrong. The first said the row was "LIVE, not
-                decorative", citing #2450's "Never ship an inert design-only Area chip" as though
-                using the real writer settled it — liveness needs a writer, a READER and a QUERY,
-                and that surface had only the writer. The second said `areaMinSqft` was absent from
-                `useDiscoverMapData` and concluded "markers do not narrow either — uniformly inert";
-                the premise was true and the INFERENCE was not, because that hook never names filter
-                keys on the marker path, it forwards them wholesale.
-
-                THE CARD PATH AS IT WAS, each link read rather than inferred:
-                  - `selectors/effectiveDiscoverContext.ts::resolveEffectiveAreaLeafFilters` — both
-                    branches projected exactly propertyTypes / commercialSubtypes / bedrooms /
-                    priceMin / priceMax / readyToMove. No area keys.
-                  - `views/NodeListingsSurface.tsx` — the same six in its inline `effectiveFilters`
-                    memo and in its deps.
-                  - `hooks/useDiscoverCityListings.ts` — no area parameter at all, in neither the
-                    params type nor the `queryFn`.
-                So the click emitted, the commit boundary forwarded, and the projection DROPPED it
-                before it returned as props: `activeAreaMin` stayed undefined, "Any size" stayed
-                pressed, the clicked chip never latched, `selected-chip-area` could not render, and
-                the CARDS did not change.
-
-                THE MARKER PATH NEVER DROPPED IT:
-                  - `useDiscoverMapDataController` passes `filters: effectiveFilters`, which is the
-                    page filters unchanged apart from a combined area+school polygon injection.
-                  - `useDiscoverMapData` — `agriFilters` IS `filters` itself off the agri journey,
-                    handed straight to `useDiscoverFilteredMarkers`.
-                  - `useDiscoverFilteredMarkers` passes `filters` wholesale to
-                    `buildDiscoverSearchParams`.
-                  - `lib/discoverSearchParams.ts` EMITS `areaMinSqft`/`areaMaxSqft`, and its own
-                    #2459 note calls itself "the ONE builder both the listings hook and the markers
-                    hook call".
-                Net: a SIGNED-IN buyer (markers are auth-gated) saw the MAP narrow to the chosen
-                bound while the card list ignored it and the chip still read "Any size".
-
-                WHAT `65b5dc7c` CHANGED. The area keys were added at five points, because the axis
-                was unrepresentable at several layers at once: both branches of
-                `resolveEffectiveAreaLeafFilters`; `NodeListingsSurface`'s inline twin AND its memo
-                deps; the `cityListingsQueryParams` `Pick<>` union and that adapter's return object;
-                and `useDiscoverCityListings`' params type, destructure, react-query KEY and URL
-                append. Forwarded with NO applicability gate, deliberately: unlike `bedrooms` —
-                suppressed for plot-only/commercial-only selections whose rows carry `bedrooms` NULL
-                — #2459 resolves the area column PER ROW, so every shape has a comparable quantity
-                and there is nothing to suppress. Sent in square feet, unconverted.
-
-                THIS IS STILL THE ONE UNGATED PART OF #2555. Everything else here is dormant behind
-                `isCommercialSubtypeSupported`; this row renders for every buyer, so changes here
-                reach production without the flag flip and "it is only a scaffold" does not cover
-                it. Gating the row behind an `isAreaFilterSupported` prop on the
-                `isReadyToMoveSupported` precedent would hide a row the approved mock requires, so
-                that remains an owner decision rather than a tidy-up — and it is now moot, since the
-                capability the prop would have guarded exists.
-
-                The approved mock trails the BUDGET label on the right of this same row, which is
-                what `ml-auto` below reproduces. */}
-            <div className="space-y-2">
-              <div
-                className="flex flex-wrap items-center gap-x-2 gap-y-1.5"
-                data-testid="quick-area-row"
-              >
-                <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-                  {areaControlLabel}
-                </span>
+                comes from #2459's resolver. */}
+            <div
+              className="flex flex-col gap-[7px] md:grid md:grid-cols-[96px_minmax(0,1fr)] md:gap-x-[9px] md:items-start"
+              data-testid="quick-area-row"
+            >
+              <span className="pt-2 text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground leading-[1.25]">
+                {areaControlLabel}
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
                 {QUICK_AREA_PRESETS.map((preset) => {
                   // "Any size" is active precisely when no lower bound narrows the results.
                   const pressed =
@@ -2254,10 +1997,10 @@ export function AreaSelectedPanel({
                       variant="outline"
                       size="sm"
                       className={cn(
-                        'h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
+                        'h-11 min-h-[44px] px-[14px] text-[13px] font-semibold rounded-full md:min-h-0 md:h-auto md:py-[6px] md:px-[12px] md:text-[12.5px] md:leading-normal',
                         pressed
-                          ? 'border-gold bg-gold text-gold-foreground shadow-sm hover:bg-gold/90'
-                          : '',
+                          ? 'border-copper bg-copper text-copper-foreground shadow-sm hover:bg-copper-hover'
+                          : 'border-border bg-card text-[hsl(var(--text-body))] hover:border-border-strong',
                       )}
                       onClick={() => handleSelectArea(preset.min)}
                       data-testid={preset.testId}
@@ -2268,68 +2011,32 @@ export function AreaSelectedPanel({
                   );
                 })}
               </div>
+            </div>
 
-              {/* Issue #2459 D1, the LABEL half of "meaning DISCLOSED in label and chip".
-                  "Disclosure is NOT optional" is a ruled acceptance criterion, not copy polish.
+            {/* Issue #2459 D1, the LABEL half of "meaning DISCLOSED in label and chip". */}
+            {areaControl.disclosure !== null && (
+              <p className="text-xs text-muted-foreground md:ml-[105px]" data-testid="quick-area-disclosure">
+                {areaControl.disclosure}
+              </p>
+            )}
 
-                  WHY THIS WAS MISSING RATHER THAN DECLINED. The row above renders
-                  `areaControlLabel`, which for a broad or mixed selection is the deliberately
-                  non-committal "AREA (SQ FT)". That is the DEFAULT state here: with no property-type
-                  narrowing every shape is in play, so the row compares built-up area on homes and
-                  plot size on plots and said so nowhere. `primaryAreaLabels.ts` returns a non-null
-                  `disclosure` in exactly that case and calls rendering the broad label without it
-                  "the failure mode D1 forbids" — the panel simply dropped the value.
-
-                  NO COPY IS COINED HERE. The sentence is built by the shared module from
-                  PRIMARY_AREA_DISCLOSURE_TERMS, so this surface cannot drift from the numeric
-                  AreaRangeFilter or from ActiveContextChips, which render the same data.
-
-                  Rendered as its OWN element with a stable test id, mirroring
-                  `AreaRangeFilter`'s `area-filter-disclosure`, so a test fails when it goes missing
-                  rather than the sentence silently disappearing. A distinct id, because both
-                  controls can mount on the same page. That component additionally wires its
-                  sentence to its numeric inputs via `aria-describedby`; these presets are buttons
-                  sitting immediately after it, so the sentence is announced in normal document
-                  order instead. */}
-              {areaControl.disclosure !== null && (
-                <p className="text-xs text-muted-foreground" data-testid="quick-area-disclosure">
-                  {areaControl.disclosure}
-                </p>
-              )}
-
-              {/* Issue #2555 item 3 — purpose- and family-aware bands; see QUICK_BUDGET_BANDS.
-                  COPPER active state, per the approved mock, which deliberately distinguishes
-                  Budget from the gold family/subtype/area controls. */}
-              {/* Issue #2596 — ONE FILTER GROUP PER ROW, and Budget owns its own heading.
-                  The synced kit's §"One filter group per row" is explicit: "A group heading
-                  therefore always owns the chips beside it, and no heading is ever pushed into
-                  another group's leftover horizontal space." The BUDGET label previously sat
-                  `ml-auto` on the trailing edge of the AREA row — #2555 parity with the older mock,
-                  which the updated kit contradicts — so the two groups shared one row and the
-                  heading floated away from the chips it names. §Commercial attribute filters says
-                  the same thing from the other direction: Commercial carries area and budget "each
-                  as its own labelled filter group".
-
-                  The wording follows Buy/Rent because the kit requires it: "the label reads
-                  `Monthly rent`" in the Rent / Lease state, where the ladder is monthly and reusing
-                  "Budget" would present a rent ceiling in the register of a purchase price. Label
-                  only — `budgetIntent` already drives the BANDS and the selected-chip suffix, so
-                  this reads the same source rather than introducing a second one. */}
-              <div
-                className="flex flex-wrap items-center gap-x-2 gap-y-1.5"
-                data-testid="quick-budget-row"
-              >
-                <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-                  {budgetIntent === 'rent' ? 'Monthly rent' : 'Budget'}
-                </span>
+            {/* Issue #2555 item 3 — purpose- and family-aware bands; see QUICK_BUDGET_BANDS. */}
+            <div
+              className="flex flex-col gap-[7px] md:grid md:grid-cols-[96px_minmax(0,1fr)] md:gap-x-[9px] md:items-start"
+              data-testid="quick-budget-row"
+            >
+              <span className="pt-2 text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground leading-[1.25]">
+                {budgetIntent === 'rent' ? 'Monthly rent' : 'Budget'}
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
                 <Button
                   variant="outline"
                   size="sm"
                   className={cn(
-                    'h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
+                    'h-11 min-h-[44px] px-[14px] text-[13px] font-semibold rounded-full md:min-h-0 md:h-auto md:py-[6px] md:px-[12px] md:text-[12.5px] md:leading-normal',
                     activePriceMax == null
                       ? 'border-copper bg-copper text-copper-foreground shadow-sm hover:bg-copper-hover'
-                      : '',
+                      : 'border-border bg-card text-[hsl(var(--text-body))] hover:border-border-strong',
                   )}
                   onClick={() => handleSelectBudget(undefined)}
                   data-testid="quick-chip-budget-any"
@@ -2343,10 +2050,10 @@ export function AreaSelectedPanel({
                     variant="outline"
                     size="sm"
                     className={cn(
-                      'h-11 rounded-full px-3 text-[12.5px] md:h-[30px]',
+                      'h-11 min-h-[44px] px-[14px] text-[13px] font-semibold rounded-full md:min-h-0 md:h-auto md:py-[6px] md:px-[12px] md:text-[12.5px] md:leading-normal',
                       activePriceMax === budget.max
                         ? 'border-copper bg-copper text-copper-foreground shadow-sm hover:bg-copper-hover'
-                        : '',
+                        : 'border-border bg-card text-[hsl(var(--text-body))] hover:border-border-strong',
                     )}
                     onClick={() => handleSelectBudget(budget.max)}
                     data-testid={`quick-chip-budget-${budget.max}`}
@@ -2586,8 +2293,292 @@ export function AreaSelectedPanel({
                 behind. Nothing asserted it: its `data-testid` had exactly one occurrence in the
                 repository, its own. */}
           </div>
-        </div>
       </div>
+
+      {/* Heading section — result-scope eyebrow, headline, count, sub-copy.
+          Issue #2596 FILTER PLACEMENT: this block now renders AFTER the
+          quick-filter card, not before it. The kit puts the filters in the
+          panel's fixed top section on desktop (ExpPanel.jsx L886) and at the
+          very top of the scrolling body on mobile (L894-898); in BOTH cases
+          they precede `EPHeading`. The filters must never trail the
+          search/recommendation workflow, which is what this file did before.
+
+          RESIDUAL DEVIATION, disclosed rather than papered over: this panel is
+          a SINGLE scroll column (`area-panel-container ... overflow-y-auto`),
+          so the DESKTOP treatment reproduced here is the kit's ORDERING, not
+          its PINNING. The kit's desktop filters sit in a `flex: none` header
+          that does not scroll away; ours scroll with the body. Making them
+          genuinely sticky means restructuring this panel into fixed + scroll
+          regions, which is app-shell work this issue does not own. */}
+      {/* Issue #2596 density (owner follow-up) — `pb-4 pt-3.5` -> `pb-2.5 pt-2.5`. MEASURED at
+          1366×768: this section rendered 152px against the kit's 64px `scope-bar`. Most of that
+          difference is CONTENT this surface carries and the kit does not (the sub-copy line and
+          the intent helper), which a spacing-only pass must not delete — so what is reclaimed
+          here is the section padding and the two dead margins above, not the copy. */}
+      <div className="border-b border-border px-4 pb-2.5 pt-2.5">
+        {/* Issue #2159 reskin — mock density rule (VISUAL_RULES §3): the scope
+            eyebrow, area title and result count read as ONE compact block
+            instead of a full-bleed hero headline. Count sits outside the <h1>
+            (a sibling, not a child) so the heading's accessible name stays
+            exactly "Properties in {areaLabel}" for existing tests/consumers.
+
+            PR #2180 review fix — `count` is areaListings.length, the length
+            of the bounded per-area fetch slice (caller wires
+            useDiscoverCityListings with limitPerArea: 50), NOT an
+            authoritative total. The evergreen result-summary strip further
+            below gets to say "X verified properties" safely because it has
+            an escape hatch to the caller-precomputed `areaResultSummaryText`
+            (same formatDiscoverBadgeCopy(...) call the map badge uses — see
+            the prop's own JSDoc above). This hero block does not have that
+            wiring, so for any area with >50 matches, labelling this number
+            "for sale"/"for rent" would silently understate the true total.
+            Labelled "shown" instead — true regardless of whether the area
+            has more matches than the fetch limit. */}
+        {multiAreaKeys ? (
+          <AreaSetSelectedHeader
+            areaKeys={multiAreaKeys}
+            // Issue #2017 — fall back to the authoritative `nav.city` slug
+            // (already read above for `activeScope`/`multiAreaKeys`) when the
+            // caller omits the `city` prop entirely. `DiscoverAreasJourneyPanel`'s
+            // `AreaLeafListingsSurface` (the default AREA-leaf render path — the
+            // component this panel most commonly mounts under) passes
+            // `cityLabel` but not `city`, which otherwise silently collapsed to
+            // `''` here and sat below `useDiscoverAreas`'s `enabled: city.length
+            // > 0` guard inside AreaSetSelectedHeader — the areas query never
+            // fired, so the plural header always rendered its generic
+            // "N areas" fallback instead of resolved names/counts, even once
+            // listings had loaded. `nav.city` is the same city slug every
+            // caller (this one included) already derives `cityLabel` from via
+            // `CITY_CONFIG[nav.city]`, so this cannot diverge from what the
+            // panel is actually displaying. Explicit `city` props (e.g.
+            // NodeListingsSurface's `city={nav.city}`) still take precedence.
+            //
+            // Uses `||` (not `??`) and falls back through to DEFAULT_CITY, matching
+            // the established `nav.city || DEFAULT_CITY` idiom used everywhere else
+            // in Discover (see useDiscoverPageComposition.ts,
+            // useDiscoverAreaGroupsController.ts, useDiscoverJourneySwitchController.ts,
+            // useDiscoverNavigationController.ts). At a plain `/discover` URL with no
+            // `?city=` param, `nav.city` itself is `''` (documented in
+            // useDiscoverAgriController.ts and CityLaunchPreview.test.tsx) — a `??`
+            // fallback never catches that empty string, so it silently reached
+            // `useDiscoverAreas('')` and sat below its `enabled: city.length > 0`
+            // guard, same failure mode as the missing-prop case above.
+            city={city || nav.city || DEFAULT_CITY}
+            count={count}
+            intentNoun={intentNoun}
+            isLoadingListings={isLoadingListings}
+            onEditAreas={handleEditAreas}
+            onClearAreas={handleClearAreas}
+            onRemoveArea={handleRemoveCommittedArea}
+            // Issue #2017 (Fit all / focus-one) — camera-only actions
+            // registered by useDiscoverMapDataController; see
+            // DiscoverShellContextValue's AreaSetCameraActions doc. Neither
+            // call touches `resultScope`/`rareas`.
+            onFitAll={shell.fitAreaSet}
+            onFocusArea={shell.focusAreaSetMember}
+            // Issue #2419 (PR-2) — "Draw search area". Same shell-registered
+            // indirection as the two camera actions above; unlike them it
+            // enters draw mode rather than moving the camera, and still
+            // commits nothing on its own.
+            onDrawSearchArea={shell.startDrawSearchArea}
+            // Below the mobile breakpoint the map canvas is not mounted until
+            // the Map view is open, so the draw tool must have a surface to
+            // arm on. A no-op on desktop, where the map is always present.
+            onRevealMap={shell.isMobileShell ? () => shell.setMobileView('MAP') : undefined}
+          />
+        ) : (
+          <>
+            {/* Issue #2419 (PR-2) — the draw entry belongs in EVERY eligible
+                residential listing state, not only the multi-area one. It
+                previously lived inline in AreaSetSelectedHeader above, so a
+                SINGLE committed area — much the more common state, and the
+                one the #2016 contract spec reaches — had no entry at all.
+                Hidden by its own eligibility rule for VIEWPORT scope, agri
+                and anonymous shoppers, so this placement adds a control only
+                where drawing genuinely applies. */}
+            {/* Issue #2596 density — `empty:hidden`. MEASURED, not guessed: at 1366×768 this row
+                renders at height 0 (its `DrawSearchAreaEntry` child is hidden by its own
+                eligibility rule on this route) while its `mb-2` still applies, so it contributed
+                8px of whitespace for nothing. `:empty` matches precisely when the child rendered
+                null, so the margin survives wherever the row actually has content. */}
+            {!isViewportScope && (
+              <div
+                className="mb-2 flex flex-wrap items-center gap-1.5 empty:hidden"
+                data-testid="area-single-action-row"
+              >
+                <DrawSearchAreaEntry
+                  hasResidentialListingScope
+                  onDrawSearchArea={shell.startDrawSearchArea}
+                  onRevealMap={
+                    shell.isMobileShell ? () => shell.setMobileView('MAP') : undefined
+                  }
+                />
+              </div>
+            )}
+            <div className="flex items-end justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                  {isViewportScope
+                    ? `Result scope — ${SCOPE_TITLE.VIEWPORT}`
+                    : resultScopeKind === 'POLYGON'
+                      ? 'Result scope — Drawn area'
+                      : 'Result scope — Selected area'}
+                </p>
+                <h1 className="mt-0.5 font-['Fraunces',_ui-serif,_Georgia,_serif] text-[1.625rem] font-semibold leading-[1.15] tracking-[-0.02em] text-foreground">
+                  {/* Issue #2461 — a committed POLYGON now renders the
+                      polygon-scoped card list, so the heading must stop
+                      attributing those results to the previously-selected
+                      area. Keyed off the same `resultScopeKind` the
+                      zero-result recovery already reads. */}
+                  {isViewportScope
+                    ? 'On screen right now'
+                    : resultScopeKind === 'POLYGON'
+                      ? `${headingNoun} in your drawn area`
+                      : `${headingNoun} in ${areaLabel}`}
+                </h1>
+              </div>
+              {!isLoadingListings && (
+                <div className="shrink-0 text-right" data-testid="area-header-count">
+                  <p className="font-mono text-2xl font-semibold leading-none tabular-nums text-foreground">
+                    {count}
+                  </p>
+                  <p
+                    className="mt-0.5 text-[11px] text-muted-foreground"
+                    data-testid="area-header-count-noun"
+                  >
+                    {countNoun}
+                  </p>
+                </div>
+              )}
+            </div>
+            {/* R-C — sub-copy: 15px, 1.55 line-height, --text-body colour. */}
+            <p className="mt-1.5 text-[15px] leading-[1.55] text-[hsl(var(--text-body))]">
+              {isViewportScope
+                ? 'Explore verified listings in this map area, with map context and area-first filters.'
+                : resultScopeKind === 'POLYGON'
+                  ? 'Explore verified listings inside the area you drew, with map context and area-first filters.'
+                  : `Explore verified listings around ${areaLabel}, with map context and area-first filters.`}
+            </p>
+            <AreaSelectedPanelScopeBar
+              resultScopeKind={resultScopeKind}
+              returnLabel={returnLabel}
+              onReturn={handleReturnToPreviousScope}
+              onRedrawPolygon={onRedrawPolygon}
+            />
+          </>
+        )}
+
+        {/* Controls card — REMOVED (product-owner ruling, #1953 follow-up).
+            City was already removed from this card in build step 6, leaving
+            Buy/Rent as its only occupant; now that Buy/Rent is ALSO removed
+            (the persistent DiscoverControlBar is the SOLE Buy/Rent control
+            on /discover, same ownership rationale as the prior city
+            removal), the `onIntentChange &&`-gated card has nothing left to
+            hold and is retired with it — leaving it in place would render
+            an empty bordered "Looking to" box whenever `onIntentChange` is
+            supplied, which is worse than not rendering at all. The intent-
+            aware price helper directly below is UNCHANGED (it was already a
+            separate, unconditional element, not part of this gate).
+            `intent`/`onIntentChange` remain accepted (now JSX-unused) props
+            — kept threaded through unchanged, mirroring the existing
+            `onCityChange` convention already established on this exact
+            component, so no prop-interface churn ripples into
+            DiscoverRightPanel / DiscoverRightPanelContainer for this file. */}
+
+        <p className="mt-2.5 text-xs text-muted-foreground" data-testid="area-intent-helper">
+          {isViewportScope
+            ? `Showing ${intentNoun} prices in ₹ for this area.`
+            : resultScopeKind === 'POLYGON'
+              ? `Showing ${intentNoun} prices in ₹ for your drawn area.`
+              : `Showing ${intentNoun} prices in ₹ for ${areaLabel}.`}
+        </p>
+
+        {/* Issue #2596 density — same `empty:hidden` reasoning as the action row above, and the
+            same measurement: `activeContextChips` is frequently a non-null node that renders
+            nothing, so the `!= null` guard passes and this div contributed 10px of top margin
+            around zero content. */}
+        {activeContextChips != null && (
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5 empty:hidden">
+            {activeContextChips}
+          </div>
+        )}
+      </div>
+
+      {/* VIEWPORT-scope school CTA — its own bordered strip, directly below the
+          heading and ABOVE the search, exactly as at the merge base. Rendered
+          here rather than inside the group below so this PR carries no visual
+          delta on a surface no gate has been able to reach (#2601 option D);
+          see the constant's own comment for the full reasoning. Null in every
+          AREA_SET state, so the certified single-area path is untouched. */}
+      {viewportSchoolCta}
+
+      {/* Workflow group (Issue #2596) — property search FIRST, then the two
+          compact recommendation tiles, read as ONE group.
+
+          THIS ORDERING SUPERSEDES ISSUE #2084 AC8, deliberately. AC8 ruled
+          "heading -> school CTA -> search -> filters". The approved kit puts
+          the search box first and the tiles beneath it: `EPAreaActions`
+          (ExpPanel.jsx L371) is a single flex column, `gap: 8px`, holding the
+          `property-search` box (L379) and only then the `1fr 1fr` tile grid
+          (L385). The product owner ruled this order for #2596 with AC8 in
+          view, so AC8's ordering clause is superseded here rather than
+          accidentally contradicted. AC8's other clause — that the school
+          shortcut is its own modest row and not a hero block — still holds.
+
+          ONE SEPARATION, NOT TWO. The kit has no divider between the search
+          box and the tile grid; they are one workflow separated by spacing.
+          This group therefore owns the section's single bottom hairline and
+          its own padding, and the children inside carry neither.
+
+          Issue #2017 — the mock's state machine (Experience.jsx: `single =
+          scopeKind === "AREA_SET" && committed.length === 1`, `v.areaActions =
+          single`) gates the two-tile row on exactly ONE committed area. The
+          committed multi-area state's own action surface is the ghost-button
+          row inside `AreaSetSelectedHeader` above (Edit areas / Clear selected
+          areas / Draw search area / Create alert), matching the mock's
+          `EPScopeBar` AREA_SET row, so nothing else is needed there.
+
+          Issue #2596 density (owner follow-up) — `py-3` -> `py-2.5`. The kit's `EPAreaActions`
+          carries NO padding of its own; its separation comes from the scrolling body's 12px
+          column gap. This panel has no container gap (measured: `gap: normal`, every
+          inter-section gap 0), so the section keeps padding rather than losing its separation
+          entirely. The inner `gap-2` is the kit's own 8px and is unchanged, as is the tile
+          height — those were measured to parity in the density pass and are not to regress. */}
+      {(onSearchChange != null || areaRecommendationTiles != null) && (
+        <div className="flex flex-col gap-2 border-b border-border px-4 py-2.5">
+          {onSearchChange && (
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              {/* `h-10` = 40px (Issue #2596, owner-authorised kit parity). The kit's
+                  `property-search` box declares `minHeight: "40px"` (ExpPanel.jsx L379);
+                  this was `h-9` = 36px. No custom height scale is configured, so the
+                  Tailwind default applies and `h-10` is 2.5rem = 40px exactly. The
+                  absolutely-positioned search icon and clear button both centre on
+                  `top-1/2 -translate-y-1/2`, so neither needs adjusting. */}
+              <Input
+                placeholder={`Search properties in ${areaLabel}`}
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                className="h-10 pl-8 pr-8 text-sm"
+                data-testid="area-search-input"
+              />
+              {searchQuery && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2"
+                  onClick={() => onSearchChange('')}
+                  aria-label="Clear search"
+                  data-testid="area-search-clear"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+          )}
+          {areaRecommendationTiles}
+        </div>
+      )}
 
       {/* Listings body */}
       <div

@@ -404,11 +404,40 @@ function buildShortLabel(
 export function resolvePrimaryAreaControlLabel(
   selection: PrimaryAreaSelection = {},
 ): PrimaryAreaControlLabel {
-  const selectedTypes =
-    selection.propertyTypes != null && selection.propertyTypes.length > 0
-      ? selection.propertyTypes
-      : ALL_PROPERTY_TYPES;
   const selectedSubtypes = selection.commercialSubtypes ?? [];
+  const hasTypeNarrowing = selection.propertyTypes != null && selection.propertyTypes.length > 0;
+
+  // Issue #2596 — A SUBTYPE-ONLY SELECTION IS A NARROWING, NOT AN ABSENCE OF ONE.
+  //
+  // Under the one-axis buyer contract, picking a single Commercial subtype emits ONLY
+  // `commercialSubtypes` (e.g. `?subtype=SHOP`) and NO `propertyTypes`. The empty-types branch
+  // below then fell through to ALL_PROPERTY_TYPES — every shape there is — so three meanings
+  // landed in play and the caller got the broad `AREA (SQ FT)` plus the MIXED disclosure, for a
+  // selection that is not mixed at all. Measured on the live route before this fix: Shop,
+  // Warehouse / Godown and Commercial Land each rendered `AREA (SQ FT)` with the full
+  // "compares built-up ... warehouse ... plot size" sentence, while a single shape was selected.
+  // That is the #2596 AC "Contextual Area is visible and correctly labelled for every shape"
+  // failing, and it is actively misleading: the disclosure exists to explain a MIXTURE.
+  //
+  // The table itself was never wrong — MEANING_BY_SUBTYPE already maps SHOP/OFFICE/BUILDING to
+  // BUILT_UP, WAREHOUSE to WAREHOUSE and LAND to PLOT, and `resolvePrimaryAreaMeaning` consults
+  // the subtype FIRST. The subtypes simply never reached it, because `subtypesToApply` below only
+  // applies them to the subtype-bearing type, and that type was not in the selection.
+  //
+  // So this restores the SELECTION the buyer actually expressed rather than special-casing any
+  // individual subtype: a subtype narrowing implies the subtype-bearing type. One rule, no
+  // per-subtype branch, and every consumer of this resolver (panel row, selected chip,
+  // AreaRangeFilter) is corrected at once.
+  //
+  // DELIBERATELY NARROW. It applies only when there is NO type narrowing at all. A selection that
+  // names types AND subtypes (e.g. a hand-written `?type=apartment&subtype=SHOP`) is left exactly
+  // as it was — genuinely mixed, and not a state this buyer surface can currently produce.
+  const effectiveTypes = hasTypeNarrowing
+    ? selection.propertyTypes!
+    : selectedSubtypes.length > 0
+      ? [SUBTYPE_BEARING_PROPERTY_TYPE]
+      : ALL_PROPERTY_TYPES;
+  const selectedTypes = effectiveTypes;
 
   const meaningsByFamily = new Map<PrimaryAreaFamily, Set<ResolvedPrimaryAreaMeaning>>();
   const meaningsInPlay = new Set<ResolvedPrimaryAreaMeaning>();

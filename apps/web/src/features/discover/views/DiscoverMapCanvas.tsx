@@ -41,7 +41,6 @@ import type {
   PolygonDraftBlock,
   PolygonDraftPhase,
 } from '@/features/discover/state/polygonDraftPhase';
-import { AreaSetChips } from '@/features/discover/components/AreaSetChips';
 import { useAreaSetDraftContext } from '@/features/discover/state/AreaSetDraftContext';
 import type {
   AreaSetCandidateCallout,
@@ -572,7 +571,6 @@ export function DiscoverMapCanvas({
     ctaTopOffsetPx,
     drawOverlayTopOffsetPx,
     onBreadcrumbHeightChange,
-    chipsRowRef,
   } = useSearchThisAreaCtaOffset(mapContainerRef);
 
   // Issue #2419 (PR-2) — touch vs pointer wording for the draw instructions.
@@ -1152,14 +1150,7 @@ export function DiscoverMapCanvas({
           enough room with margin. At `lg`+ the breadcrumb never wraps in
           practice (see AreasBreadcrumbTrail's own width-budget derivation),
           so the original `top-14` is kept there, unchanged. */}
-      <div
-        ref={chipsRowRef}
-        className="pointer-events-none absolute top-14 left-4 right-4 z-[999] [@media(max-width:1023px)]:top-24 lg:right-auto"
-      >
-        <div className="pointer-events-auto inline-flex max-w-full">
-          <AreaSetChips />
-        </div>
-      </div>
+
 
       {/* Discover map marker redesign — "EXPLORE THE MAP" guidance card, shown
           only at the bare city landing (5 macro-region bubbles: no scope and

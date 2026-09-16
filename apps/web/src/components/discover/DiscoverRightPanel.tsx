@@ -1739,14 +1739,10 @@ export function DiscoverRightPanel({
           }
           return <GuidedEntryPanel {...guidedEntryProps} />;
         }
-        // Issue #2017 (owner-directed desktop rework, PR #2424) — on
-        // desktop, an open AREA_SET draft renders IN-PANEL (matching the
+        // Issue #2017 / Issue #2596 (owner-directed selected-area workflow) — an open
+        // AREA_SET draft renders IN-PANEL across all viewports (matching the
         // design mock's right-panel structure) instead of AreaSelectedPanel.
-        // Mobile keeps AreaSetChips's map-anchored popover (see that
-        // component's own doc for why: map and panel are the same
-        // single-column surface there, so a popover reads correctly) — this
-        // branch is desktop-only by design.
-        if (!isMobileShell && isAreaSetDraftOpen) {
+        if (isAreaSetDraftOpen) {
           return <AreaSetDraftPanel />;
         }
         const activeGroup = areaGroups.find((g) => g.id === groupId);
@@ -1822,7 +1818,37 @@ export function DiscoverRightPanel({
             onBack={onBack}
             onStartOver={onStartOver}
             journey={journey}
-            filtersContent={filtersContent}
+            // Issue #2596 — `filtersContent` is DELIBERATELY NOT PASSED HERE.
+            // It renders `<MapFilters/>` (built in useDiscoverFilterChromeController),
+            // and mounting it on this surface made the legacy right-hand Filters
+            // drawer a SECOND buyer filter system alongside the approved inline
+            // controls — which #2596 forbids in as many words ("Do not mount
+            // MapFilters as a second buyer filter system", "Do not create a second
+            // filter owner"). Verified on the running Manipal route: the drawer was
+            // reachable AND was the only place a buyer could select Commercial at
+            // all, while the inline surface showed Residential only.
+            //
+            // SCOPED DELIBERATELY: the school journeys below (`school-area` and
+            // `area-school-combined`) still receive `filtersContent`, because #2596
+            // governs the selected-area buyer surface only and those surfaces have
+            // no inline replacement. `MapFilters` itself is untouched.
+            //
+            // Issue #2596 — COMMERCIAL CAPABILITY. This is the THIRD production
+            // render site of AreaSelectedPanel, and the one the live selected-area
+            // route actually uses. The panel's own comment claimed there were only
+            // two (DiscoverAreasJourneyPanel and NodeListingsSurface, both of which
+            // pass this) — the comment was wrong and was believed, so the capability
+            // defaulted false here and the approved TYPE -> Residential | Commercial
+            // row rendered for nobody on the real buyer surface.
+            //
+            // NOT A BLIND DEFAULT FLIP: the data path was verified end-to-end in a
+            // browser on this exact route BEFORE enabling it. Selecting Commercial
+            // produced `type=commercial` in the URL, the "Commercial properties in
+            // Manipal" heading, suppression of the Bedrooms row, the BUILT-UP AREA
+            // label, the approved Commercial Buy budgets, a removable chip, and
+            // list/count/markers moving together. Everything downstream of this
+            // gate already worked; only the gate was off.
+            isCommercialSubtypeSupported
             trendsHref={trendsHref}
             isFetching={isFetching}
             isInitialLoading={isInitialLoading}

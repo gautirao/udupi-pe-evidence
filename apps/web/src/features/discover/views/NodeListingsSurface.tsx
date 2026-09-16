@@ -285,7 +285,7 @@ export function NodeListingsSurface({
     const listings = isAuthenticated
       ? (areaListingsQuery.data?.content ?? [])
       : nodeListingsAnonListings;
-    const mapped = listings.map((l) => discoverListingToCityListing(l as any));
+    const mapped = listings.map((l) => discoverListingToCityListing(l as Parameters<typeof discoverListingToCityListing>[0]));
     return isAuthenticated
       ? mapped
       : mapped.map((l) => ({ ...l, pricePaise: undefined, monthlyRentRupees: undefined }));
@@ -368,7 +368,7 @@ export function NodeListingsSurface({
         <ChevronLeft className="mr-1 h-4 w-4" aria-hidden="true" />
         Back to {node.displayLabel}
       </button>
-      {!isMobileShell && isAreaSetDraftOpen ? (
+      {isAreaSetDraftOpen ? (
         <AreaSetDraftPanel />
       ) : (
       <>
@@ -429,7 +429,17 @@ export function NodeListingsSurface({
         // FALSE in the panel, and until now NO production call site passed it,
         // so the TYPE family row and the Commercial subtype row rendered for
         // nobody: the whole family was unreachable on the real buyer surface
-        // while every test that exercised it passed the prop explicitly. The
+        // while every test that exercised it passed the prop explicitly.
+        //
+        // Issue #2596 — AND IT HAPPENED AGAIN, for the same reason, on a site
+        // this comment did not know about. Enabling it here and on
+        // DiscoverAreasJourneyPanel left a THIRD render site untouched:
+        // `DiscoverRightPanel.tsx`'s `area-selected` case, which is the one the
+        // live selected-area route renders. So the family row was still dark for
+        // real buyers after #2572 shipped. Confirmed by driving the running app,
+        // not by reading this file. The lesson is the failure mode, not the
+        // count: a default-false capability enabled call-site-by-call-site has no
+        // way to report the site you missed. The
         // three preconditions the panel's own gate comment names are now met on
         // main — #2552 (family resync), #2553 (commit boundaries stopped
         // discarding the axis, PR #2564), #2555 (panel mock parity) — and the

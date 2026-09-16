@@ -1173,4 +1173,33 @@ describe('DiscoverRightPanel — school-first + groupId → school-group-areas (
     });
     expect(panelContent).toBe('area-groups-landing');
   });
+
+  // ── Issue #2596 — AreaSetDraftPanel in-panel draft workflow across viewports ──
+  describe('#2596 — AreaSetDraftPanel in-panel draft workflow', () => {
+    it('renders AreaSetDraftPanel when isAreaSetDraftOpen is true on desktop (isMobileShell: false)', () => {
+      renderPanel(
+        <DiscoverRightPanel
+          {...baseProps}
+          panelContent="area-selected"
+          selectedArea={makeArea('udupi-city')}
+          isMobileShell={false}
+          isAreaSetDraftOpen={true}
+        />,
+      );
+      expect(screen.getByTestId('area-set-draft-panel')).toBeInTheDocument();
+    });
+
+    it('renders AreaSetDraftPanel in-panel when isAreaSetDraftOpen is true on mobile shell (isMobileShell: true)', () => {
+      renderPanel(
+        <DiscoverRightPanel
+          {...baseProps}
+          panelContent="area-selected"
+          selectedArea={makeArea('udupi-city')}
+          isMobileShell={true}
+          isAreaSetDraftOpen={true}
+        />,
+      );
+      expect(screen.getByTestId('area-set-draft-panel')).toBeInTheDocument();
+    });
+  });
 });

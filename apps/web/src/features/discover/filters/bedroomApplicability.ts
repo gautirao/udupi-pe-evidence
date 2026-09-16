@@ -110,10 +110,44 @@ import {
  *    returns false and submits bedrooms unchanged. AC2 covers plot-ONLY; mixed-selection bedroom
  *    semantics are explicitly out of scope for this slice.
  *
- * Subtype narrowing is applied exactly as {@link resolvePrimaryAreaControlLabel} applies it — only
- * to the one subtype-bearing type, every other type resolving from itself — so the control's label
- * and the submitted predicate can never be computed from two different readings of the same
- * selection.
+ * Subtype narrowing is applied the same way {@link resolvePrimaryAreaControlLabel} applies it —
+ * only to the one subtype-bearing type, every other type resolving from itself — WHENEVER
+ * `propertyTypes` is non-empty. So `{propertyTypes:['commercial'], commercialSubtypes:['LAND']}`
+ * is plot-only here, exactly as the label resolver calls it `PLOT SIZE (SQ FT)`.
+ *
+ * ## ⚠ The two DIVERGE on the subtype-only shape, and this comment used to deny it
+ *
+ * An earlier revision of this paragraph claimed the label and the submitted predicate "can never be
+ * computed from two different readings of the same selection". **That is false**, and it became
+ * false in this branch: issue #2596 taught `resolvePrimaryAreaControlLabel` that a subtype narrowing
+ * implies the subtype-bearing type, so a ONE-AXIS selection now resolves to a single meaning there,
+ * while the `selectedTypes.length === 0` early return below still reports "no narrowing". Measured
+ * on `{commercialSubtypes:['LAND']}`:
+ *
+ * ```
+ *   resolvePrimaryAreaControlLabel(...).label   'PLOT SIZE (SQ FT)'   (meanings ['PLOT'])
+ *   isPlotOnlySelection(...)                    false
+ * ```
+ *
+ * (Before #2596 both were non-committal — the label read `AREA (SQ FT)` over three meanings — which
+ * is why the old sentence was true when it was written. It is stated rather than deleted so a reader
+ * who meets the old claim elsewhere knows it was superseded, not which one is current.)
+ *
+ * ## Why the behaviour is nonetheless correct — and this is the load-bearing part
+ *
+ * `shouldSubmitBedrooms({commercialSubtypes:['LAND']})` is still `false`, because
+ * {@link isCommercialOnlySelection} catches that exact shape: empty `propertyTypes` with a NON-EMPTY
+ * subtype list is unambiguously commercial, and a commercial row carries `bedrooms` NULL. The plot
+ * rule missing it costs nothing **only because the commercial rule covers it**.
+ *
+ * **So that coverage is not incidental tidiness — it is what makes this safe.** If anyone narrows or
+ * removes `isCommercialOnlySelection`'s empty-types branch, a LAND-only selection starts submitting
+ * a bedroom predicate again, and NOTHING here will catch it: this function returns false for that
+ * shape by design. Change that branch and you must teach this one the subtype-only shape too.
+ *
+ * Deliberately NOT "fixed" to match the label resolver. The behaviour is already correct, the two
+ * predicates answer different questions, and widening this one under a scope lock would be a
+ * behavioural change with no defect behind it.
  */
 export function isPlotOnlySelection(selection: PrimaryAreaSelection = {}): boolean {
   const selectedTypes = selection.propertyTypes;

@@ -459,6 +459,31 @@ beforeEach(() => {
   mockUseDiscoverShell.mockReturnValue(defaultShellMock());
 });
 
+// ── Issue #2596 — the map chip row is removed across all viewports ───────────
+//
+// Owner: "remove the chips from the map once the right panel has them." Since AreaSetDraftPanel
+// now renders in-panel across all viewports (including < lg), the right panel carries the draft
+// workflow everywhere, so the map chip row is removed completely.
+describe('#2596 — AREA_SET map chip row is removed across all viewports', () => {
+  const OVERLAY = '.pointer-events-none.absolute.top-14';
+
+  it('is ABSENT at >= lg', () => {
+    mockUseDiscoverShell.mockReturnValue({ ...defaultShellMock(), isMobileShell: false });
+    const { container } = renderCanvas(<DiscoverMapCanvas {...baseProps()} />);
+    expect(screen.getByTestId('property-map-mock')).toBeInTheDocument();
+    expect(container.querySelector(OVERLAY)).toBeNull();
+    expect(screen.queryByTestId('area-set-map-chips-row')).not.toBeInTheDocument();
+  });
+
+  it('is ABSENT below lg, as right panel now carries the draft workflow', () => {
+    mockUseDiscoverShell.mockReturnValue({ ...defaultShellMock(), isMobileShell: true });
+    const { container } = renderCanvas(<DiscoverMapCanvas {...baseProps()} />);
+    expect(screen.getByTestId('property-map-mock')).toBeInTheDocument();
+    expect(container.querySelector(OVERLAY)).toBeNull();
+    expect(screen.queryByTestId('area-set-map-chips-row')).not.toBeInTheDocument();
+  });
+});
+
 describe('DiscoverMapCanvas', () => {
   it('renders PropertyMap and attaches mapContainerRef to the root div', () => {
     const ref = createRef<HTMLDivElement>();

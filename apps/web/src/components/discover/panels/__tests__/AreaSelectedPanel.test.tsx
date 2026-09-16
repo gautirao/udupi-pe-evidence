@@ -7,6 +7,7 @@ import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftContext';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import * as DiscoverContextHooks from '@/features/discover/context/useDiscoverContext';
 
 const mockArea: AreaPoint = {
   areaKey: 'test-area|city|udupi',
@@ -96,11 +97,10 @@ describe('AreaSelectedPanel', () => {
 
     it('highlights active chips', () => {
       renderPanel({ filters: { propertyTypes: ['apartment'], bedrooms: [2] } });
-      // R-C: property-type chips use NAVY (bg-primary) when active.
-      // BHK chips use copper-tint (bg-copper-tint) when active, NOT solid copper.
-      expect(screen.getByTestId('quick-chip-apartment')).toHaveClass('bg-primary');
-      expect(screen.getByTestId('quick-chip-2-bhk')).toHaveClass('bg-copper-tint');
-      expect(screen.getByTestId('quick-chip-villa')).not.toHaveClass('bg-primary');
+      // Residential controls use default active --accent (bg-copper) when active.
+      expect(screen.getByTestId('quick-chip-apartment')).toHaveClass('bg-copper');
+      expect(screen.getByTestId('quick-chip-2-bhk')).toHaveClass('bg-copper');
+      expect(screen.getByTestId('quick-chip-villa')).not.toHaveClass('bg-copper');
     });
   });
 
@@ -248,6 +248,28 @@ describe('AreaSelectedPanel', () => {
       fireEvent.click(screen.getByTestId('area-set-schools-tile'));
       expect(onAddSchool).toHaveBeenCalledTimes(1);
       expect(onSelectJourney).not.toHaveBeenCalled();
+    });
+
+    it('calls openAreaSetDraft (and NOT setMobileView MAP) on Add nearby areas tile click', () => {
+      const openAreaSetDraft = vi.fn();
+      const setMobileView = vi.fn();
+      vi.spyOn(DiscoverContextHooks, 'useDiscoverShell').mockReturnValue({
+        mobileView: 'LIST',
+        setMobileView,
+        isMobileShell: false,
+        isAreaSetDraftOpen: false,
+        openAreaSetDraft,
+        closeAreaSetDraft: vi.fn(),
+        fitAreaSet: vi.fn(),
+        focusAreaSetMember: vi.fn(),
+        registerAreaSetCameraActions: vi.fn(),
+        getAreaSetCameraRestoreRequest: vi.fn(() => null),
+        setAreaSetCameraRestoreRequest: vi.fn(),
+      });
+      renderPanel();
+      fireEvent.click(screen.getByTestId('area-set-add-nearby-tile'));
+      expect(openAreaSetDraft).toHaveBeenCalledTimes(1);
+      expect(setMobileView).not.toHaveBeenCalledWith('MAP');
     });
   });
 
@@ -735,15 +757,10 @@ describe('AreaSelectedPanel', () => {
       expect(screen.getByTestId('area-intent-helper')).toBeInTheDocument();
     });
 
-    // Issue #2596 — retitled. This read "wrapped in a white card (rounded-xl bg-card)", which
-    // documented a decision the reskin deliberately reversed: the inner card lost its border,
-    // radius, shadow and padding so the filter block carries ONE separation rather than three.
-    // The assertion itself never reddened, because it only walks up for `bg-card`, which is kept —
-    // so the title and comment were asserting a removed design while the test stayed green.
-    // Renamed in the same change that reversed it, per this file's own "a behaviour change and its
-    // comment are one edit" standard.
-    it('property-type filter sits on the card surface (bg-card)', () => {
-      const { container } = renderWithProviders(
+    // Issue #2596 — the white card container box (bg-card) wrapping filter controls was removed
+    // so filter controls render directly on the clean canvas surface (#F6F5F2 / bg-background).
+    it('property-type filter sits directly on the clean canvas surface without bg-card wrapper', () => {
+      renderWithProviders(
         <DiscoverProvider>
           <AreaSelectedPanel
             selectedArea={mockArea}
@@ -756,30 +773,29 @@ describe('AreaSelectedPanel', () => {
         </DiscoverProvider>,
         { router: 'browser' },
       );
-      // The quick-filter card wraps both property-type and BHK chips.
-      // It is the div that contains quick-chip-all and uses rounded-xl bg-card.
+      // The quick-filter block sits on the canvas background.
       const allChip = screen.getByTestId('quick-chip-all');
-      // Walk up to find the bg-card wrapper.
+      // Walk up to verify no bg-card wrapper exists around the quick filter controls.
       let node: HTMLElement | null = allChip.parentElement;
       let foundBgCard = false;
-      while (node) {
+      while (node && node !== document.body) {
         if (node.className && node.className.includes('bg-card')) {
           foundBgCard = true;
           break;
         }
         node = node.parentElement;
       }
-      expect(foundBgCard).toBe(true);
+      expect(foundBgCard).toBe(false);
     });
 
-    it('active property-type chip still uses bg-primary (navy)', () => {
+    it('active property-type chip uses bg-copper (--accent)', () => {
       renderPanel({ filters: { propertyTypes: ['apartment'] } });
-      expect(screen.getByTestId('quick-chip-apartment')).toHaveClass('bg-primary');
+      expect(screen.getByTestId('quick-chip-apartment')).toHaveClass('bg-copper');
     });
 
-    it('active BHK chip still uses bg-copper-tint', () => {
+    it('active BHK chip uses bg-copper (--accent)', () => {
       renderPanel({ filters: { bedrooms: [2] } });
-      expect(screen.getByTestId('quick-chip-2-bhk')).toHaveClass('bg-copper-tint');
+      expect(screen.getByTestId('quick-chip-2-bhk')).toHaveClass('bg-copper');
     });
   });
 
@@ -820,13 +836,13 @@ describe('AreaSelectedPanel', () => {
   describe('"All" property-type chip (Issue #1606)', () => {
     it('renders an All chip that is active when no property type is selected', () => {
       renderPanel({ filters: {} });
-      // R-C: active All chip uses NAVY (bg-primary), not copper.
-      expect(screen.getByTestId('quick-chip-all')).toHaveClass('bg-primary');
+      // Residential controls use default active --accent (bg-copper).
+      expect(screen.getByTestId('quick-chip-all')).toHaveClass('bg-copper');
     });
 
     it('All chip is not active when a property type filter is set', () => {
       renderPanel({ filters: { propertyTypes: ['apartment'] } });
-      expect(screen.getByTestId('quick-chip-all')).not.toHaveClass('bg-primary');
+      expect(screen.getByTestId('quick-chip-all')).not.toHaveClass('bg-copper');
     });
 
     it('clicking All clears the property-type filter (preserving bedrooms)', () => {
@@ -853,32 +869,112 @@ describe('AreaSelectedPanel', () => {
     });
   });
 
-  // ── Issue #2084 (AC8) — area-leaf information architecture reorder ────────
-  describe('AC8 — landmark DOM order and school-CTA placement', () => {
-    it('renders school CTA -> search -> filters -> result-count -> cards in that DOM order', () => {
+  // ── Issue #2596 — area-leaf information architecture, second reorder ──────
+  //
+  // SUPERSEDES ISSUE #2084 AC8's ordering clause. AC8 ruled "school CTA ->
+  // search -> filters"; the approved kit (ExpPanel.jsx) puts the FILTERS above
+  // the heading — desktop in the fixed top section (L886), mobile at the top of
+  // the scrolling body (L894-898) — and then, inside `EPAreaActions` (L371),
+  // the search box (L379) BEFORE the two-tile grid (L385). The product owner
+  // ruled this order for #2596 knowing AC8 said otherwise, so this assertion is
+  // updated to the newly approved order rather than deleted. AC8's OTHER claim
+  // — that the school shortcut is not a descendant of the quick-filter box —
+  // is unchanged and still asserted below.
+  describe('#2596 — landmark DOM order and school-CTA placement', () => {
+    it('renders filters -> heading -> search -> recommendation tiles -> result-count -> cards in that DOM order', () => {
       renderPanel({ areaListings: [mockListing], onSearchChange: vi.fn() });
-      const schoolCta = screen.getByTestId('area-set-schools-tile');
-      const search = screen.getByTestId('area-search-input');
       const filterCard = screen.getByTestId('quick-chip-all');
+      const heading = screen.getByRole('heading', { level: 1 });
+      const search = screen.getByTestId('area-search-input');
+      const schoolCta = screen.getByTestId('area-set-schools-tile');
       const resultSummary = screen.getByTestId('area-result-summary');
       const cards = screen.getByText('Test Listing');
 
       const FOLLOWING = Node.DOCUMENT_POSITION_FOLLOWING;
-      expect(schoolCta.compareDocumentPosition(search) & FOLLOWING).toBeTruthy();
-      expect(search.compareDocumentPosition(filterCard) & FOLLOWING).toBeTruthy();
-      expect(filterCard.compareDocumentPosition(resultSummary) & FOLLOWING).toBeTruthy();
+      // Filters now lead, ahead of the headline — the clause #2596 exists to fix.
+      expect(filterCard.compareDocumentPosition(heading) & FOLLOWING).toBeTruthy();
+      expect(heading.compareDocumentPosition(search) & FOLLOWING).toBeTruthy();
+      // Search before the tiles — the half that reverses #2084 AC8.
+      expect(search.compareDocumentPosition(schoolCta) & FOLLOWING).toBeTruthy();
+      expect(schoolCta.compareDocumentPosition(resultSummary) & FOLLOWING).toBeTruthy();
       expect(resultSummary.compareDocumentPosition(cards) & FOLLOWING).toBeTruthy();
+
+      // The superseded order must be genuinely GONE, not merely un-asserted:
+      // under #2084 AC8 the tiles preceded the search and the filters trailed
+      // both. Both of those are now false.
+      expect(schoolCta.compareDocumentPosition(search) & FOLLOWING).toBeFalsy();
+      expect(search.compareDocumentPosition(filterCard) & FOLLOWING).toBeFalsy();
+    });
+
+    // Issue #2596 ruling 2 — "one visual group". The kit's `EPAreaActions` is a
+    // single flex column with `gap: 8px` and NO rule between the search box and
+    // the tile grid; the app previously drew a `border-b` hairline under each.
+    it('puts the search and the recommendation tiles in ONE bordered group with no divider between them', () => {
+      renderPanel({ onSearchChange: vi.fn() });
+      const tileRow = screen.getByTestId('area-set-two-tile-row');
+      const search = screen.getByTestId('area-search-input');
+
+      // The tile row no longer draws its own separation...
+      expect(tileRow.className).not.toMatch(/border-b/);
+      // ...because it shares one container with the search box, and THAT
+      // container owns the single hairline for the pair.
+      const group = tileRow.parentElement!;
+      expect(group.contains(search)).toBe(true);
+      expect(group.className).toMatch(/border-b/);
+    });
+
+    // Issue #2596 ruling 6 — the tiles stack one-per-row below `sm` and only go
+    // two-up from `sm`, a deliberate adaptation of the kit's `1fr 1fr` (two
+    // columns at ~390px wrapped the labels into three ragged lines; measured in
+    // the preceding density pass). This is a STRUCTURAL guard, not visual
+    // proof: the same edit that stripped this row's border and padding rewrote
+    // this className, so the responsive rule needs something holding it in
+    // place. Rendered geometry is the visual gate's business, not this test's.
+    it('keeps the tiles stacked below sm and two-up from sm', () => {
+      renderPanel();
+      const tileRow = screen.getByTestId('area-set-two-tile-row');
+      expect(tileRow).toHaveClass('grid-cols-1');
+      expect(tileRow).toHaveClass('sm:grid-cols-2');
+    });
+
+    // Issue #2596, owner-authorised kit parity (PR #2601 final pass).
+    //
+    // THESE ARE CLASS GUARDS, NOT VALUE PROOFS, and the distinction matters because this
+    // project OVERRIDES the radius scale. JSDOM loads no stylesheet, so no test here can
+    // read a computed radius or height. The values were proved separately by emitting the
+    // real Tailwind CSS:
+    //   .rounded-md -> calc(var(--radius) - 2px), with --radius: 0.625rem  => 8px  (kit 8px)
+    //   .h-10       -> 2.5rem                                              => 40px (kit 40px)
+    // The OLD classes emit 10px and 36px, which is exactly what the independent browser
+    // certification measured — so the token chain is corroborated at both ends rather than
+    // assumed from Tailwind's defaults (where `rounded-md` would be 6px, not 8px).
+    //
+    // What these guards buy is regression cover: `rounded-lg` and `h-9` read as innocuous
+    // and would silently walk these two values back off-kit.
+    it('pins the tile corner radius to the kit token (rounded-md = 8px here, not rounded-lg = 10px)', () => {
+      renderPanel();
+      for (const id of ['area-set-schools-tile', 'area-set-add-nearby-tile']) {
+        expect(screen.getByTestId(id)).toHaveClass('rounded-md');
+        expect(screen.getByTestId(id)).not.toHaveClass('rounded-lg');
+      }
+    });
+
+    it('pins the property-search height to the kit 40px (h-10, not h-9 = 36px)', () => {
+      renderPanel({ onSearchChange: vi.fn() });
+      const search = screen.getByTestId('area-search-input');
+      expect(search).toHaveClass('h-10');
+      expect(search).not.toHaveClass('h-9');
     });
 
     it('the school CTA is NOT a descendant of the quick-filter box', () => {
       renderPanel({ areaListings: [mockListing] });
       const schoolCta = screen.getByTestId('area-set-schools-tile');
       // Walk up from the property-type "All" chip (a real member of the
-      // filter box) to find its bg-card wrapper, then assert the school CTA
+      // filter box) to find its wrapper, then assert the school CTA
       // is not contained within that same wrapper.
       const allChip = screen.getByTestId('quick-chip-all');
       let filterBox: HTMLElement | null = allChip.parentElement;
-      while (filterBox && !(filterBox.className && filterBox.className.includes('bg-card'))) {
+      while (filterBox && !(filterBox.className && filterBox.className.includes('space-y-1'))) {
         filterBox = filterBox.parentElement;
       }
       expect(filterBox).not.toBeNull();
@@ -897,6 +993,108 @@ describe('AreaSelectedPanel', () => {
       expect(schoolsTile).toBeDisabled();
       expect(screen.getByTestId('area-set-add-nearby-tile')).toBeInTheDocument();
       expect(screen.getByTestId('area-set-add-nearby-tile')).not.toBeDisabled();
+    });
+  });
+
+  // ── Issue #2596 rulings 3 & 4 — recommendation-tile copy ──────────────────
+  describe('#2596 — recommendation tile copy', () => {
+    // Ruling 3. Truthful on this surface: the row renders only in the
+    // single-area state, so one area is committed and the cap of 3 leaves two.
+    it('uses the approved "Add up to 2 nearby areas" sub-label', () => {
+      renderPanel();
+      const sub = screen.getByTestId('area-set-add-nearby-tile-sub');
+      expect(sub).toHaveTextContent('Add up to 2 nearby areas');
+      // The superseded copy is gone, not merely unasserted.
+      expect(sub).not.toHaveTextContent('Up to 3 areas total');
+    });
+
+    // Ruling 4. The kit reads "{N} schools · keeps this area". The count must be
+    // REAL: it comes from the shared areas query, falling back to the count the
+    // caller's own AreaPoint already carries.
+    it('renders the real school count when the selected area carries one', () => {
+      renderPanel({ selectedArea: { ...mockArea, schoolCount: 4 } });
+      expect(screen.getByTestId('area-set-schools-tile-sub')).toHaveTextContent(
+        '4 schools · keeps this area',
+      );
+    });
+
+    it('says "school", not "schools", when the area has exactly one', () => {
+      renderPanel({ selectedArea: { ...mockArea, schoolCount: 1 } });
+      const sub = screen.getByTestId('area-set-schools-tile-sub');
+      expect(sub).toHaveTextContent('1 school · keeps this area');
+      expect(sub).not.toHaveTextContent('1 schools');
+    });
+
+    // A genuine zero is the data speaking, so it is shown.
+    it('shows a genuine zero rather than hiding it', () => {
+      renderPanel({ selectedArea: { ...mockArea, schoolCount: 0 } });
+      expect(screen.getByTestId('area-set-schools-tile-sub')).toHaveTextContent(
+        '0 schools · keeps this area',
+      );
+    });
+
+    // THE HONEST-DEGRADE ARM. `mockArea` carries no schoolCount and the areas
+    // query does not resolve here, so no count is truthfully available. The tile
+    // must fall back to its previous wording rather than invent a number — and
+    // in particular must NOT claim zero, which the data never stated.
+    it('falls back to "See nearby schools" when no count is available, and never fabricates one', () => {
+      renderPanel();
+      const sub = screen.getByTestId('area-set-schools-tile-sub');
+      expect(sub).toHaveTextContent('See nearby schools');
+      expect(sub.textContent).not.toMatch(/\d/);
+      expect(sub).not.toHaveTextContent('keeps this area');
+    });
+  });
+
+  // ── Issue #2601 "option D" — VIEWPORT scope carries NO visual delta ───────
+  //
+  // Three gates independently failed to find any reachable route to VIEWPORT
+  // scope, so this surface has never been witnessed rendering in either arm.
+  // Rather than certify a PASS nobody could observe, the owner ruled that this
+  // PR must leave the VIEWPORT CTA exactly as the merge base `cdb3c7d0` had it:
+  // its own bordered strip, below the heading and ABOVE the search — NOT folded
+  // into the search + tiles workflow group the AREA_SET path uses.
+  //
+  // These assertions stand in for browser evidence that does not exist. They
+  // cannot prove the surface renders correctly to a person; they prove the
+  // structure this PR is required not to change.
+  describe('#2601 option D — VIEWPORT-scope school CTA keeps its merge-base presentation', () => {
+    const renderViewport = () =>
+      renderPanel({ isViewportScope: true, onAddSchool: vi.fn(), onSearchChange: vi.fn() });
+
+    it('renders the CTA in its OWN bordered strip, not inside the search group', () => {
+      renderViewport();
+      const cta = screen.getByTestId('add-school-cta');
+      const search = screen.getByTestId('area-search-input');
+
+      // Its wrapper is a bordered strip of its own...
+      const wrapper = cta.parentElement!;
+      expect(wrapper.className).toMatch(/border-b/);
+      // ...which must NOT be the shared workflow group: the search box lives
+      // somewhere else entirely.
+      expect(wrapper.contains(search)).toBe(false);
+    });
+
+    it('places the CTA ABOVE the property search, as at the merge base', () => {
+      renderViewport();
+      const cta = screen.getByTestId('add-school-cta');
+      const search = screen.getByTestId('area-search-input');
+      const FOLLOWING = Node.DOCUMENT_POSITION_FOLLOWING;
+      expect(cta.compareDocumentPosition(search) & FOLLOWING).toBeTruthy();
+      // And explicitly NOT the arrangement the AREA_SET path uses.
+      expect(search.compareDocumentPosition(cta) & FOLLOWING).toBeFalsy();
+    });
+
+    it('does not render the two-tile row under VIEWPORT scope', () => {
+      renderViewport();
+      expect(screen.queryByTestId('area-set-two-tile-row')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('area-set-schools-tile')).not.toBeInTheDocument();
+    });
+
+    // The gate is `onAddSchool`, unchanged from the merge base.
+    it('renders nothing when onAddSchool is absent', () => {
+      renderPanel({ isViewportScope: true, onAddSchool: undefined, onSearchChange: vi.fn() });
+      expect(screen.queryByTestId('add-school-cta')).not.toBeInTheDocument();
     });
   });
 

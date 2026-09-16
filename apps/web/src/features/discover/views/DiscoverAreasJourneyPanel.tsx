@@ -1321,17 +1321,23 @@ function AreaLeafListingsSurface({
         historyAdjacencyLog={historyAdjacencyLog}
         className="mb-3 shrink-0"
       />
-      {!isMobileShell && isAreaSetDraftOpen ? (
+      {isAreaSetDraftOpen ? (
         <AreaSetDraftPanel />
       ) : (
       <AreaSelectedPanel
         selectedArea={areaPoint}
         // Issue #2572 — COMMERCIAL CAPABILITY ENABLEMENT. See the twin comment
-        // at the NodeListingsSurface call site. This is the AREA-leaf surface of
-        // the area-first journey and the second of the two production render
-        // sites; both must pass it or the family row stays dark on whichever one
-        // was missed, which is exactly the omission class this call site has
-        // been bitten by twice before (see the breadcrumb notes below).
+        // at the NodeListingsSurface call site.
+        //
+        // CORRECTED, Issue #2596: this comment used to say "the second of the TWO
+        // production render sites". THERE ARE THREE. The third —
+        // `DiscoverRightPanel.tsx`'s `area-selected` case — is the one the live
+        // selected-area route actually renders, and it was the one missed. The
+        // count in this comment was wrong and was believed, so the omission it
+        // warns about is exactly the omission that happened: the approved TYPE ->
+        // Residential | Commercial row rendered for nobody on the real buyer
+        // surface while every test that passed the prop explicitly stayed green.
+        // If you add a fourth render site, pass it there too — and fix this count.
         isCommercialSubtypeSupported
         // FIX CYCLE 2 (opus review, nit) — was omitted, so AreaSelectedPanel's
         // breadcrumb fell back to the area label for cityLabel too, rendering

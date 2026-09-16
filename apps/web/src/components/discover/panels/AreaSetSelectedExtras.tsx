@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
-import { ChevronRight, GraduationCap, MapPin } from 'lucide-react';
+import { ChevronRight, GraduationCap, MapPin, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDiscoverAreas, type DiscoverArea } from '@/hooks/useDiscoverAreas';
 import { useDiscoverSummary } from '@/hooks/useDiscoverSummary';
@@ -144,6 +144,12 @@ export interface AreaSetSelectedHeaderProps {
   onEditAreas: () => void;
   onClearAreas: () => void;
   /**
+   * Issue #2596 — removes ONE area from the COMMITTED set, immediately. Distinct from the map
+   * overlay's chips, which edit the uncommitted draft and take effect only on "Show listings".
+   * The caller commits the remaining keys, or clears the scope when the last one goes.
+   */
+  onRemoveArea: (areaKey: string) => void;
+  /**
    * Issue #2017 (Fit all / focus-one, confirmed MUST-HAVE) — republishes the
    * union camera framing for the currently committed areaKeys. Camera intent
    * only; must never mutate the committed result scope.
@@ -199,6 +205,7 @@ export function AreaSetSelectedHeader({
   isLoadingListings,
   onEditAreas,
   onClearAreas,
+  onRemoveArea,
   onFitAll,
   onFocusArea,
   onDrawSearchArea,
@@ -250,7 +257,66 @@ export function AreaSetSelectedHeader({
 
   return (
     <>
-      <div className="mb-2 flex flex-wrap items-center gap-1.5" data-testid="area-set-action-row">
+      {/* Issue #2596 owner follow-up — ORDER FOLLOWS THE KIT, which is not where this action row
+          used to sit. The kit's committed AREA_SET panel reads:
+            RESULT SCOPE — SELECTED AREAS  ->  heading + count  ->  chips  ->  Edit / Clear  ->  Draw / Alert
+          This component previously rendered the action row ABOVE the heading. The chips go
+          between the heading and the actions, so the action row moves below the heading to put
+          them there — which also satisfies "chips above the action row" literally.
+
+          The reorder is therefore NOT purely additive, and is called out here because it was
+          authorised as an additive change: the position is the kit's, and leaving the actions on
+          top would have put the chips above the heading they belong to. */}
+      <AreaSetHeadingBlock
+        selectedAreas={selectedAreas}
+        areaKeys={areaKeys}
+        namesJoined={namesJoined}
+        hasFullBreakdown={hasFullBreakdown}
+        count={count}
+        intentNoun={intentNoun}
+        isLoadingListings={isLoadingListings}
+        onFocusArea={onFocusArea}
+      />
+
+      {/* The committed area chips, in the RIGHT PANEL. Owner: "the area name chips come on the
+          map, it should be on the right panel as in the mock."
+
+          These read the COMMITTED `areaKeys` this component already receives and remove by
+          committing the remaining set, so they act immediately — distinct from the map overlay's
+          chips, which edit the uncommitted DRAFT via `commands.remove` and take effect only on
+          "Show listings". Same AREA_SET state either way; no second selection state is created.
+
+          Removing the LAST area clears the scope rather than committing an empty AREA_SET, which
+          is not a state the rest of the app models. */}
+      {selectedAreas.length > 0 && (
+        <div
+          className="mt-2 flex flex-wrap items-center gap-1.5"
+          role="group"
+          aria-label="Selected areas"
+          data-testid="area-set-panel-committed-chips"
+        >
+          {selectedAreas.map((area) => (
+            <span
+              key={area.areaKey}
+              className="inline-flex items-center gap-1 rounded-full border border-copper/40 bg-accent-tint px-2.5 py-1 text-xs font-medium text-foreground"
+              data-testid={`area-set-panel-committed-chip-${area.areaKey}`}
+            >
+              {area.name}
+              <button
+                type="button"
+                onClick={() => onRemoveArea(area.areaKey)}
+                aria-label={`Remove ${area.name} from the selected areas`}
+                data-testid={`area-set-panel-committed-chip-${area.areaKey}-dismiss`}
+                className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+              >
+                <X className="h-3 w-3" aria-hidden="true" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-2 flex flex-wrap items-center gap-1.5" data-testid="area-set-action-row">
         <EPGhost onClick={onEditAreas} testId="area-set-edit-areas">
           Edit areas
         </EPGhost>
@@ -274,6 +340,39 @@ export function AreaSetSelectedHeader({
         </EPGhost>
       </div>
 
+      <p className="mt-1.5 text-[15px] leading-[1.55] text-[hsl(var(--text-body))]" data-testid="area-set-why">
+        {whyText ??
+          `Explore verified listings across ${areaKeys.length} selected areas, with map context and area-first filters.`}
+      </p>
+    </>
+  );
+}
+
+/**
+ * The AREA_SET heading block — eyebrow, per-area focus links and the count — lifted out of
+ * {@link AreaSetSelectedHeader} unchanged when the kit's order put the committed chips between it
+ * and the action row (Issue #2596). Extracted rather than duplicated so the two cannot drift.
+ */
+function AreaSetHeadingBlock({
+  selectedAreas,
+  areaKeys,
+  namesJoined,
+  hasFullBreakdown,
+  count,
+  intentNoun,
+  isLoadingListings,
+  onFocusArea,
+}: {
+  selectedAreas: DiscoverArea[];
+  areaKeys: string[];
+  namesJoined: string;
+  hasFullBreakdown: boolean;
+  count: number;
+  intentNoun: 'sale' | 'rent';
+  isLoadingListings: boolean;
+  onFocusArea: (areaKey: string) => void;
+}) {
+  return (
       <div className="flex items-end justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
@@ -313,18 +412,23 @@ export function AreaSetSelectedHeader({
           </div>
         )}
       </div>
-
-      <p className="mt-1.5 text-[15px] leading-[1.55] text-[hsl(var(--text-body))]" data-testid="area-set-why">
-        {whyText ??
-          `Explore verified listings across ${areaKeys.length} selected areas, with map context and area-first filters.`}
-      </p>
-    </>
   );
 }
 
 export interface AreaSetTwoTileRowProps {
   /** First area in the committed set — used as the schools-tile label. */
   primaryAreaName: string;
+  /** That same area's `areaKey` — resolves its school count out of the shared areas query. */
+  primaryAreaKey: string;
+  /** City slug for `useDiscoverAreas`, self-sourced per this file's convention (see header). */
+  city: string;
+  /**
+   * The count the caller's own `AreaPoint` already carries, if any. The map
+   * journey populates it (`useDiscoverMapData` maps `DiscoverArea.schoolCount`
+   * through); the node journey's `deriveAreaPointFromNode` does not. Used only
+   * until the shared areas query resolves — never as a substitute for it.
+   */
+  fallbackSchoolCount?: number | null;
   /** Omit (undefined) to render the schools tile disabled, mirroring the single-area CTA's `onAddSchool &&` gate. */
   onAddSchool?: () => void;
   onAddNearbyAreas: () => void;
@@ -338,43 +442,125 @@ export interface AreaSetTwoTileRowProps {
  * the widget lives — via `useDiscoverShell().setMobileView('MAP')`, the
  * confirmed real mechanism; on desktop the map is already visible).
  */
-export function AreaSetTwoTileRow({ primaryAreaName, onAddSchool, onAddNearbyAreas }: AreaSetTwoTileRowProps) {
+export function AreaSetTwoTileRow({
+  primaryAreaName,
+  primaryAreaKey,
+  city,
+  fallbackSchoolCount,
+  onAddSchool,
+  onAddNearbyAreas,
+}: AreaSetTwoTileRowProps) {
+  // Issue #2596 — the kit's schools tile reads "{schoolN} schools · keeps this area"
+  // (ExpPanel.jsx L399), so the number has to be REAL or absent; there is no honest
+  // placeholder for it. Self-sourced from `useDiscoverAreas(city)` following this file's
+  // established convention (see the header comment). `schoolCount` is non-optional on
+  // `DiscoverArea`, and no new endpoint is involved.
+  //
+  // WHY THIS COSTS NO EXTRA REQUEST, anchored correctly (PR #2601 review, MEDIUM-2).
+  // An earlier version of this comment credited the dedupe to sharing a React Query key with
+  // `AreaSetSelectedHeader`. That reason is FALSE, though the conclusion happens to hold: the
+  // two can never co-render. The header requires `multiAreaKeys` truthy and this row requires
+  // it falsy (`AreaSelectedPanel.tsx`: `multiAreaKeys ? <AreaSetSelectedHeader/> : …` against
+  // `multiAreaKeys ? null : <this row/>`), so they are mutually exclusive by construction and
+  // the header's own query is never the one this hook rides on.
+  //
+  // The real guarantee is the PARENT's own call. `AreaSelectedPanel.tsx:1449-1450` runs
+  // `useDiscoverAreas(resolvedAreasCity)` UNCONDITIONALLY — it feeds the previous-scope
+  // restore path and has nothing to do with this tile — and hands this row the identical
+  // `city || nav.city || DEFAULT_CITY` expression, so both resolve to one key and this hook
+  // is served from that cache.
+  //
+  // THE COUPLING IS LATENT AND SILENT: delete that parent call, make it conditional, or let
+  // the two city expressions drift apart, and this row becomes the first subscriber — adding
+  // exactly the request this paragraph claims is impossible. Nothing would fail or warn; it
+  // would simply fetch. If `1449-1450` moves, re-derive this claim instead of trusting it.
+  const { data } = useDiscoverAreas(city);
+  const schoolCount = useMemo(() => {
+    const fromAreas = data?.areas.find((area) => area.areaKey === primaryAreaKey)?.schoolCount;
+    const resolved = fromAreas ?? fallbackSchoolCount;
+    // A genuine 0 is kept and shown; only a missing/non-finite value degrades.
+    return typeof resolved === 'number' && Number.isFinite(resolved) ? resolved : null;
+  }, [data?.areas, primaryAreaKey, fallbackSchoolCount]);
+
+  // Two-up from `sm`, stacked below it. The mock's two-column geometry is authoritative on the
+  // desktop panel and reproduces exactly there. At 390px, though, two columns leave each tile
+  // ~175px: measured, "Schools in Sanjeevini Nagar" wrapped to three ragged lines and the row
+  // came to 124px — barely better than the stacked card this replaces, and uglier. One column
+  // per row at mobile gives each tile the full width, so the label fits on one line and the
+  // tiles stay at their compact single-row height.
+  //
+  // No border or padding of its own any more (Issue #2596): this row is now a child of the
+  // panel's search + recommendations workflow group, which owns the single hairline and the
+  // px-4 rhythm for both. The kit has no divider between the search box and this grid.
   return (
-    <div className="grid grid-cols-2 gap-2 border-b border-border px-4 py-3" data-testid="area-set-two-tile-row">
+    <div
+      className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+      data-testid="area-set-two-tile-row"
+    >
       <button
         type="button"
         onClick={onAddSchool}
         disabled={!onAddSchool}
         data-testid="area-set-schools-tile"
         className={cn(
-          'flex flex-col items-start gap-2 rounded-xl border border-plum/20 bg-plum-tint p-3 text-left shadow-sm transition-colors',
+          // `rounded-md`, NOT `rounded-lg` (Issue #2596, owner-authorised kit parity).
+          // This project overrides the radius scale: `--radius: 0.625rem`, so `rounded-lg`
+          // is 10px and `rounded-md` is `calc(var(--radius) - 2px)` = 8px. The kit sets
+          // these tiles to `var(--radius-md)`, which its own tokens/spacing.css defines as
+          // 8px — so `rounded-md` is an exact match, and the Tailwind default scale (where
+          // `rounded-md` would be 6px) does not apply here.
+          'flex items-center gap-[9px] rounded-md border border-plum/20 bg-plum-tint px-[11px] py-[9px] text-left transition-colors',
           onAddSchool ? 'hover:border-plum/50' : 'cursor-not-allowed opacity-60',
         )}
       >
-        <span className="flex w-full items-center justify-between">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-plum text-plum-foreground">
-            <GraduationCap className="h-4 w-4" aria-hidden="true" />
-          </span>
-          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+        <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-plum text-plum-foreground">
+          <GraduationCap className="h-4 w-4" aria-hidden="true" />
         </span>
-        <span className="text-sm font-semibold text-foreground">Schools in {primaryAreaName}</span>
-        <span className="text-xs text-muted-foreground">See nearby schools</span>
+        <span className="min-w-0 flex-1">
+          {/*
+            NOT `truncate`. At 390px this grid gives each tile ~175px, and a clamped single line
+            rendered "Schools i…" / "Add near…" — compact, and unreadable. Wrap with tight leading
+            instead: the row grows a little at mobile and stays far below the stacked-card baseline.
+          */}
+          <span className="block text-[13px] font-bold leading-tight text-foreground">Schools in {primaryAreaName}</span>
+          {/*
+            The kit sets this sub-label in the MONO face, plum, 11.5px (ExpPanel.jsx L399) —
+            it is a figure, and the mono face is how this design system marks figures.
+            "1 school" rather than the kit's literal "{n} schools" when the count is one:
+            the kit's fixture never renders that case, and shipping "1 schools" to a real
+            area that has one school is a defect, not parity.
+            With no truthful count available the tile keeps its previous copy instead of
+            inventing a number or asserting a zero the data never stated.
+          */}
+          <span className="block font-mono text-[11.5px] text-plum" data-testid="area-set-schools-tile-sub">
+            {schoolCount === null
+              ? 'See nearby schools'
+              : `${schoolCount} ${schoolCount === 1 ? 'school' : 'schools'} · keeps this area`}
+          </span>
+        </span>
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-plum" aria-hidden="true" />
       </button>
 
       <button
         type="button"
         onClick={onAddNearbyAreas}
         data-testid="area-set-add-nearby-tile"
-        className="flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-3 text-left shadow-sm transition-colors hover:border-copper/40"
+        // `rounded-md` = 8px here — see the schools tile above for the token derivation.
+        className="flex items-center gap-[9px] rounded-md border border-border bg-card px-[11px] py-[9px] text-left transition-colors hover:border-copper/40"
       >
-        <span className="flex w-full items-center justify-between">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
-            <MapPin className="h-4 w-4" aria-hidden="true" />
-          </span>
-          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+        <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
+          <MapPin className="h-4 w-4" aria-hidden="true" />
         </span>
-        <span className="text-sm font-semibold text-foreground">Add nearby areas</span>
-        <span className="text-xs text-muted-foreground">Up to 3 areas total</span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] font-bold leading-tight text-foreground">Add nearby areas</span>
+          {/* Issue #2596 — the kit's wording (ExpPanel.jsx L403), and truthful on this
+              surface: the row renders only in the single-area state, so exactly one area
+              is already committed and `AREA_SET_MAX_AREAS` (3) leaves room for two more. */}
+          <span className="block text-[11.5px] text-muted-foreground" data-testid="area-set-add-nearby-tile-sub">
+            Add up to 2 nearby areas
+          </span>
+        </span>
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-copper" aria-hidden="true" />
       </button>
     </div>
   );

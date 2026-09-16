@@ -331,12 +331,9 @@ export function AreaZeroResultRecovery({
   // history are all untouched here; only the explicit "Show listings" /
   // "Search these areas" action commits, and that already exists.
   //
-  // `openAreaSetDraft()` is the single cross-tree open signal both surfaces
-  // read (see DiscoverShellContextValue's doc): on desktop the right panel
-  // swaps to `AreaSetDraftPanel` in place; on mobile the paired
-  // `setMobileView('MAP')` reveals the map surface where `AreaSetChips`'
-  // popover lives. Copied from `AreaSelectedPanel`'s own
-  // `handleAddNearbyAreas`, not a second mechanism.
+  // `openAreaSetDraft()` is the single cross-tree open signal all surfaces
+  // read: the right panel swaps to `AreaSetDraftPanel` in place.
+  // Copied from `AreaSelectedPanel`'s own `handleAddNearbyAreas`, not a second mechanism.
   const handleAdd = useCallback(
     (areaKey: string) => {
       // A single canonical AREA has no committed AREA_SET, so the shared
@@ -347,7 +344,6 @@ export function AreaZeroResultRecovery({
         scopeAreaKeys.forEach((key) => commands.add(key));
       }
       commands.add(areaKey);
-      shell.setMobileView('MAP');
       shell.openAreaSetDraft();
     },
     [draft.draftAreaKeys.length, scopeAreaKeys, commands, shell],

@@ -63,6 +63,9 @@ function renderHeader(
       isLoadingListings={false}
       onEditAreas={vi.fn()}
       onClearAreas={vi.fn()}
+      // Issue #2596 — required since the committed chips moved into this header. This suite is
+      // about the draw entry, so a stub is the right level of involvement here.
+      onRemoveArea={vi.fn()}
       onFitAll={vi.fn()}
       onFocusArea={vi.fn()}
       onDrawSearchArea={handlers.onDrawSearchArea}
