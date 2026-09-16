@@ -1,0 +1,714 @@
+[
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Y83577524",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-brahmavar-udupi-1050-sqft-r1-spid-Y83577524",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.43185, 74.744941)_5_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "H93320818",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-brahmavar-udupi-10696-sqyd-spid-H93320818",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.43185, 74.744941)_5_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "A93046308",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-brahmavar-udupi-2565-sqyd-spid-A93046308",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.43185, 74.744941)_5_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "G92618822",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-brahmavar-udupi-356-sqft-spid-G92618822",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.43185, 74.744941)_5_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "X88284930",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-brahmavar-udupi-12826-sqyd-spid-X88284930",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.43185, 74.744941)_5_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "A93707152",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-udupi-53240-sqyd-spid-A93707152",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(74.74605, 13.33232)_9_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "X92175218",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-udupi-4840-sqyd-spid-X92175218",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(74.74605, 13.33232)_9_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "D93563898",
+    "source_url": "https://www.99acres.com/industrial-land-plot-for-sale-in-udupi-2323-sqyd-spid-D93563898",
+    "raw_property_type": "Industrial Lands/Plots",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(74.74605, 13.33232)_9_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "K92816250",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-udupi-850-sqft-spid-K92816250",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(74.74605, 13.33232)_9_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "F91985326",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-udupi-4840-sqyd-spid-F91985326",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(74.74605, 13.33232)_9_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Z90966318",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-udupi-267-sqyd-spid-Z90966318",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(74.74605, 13.33232)_9_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "I89975724",
+    "source_url": "https://www.99acres.com/industrial-land-plot-for-sale-in-udupi-8083-sqyd-spid-I89975724",
+    "raw_property_type": "Industrial Lands/Plots",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(74.74605, 13.33232)_9_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "X89861654",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-udupi-5324-sqyd-spid-X89861654",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(74.74605, 13.33232)_9_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "S71548216",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-udupi-4840-sqyd-r1-spid-S71548216",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(74.74605, 13.33232)_9_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "K90482682",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-katapady-udupi-1936-sqyd-spid-K90482682",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.283095, 74.747758)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Q81196575",
+    "source_url": "https://www.99acres.com/warehouse-for-sale-in-katapady-udupi-380-sqft-r2-spid-Q81196575",
+    "raw_property_type": "Ware House",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.283095, 74.747758)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Y91761024",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-katapady-udupi-3630-sqyd-spid-Y91761024",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.283095, 74.747758)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "W71826210",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-moodubelle-udupi-335-sqft-r3-spid-W71826210",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.33232, 74.74605)_4_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "F62294724",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-alevoor-udupi-175-sqft-r1-spid-F62294724",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.33232, 74.74605)_4_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Y84605202",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-udupi-24442-sqyd-r1-spid-Y84605202",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.33232, 74.74605)_4_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "J88421492",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-udupi-266-sqyd-spid-J88421492",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.33232, 74.74605)_4_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "J93054332",
+    "source_url": "https://www.99acres.com/factory-for-sale-in-udyavara-udupi-8712-sqft-spid-J93054332",
+    "raw_property_type": "Factory",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.309866, 74.736679)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Y92546584",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-udyavara-udupi-1065-sqyd-spid-Y92546584",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.309866, 74.736679)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "P93248434",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-udyavara-udupi-150-sqft-spid-P93248434",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.309866, 74.736679)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "X51593396",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-kaup-udupi-3775-sqyd-r3-spid-X51593396",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.232099, 74.7423)_8_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "A88752714",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-kaup-udupi-11000-sqft-spid-A88752714",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.232099, 74.7423)_8_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "S92951220",
+    "source_url": "https://www.99acres.com/warehouse-for-sale-in-kaup-udupi-4792-sqft-spid-S92951220",
+    "raw_property_type": "Ware House",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.232099, 74.7423)_8_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "E92951138",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-kaup-udupi-11-sqft-spid-E92951138",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.232099, 74.7423)_8_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "F85753678",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-kaup-udupi-300-sqft-r1-spid-F85753678",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.232099, 74.7423)_8_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "U91353108",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-kaup-udupi-13068-sqyd-spid-U91353108",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.232099, 74.7423)_8_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Z79079725",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-kaup-udupi-2800-sqft-r1-spid-Z79079725",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.232099, 74.7423)_8_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "C89813560",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-kaup-udupi-726-sqyd-spid-C89813560",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.232099, 74.7423)_8_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "K92245856",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-karkala-udupi-340-sqft-spid-K92245856",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.215381, 74.996597)_10_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "J89255947",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-karkala-udupi-340-sqft-spid-J89255947",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.215381, 74.996597)_10_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "D88344640",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-karkala-udupi-348-sqft-spid-D88344640",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.215381, 74.996597)_10_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "A93255522",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-karkala-udupi-348-sqft-spid-A93255522",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.215381, 74.996597)_10_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "T92900356",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-karkala-udupi-24200-sqyd-spid-T92900356",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.215381, 74.996597)_10_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "N85767698",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-karkala-udupi-53240-sqyd-r1-spid-N85767698",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.215381, 74.996597)_10_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "V92246586",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-karkala-udupi-340-sqft-spid-V92246586",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.215381, 74.996597)_10_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "N92006454",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-karkala-udupi-19360-sqyd-spid-N92006454",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.215381, 74.996597)_10_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "U91564408",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-karkala-udupi-2807-sqyd-spid-U91564408",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.215381, 74.996597)_10_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "V90872416",
+    "source_url": "https://www.99acres.com/industrial-land-plot-for-sale-in-karkala-udupi-2323-sqyd-spid-V90872416",
+    "raw_property_type": "Industrial Lands/Plots",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.215381, 74.996597)_10_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Q85182380",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-kundapura-udupi-75021-sqyd-r1-spid-Q85182380",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.631835, 74.689299)_12_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "U93046744",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-kundapura-udupi-922-sqyd-spid-U93046744",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.631835, 74.689299)_12_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "R92877766",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-kundapura-udupi-169402-sqyd-spid-R92877766",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.631835, 74.689299)_12_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "E92787730",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-kundapura-udupi-12100-sqyd-spid-E92787730",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.631835, 74.689299)_12_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "H92392140",
+    "source_url": "https://www.99acres.com/hotel-resort-for-sale-in-kundapura-udupi-11238583-sqft-spid-H92392140",
+    "raw_property_type": "Hotel/Resorts",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.631835, 74.689299)_12_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "N92286930",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-kundapura-udupi-53240-sqyd-spid-N92286930",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.631835, 74.689299)_12_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Y92230584",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-kundapura-udupi-2420-sqyd-spid-Y92230584",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.631835, 74.689299)_12_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Z77421123",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-kundapura-udupi-66067-sqyd-r2-spid-Z77421123",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.631835, 74.689299)_12_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "U91504972",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-kundapura-udupi-1984-sqyd-spid-U91504972",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.631835, 74.689299)_12_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "F90762136",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-kundapura-udupi-2904-sqyd-spid-F90762136",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.631835, 74.689299)_12_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "K89412479",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-kundapura-udupi-12100-sqyd-spid-K89412479",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.631835, 74.689299)_12_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "R89408247",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-kundapura-udupi-12100-sqyd-spid-R89408247",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.631835, 74.689299)_12_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "G91418270",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-moodubelle-udupi-3969-sqyd-spid-G91418270",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.27782, 74.825684)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "H89270465",
+    "source_url": "https://www.99acres.com/showroom-for-sale-in-moodubelle-udupi-330-sqft-spid-H89270465",
+    "raw_property_type": "Commercial Showrooms",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.27782, 74.825684)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "E89270431",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-moodubelle-udupi-331-sqft-spid-E89270431",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.27782, 74.825684)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "G92573866",
+    "source_url": "https://www.99acres.com/guest-house-banquet-hall-for-sale-in-manipal-udupi-900-sqft-spid-G92573866",
+    "raw_property_type": "Guest-House/Banquet-Halls",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.347199, 74.788029)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "B92591234",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-manipal-udupi-1500-sqft-spid-B92591234",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.347199, 74.788029)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "P58595140",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-manipal-udupi-854-sqft-r8-spid-P58595140",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.347199, 74.788029)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "T92348180",
+    "source_url": "https://www.99acres.com/guest-house-banquet-hall-for-sale-in-santhekatte-udupi-11400-sqft-spid-T92348180",
+    "raw_property_type": "Guest-House/Banquet-Halls",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.382522, 74.730965)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "F92193762",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-santhekatte-udupi-250-sqft-spid-F92193762",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.382522, 74.730965)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "E91705622",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-padubidri-udupi-460-sqft-spid-E91705622",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.138412, 74.770739)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "J90821776",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-padubidri-udupi-330-sqft-spid-J90821776",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.138412, 74.770739)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "F89314469",
+    "source_url": "https://www.99acres.com/other-commercial-property-for-sale-in-padubidri-udupi-2000-sqft-spid-F89314469",
+    "raw_property_type": "Other",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.138412, 74.770739)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "B91368828",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-athrady-udupi-871-sqyd-spid-B91368828",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.351267, 74.825656)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "N89159677",
+    "source_url": "https://www.99acres.com/factory-for-sale-in-athrady-udupi-47916-sqft-spid-N89159677",
+    "raw_property_type": "Factory",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.351267, 74.825656)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "P89116131",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-malpe-udupi-1452-sqyd-spid-P89116131",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.355652, 74.704626)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "H88962380",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-malpe-udupi-19360-sqyd-spid-H88962380",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.355652, 74.704626)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "E88894746",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-perdur-udupi-9680-sqyd-spid-E88894746",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.384777, 74.904528)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "P88618400",
+    "source_url": "https://www.99acres.com/other-commercial-property-for-sale-in-perdur-udupi-8712-sqft-spid-P88618400",
+    "raw_property_type": "Other",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.384777, 74.904528)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "D93703514",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-indrali-udupi-3333-sqyd-spid-D93703514",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "not_commercial_family",
+    "detail": "Agricultural/Farm Land -> AGRICULTURAL"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "F93358796",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-udyavara-udupi-150-sqft-spid-F93358796",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: Already flagged unresolved in the Housing.com pass (OSM bbox too coarse; coordinates fall outside every existing area bbox)."
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "F20834843",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-udupi-23910-sqyd-r3-spid-F20834843",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "not_commercial_family",
+    "detail": "Agricultural/Farm Land -> AGRICULTURAL"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "C91901558",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-hebri-udupi-24200-sqyd-spid-C91901558",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "out_of_geography",
+    "detail": "(13.458832,74.990931)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "X92714496",
+    "source_url": "https://www.99acres.com/hotel-resort-for-sale-in-adi-udupi-8000-sqft-spid-X92714496",
+    "raw_property_type": "Hotel/Resorts",
+    "reject_reason": "ambiguous_or_missing_type",
+    "detail": "Hotel/Resorts"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "B93115900",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-mudar-udupi-13165-sqyd-spid-B93115900",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "not_commercial_family",
+    "detail": "Agricultural/Farm Land -> AGRICULTURAL"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "I54454250",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-udupi-1065-sqyd-r4-spid-I54454250",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "not_commercial_family",
+    "detail": "Agricultural/Farm Land -> AGRICULTURAL"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "H92317526",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-shanthi-nagar-udupi-1100-sqft-spid-H92317526",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: locality not aliased, no OSM evidence gathered, coordinate outside every area bbox"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "A80162053",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-hirebettu-udupi-1307-sqyd-r3-spid-A80162053",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: locality not aliased, no OSM evidence gathered, coordinate outside every area bbox"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "L91108296",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-hemmadi-udupi-1113-sqyd-spid-L91108296",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "out_of_geography",
+    "detail": "(13.67817,74.695897)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "G90973440",
+    "source_url": "https://www.99acres.com/other-commercial-property-for-sale-in-pangala-udupi-24829-sqft-spid-G90973440",
+    "raw_property_type": "Other",
+    "reject_reason": "ambiguous_or_missing_type",
+    "detail": "Other"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "I90648798",
+    "source_url": "https://www.99acres.com/industrial-land-plot-for-sale-in-tallur-udupi-12100-sqyd-spid-I90648798",
+    "raw_property_type": "Industrial Lands/Plots",
+    "reject_reason": "out_of_geography",
+    "detail": "(13.651262,74.713387)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "F72328532",
+    "source_url": "https://www.99acres.com/other-commercial-property-for-sale-in-saligrama-udupi-2800-sqft-r3-spid-F72328532",
+    "raw_property_type": "Other",
+    "reject_reason": "ambiguous_or_missing_type",
+    "detail": "Other"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "R90632264",
+    "source_url": "https://www.99acres.com/industrial-land-plot-for-sale-in-bailur-udupi-1839-sqyd-spid-R90632264",
+    "raw_property_type": "Industrial Lands/Plots",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: locality not aliased, no OSM evidence gathered, coordinate outside every area bbox"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "B90631612",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-navunda-udupi-2226-sqyd-spid-B90631612",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "out_of_geography",
+    "detail": "(13.7507098309822,74.6395020087177)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Z90326030",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-kalsanka-udupi-14000-sqft-spid-Z90326030",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "out_of_geography",
+    "detail": "(13.762886,74.898628)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "O90217428",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-kollur-udupi-532-sqyd-spid-O90217428",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "out_of_geography",
+    "detail": "(13.863186,74.810277)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "I89472258",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-hejamadi-udupi-97-sqyd-spid-I89472258",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "not_commercial_family",
+    "detail": "Agricultural/Farm Land -> AGRICULTURAL"
+  }
+]

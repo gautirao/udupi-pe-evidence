@@ -1,0 +1,546 @@
+[
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "B86597818",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-devanahalli-bangalore-north-2420-sqyd-r1-spid-B86597818",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.243287, 77.710834)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "J91795176",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-devanahalli-bangalore-north-8346-sqyd-spid-J91795176",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.243287, 77.710834)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "O94304410",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-electronic-city-bangalore-south-3230-sqft-spid-O94304410",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(77.59456, 12.9716)_5_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "L94059802",
+    "source_url": "https://www.99acres.com/bare-shell-office-space-for-sale-in-electronic-city-bangalore-south-2193-sqft-spid-L94059802",
+    "raw_property_type": "Bare shell office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(77.59456, 12.9716)_5_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "T93961806",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-kanakapura-road-bangalore-south-6050-sqyd-spid-T93961806",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(77.59456, 12.9716)_5_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "T92610426",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-bangalore-south-1333-sqyd-spid-T92610426",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(77.59456, 12.9716)_5_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "R94080974",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-venkateshwara-layout-8th-phase-jp-nagar-bangalore-south-2800-sqft-spid-R94080974",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(77.59456, 12.9716)_5_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "C94103162",
+    "source_url": "https://www.99acres.com/hotel-resort-for-sale-in-hebbal-bangalore-north-1120-sqft-spid-C94103162",
+    "raw_property_type": "Hotel/Resorts",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(77.607315, 13.048041)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Y93600374",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-devanahalli-bangalore-north-14520-sqyd-spid-Y93600374",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(77.607315, 13.048041)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Z93169690",
+    "source_url": "https://www.99acres.com/industrial-land-plot-for-sale-in-kiadb-industrial-area-bangalore-south-13175-sqyd-spid-Z93169690",
+    "raw_property_type": "Industrial Lands/Plots",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(77.607315, 13.048041)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "G92845190",
+    "source_url": "https://www.99acres.com/bare-shell-office-space-for-sale-in-bellandur-bangalore-east-16164-sqft-spid-G92845190",
+    "raw_property_type": "Bare shell office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(77.618233, 13.002091)_4_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "W93979886",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-marathahalli-bangalore-east-2309-sqft-spid-W93979886",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(77.618233, 13.002091)_4_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "C75200519",
+    "source_url": "https://www.99acres.com/industrial-land-plot-for-sale-in-bangalore-east-9680-sqyd-r5-spid-C75200519",
+    "raw_property_type": "Industrial Lands/Plots",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(77.618233, 13.002091)_4_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Q94260768",
+    "source_url": "https://www.99acres.com/other-commercial-property-for-sale-in-siddapura-bangalore-east-26000-sqft-spid-Q94260768",
+    "raw_property_type": "Other",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(77.618233, 13.002091)_4_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "G91373440",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-aswath-nagar-marathahalli-bangalore-east-4515-sqft-spid-G91373440",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.956685, 77.699972)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "T89946494",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-marathahalli-bangalore-east-8790-sqft-spid-T89946494",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.956685, 77.699972)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "P91373346",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-aswath-nagar-marathahalli-bangalore-east-4245-sqft-spid-P91373346",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.956685, 77.699972)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "D74283615",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-whitefield-bangalore-east-7700-sqft-r3-spid-D74283615",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.96982, 77.749972)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "P72653009",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-whitefield-bangalore-east-24000-sqft-r6-spid-P72653009",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.96982, 77.749972)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "H93107424",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-kaggalahalli-bangalore-north-667-sqyd-spid-H93107424",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "not_commercial_family",
+    "detail": "Agricultural/Farm Land -> AGRICULTURAL"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "O92704490",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-sidlaghatta-bangalore-north-667-sqyd-spid-O92704490",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "not_commercial_family",
+    "detail": "Agricultural/Farm Land -> AGRICULTURAL"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "O89250339",
+    "source_url": "https://www.99acres.com/guest-house-banquet-hall-for-sale-in-kr-puram-bangalore-east-35000-sqft-r1-spid-O89250339",
+    "raw_property_type": "Guest-House/Banquet-Halls",
+    "reject_reason": "ambiguous_or_missing_type",
+    "detail": "Guest-House/Banquet-Halls"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "C94242904",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-kammasandra-bangalore-south-1415-sqft-spid-C94242904",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "out_of_geography",
+    "detail": "(12.833393,77.684834)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "V94054004",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-jalahalli-east-bangalore-north-413-sqyd-spid-V94054004",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "P93322202",
+    "source_url": "https://www.99acres.com/bare-shell-office-space-for-sale-in-peenya-industrial-area-phase-4-bangalore-west-55914-sqft-spid-P93322202",
+    "raw_property_type": "Bare shell office space",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "X93880332",
+    "source_url": "https://www.99acres.com/bare-shell-office-space-for-sale-in-the-arcade-at-brigade-orchards-devanahalli-bangalore-north-4415-sqft-spid-X93880332",
+    "raw_property_type": "Bare shell office space",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "J93076600",
+    "source_url": "https://www.99acres.com/bare-shell-office-space-for-sale-in-the-arcade-at-brigade-orchards-devanahalli-bangalore-north-1270-sqft-spid-J93076600",
+    "raw_property_type": "Bare shell office space",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "J94335290",
+    "source_url": "https://www.99acres.com/other-commercial-property-for-sale-in-cunningham-road-bangalore-central-1800-sqft-spid-J94335290",
+    "raw_property_type": "Other",
+    "reject_reason": "ambiguous_or_missing_type",
+    "detail": "Other"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "D92902822",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-arasanakunte-bangalore-west-298-sqyd-spid-D92902822",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Z93927420",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-peenya-industrial-area-phase-4-bangalore-west-4961-sqyd-spid-Z93927420",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "I41714555",
+    "source_url": "https://www.99acres.com/factory-for-sale-in-electronic-city-bangalore-south-1664-sqft-r5-spid-I41714555",
+    "raw_property_type": "Factory",
+    "reject_reason": "ambiguous_or_missing_type",
+    "detail": "Factory"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "H93350320",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-attibele-bangalore-south-6776-sqyd-spid-H93350320",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "out_of_geography",
+    "detail": "(12.78088,77.77141)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "M90464540",
+    "source_url": "https://www.99acres.com/industrial-land-plot-for-sale-in-andrahalli-bangalore-west-1111-sqyd-spid-M90464540",
+    "raw_property_type": "Industrial Lands/Plots",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Z91807748",
+    "source_url": "https://www.99acres.com/hotel-resort-for-sale-in-rt-nagar-bangalore-north-1200-sqft-spid-Z91807748",
+    "raw_property_type": "Hotel/Resorts",
+    "reject_reason": "ambiguous_or_missing_type",
+    "detail": "Hotel/Resorts"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "X92828212",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-harohalli-bangalore-north-311-sqyd-spid-X92828212",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Y69455628",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-kanakapura-road-bangalore-south-605-sqyd-r3-spid-Y69455628",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "not_commercial_family",
+    "detail": "Agricultural/Farm Land -> AGRICULTURAL"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Q93531974",
+    "source_url": "https://www.99acres.com/showroom-for-sale-in-the-arcade-at-brigade-orchards-devanahalli-bangalore-north-1200-sqft-spid-Q93531974",
+    "raw_property_type": "Commercial Showrooms",
+    "reject_reason": "out_of_geography",
+    "detail": "(13.236694444444444,77.72380555555556)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "O93945720",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-marsur-bangalore-south-133-sqyd-spid-O93945720",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "out_of_geography",
+    "detail": "(12.766937,77.703366)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "W93460616",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-smv-layout-bangalore-west-444-sqyd-spid-W93460616",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "O93944378",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-tata-silk-farm-bangalore-south-480-sqyd-spid-O93944378",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "E89968158",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-pride-vatika-plots-jigani-bangalore-south-274-sqyd-spid-E89968158",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "out_of_geography",
+    "detail": "(12.784569,77.612986)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "N91833088",
+    "source_url": "https://www.99acres.com/other-commercial-property-for-sale-in-commercial-street-bangalore-central-1100-sqft-spid-N91833088",
+    "raw_property_type": "Other",
+    "reject_reason": "ambiguous_or_missing_type",
+    "detail": "Other"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "J93549612",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-rbi-layout-bangalore-south-444-sqyd-spid-J93549612",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "U90259100",
+    "source_url": "https://www.99acres.com/showroom-for-sale-in-gandhi-bazar-bangalore-south-4600-sqft-r1-spid-U90259100",
+    "raw_property_type": "Commercial Showrooms",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "M94044256",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-srirampuram-bangalore-north-118-sqyd-spid-M94044256",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "K92376114",
+    "source_url": "https://www.99acres.com/bare-shell-office-space-for-sale-in-kammagondahalli-bangalore-north-2600-sqft-spid-K92376114",
+    "raw_property_type": "Bare shell office space",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "T81659766",
+    "source_url": "https://www.99acres.com/other-commercial-property-for-sale-in-wind-tunnel-road-bangalore-east-22000-sqft-r3-spid-T81659766",
+    "raw_property_type": "Other",
+    "reject_reason": "ambiguous_or_missing_type",
+    "detail": "Other"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "P87151884",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-banashankari-6th-stage-5th-block-bangalore-south-299-sqyd-spid-P87151884",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "V94323032",
+    "source_url": "https://www.99acres.com/other-commercial-property-for-sale-in-3rd-phase-jp-nagar-bangalore-south-2400-sqft-spid-V94323032",
+    "raw_property_type": "Other",
+    "reject_reason": "ambiguous_or_missing_type",
+    "detail": "Other"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "V90190412",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-mg-road-bangalore-central-890-sqft-spid-V90190412",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "X92250466",
+    "source_url": "https://www.99acres.com/bare-shell-office-space-for-sale-in-cubbonpet-bangalore-central-3228-sqft-spid-X92250466",
+    "raw_property_type": "Bare shell office space",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Z94029888",
+    "source_url": "https://www.99acres.com/bare-shell-office-space-for-sale-in-sultanpet-bangalore-central-440-sqft-spid-Z94029888",
+    "raw_property_type": "Bare shell office space",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "O93110544",
+    "source_url": "https://www.99acres.com/showroom-for-sale-in-jc-road-bangalore-central-19500-sqft-spid-O93110544",
+    "raw_property_type": "Commercial Showrooms",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "U70132756",
+    "source_url": "https://www.99acres.com/factory-for-sale-in-bangalore-corporation-industrial-estate-bangalore-east-37300-sqft-r4-spid-U70132756",
+    "raw_property_type": "Factory",
+    "reject_reason": "ambiguous_or_missing_type",
+    "detail": "Factory"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Y41284413",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-doddaballapur-bangalore-north-133-sqyd-r1-spid-Y41284413",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "out_of_geography",
+    "detail": "(13.282239289291649,77.53090851008892)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Z94310394",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-jalahalli-bangalore-north-225-sqft-spid-Z94310394",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "H94321766",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-ramanagara-bangalore-south-242-sqyd-spid-H94321766",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "out_of_geography",
+    "detail": "(12.720391,77.287247)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "A94315100",
+    "source_url": "https://www.99acres.com/hotel-resort-for-sale-in-telecom-layout-kempapura-agrahara-bangalore-west-1200-sqft-spid-A94315100",
+    "raw_property_type": "Hotel/Resorts",
+    "reject_reason": "ambiguous_or_missing_type",
+    "detail": "Hotel/Resorts"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "J87990732",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-banashankari-stage-6-block-8-bangalore-south-173-sqyd-r1-spid-J87990732",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "S94305284",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-mg-road-bangalore-central-1355-sqft-spid-S94305284",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "S94280890",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-ivc-road-bangalore-north-69116-sqyd-spid-S94280890",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "out_of_geography",
+    "detail": "(13.23103017,77.64682811)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "E94262286",
+    "source_url": "https://www.99acres.com/industrial-land-plot-for-sale-in-windsor-township-hoskote-bangalore-east-1111-sqyd-spid-E94262286",
+    "raw_property_type": "Industrial Lands/Plots",
+    "reject_reason": "out_of_geography",
+    "detail": "(13.057187,77.841516)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Q94285336",
+    "source_url": "https://www.99acres.com/hotel-resort-for-sale-in-venkateshwara-layout-bangalore-south-475-sqft-spid-Q94285336",
+    "raw_property_type": "Hotel/Resorts",
+    "reject_reason": "ambiguous_or_missing_type",
+    "detail": "Hotel/Resorts"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "H94242866",
+    "source_url": "https://www.99acres.com/other-commercial-property-for-sale-in-forest-layout-bangalore-west-450-sqft-spid-H94242866",
+    "raw_property_type": "Other",
+    "reject_reason": "ambiguous_or_missing_type",
+    "detail": "Other"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "H94229776",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-avenue-road-bangalore-central-820-sqft-spid-H94229776",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "F84756618",
+    "source_url": "https://www.99acres.com/industrial-land-plot-for-sale-in-chikkaballapur-bangalore-north-3575-sqyd-r3-spid-F84756618",
+    "raw_property_type": "Industrial Lands/Plots",
+    "reject_reason": "out_of_geography",
+    "detail": "(13.42608,77.7304)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "M94129320",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-narayana-nagar-1st-block-bangalore-south-419-sqyd-spid-M94129320",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — a coverage hole, distinct from a coordinate falling outside the city entirely (see bengaluru-acquisition-report.md section 4.2)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "X35543189",
+    "source_url": "https://www.99acres.com/commercial-office-space-for-sale-in-splendid-skywalk-ulsoor-bangalore-central-235-sqft-r3-spid-X35543189",
+    "raw_property_type": "Commercial Office/Space",
+    "reject_reason": "unmapped_type",
+    "detail": "Commercial Office/Space"
+  }
+]

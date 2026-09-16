@@ -81,6 +81,17 @@ NINETYNINE_RESIDENTIAL_AMBIGUOUS = {"Other", "Studio Apartment", "Builder Floor"
 # 99acres commercial propertyType vocabulary -> (property_type, listing_family)
 NINETYNINE_COMMERCIAL_TYPE_MAP = {
     "Commercial Shops": ("commercial", "COMMERCIAL"),
+    # 99acres also emits the BARE label "Shop" for the same concept — 3 rows in #2575's Mangalore
+    # capture. A string variant of an existing concept is NORMALISATION; a genuinely new concept is
+    # a taxonomy decision and is left to reject (see "Co-working office space", deliberately absent
+    # from this map so it surfaces as unmapped_type rather than being folded into OFFICE).
+    #
+    # VERIFIED NON-RETROACTIVE BEFORE ADDING: the exact label "Shop" occurs ZERO times in both
+    # prior captures (Udupi #2304 commercial, Bengaluru #2575), which carry "Commercial Shops" 21
+    # and 5 times respectively. Adding a label to a shared map reclassifies HISTORY unless that
+    # absence is checked first — the 11 Udupi / 32 Bengaluru staged counts asserted in the ITs
+    # would otherwise move with nothing reddening.
+    "Shop": ("commercial", "COMMERCIAL"),
     "Commercial Showrooms": ("commercial", "COMMERCIAL"),
     "Ready to move office space": ("commercial", "COMMERCIAL"),
     "Bare shell office space": ("commercial", "COMMERCIAL"),
@@ -159,6 +170,7 @@ def map_commercial_type(ptype):
 # given our own property_type classification above - never guessed independently of it.
 NINETYNINE_COMMERCIAL_SUBTYPE_MAP = {
     "Commercial Shops": "SHOP",
+    "Shop": "SHOP",
     "Commercial Showrooms": "SHOP",
     "Ready to move office space": "OFFICE",
     "Bare shell office space": "OFFICE",

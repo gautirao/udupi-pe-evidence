@@ -25,7 +25,16 @@ to remove — the check would have become the leak. Instead:
   * --canary-file F is an UNCOMMITTED newline-separated list of literal values to prove absent.
 Both are optional; without them the shape detectors still run over everything.
 
-TWO LAYERS
+THREE LAYERS. This header said "TWO" and enumerated two while three existed — the literal-canary
+layer was implemented below and absent from its own documentation, which is the self-falsifying
+comment class this module's history otherwise records carefully.
+
+REACH IS NOT UNIFORM, and the verdict line does not say so. Layer 1 is pattern-based and reaches
+every file. Layer 3 scans every file, but only for the literals it was given. Layer 2 is keyed by
+FILENAME via baseline_index, so it reaches ONLY those swept files whose name also appears in
+--baseline; every other file, including derived artefacts of the very capture the baseline came
+from, gets no name check at all. Measured on #2575: 1 of 28 swept files. "all 3 layers" in the
+verdict describes which layers RAN, never how far each one reached.
   1. Shape detectors (email / telephone / digits-spelled-as-words) — applied to every string
      leaf of every file, unconditionally. Hand-written sources (.py/.sh) are swept with the FULL
      rule, bare unseparated digits included. Only the GENERATED text artefacts (.sql/.md) relax
@@ -182,11 +191,29 @@ def baseline_index(baseline_dir):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dir", default=os.path.dirname(os.path.abspath(__file__)))
+    # --dir IS REQUIRED. It used to default to this file's own directory, which is how a sweep
+    # answers confidently about the WRONG TREE: invoked from another import directory it swept
+    # udupi-properties-2304 and printed PASS, while the directory the operator meant was never
+    # examined. Measured on #2575 — the first Mangalore sweep reported 0 residuals over a
+    # directory that did not contain the Mangalore capture at all. A defaulted scan path is a
+    # gate that can be run wrongly by accident, and its PASS is indistinguishable from a real one.
+    ap.add_argument("--dir", required=True,
+                    help="directory to sweep — REQUIRED, never defaulted (see comment above)")
     ap.add_argument("--baseline", default=None,
                     help="uncommitted pre-sanitisation directory, for the row-keyed name layer")
     ap.add_argument("--canary-file", default=None,
                     help="uncommitted newline-separated literal values to prove absent")
+    # Any sweep CITED AS EVIDENCE must run every layer. Without this the shape layer alone prints
+    # the same PASS as a full run: on #2575 a two-of-three sweep reported PASS (0 residuals) on
+    # the very file carrying a real identity residual, because the field was gone (shape layer
+    # blind to names) and the name layer had not been given a baseline to compare against.
+    #
+    # Deliberately opt-IN rather than hard-required: validate.sh step 9 invokes this as
+    # `--dir "$IMP"` with no baseline, and making --baseline unconditional would redden #2304's
+    # pipeline as a side effect of a #2575 fix. Evidence sweeps pass this flag; routine ones
+    # still run and now say plainly that they were partial.
+    ap.add_argument("--require-all-layers", action="store_true",
+                    help="exit 2 unless --baseline AND --canary-file are both supplied")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
 
@@ -268,15 +295,50 @@ def main():
                                      "value": h})
             coverage.append((fn, f"{text.count(chr(10)) + 1} lines (raw text)"))
 
+    # A canary must DISCRIMINATE. A literal that also occurs in ordinary prose cannot tell a leak
+    # from a coincidence, and it will fire on a clean tree — measured on #2575, where a canary list
+    # harvested with `len >= 4` included the bare word "Name" and matched 17 of 25 files. Those 17
+    # were not findings; they were the canary being useless, and they buried the one real finding
+    # in the same report.
+    #
+    # So a canary hitting more than half the swept files is reported as a CANARY-QUALITY error
+    # rather than as N residuals, and it fails the run through the coverage door (exit 2) instead
+    # of the detection door (exit 1). Mislabelling a bad instrument as a detection is how a gate
+    # teaches its operator to ignore it.
+    canary_quality = []
     if canaries:
-        for fn, _ in coverage:
-            if fn in CANARY_EXEMPT:
-                continue
+        sweepable = [fn for fn, _ in coverage if fn not in CANARY_EXEMPT]
+        per_canary = {}
+        for fn in sweepable:
             text = open(os.path.join(target, fn), errors="replace").read().lower()
             for c in canaries:
                 if c.lower() in text:
-                    findings.append({"file": fn, "path": "<literal>", "kind": "canary",
-                                     "value": c})
+                    per_canary.setdefault(c, []).append(fn)
+        # AT OR ABOVE half, not "more than half" — stated exactly, because the `max(2, ...)` floor
+        # also trips on two hits in a sweep of four files or fewer.
+        threshold = max(2, len(sweepable) // 2)
+        # MINIMUM CORPUS BEFORE RECLASSIFICATION IS ALLOWED TO FIRE. `threshold` collapses to 2 on
+        # any sweep of five files or fewer, and `--dir` is now REQUIRED, which deliberately
+        # encourages narrowly-scoped sweeps. Without this floor, a REAL residual present in two
+        # files of a small directory — exactly the shape this PR's own residue has — is reported as
+        # "a canary matched 2 of N swept files, non-discriminating", exits 2, and never appears as
+        # a finding at all. The operator would see an instrument complaint where there is a leak.
+        #
+        # Eight is the smallest corpus where "at or above half" means four or more files, which is
+        # a population a coincidence can plausibly reach and a single real leak usually cannot.
+        for c, files in per_canary.items():
+            if len(files) >= threshold and len(sweepable) >= 8:
+                # Report the COUNT and THE FILE NAMES, never the literal. Filenames are not PII,
+                # and without them a PERVASIVE REAL LEAK is indistinguishable from a useless
+                # canary — both present as "matched N of M files". The operator needs to be able
+                # to tell those apart, and only the file list does that.
+                canary_quality.append(
+                    f"a canary matched {len(files)} of {len(sweepable)} swept files — it is "
+                    f"non-discriminating and proves nothing about the detector's reach. "
+                    f"Files: {', '.join(sorted(files))}")
+                continue
+            for fn in files:
+                findings.append({"file": fn, "path": "<literal>", "kind": "canary", "value": c})
 
     report = {
         "target": target,
@@ -332,8 +394,58 @@ def main():
     # Under --json the verdict goes to stderr so the document on stdout stays parseable. An
     # earlier revision appended it to stdout, which made `--json | jq` die on "Extra data" —
     # and a gate whose machine-readable output cannot be parsed gets read by eye instead.
-    print(f"\nPII_RESIDUALS: {'PASS (0 residuals)' if not findings else 'FAIL'}",
-          file=sys.stderr if args.json else sys.stdout)
+    # A NON-DISCRIMINATING CANARY IS AN INSTRUMENT FAILURE, not a detection.
+    #
+    # `and not findings` IS LOAD-BEARING, and an earlier revision of THIS COMMENT asserted the
+    # property while the code lacked it: it claimed "checked after the findings floor so a real
+    # detection is never downgraded", but position confers nothing. The floor guards on
+    # `not findings`; this block had no findings guard at all, so a run with BOTH a real residual
+    # and a poor canary list exited 2 — an environment error — and the module docstring's promise
+    # ("anything actually detected exits 1, so a detection is never downgraded") was false.
+    #
+    # Measured on two synthetic trees differing ONLY in the canary list, same real shape finding
+    # in both: discriminating list -> exit 1; non-discriminating list -> exit 2.
+    #
+    # The pairing is the DOCUMENTED motivating case rather than a contrived one: the #2575 run that
+    # prompted this guard had a canary matching 17 of 25 files while burying one real finding in
+    # the same report. validate.sh step 9 would then print "NOT a residuals finding" while the
+    # residual sat in the report printed immediately above.
+    if canary_quality and not findings:
+        for msg in canary_quality:
+            print(f"PII_RESIDUALS: FAIL — canary quality: {msg}", file=sys.stderr)
+        return 2
+    if canary_quality:
+        # Findings win the exit code, but the operator still needs to know the list was unusable.
+        for msg in canary_quality:
+            print(f"PII_RESIDUALS: NOTE — canary quality: {msg} — reported alongside real "
+                  f"findings; the exit code reflects the findings.", file=sys.stderr)
+
+    # THE VERDICT MUST NAME ITS OWN COVERAGE. A two-of-three sweep printed the identical
+    # "PASS (0 residuals)" as a full one, and on #2575 it printed exactly that over a file that
+    # was carrying a real identity residual in a URL slug — invisible to the shape layer, and the
+    # name layer had no baseline to compare against. The PASS was true of what ran and silent on
+    # what did not, which is the shape that makes a gate worse than no gate.
+    layers = [("shape", True), ("name-invariant", bool(args.baseline)),
+              ("literal-canary", bool(canaries))]
+    ran = [n for n, on in layers if on]
+    skipped = [n for n, on in layers if not on]
+
+    if args.require_all_layers and skipped:
+        print(f"PII_RESIDUALS: FAIL — --require-all-layers was given but these layers did not "
+              f"run: {', '.join(skipped)}. An evidence sweep must run all three; refusing to "
+              f"report a verdict on a partial one.", file=sys.stderr)
+        return 2
+
+    if findings:
+        verdict = "FAIL"
+    elif skipped:
+        verdict = (f"PARTIAL ({len(ran)} of {len(layers)} layers: ran {', '.join(ran)}; "
+                   f"SKIPPED {', '.join(skipped)}) — 0 residuals in the layers that ran, "
+                   f"which is NOT the same as clean")
+    else:
+        verdict = "PASS (0 residuals, all 3 layers)"
+
+    print(f"\nPII_RESIDUALS: {verdict}", file=sys.stderr if args.json else sys.stdout)
     return 0 if not findings else 1
 
 

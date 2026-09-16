@@ -1,0 +1,658 @@
+[
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "D92814240",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-pumpwell-mangalore-184-sqft-spid-D92814240",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.86247, 74.86972)_5_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "O85890268",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-pumpwell-mangalore-605-sqft-r1-spid-O85890268",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.86247, 74.86972)_5_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "X93559640",
+    "source_url": "https://www.99acres.com/other-commercial-property-for-sale-in-pumpwell-mangalore-6500-sqft-spid-X93559640",
+    "raw_property_type": "Other",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.86247, 74.86972)_5_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "S93348366",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-pumpwell-mangalore-581-sqyd-spid-S93348366",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.86247, 74.86972)_5_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "C92582432",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-pumpwell-mangalore-580-sqft-spid-C92582432",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.86247, 74.86972)_5_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "J92987154",
+    "source_url": "https://www.99acres.com/coworking-space-for-sale-in-kottara-chowki-mangalore-215-sqft-spid-J92987154",
+    "raw_property_type": "Co-working office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.91081, 74.83567)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "W90791520",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-kottara-chowki-mangalore-411-sqyd-spid-W90791520",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.91081, 74.83567)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "L85941832",
+    "source_url": "https://www.99acres.com/industrial-land-plot-for-sale-in-mulki-mangalore-9535-sqyd-r1-spid-L85941832",
+    "raw_property_type": "Industrial Lands/Plots",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.066603, 74.798157)_4_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "R91982578",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-mulki-mangalore-206-sqft-spid-R91982578",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.066603, 74.798157)_4_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "U93753792",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-mulki-mangalore-2-sqyd-spid-U93753792",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.066603, 74.798157)_4_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "P91057930",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-mulki-mangalore-242-sqyd-spid-P91057930",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.066603, 74.798157)_4_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Z91777356",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-industrial-area-baikampady-mangalore-6873-sqyd-spid-Z91777356",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.953307, 74.823682)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "R89772484",
+    "source_url": "https://www.99acres.com/industrial-land-plot-for-sale-in-industrial-area-baikampady-mangalore-2468-sqyd-r6-spid-R89772484",
+    "raw_property_type": "Industrial Lands/Plots",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.953307, 74.823682)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "U93012848",
+    "source_url": "https://www.99acres.com/warehouse-for-sale-in-industrial-area-baikampady-mangalore-10000-sqft-spid-U93012848",
+    "raw_property_type": "Ware House",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.953307, 74.823682)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "L89447246",
+    "source_url": "https://www.99acres.com/other-commercial-property-for-sale-in-kodikal-mangalore-507-sqft-r1-spid-L89447246",
+    "raw_property_type": "Other",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.911644, 74.82366)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "R93779836",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-kodikal-mangalore-140-sqyd-spid-R93779836",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.911644, 74.82366)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Y69350560",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-surathkal-mangalore-400-sqft-r2-spid-Y69350560",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.00304, 74.80977)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "A93200970",
+    "source_url": "https://www.99acres.com/showroom-for-sale-in-surathkal-mangalore-610-sqft-spid-A93200970",
+    "raw_property_type": "Commercial Showrooms",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.00304, 74.80977)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "X92838458",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-surathkal-mangalore-430-sqft-spid-X92838458",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.00304, 74.80977)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "P52724856",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-ks-rao-road-mangalore-380-sqft-r1-spid-P52724856",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.869167, 74.842662)_5_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Y43316753",
+    "source_url": "https://www.99acres.com/commercial-office-space-for-sale-in-hampankatta-mangalore-380-sqft-r6-spid-Y43316753",
+    "raw_property_type": "Commercial Office/Space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.869167, 74.842662)_5_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "D92771276",
+    "source_url": "https://www.99acres.com/hotel-resort-for-sale-in-hampankatta-mangalore-60000-sqft-spid-D92771276",
+    "raw_property_type": "Hotel/Resorts",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.869167, 74.842662)_5_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "T94218680",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-hampankatta-mangalore-580-sqft-spid-T94218680",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.869167, 74.842662)_5_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "T92910850",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-hampankatta-mangalore-2000-sqft-spid-T92910850",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.869167, 74.842662)_5_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "T92933200",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-ashok-nagar-mangalore-3630-sqft-spid-T92933200",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.89477, 74.82439)_10_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "J92933098",
+    "source_url": "https://www.99acres.com/bare-shell-office-space-for-sale-in-ashok-nagar-mangalore-625-sqft-spid-J92933098",
+    "raw_property_type": "Bare shell office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.89477, 74.82439)_10_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "X92924686",
+    "source_url": "https://www.99acres.com/showroom-for-sale-in-ashok-nagar-mangalore-535-sqft-spid-X92924686",
+    "raw_property_type": "Commercial Showrooms",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.89477, 74.82439)_10_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "R92932738",
+    "source_url": "https://www.99acres.com/bare-shell-office-space-for-sale-in-ashok-nagar-mangalore-4647-sqft-spid-R92932738",
+    "raw_property_type": "Bare shell office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.89477, 74.82439)_10_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Q92932638",
+    "source_url": "https://www.99acres.com/showroom-for-sale-in-ashok-nagar-mangalore-535-sqft-spid-Q92932638",
+    "raw_property_type": "Commercial Showrooms",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.89477, 74.82439)_10_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "M92924864",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-ashok-nagar-mangalore-360-sqft-spid-M92924864",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.89477, 74.82439)_10_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "G92925152",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-ashok-nagar-mangalore-3613-sqft-spid-G92925152",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.89477, 74.82439)_10_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "L92932852",
+    "source_url": "https://www.99acres.com/bare-shell-office-space-for-sale-in-ashok-nagar-mangalore-4647-sqft-spid-L92932852",
+    "raw_property_type": "Bare shell office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.89477, 74.82439)_10_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "F92954132",
+    "source_url": "https://www.99acres.com/showroom-for-sale-in-ashok-nagar-mangalore-505-sqft-spid-F92954132",
+    "raw_property_type": "Commercial Showrooms",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.89477, 74.82439)_10_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "P92953986",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-ashok-nagar-mangalore-145-sqft-spid-P92953986",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.89477, 74.82439)_10_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "D92754414",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-pandeshwar-mangalore-2372-sqyd-spid-D92754414",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.858414, 74.83989)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Z92230250",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-pandeshwar-mangalore-600-sqft-spid-Z92230250",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.858414, 74.83989)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "L93829090",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-bendoorwell-mangalore-1828-sqft-spid-L93829090",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.871213, 74.855822)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "D90894358",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-bendoorwell-mangalore-422-sqft-spid-D90894358",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.871213, 74.855822)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "T92762070",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-padil-mangalore-4211-sqyd-spid-T92762070",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.86892, 74.88434)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "J78785149",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-padil-mangalore-15730-sqyd-r1-spid-J78785149",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.86892, 74.88434)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "W94156102",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-mangalore-823-sqyd-spid-W94156102",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(74.85596, 12.91414)_9_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "C93443446",
+    "source_url": "https://www.99acres.com/other-commercial-property-for-sale-in-mannagudda-mangalore-2178-sqft-spid-C93443446",
+    "raw_property_type": "Other",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(74.85596, 12.91414)_9_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "I93026060",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-mangalore-2000-sqft-spid-I93026060",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(74.85596, 12.91414)_9_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "N83187726",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-mangalore-4211-sqyd-r1-spid-N83187726",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(74.85596, 12.91414)_9_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Y82829450",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-hampankatta-mangalore-525-sqft-r1-spid-Y82829450",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(74.85596, 12.91414)_9_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Z91885486",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-mangalore-5034-sqyd-spid-Z91885486",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(74.85596, 12.91414)_9_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "W91521040",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-mangalore-484-sqyd-spid-W91521040",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(74.85596, 12.91414)_9_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "S85030106",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-mangalore-355-sqft-r1-spid-S85030106",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(74.85596, 12.91414)_9_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "T90807680",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-mangalore-94-sqyd-spid-T90807680",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(74.85596, 12.91414)_9_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "R92950912",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-kinnigoli-mangalore-774-sqyd-spid-R92950912",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.06294, 74.84651)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "J92653754",
+    "source_url": "https://www.99acres.com/other-commercial-property-for-sale-in-kinnigoli-mangalore-19906-sqft-spid-J92653754",
+    "raw_property_type": "Other",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(13.06294, 74.84651)_2_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "K75557139",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-kodailbail-mangalore-1000-sqft-r3-spid-K75557139",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.880923, 74.841588)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "L91711426",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-kodailbail-mangalore-325-sqft-spid-L91711426",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.880923, 74.841588)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "V91443580",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-kodailbail-mangalore-235-sqft-spid-V91443580",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "coordinate_untrusted",
+    "detail": "shared_coord_locality_centroid_suspected_(12.880923, 74.841588)_3_listings"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "439814",
+    "source_url": "https://www.99acres.com/mukund-ashoka-business-center-bejai-mangalore-npxid-c439814",
+    "raw_property_type": "Shop",
+    "reject_reason": "unsupported_area_unit",
+    "detail": "Carpet Area"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "411487",
+    "source_url": "https://www.99acres.com/land-vikram-trade-centre-kodailbail-mangalore-npxid-c411487",
+    "raw_property_type": "Shop",
+    "reject_reason": "unsupported_area_unit",
+    "detail": "Super Built-up Area"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "453728",
+    "source_url": "https://www.99acres.com/sindhu-souparnika-ashok-nagar-mangalore-npxid-c453728",
+    "raw_property_type": "Shop",
+    "reject_reason": "unsupported_area_unit",
+    "detail": "Super Built-up Area"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "L52791964",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-bendoorwell-mangalore-1860-sqft-r5-spid-L52791964",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "out_of_geography",
+    "detail": "(14.78551,75.79468)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "X94121966",
+    "source_url": "https://www.99acres.com/other-commercial-property-for-sale-in-mangala-nagar-mangalore-25000-sqft-spid-X94121966",
+    "raw_property_type": "Other",
+    "reject_reason": "ambiguous_or_missing_type",
+    "detail": "Other"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "F93772384",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-mangaladevi-mangalore-600-sqft-spid-F93772384",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — Mangalore has only 8 seeded areas, so this is a COVERAGE HOLE, distinct from a coordinate falling outside the city entirely"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "M92331888",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-matha-residency-haleyangady-haleangadi-mangalore-625-sqft-spid-M92331888",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "out_of_geography",
+    "detail": "(13.045959,74.797055)"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Y91804546",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-katlerigudda-bejai-mangalore-1282-sqft-spid-Y91804546",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — Mangalore has only 8 seeded areas, so this is a COVERAGE HOLE, distinct from a coordinate falling outside the city entirely"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "S83194186",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-gb-sai-sabhya-and-sai-aiesha-vamanjoor-mangalore-750-sqft-spid-S83194186",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — Mangalore has only 8 seeded areas, so this is a COVERAGE HOLE, distinct from a coordinate falling outside the city entirely"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "J90644956",
+    "source_url": "https://www.99acres.com/other-commercial-property-for-sale-in-gb-sai-sabhya-and-sai-aiesha-vamanjoor-mangalore-750-sqft-spid-J90644956",
+    "raw_property_type": "Other",
+    "reject_reason": "ambiguous_or_missing_type",
+    "detail": "Other"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "R92955400",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-chilimbi-mangalore-655-sqft-spid-R92955400",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — Mangalore has only 8 seeded areas, so this is a COVERAGE HOLE, distinct from a coordinate falling outside the city entirely"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "J93317402",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-shakti-nagar-mangalore-2904-sqyd-r1-spid-J93317402",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — Mangalore has only 8 seeded areas, so this is a COVERAGE HOLE, distinct from a coordinate falling outside the city entirely"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "R92775810",
+    "source_url": "https://www.99acres.com/other-commercial-property-for-sale-in-ullal-mangalore-8450-sqft-spid-R92775810",
+    "raw_property_type": "Other",
+    "reject_reason": "ambiguous_or_missing_type",
+    "detail": "Other"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "N93779660",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-neermarga-mangalore-140-sqyd-spid-N93779660",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — Mangalore has only 8 seeded areas, so this is a COVERAGE HOLE, distinct from a coordinate falling outside the city entirely"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "G94048310",
+    "source_url": "https://www.99acres.com/factory-for-sale-in-badagaulipady-mangalore-54250-sqft-spid-G94048310",
+    "raw_property_type": "Factory",
+    "reject_reason": "ambiguous_or_missing_type",
+    "detail": "Factory"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Q93722012",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-bangrakuloor-mangalore-1452-sqyd-spid-Q93722012",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — Mangalore has only 8 seeded areas, so this is a COVERAGE HOLE, distinct from a coordinate falling outside the city entirely"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "C40844507",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-kateel-mangalore-2904-sqyd-r3-spid-C40844507",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "not_commercial_family",
+    "detail": "Agricultural/Farm Land -> AGRICULTURAL"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Q93499112",
+    "source_url": "https://www.99acres.com/agricultural-farm-land-for-sale-in-nidhi-land-sharon-rose-mangalore-169402-sqyd-spid-Q93499112",
+    "raw_property_type": "Agricultural/Farm Land",
+    "reject_reason": "not_commercial_family",
+    "detail": "Agricultural/Farm Land -> AGRICULTURAL"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "X56550256",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-bajpe-mangalore-1585-sqft-r3-spid-X56550256",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — Mangalore has only 8 seeded areas, so this is a COVERAGE HOLE, distinct from a coordinate falling outside the city entirely"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "A93040594",
+    "source_url": "https://www.99acres.com/bare-shell-office-space-for-sale-in-garden-city-thokkttu-mangalore-280-sqft-spid-A93040594",
+    "raw_property_type": "Bare shell office space",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — Mangalore has only 8 seeded areas, so this is a COVERAGE HOLE, distinct from a coordinate falling outside the city entirely"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "C93045626",
+    "source_url": "https://www.99acres.com/other-commercial-property-for-sale-in-ballalbagh-mangalore-1000000-sqft-spid-C93045626",
+    "raw_property_type": "Other",
+    "reject_reason": "ambiguous_or_missing_type",
+    "detail": "Other"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "N78719635",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-kasba-bengre-mangalore-305-sqft-r2-spid-N78719635",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — Mangalore has only 8 seeded areas, so this is a COVERAGE HOLE, distinct from a coordinate falling outside the city entirely"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "U92390906",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-kotekani-mangalore-1597-sqyd-spid-U92390906",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — Mangalore has only 8 seeded areas, so this is a COVERAGE HOLE, distinct from a coordinate falling outside the city entirely"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "Q92038594",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-prakruthi-kankanady-mangalore-14520-sqyd-spid-Q92038594",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — Mangalore has only 8 seeded areas, so this is a COVERAGE HOLE, distinct from a coordinate falling outside the city entirely"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "H91602214",
+    "source_url": "https://www.99acres.com/shop-for-sale-in-urwa-mangalore-720-sqft-spid-H91602214",
+    "raw_property_type": "Commercial Shops",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — Mangalore has only 8 seeded areas, so this is a COVERAGE HOLE, distinct from a coordinate falling outside the city entirely"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "T91309832",
+    "source_url": "https://www.99acres.com/commercial-institutional-land-for-sale-in-kulur-mangalore-920-sqyd-spid-T91309832",
+    "raw_property_type": "Commercial Land/Inst. Land",
+    "reject_reason": "area_unresolved",
+    "detail": "unresolved: inside the city envelope but covered by no seeded area bbox — Mangalore has only 8 seeded areas, so this is a COVERAGE HOLE, distinct from a coordinate falling outside the city entirely"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "H90981718",
+    "source_url": "https://www.99acres.com/other-commercial-property-for-sale-in-urwa-market-mangalore-3000-sqft-spid-H90981718",
+    "raw_property_type": "Other",
+    "reject_reason": "ambiguous_or_missing_type",
+    "detail": "Other"
+  },
+  {
+    "source_platform": "99acres",
+    "source_listing_id": "H90497382",
+    "source_url": "https://www.99acres.com/ready-to-move-office-space-for-sale-in-lalbagh-mangalore-762-sqft-spid-H90497382",
+    "raw_property_type": "Ready to move office space",
+    "reject_reason": "out_of_geography",
+    "detail": "(0,0)"
+  }
+]

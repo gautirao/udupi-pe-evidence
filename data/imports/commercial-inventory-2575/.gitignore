@@ -1,0 +1,8 @@
+# adapter_99acres_commercial.py imports normalise_v2 and pii_filter from the sibling
+# udupi-properties-2304 directory, and test_adapter_99acres_commercial.py imports the adapter,
+# so running either by hand drops a __pycache__/ into this committed artefact directory.
+# The repo-root .gitignore's __pycache__ patterns are path-anchored to .claude/scripts/ and
+# scripts/geography/, so they do not cover this directory — same reason the 2304 directory
+# carries its own copy of this file.
+__pycache__/
+*.pyc
