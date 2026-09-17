@@ -3,7 +3,7 @@
 Before beginning execution on an issue lane (`mode3-run`), validate environment capabilities:
 
 1. **Skill Availability**:
-   - Confirm `quick`, `final-merge-reviewer`, and required specialist skills exist.
+   - Confirm `quick`, `pre-push-reviewer`, `code-reviewer`, `final-merge-reviewer`, and required specialist skills exist.
 2. **GitHub Access**:
    - Run `gh auth status` or verify GitHub CLI access.
 3. **Repository Cleanliness**:

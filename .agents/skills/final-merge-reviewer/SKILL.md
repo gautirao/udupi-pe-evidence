@@ -15,25 +15,32 @@ Refer to canonical rules in `.agents/contracts/`:
 - `merge-gate.md` (Merge gate invariants and authorization token)
 - `exact-head-contract.md` (Exact HEAD SHA verification)
 - `pr-workflow.md` (PR lifecycle compliance)
+- `reviewer-routing.md` (Consuming existing reviewer verdicts)
 
 ## Merge Authorization Invariant
 
-A PR MUST NOT be merged based on worker self-reports or gate verdicts alone.
+A PR MUST NOT be merged based on worker self-reports or pre-push local verdicts alone.
 The PR remains open until this reviewer inspects the **CURRENT exact HEAD SHA** and posts:
 
 `OWNER APPROVED TO MERGE`
 
 Any subsequent code push invalidates prior authorization and requires a fresh exact-head review.
 
-## Audit Checklist
-1. **Exact HEAD SHA Audit**: Confirm git HEAD on target remote branch matches reviewed commit SHA.
-2. **Definition of Done (DoD)**: Verify all DoD acceptance criteria from the issue description.
-3. **Review & Test Consolidation**: Confirm code, security, and UI/buyer verification reviews are clean (`PASS`).
-4. **Scope Compliance**: Confirm 0 unapproved file edits outside scope.
-5. **GitHub Mergeability**: Run `gh pr view <PR> --json mergeable` and confirm `MERGEABLE`.
+## Audit Protocol & Token Efficiency
+
+1. **Consume Existing Evidence**:
+   - Consume existing PR Code Reviewer, Security Reviewer, UI Reviewer, and Buyer Visibility Reviewer verdicts and test evidence.
+   - Investigate ONLY gaps, unverified claims, or contradictions between reviewer findings.
+2. **Audit Checklist**:
+   - Confirm exact HEAD SHA on target remote branch matches reviewed commit SHA.
+   - Verify DoD acceptance criteria from issue description.
+   - Confirm all required specialist PR reviews passed (`PASS`).
+   - Confirm 0 unapproved file edits outside scope.
+   - Confirm GitHub mergeability (`gh pr view <PR> --json mergeable`).
 
 ## PR Post & Verdict
 Post review verdict comment on GitHub PR (`gh pr comment <PR>`):
+- Identification: `Reviewer: Final Merge Reviewer`
 - Exact HEAD SHA audited
 - DoD Checklist Status
 - GitHub Mergeability: `MERGEABLE`

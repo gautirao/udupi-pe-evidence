@@ -7,25 +7,39 @@ Whenever the user asks to work on an issue, bug, feature, or PR (e.g. `work on <
 1. **Default PR-First Workflow**:
    - Every code issue runs in an isolated worktree (`/Users/gouthamrao/projects/udupi-property-explorer-worktrees/lane-<issue#>`) and branch (`fix/...`, `feat/...`, `chore/...`).
    - Open a Draft PR early (`gh pr create --draft`). Use the PR as the sole durable execution channel.
-   - Refer to shared contracts in `.agents/contracts/` (`pr-workflow.md`, `worktree-contract.md`, `exact-head-contract.md`, `merge-gate.md`, `reviewer-routing.md`, `lane-ledger.md`, `startup-check.md`).
+   - Refer to shared contracts in `.agents/contracts/` (`pr-workflow.md`, `worktree-contract.md`, `pre-push-review-contract.md`, `exact-head-contract.md`, `merge-gate.md`, `reviewer-routing.md`, `lane-ledger.md`, `startup-check.md`).
 
-2. **Token Efficiency & Progressive Disclosure**:
+2. **Inner-Loop Pre-Push Review**:
+   - Implementation engineer works locally in working tree.
+   - Dispatch `pre-push-reviewer` to audit `git diff` before commit/push.
+   - Engineer fixes findings locally; reviewer re-audits fix delta until `CLEAN FOR COMMIT`.
+   - Engineer MUST NOT commit or push until `CLEAN FOR COMMIT` is issued (unless remote CI/preview is required).
+
+3. **Separate Independent PR Reviewers**:
+   - PR Code Reviewer audits pushed exact HEAD on GitHub PR and identifies as:
+     `Reviewer: PR Code Reviewer`
+     `Exact HEAD: <sha>`
+   - `CLEAN FOR COMMIT` is local pre-push certification only and is NEVER treated as PR approval.
+
+4. **Token Efficiency & Progressive Disclosure**:
    - Load only skills/contracts required for current stage.
-   - Use delta-based context (`A..B` diff) when re-evaluating follow-up commits.
+   - Pre-push reviewer starts from working-tree diff; rechecks fix deltas.
+   - PR reviewers do not repeat resolved trivial inner-loop findings.
+   - Final merge reviewer consumes existing verdicts/evidence and investigates only gaps/contradictions.
    - Maintain compact `lane-ledger` state records instead of re-reading full histories.
    - Subagents return compact reports (`status`, `exact_HEAD`, `findings`, `evidence`, `blockers`, `next_action`).
 
-3. **Owner Interruption Policy**:
+5. **Owner Interruption Policy**:
    - Never stop for questions answerable from issue descriptions, code, tests, or existing architecture.
    - Interrupt owner ONLY for material architectural boundary changes, destructive production mutations, or legal/cost decisions.
    - Format decision requests cleanly on PR as `Decision required — <short title>`.
 
-4. **Merge Authorization & Autonomous Merging**:
+6. **Merge Authorization & Autonomous Merging**:
    - Implementation workers NEVER self-certify or merge.
    - Final reviewer MUST inspect current exact HEAD SHA and post `OWNER APPROVED TO MERGE`.
    - Once authorized, verify exact HEAD == PR HEAD, clean tests, served UI evidence (if applicable), and GitHub `MERGEABLE`, then execute autonomous merge (`gh pr merge --squash --delete-branch`) without waiting for owner prompt.
 
-5. **Post-Merge Verification**:
+7. **Post-Merge Verification**:
    - For buyer-visible bugs/features or production-sensitive behavior, automatically run post-merge verification (`post-merge-verifier`).
    - Post `POST-MERGE VERIFIED` or `POST-MERGE REGRESSION FOUND`.
 
