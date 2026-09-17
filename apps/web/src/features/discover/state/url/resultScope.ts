@@ -32,6 +32,7 @@ import { useCallback, useMemo } from 'react';
 import type { UrlDomainCtx, UrlDomainModule } from './_shared';
 import type { DiscoverUrlActions, DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import type { ResultScope } from '@/features/discover/state/resultScope';
+import { isAreaKeyMatchingCity } from '@/lib/localityUtils';
 
 const LAT_LON_PRECISION = 5;
 const MAX_POLYGON_VERTICES = 40;
@@ -45,10 +46,11 @@ function encodeAreaSet(areaKeys: string[]): string {
   return areaKeys.join(',');
 }
 
-function decodeAreaSet(raw: string | null): Extract<ResultScope, { kind: 'AREA_SET' }> | null {
+function decodeAreaSet(raw: string | null, city?: string | null): Extract<ResultScope, { kind: 'AREA_SET' }> | null {
   if (!raw) return null;
   const areaKeys = raw.split(',').map((s) => s.trim()).filter(Boolean);
-  return areaKeys.length > 0 ? { kind: 'AREA_SET', areaKeys } : null;
+  const validAreaKeys = city ? areaKeys.filter((k) => isAreaKeyMatchingCity(k, city)) : areaKeys;
+  return validAreaKeys.length > 0 ? { kind: 'AREA_SET', areaKeys: validAreaKeys } : null;
 }
 
 function encodePolygon(coordinates: [number, number][]): string {
@@ -100,13 +102,13 @@ function encodeForPrev(scope: NonNullResultScope): string {
   }
 }
 
-function decodePrev(raw: string | null): ResultScope {
+function decodePrev(raw: string | null, city?: string | null): ResultScope {
   if (!raw) return null;
   const sep = raw.indexOf(':');
   if (sep < 0) return null;
   const kind = raw.slice(0, sep);
   const payload = raw.slice(sep + 1);
-  if (kind === 'areas') return decodeAreaSet(payload);
+  if (kind === 'areas') return decodeAreaSet(payload, city);
   if (kind === 'poly') return decodePolygon(payload);
   if (kind === 'vp') return decodeViewport(payload);
   return null;
@@ -128,20 +130,22 @@ function deriveActiveScope(
   rareas: string | null,
   rpoly: string | null,
   rvp: string | null,
+  city?: string | null,
 ): ResultScope {
-  if (rscope === 'areas') return decodeAreaSet(rareas);
+  if (rscope === 'areas') return decodeAreaSet(rareas, city);
   if (rscope === 'poly') return decodePolygon(rpoly);
   if (rscope === 'vp') return decodeViewport(rvp);
   return null;
 }
 
 /** Write-time convenience wrapper over `deriveActiveScope` for a live URLSearchParams. */
-function readActiveScope(urlParams: URLSearchParams): ResultScope {
+function readActiveScope(urlParams: URLSearchParams, city?: string | null): ResultScope {
   return deriveActiveScope(
     urlParams.get('rscope'),
     urlParams.get('rareas'),
     urlParams.get('rpoly'),
     urlParams.get('rvp'),
+    city || urlParams.get('city'),
   );
 }
 
@@ -204,10 +208,10 @@ export function useResultScopeUrlDomain(
   const rvp = urlParams.get('rvp');
   const rprev = urlParams.get('rprev');
   const active = useMemo(
-    () => deriveActiveScope(rscope, rareas, rpoly, rvp),
-    [rscope, rareas, rpoly, rvp],
+    () => deriveActiveScope(rscope, rareas, rpoly, rvp, ctx.reads.city),
+    [rscope, rareas, rpoly, rvp, ctx.reads.city],
   );
-  const previous = useMemo(() => decodePrev(rprev), [rprev]);
+  const previous = useMemo(() => decodePrev(rprev, ctx.reads.city), [rprev, ctx.reads.city]);
 
   const commitResultScope = useCallback(
     (scope: ResultScope, opts?: { history: 'push' | 'replace' }) => {

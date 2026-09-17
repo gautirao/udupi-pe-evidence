@@ -20,6 +20,8 @@ import type {
   DiscoverUrlActions,
   DiscoverUrlState,
 } from '@/hooks/useDiscoverUrlState';
+import { clearNodeParam } from './navigation';
+import { applyResultScopeCommit } from './resultScope';
 
 type CityState = Pick<DiscoverUrlState, 'city' | 'intent'>;
 type CityActions = Pick<DiscoverUrlActions, 'changeCity' | 'setCity' | 'setIntent' | 'setScope'>;
@@ -47,6 +49,9 @@ export function useCityUrlDomain(ctx: UrlDomainCtx): UrlDomainModule<CityState, 
           next.delete('lat');
           next.delete('lon');
           next.delete('zoom');
+          clearNodeParam(next);
+          applyResultScopeCommit(next, null);
+          next.delete('rprev');
           return next;
         },
         { replace: false }, // PUSH — city is a major navigation destination
@@ -78,6 +83,9 @@ export function useCityUrlDomain(ctx: UrlDomainCtx): UrlDomainModule<CityState, 
           next.delete('lat');
           next.delete('lon');
           next.delete('zoom');
+          clearNodeParam(next);
+          applyResultScopeCommit(next, null);
+          next.delete('rprev');
           return next;
         },
         { replace: false }, // PUSH — city switch is a major navigation destination

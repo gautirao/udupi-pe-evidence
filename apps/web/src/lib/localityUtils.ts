@@ -21,6 +21,8 @@ export const LOCALITY_CAP = 3;
 /** Maps the district segment (pipe-index 2) of an areaKey to its URL city slug. */
 export const DISTRICT_TO_CITY_SLUG: Record<string, string> = {
   Bengaluru: 'bangalore',
+  Bangalore: 'bangalore',
+  'Bangalore Urban': 'bangalore',
   Kundapur: 'kundapur',
   Mangalore: 'mangalore',
   Udupi: 'udupi',
@@ -43,6 +45,24 @@ const DISTRICT_TO_CITY_SLUG_FOLDED: Readonly<Record<string, string>> = Object.fr
 export function districtToCitySlug(district: string | null | undefined): string | undefined {
   if (!district) return undefined;
   return DISTRICT_TO_CITY_SLUG_FOLDED[district.toLowerCase()];
+}
+
+/**
+ * Check if a canonical areaKey (e.g. "IN|KA|Bengaluru|Hebbal" or "a:IN|KA|Udupi|Manipal")
+ * belongs to the specified city slug (e.g. "bangalore" or "udupi").
+ * Returns true if the key is empty, unparsed, or matches the city slug.
+ */
+export function isAreaKeyMatchingCity(areaKey: string | null | undefined, citySlug: string | null | undefined): boolean {
+  if (!areaKey || !citySlug) return true;
+  const key = areaKey.startsWith('a:') ? areaKey.slice(2) : areaKey;
+  const parts = key.split('|');
+  if (parts.length >= 3) {
+    const derivedCity = districtToCitySlug(parts[2]);
+    if (derivedCity && derivedCity !== citySlug.toLowerCase()) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // === Shared Locality Toggle ===
