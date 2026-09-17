@@ -34,11 +34,15 @@ Whenever the user asks to work on an issue, bug, feature, or PR (e.g. `work on <
    - Interrupt owner ONLY for material architectural boundary changes, destructive production mutations, or legal/cost decisions.
    - Format decision requests cleanly on PR as `Decision required — <short title>`.
 
-6. **Merge Authorization & Autonomous Merging**:
-   - Implementation workers and reviewer subagents NEVER self-certify or synthesize owner merge approval.
-   - `final-merge-reviewer` inspects current exact HEAD SHA, DoD, test evidence, and PR mergeability, and posts `READY_FOR_OWNER_MERGE_AUTHORIZATION`.
-   - Merge authorization requires an explicit top-level GitHub comment authored by the project owner containing `OWNER_APPROVED_TO_MERGE head:<full-current-sha>`.
-   - Once authorized, verify exact HEAD == PR HEAD, clean tests, served UI evidence (if applicable), and GitHub `MERGEABLE`, then execute autonomous merge (`gh pr merge --squash --delete-branch`) without waiting for owner prompt.
+6. **Merge Authorization & Autonomous Merging Rules**:
+   - **Human-Only Owner Approval Token**: AGY, subagents, reviewers, final reviewers, and orchestrators MUST NEVER emit `OWNER_APPROVED_TO_MERGE` or any agent-generated equivalents ("owner approved", "approved by owner", "owner authorization granted"). The token `OWNER_APPROVED_TO_MERGE` is reserved EXCLUSIVELY for an explicit message from the human owner in the active conversation or GitHub PR comments. AGY agents may only emit `READY_FOR_OWNER_APPROVAL` or, for buyer-visible UI work, `READY_FOR_OWNER_VISUAL_APPROVAL` (which are NOT merge authorization).
+   - **Hard Block on PARTIAL / BLOCK / REQUEST_CHANGES**: Merge is strictly prohibited if ANY applicable reviewer on the CURRENT exact HEAD has `PARTIAL`, `BLOCK`, `REQUEST_CHANGES`, `FAIL`, `NEEDS_WORK`, `*_PENDING` or unresolved equivalent findings. A later reviewer `PASS` does NOT erase another reviewer's unresolved `PARTIAL` or `BLOCK`. Any contradiction between reviewers is a `REVIEW_STATE_CONTRADICTION` and must fail the merge gate.
+   - **UI / Visual Changes Require Human Visual Approval**: For any material buyer-visible UI change (reskin, layout, spacing, typography, marker/card redesign, responsive layout, visual hierarchy, interaction affordances, mobile presentation), AGY MUST STOP before merge, deploy preview, publish GitHub-visible visual evidence (approved mock, BEFORE, AFTER, mobile AFTER, selected/hover states, preview URL, exact HEAD), post `READY_FOR_OWNER_VISUAL_APPROVAL`, and WAIT for explicit human owner visual approval. No timeout, inference, reviewer PASS, silence, or previous approval may substitute.
+   - **Head-Bound Owner Approval**: Owner approval is bound strictly to the exact HEAD SHA. Any code-changing push invalidates it (`OWNER APPROVAL = STALE`), requiring new visual evidence + new owner approval.
+   - **Visual Evidence Contract**: Evidence must be visible on GitHub PR (mock ref, BEFORE screenshot, AFTER screenshot, same route/scenario/viewport, mobile AFTER, selected/hover states, preview URL, exact HEAD). Local file paths or prose statements are NOT sufficient.
+   - **Visual Reviewer Role**: The visual reviewer (`ui-reviewer`) is an evidence/difference verifier comparing MOCK vs BEFORE vs AFTER (verdicts: `VISUAL_MATCH`, `VISUAL_MISMATCH`, `PARTIAL`). It cannot authorize merge.
+   - **Final Merge Reviewer Role**: Verifies exact HEAD SHA, zero unresolved blockers, all applicable reviews PASS/MATCH, CI state, visual evidence, and human owner approval. For UI work, it emits `READY_TO_MERGE` ONLY AFTER explicit human owner visual approval is recorded for current exact HEAD. It MUST NEVER emit `OWNER_APPROVED_TO_MERGE` itself.
+   - **Merge Authority**: Non-UI work allows normal autonomous merge after all required independent reviews pass. Material UI work allows autonomous merge ONLY AFTER actual human visual approval is observed for current exact HEAD.
 
 7. **Post-Merge Verification**:
    - For buyer-visible bugs/features or production-sensitive behavior, automatically run post-merge verification (`post-merge-verifier`).

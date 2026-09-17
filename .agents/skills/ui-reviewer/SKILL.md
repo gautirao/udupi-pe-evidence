@@ -2,31 +2,45 @@
 name: ui-reviewer
 description: >-
   Independent UI design & visual parity review subagent for inspecting frontend component changes,
-  design system compliance, layout/CSS parity against served mockups/UI kits, and verifying before/after
-  visual evidence.
+  comparing approved mockups against served BEFORE and AFTER states, listing concrete visual differences,
+  and posting verdicts (VISUAL_MATCH, VISUAL_MISMATCH, PARTIAL).
 ---
 
-# UI Reviewer Skill (`ui-reviewer`)
+# UI Visual Reviewer Skill (`ui-reviewer`)
 
-Independent UI, design system, and visual parity reviewer for pull requests.
+Independent visual evidence and difference verifier for UI pull requests.
+
+## Role & Boundaries
+- The visual reviewer is an **EVIDENCE and DIFFERENCE verifier**, NOT an owner proxy.
+- It compares: `APPROVED MOCK` vs `BEFORE` vs `AFTER`.
+- It reports concrete visual matches and mismatches.
+- It CANNOT authorize merge.
 
 ## Shared Contracts
 Refer to canonical rules in `.agents/contracts/`:
 - `exact-head-contract.md` (Exact HEAD SHA audit)
+- `reviewer-routing.md` (Visual reviewer role & verdict contract)
 
-## Audit Checklist
-1. **Design System Alignment**:
-   - Compare UI components against mockups and design system specifications.
-   - Check exact colors, spacing, padding, radii, font sizes, badges, and layout bounds.
-2. **Visual Evidence**:
-   - Verify before/after screenshot or visual evidence attached to PR.
-3. **Responsive & Interaction Bounds**:
-   - Check mobile, tablet, and desktop viewports.
-   - Verify focus states, hover states, empty states, and loading indicators.
+## Audit Protocol & Visual Evidence Checklist
+1. **Three-Way Visual Comparison**:
+   - Compare `APPROVED MOCK` vs `BEFORE` (current main/served) vs `AFTER` (exact HEAD build).
+   - Check desktop (16:9 1920x1080 / 1440x900) and mobile/narrow viewports.
+   - Check default state, selected state, hover/focus states, empty states, and layout hierarchy.
+2. **Difference Breakdown**:
+   - Explicitly list `MATCH` areas (e.g. primary journey hierarchy, Buy/Rent switch).
+   - Explicitly list `MISMATCH` areas (e.g. marker cards remain dark rather than approved light-card treatment, spacing around search controls, typography bounds).
+3. **Evidence Requirement**:
+   - Verify all screenshots and preview links are published directly on GitHub PR comments.
+   - Local filesystem paths (e.g. `/Users/.../after.png`) or prose statements are strictly invalid evidence.
 
 ## PR Post & Verdict
 Post UI review comment on GitHub PR (`gh pr comment <PR>`):
+- Identification: `Reviewer: UI Visual Reviewer`
 - Exact HEAD SHA audited
-- Visual Evidence Checked: `VERIFIED`
-- Design System Alignment Findings
-- Verdict: `PASS` | `REQUEST CHANGES`
+- Visual Comparison Table (`APPROVED MOCK` vs `BEFORE` vs `AFTER`)
+- MATCH Breakdown List
+- MISMATCH Breakdown List
+- **Mandatory Verdict**:
+  - `VISUAL_MATCH` (all visual elements match approved design mock exactly across all viewports/states)
+  - `VISUAL_MISMATCH` (material visual discrepancies or incorrect layouts remain)
+  - `PARTIAL` (some approved mock elements implemented, but key visual gaps remain)

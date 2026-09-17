@@ -16,6 +16,7 @@ Refer to canonical rules in `.agents/contracts/`:
 - `pre-push-review-contract.md` (Pre-push inner review loop)
 - `pr-workflow.md` (Early draft PR & durable channel)
 - `exact-head-contract.md` (HEAD SHA commitment)
+- `merge-gate.md` (Human-only approval token rule & visual gate)
 
 ## Execution Protocol
 
@@ -29,18 +30,21 @@ Refer to canonical rules in `.agents/contracts/`:
    - Fix any reported findings locally; repeat until orchestrator returns `CLEAN FOR COMMIT`.
 5. **Commit & Push**:
    - Do NOT commit or push until `CLEAN FOR COMMIT` is received from orchestrator.
-   - Commit (`git commit -m "fix(...): ... (#<issue#>)"`) and push to remote branch.
+   - Commit (`git commit -m "... (#<issue#>)"`) and push to remote branch.
    - Mark PR ready for review (`gh pr ready <PR>`).
    - Post exact HEAD SHA, root cause, test evidence, and served UI screenshots (if applicable) to PR.
-6. **Compact Status Report**:
+6. **Visual Evidence & Owner Approval Gate (Material UI Work)**:
+   - For material UI tasks, publish full visual evidence (mock, BEFORE, AFTER, mobile AFTER, selected/hover states, preview URL, exact HEAD) to GitHub PR.
+   - Stop and report `READY_FOR_OWNER_VISUAL_APPROVAL`. Do NOT attempt to merge or emit `OWNER_APPROVED_TO_MERGE`.
+7. **Compact Status Report**:
    Return concise report to orchestrator:
    ```yaml
-   status: READY_FOR_REVIEW
+   status: READY_FOR_REVIEW | READY_FOR_OWNER_VISUAL_APPROVAL
    pre_push_verdict: CLEAN FOR COMMIT
    exact_HEAD: <sha>
    findings: <short-summary>
    evidence: <test-results-or-link>
    blockers: NONE
-   next_action: DISPATCH_PR_REVIEWERS
+   next_action: DISPATCH_PR_REVIEWERS | AWAIT_HUMAN_VISUAL_APPROVAL
    ```
-7. **Stop Boundary**: Do NOT merge or self-certify. Stop at independent PR review boundary.
+8. **Stop Boundary**: Do NOT merge or self-certify. Stop at independent PR review boundary or human owner visual approval gate.

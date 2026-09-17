@@ -4,7 +4,8 @@ description: >-
   Orchestrate single or multiple issue lanes end-to-end. Default PR-first workflow for any code issue.
   Manages isolated worktrees, delegates implementation to quick, executes pre-push review loops until CLEAN FOR COMMIT,
   monitors progress via lane ledger, routes decisions via PR, dispatches parallel risk-based PR reviewers,
-  enforces exact-HEAD loops, awaits OWNER_APPROVED_TO MERGE token, autonomously merges, and triggers post-merge verification.
+  enforces exact-HEAD loops, enforces hard blocks on PARTIAL/BLOCK, manages human owner visual approval gate,
+  autonomously merges when authorized, and triggers post-merge verification.
 ---
 
 # Mode-3 Orchestrator Skill (`mode3-run <issue#>`)
@@ -19,7 +20,7 @@ Refer to canonical rules in `.agents/contracts/`:
 - `exact-head-contract.md` (HEAD commitment & invalidation)
 - `merge-gate.md` (Merge authorization gate & owner token requirement)
 - `reviewer-routing.md` (Risk-based parallel reviewer matrix)
-- `lane-ledger.md` (Compact state tracking)
+- `lane-ledger.md` (Compact state tracking & reviewer matrix)
 - `startup-check.md` (Pre-flight validation)
 
 ## Orchestration Sequence
@@ -50,24 +51,42 @@ Refer to canonical rules in `.agents/contracts/`:
    Finding: | Existing contract: | Evidence: | Options: | Recommended: | Impact:
    ```
 
-### Phase 3: Risk-Based PR Reviewer Routing
+### Phase 3: Risk-Based PR Reviewer Routing & State Ledger
 When worker pushes commit at exact HEAD:
 1. Mark PR ready (`gh pr ready <PR>`).
 2. Select and dispatch applicable independent PR reviewers in parallel according to `reviewer-routing.md`.
-3. `code-reviewer` identifies as `Reviewer: PR Code Reviewer`, `Exact HEAD: <sha>`.
+3. Update `lane-ledger` reviewer matrix with incoming reviewer verdicts.
+4. **Hard Block Enforcement**: If ANY reviewer reports `PARTIAL`, `BLOCK`, `REQUEST_CHANGES`, `FAIL`, `NEEDS_WORK`, or `*_PENDING`, `lane-ledger` merge state MUST evaluate to `BLOCKED`. A subsequent `PASS` from another reviewer does NOT erase an unresolved `PARTIAL`/`BLOCK`.
+5. **Contradiction Check**: Scan current-head reviewer verdicts. If contradictions exist (e.g. `PASS` vs `PARTIAL`), set `Contradiction check: REVIEW_STATE_CONTRADICTION` and do NOT choose optimistic results.
 
-### Phase 4: Review Loop & Owner Merge Authorization Gate
-1. If any PR reviewer requests changes:
-   - Worker fixes locally -> orchestrator invokes `pre-push-reviewer` for `CLEAN FOR COMMIT` -> worker commits and pushes new HEAD.
-   - Previous PR reviews are invalidated; dispatch fresh exact-HEAD PR review (using delta A..B evaluation).
-2. When `final-merge-reviewer` posts `READY_FOR_OWNER_MERGE_AUTHORIZATION`:
-   - Await explicit owner top-level comment on GitHub PR containing:
-     `OWNER_APPROVED_TO_MERGE head:<full-current-sha>`
-3. Upon receiving owner authorization comment:
-   - Verify owner-approved HEAD SHA matches current remote PR HEAD SHA.
+### Phase 4: Visual Evidence & Owner Approval Gate (Material UI Tasks)
+1. If the PR involves material buyer-visible UI changes:
+   - Deploy exact HEAD preview URL.
+   - Publish full GitHub-visible visual evidence on PR (approved mock reference, BEFORE screenshot, AFTER screenshot, same route/scenario/viewport, mobile AFTER, selected/hover states, preview URL, exact HEAD). Local file paths or prose statements are prohibited.
+   - Post exact format to owner:
+     ```
+     READY_FOR_OWNER_VISUAL_APPROVAL
+     Issue: #<issue#>
+     PR: #<pr#>
+     Exact HEAD: <sha>
+     Preview: <url>
+     Visual evidence: <links>
+     Remaining known differences from mock: <NONE or explicit list>
+     ```
+   - **STOP Execution & Await Human Owner Visual Approval**.
+   - NEVER emit `OWNER_APPROVED_TO_MERGE` or agent-synthesized approval tokens.
+
+### Phase 5: Final Merge Review & Autonomous Merge
+1. Once all independent reviewers pass (or visual approval is granted for UI tasks):
+   - Dispatch `final-merge-reviewer`.
+   - For non-UI work: `final-merge-reviewer` emits `READY_FOR_OWNER_APPROVAL`.
+   - For material UI work: `final-merge-reviewer` verifies human owner visual approval for current exact HEAD, then emits `READY_TO_MERGE`.
+2. Merge Execution:
+   - Verify `lane-ledger` merge state is clean with zero unresolved blockers and zero contradictions.
+   - Verify remote PR HEAD SHA matches approved exact HEAD SHA.
    - Confirm GitHub reports `MERGEABLE`.
-   - Execute autonomous merge (`gh pr merge <PR> --squash --delete-branch`).
+   - Execute autonomous squash merge (`gh pr merge <PR> --squash --delete-branch`).
 
-### Phase 5: Post-Merge Verification & Close
+### Phase 6: Post-Merge Verification & Close
 1. If issue is buyer-visible or production-sensitive, dispatch `post-merge-verifier`.
 2. Post final summary and close issue.
