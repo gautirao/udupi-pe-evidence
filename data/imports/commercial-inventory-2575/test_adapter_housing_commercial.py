@@ -131,6 +131,41 @@ def run_cases():
           "sellerName" not in san and "sellerId" not in san and "sellerProfileUrl" not in san,
           f"remaining keys: {list(san.keys())}")
 
+    # 6b. City-Scoped Canonical Area Resolution (HSR Layout, JP Nagar, Koramangala in Bengaluru; Manipal, Kundapura in Udupi; Ashok Nagar in Bengaluru vs Udupi; ITPL in Bengaluru vs Udupi; unmatched)
+    test_area_cases = [
+        ("Bengaluru", "HSR Layout", "IN|KA|Bengaluru|HSR Layout", "HSR Layout", "RESOLVED", "CANONICAL_KEY"),
+        ("Bengaluru", "JP Nagar", "IN|KA|Bengaluru|JP Nagar", "JP Nagar", "RESOLVED", "CANONICAL_KEY"),
+        ("Bengaluru", "Koramangala", "IN|KA|Bengaluru|Koramangala", "Koramangala", "RESOLVED", "CANONICAL_KEY"),
+        ("Udupi", "Manipal", "IN|KA|Udupi|Manipal", "Manipal", "RESOLVED", "CANONICAL_KEY"),
+        ("Udupi", "Kundapura", "IN|KA|Udupi|Kundapura", "Kundapura", "RESOLVED", "CANONICAL_KEY"),
+        ("Bengaluru", "ITPL", "IN|KA|Bengaluru|Whitefield", "Whitefield", "RESOLVED", "ALIAS"),
+        ("Udupi", "ITPL", None, None, "UNRESOLVED", None),
+        ("Bengaluru", "Ashok Nagar", "IN|KA|Bengaluru|Ashok Nagar", "Ashok Nagar", "RESOLVED", "CANONICAL_KEY"),
+        ("Udupi", "Ashok Nagar", "IN|KA|Udupi|Ashok Nagar", "Ashok Nagar", "RESOLVED", "CANONICAL_KEY"),
+        ("Bengaluru", "Unknown Locality XYZ", None, None, "UNRESOLVED", None),
+    ]
+
+    for city, loc, exp_key, exp_lbl, exp_status, exp_method in test_area_cases:
+        # Test direct resolve_canonical_area call
+        direct_res = H.resolve_canonical_area(city, loc)
+        check(f"resolve_canonical_area('{city}', '{loc}') -> status={exp_status}",
+              direct_res["area_key"] == exp_key
+              and direct_res["area_label"] == exp_lbl
+              and direct_res["area_resolution_status"] == exp_status
+              and direct_res["area_resolution_method"] == exp_method,
+              f"got key={direct_res.get('area_key')} status={direct_res.get('area_resolution_status')}")
+
+        # Test build_candidate with city and locality
+        cand_area, _ = H.build_candidate(_synthetic(sourceListingId=f"AREA-{city}-{loc}", city=city, locality=loc))
+        check(f"build_candidate with city='{city}', locality='{loc}' -> area_key={exp_key}, status={exp_status}",
+              cand_area is not None
+              and cand_area["area_key"] == exp_key
+              and cand_area["area_label"] == exp_lbl
+              and cand_area["area_resolution_status"] == exp_status
+              and cand_area["area_resolution_method"] == exp_method,
+              f"got key={cand_area.get('area_key') if cand_area else None} status={cand_area.get('area_resolution_status') if cand_area else None}")
+
+
     # 7. Count reconciliation & end-to-end adapter main() invocation on synthetic files
     with tempfile.TemporaryDirectory() as tmpdir:
         comm_path = os.path.join(tmpdir, "commercial.jsonl")

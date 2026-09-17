@@ -135,6 +135,132 @@ def reject(record, reason, detail=None):
     }
 
 
+# Active Canonical Areas mapping: (city_normalised, locality_lower) -> (area_key, area_label)
+# Sourced from DB / migrations (public.areas where lifecycle_status = 'ACTIVE').
+CANONICAL_AREAS = {
+    # Bengaluru
+    ("Bengaluru", "hsr layout"): ("IN|KA|Bengaluru|HSR Layout", "HSR Layout"),
+    ("Bengaluru", "jp nagar"): ("IN|KA|Bengaluru|JP Nagar", "JP Nagar"),
+    ("Bengaluru", "koramangala"): ("IN|KA|Bengaluru|Koramangala", "Koramangala"),
+    ("Bengaluru", "indiranagar"): ("IN|KA|Bengaluru|Indiranagar", "Indiranagar"),
+    ("Bengaluru", "whitefield"): ("IN|KA|Bengaluru|Whitefield", "Whitefield"),
+    ("Bengaluru", "electronic city"): ("IN|KA|Bengaluru|Electronic City", "Electronic City"),
+    ("Bengaluru", "jayanagar"): ("IN|KA|Bengaluru|Jayanagar", "Jayanagar"),
+    ("Bengaluru", "rajajinagar"): ("IN|KA|Bengaluru|Rajajinagar", "Rajajinagar"),
+    ("Bengaluru", "marathahalli"): ("IN|KA|Bengaluru|Marathahalli", "Marathahalli"),
+    ("Bengaluru", "yelahanka"): ("IN|KA|Bengaluru|Yelahanka", "Yelahanka"),
+    ("Bengaluru", "hebbal"): ("IN|KA|Bengaluru|Hebbal", "Hebbal"),
+    ("Bengaluru", "banashankari"): ("IN|KA|Bengaluru|Banashankari", "Banashankari"),
+    ("Bengaluru", "bellandur"): ("IN|KA|Bengaluru|Bellandur", "Bellandur"),
+    ("Bengaluru", "sarjapur road"): ("IN|KA|Bengaluru|Sarjapur Road", "Sarjapur Road"),
+    ("Bengaluru", "begur"): ("IN|KA|Bengaluru|Begur", "Begur"),
+    ("Bengaluru", "bommanahalli"): ("IN|KA|Bengaluru|Bommanahalli", "Bommanahalli"),
+    ("Bengaluru", "varthur"): ("IN|KA|Bengaluru|Varthur", "Varthur"),
+    ("Bengaluru", "k r puram"): ("IN|KA|Bengaluru|K R Puram", "K R Puram"),
+    ("Bengaluru", "kr puram"): ("IN|KA|Bengaluru|K R Puram", "K R Puram"),
+    ("Bengaluru", "thanisandra"): ("IN|KA|Bengaluru|Thanisandra", "Thanisandra"),
+    ("Bengaluru", "ashok nagar"): ("IN|KA|Bengaluru|Ashok Nagar", "Ashok Nagar"),
+
+    # Udupi
+    ("Udupi", "manipal"): ("IN|KA|Udupi|Manipal", "Manipal"),
+    ("Udupi", "kundapura"): ("IN|KA|Udupi|Kundapura", "Kundapura"),
+    ("Udupi", "kundapur"): ("IN|KA|Udupi|Kundapura", "Kundapura"),
+    ("Udupi", "santhekatte"): ("IN|KA|Udupi|Santhekatte", "Santhekatte"),
+    ("Udupi", "brahmagiri"): ("IN|KA|Udupi|Brahmagiri", "Brahmagiri"),
+    ("Udupi", "kinnimulki"): ("IN|KA|Udupi|Kinnimulki", "Kinnimulki"),
+    ("Udupi", "kuthpady"): ("IN|KA|Udupi|Kuthpady", "Kuthpady"),
+    ("Udupi", "ambagilu"): ("IN|KA|Udupi|Ambagilu", "Ambagilu"),
+    ("Udupi", "adi-udupi"): ("IN|KA|Udupi|Adi-Udupi", "Adi-Udupi"),
+    ("Udupi", "adi udupi"): ("IN|KA|Udupi|Adi-Udupi", "Adi-Udupi"),
+    ("Udupi", "udupi"): ("IN|KA|Udupi|Udupi", "Udupi"),
+    ("Udupi", "brahmavar"): ("IN|KA|Udupi|Brahmavar", "Brahmavar"),
+    ("Udupi", "katapadi"): ("IN|KA|Udupi|Katapadi", "Katapadi"),
+    ("Udupi", "katapady"): ("IN|KA|Udupi|Katapadi", "Katapadi"),
+    ("Udupi", "malpe"): ("IN|KA|Udupi|Malpe", "Malpe"),
+    ("Udupi", "saligrama"): ("IN|KA|Udupi|Saligrama", "Saligrama"),
+    ("Udupi", "padubidri"): ("IN|KA|Udupi|Padubidri", "Padubidri"),
+    ("Udupi", "shirva"): ("IN|KA|Udupi|Shirva", "Shirva"),
+    ("Udupi", "kaup"): ("IN|KA|Udupi|Kaup", "Kaup"),
+    ("Udupi", "kapu"): ("IN|KA|Udupi|Kaup", "Kaup"),
+    ("Udupi", "kunjibettu"): ("IN|KA|Udupi|Kunjibettu", "Kunjibettu"),
+    ("Udupi", "ashok nagar"): ("IN|KA|Udupi|Ashok Nagar", "Ashok Nagar"),
+
+    # Mangalore
+    ("Mangalore", "kadri"): ("IN|KA|Mangalore|Kadri", "Kadri"),
+    ("Mangalore", "attavar"): ("IN|KA|Mangalore|Attavar", "Attavar"),
+    ("Mangalore", "balmatta"): ("IN|KA|Mangalore|Balmatta", "Balmatta"),
+    ("Mangalore", "hampankatta"): ("IN|KA|Mangalore|Hampankatta", "Hampankatta"),
+    ("Mangalore", "pumpwell"): ("IN|KA|Mangalore|Pumpwell", "Pumpwell"),
+    ("Mangalore", "kankanady"): ("IN|KA|Mangalore|Kankanady", "Kankanady"),
+    ("Mangalore", "surathkal"): ("IN|KA|Mangalore|Surathkal", "Surathkal"),
+    ("Mangalore", "falnir"): ("IN|KA|Mangalore|Falnir", "Falnir"),
+}
+
+# Approved aliases in public.area_alias -> (city_normalised, locality_lower) -> (area_key, area_label)
+CANONICAL_ALIASES = {
+    ("Bengaluru", "itpl"): ("IN|KA|Bengaluru|Whitefield", "Whitefield"),
+    ("Mangalore", "kadri hills"): ("IN|KA|Mangalore|Kadri", "Kadri"),
+}
+
+
+def resolve_canonical_area(city, locality):
+    """Resolve city and locality against ACTIVE canonical areas and approved aliases.
+
+    Resolution is strictly city-scoped, keyed by (city_normalised, locality_lower).
+    Returns dict with area_key, area_label, area_resolution_status, area_resolution_method, area_resolution_reason.
+    """
+    if not locality:
+        return {
+            "area_key": None,
+            "area_label": None,
+            "area_resolution_status": "UNRESOLVED",
+            "area_resolution_method": None,
+            "area_resolution_reason": "unresolved_locality_empty",
+        }
+
+    city_norm = normalise_city(city)
+    if not city_norm:
+        return {
+            "area_key": None,
+            "area_label": None,
+            "area_resolution_status": "UNRESOLVED",
+            "area_resolution_method": None,
+            "area_resolution_reason": "unresolved_city_empty",
+        }
+
+    raw_loc = str(locality).strip()
+    norm_loc = raw_loc.lower()
+    key = (city_norm, norm_loc)
+
+    if key in CANONICAL_AREAS:
+        area_key, area_label = CANONICAL_AREAS[key]
+        return {
+            "area_key": area_key,
+            "area_label": area_label,
+            "area_resolution_status": "RESOLVED",
+            "area_resolution_method": "CANONICAL_KEY",
+            "area_resolution_reason": "exact_canonical_locality_match",
+        }
+
+    if key in CANONICAL_ALIASES:
+        area_key, area_label = CANONICAL_ALIASES[key]
+        return {
+            "area_key": area_key,
+            "area_label": area_label,
+            "area_resolution_status": "RESOLVED",
+            "area_resolution_method": "ALIAS",
+            "area_resolution_reason": "approved_alias_match",
+        }
+
+    return {
+        "area_key": None,
+        "area_label": None,
+        "area_resolution_status": "UNRESOLVED",
+        "area_resolution_method": None,
+        "area_resolution_reason": "unresolved_locality_not_found",
+    }
+
+
 def build_candidate(record):
     """Map one housing.com commercial record onto the V136 candidate contract.
 
@@ -193,6 +319,9 @@ def build_candidate(record):
     else:
         built_area, built_unit, land_area, land_unit = area_value, area_unit, None, None
 
+    city = normalise_city(record.get("city"))
+    area_res = resolve_canonical_area(city, record.get("locality"))
+
     return {
         "source_platform": SOURCE_PLATFORM,
         "source_listing_id": str(listing_id),
@@ -201,14 +330,13 @@ def build_candidate(record):
         "source_transaction_type": raw_purpose,
         "scraped_at": record.get("scrapedAt"),
         "source_updated_at": record.get("updatedAt"),
-        "city": normalise_city(record.get("city")),
+        "city": city,
         "locality": record.get("locality"),
-        # housing.com supplies no PropertySignal area_key. V136 permits NULL; inventing
-        # one would be a fabricated linkage. The reason is preserved rather than dropped
-        # — load_staging_sql.py folds it into raw_payload._derived.
-        "area_key": None,
-        "area_label": None,
-        "area_resolution_reason": "unresolved_source_supplies_no_area_key",
+        "area_key": area_res["area_key"],
+        "area_label": area_res["area_label"],
+        "area_resolution_status": area_res["area_resolution_status"],
+        "area_resolution_method": area_res["area_resolution_method"],
+        "area_resolution_reason": area_res["area_resolution_reason"],
         "latitude": lat,
         "longitude": lon,
         "property_family": "COMMERCIAL",
