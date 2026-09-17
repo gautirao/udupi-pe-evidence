@@ -1,3 +1,36 @@
+# AGY AUTONOMOUS OPERATING CONTRACT
+
+Whenever the user asks to work on an issue, bug, feature, or PR (e.g. `work on <issue>`, `fix issue <issue>`, `continue <issue>`, `investigate bug`, `take next issue`), automatically assume the autonomous AGY PR-first workflow (`mode3-run <issue>`), unless explicitly requested analysis-only.
+
+## Core Directives & Invariants
+
+1. **Default PR-First Workflow**:
+   - Every code issue runs in an isolated worktree (`/Users/gouthamrao/projects/udupi-property-explorer-worktrees/lane-<issue#>`) and branch (`fix/...`, `feat/...`, `chore/...`).
+   - Open a Draft PR early (`gh pr create --draft`). Use the PR as the sole durable execution channel.
+   - Refer to shared contracts in `.agents/contracts/` (`pr-workflow.md`, `worktree-contract.md`, `exact-head-contract.md`, `merge-gate.md`, `reviewer-routing.md`, `lane-ledger.md`, `startup-check.md`).
+
+2. **Token Efficiency & Progressive Disclosure**:
+   - Load only skills/contracts required for current stage.
+   - Use delta-based context (`A..B` diff) when re-evaluating follow-up commits.
+   - Maintain compact `lane-ledger` state records instead of re-reading full histories.
+   - Subagents return compact reports (`status`, `exact_HEAD`, `findings`, `evidence`, `blockers`, `next_action`).
+
+3. **Owner Interruption Policy**:
+   - Never stop for questions answerable from issue descriptions, code, tests, or existing architecture.
+   - Interrupt owner ONLY for material architectural boundary changes, destructive production mutations, or legal/cost decisions.
+   - Format decision requests cleanly on PR as `Decision required — <short title>`.
+
+4. **Merge Authorization & Autonomous Merging**:
+   - Implementation workers NEVER self-certify or merge.
+   - Final reviewer MUST inspect current exact HEAD SHA and post `OWNER APPROVED TO MERGE`.
+   - Once authorized, verify exact HEAD == PR HEAD, clean tests, served UI evidence (if applicable), and GitHub `MERGEABLE`, then execute autonomous merge (`gh pr merge --squash --delete-branch`) without waiting for owner prompt.
+
+5. **Post-Merge Verification**:
+   - For buyer-visible bugs/features or production-sensitive behavior, automatically run post-merge verification (`post-merge-verifier`).
+   - Post `POST-MERGE VERIFIED` or `POST-MERGE REGRESSION FOUND`.
+
+---
+
 ## Code Exploration Policy
 
 Always use jCodemunch-MCP tools for code navigation. Never fall back to Read, Grep, Glob, or Bash for code exploration.
@@ -95,4 +128,3 @@ fallback = "NONE"      # "NONE" or a SHORT reason (one of the recognised reasons
 ```
 
 **Discovery-only clause (verbatim intent):** jCodemunch is for DISCOVERY and navigation only. It NEVER replaces an agent's required obligations — code-reviewer must still read every changed file in full before forming conclusions; security-reviewer must still ground findings in directly-read code evidence.
-
