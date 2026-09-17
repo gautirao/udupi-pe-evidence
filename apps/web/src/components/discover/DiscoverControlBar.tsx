@@ -69,14 +69,14 @@ export const CONTROL_BAR_CITIES: ControlBarCity[] = [
 ];
 
 const AREA_SEARCH_COPY: Record<DiscoverJourney, { label: string; placeholder: string }> = {
-  'area-first': { label: 'Search areas to explore', placeholder: 'Search areas to explore…' },
+  'area-first': { label: 'Search areas to explore', placeholder: 'Search areas, localities or landmarks...' },
   'school-first': {
     label: 'Search areas near a school',
-    placeholder: 'Search areas near a school…',
+    placeholder: 'Search areas, localities or landmarks...',
   },
   'agri-first': {
     label: 'Search corridor or locality',
-    placeholder: 'Search corridor or locality…',
+    placeholder: 'Search areas, localities or landmarks...',
   },
 };
 

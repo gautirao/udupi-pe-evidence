@@ -326,7 +326,7 @@ export function GuidedEntryPanel({
                             concatenated into one string) — GuidedEntryPanel.regionGuide.test.tsx
                             asserts on the bare count via getByText('12'). */}
                         <span className="shrink-0 whitespace-nowrap flex items-baseline gap-1">
-                          <span className="text-sm font-bold text-foreground">
+                          <span className="text-sm font-mono font-bold text-foreground">
                             {region.listingCount.toLocaleString()}
                           </span>
                           <span className="text-xs font-medium text-muted-foreground">

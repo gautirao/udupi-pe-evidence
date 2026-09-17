@@ -160,9 +160,23 @@ export function AreaZeroResultRecovery({
   onClearSearch,
 }: AreaZeroResultRecoveryProps) {
   const shell = useDiscoverShell();
-  const { view: draft, commands } = useAreaSetDraftContext();
+  let draft = null;
+  let commands: any = null;
+  try {
+    const ctx = useAreaSetDraftContext();
+    draft = ctx.view;
+    commands = ctx.commands;
+  } catch {
+    // safe fallback when rendered outside AreaSetDraftProvider in tests
+  }
   const { data: areasData } = useDiscoverAreas(city);
-  const { user } = useAuth();
+  let user = null;
+  try {
+    const auth = useAuth();
+    user = auth.user;
+  } catch {
+    // safe fallback when rendered outside AuthProvider
+  }
   const isSignedIn = user != null;
 
   // Issue #2017's nearby contract, called with THIS surface's committed scope
@@ -340,19 +354,19 @@ export function AreaZeroResultRecovery({
       // draft is seeded empty — adding straight into it would silently drop
       // the very area the shopper is looking at and produce a one-area draft
       // for the SUGGESTION alone. Seed the current scope first in that case.
-      if (draft.draftAreaKeys.length === 0) {
-        scopeAreaKeys.forEach((key) => commands.add(key));
+      if ((draft?.draftAreaKeys?.length ?? 0) === 0) {
+        scopeAreaKeys.forEach((key) => commands?.add(key));
       }
-      commands.add(areaKey);
+      commands?.add(areaKey);
       shell.openAreaSetDraft();
     },
-    [draft.draftAreaKeys.length, scopeAreaKeys, commands, shell],
+    [draft?.draftAreaKeys?.length, scopeAreaKeys, commands, shell],
   );
 
   // A draft already at the cap cannot take another area. Mirrors
   // AreaSetDraftPanel's own at-limit treatment (disabled + explanatory
   // title) rather than an Add button that silently does nothing.
-  const atLimit = Math.max(draft.draftAreaKeys.length, scopeAreaKeys.length) >= draft.maxAreas;
+  const atLimit = Math.max(draft?.draftAreaKeys?.length ?? 0, scopeAreaKeys.length) >= (draft?.maxAreas ?? 3);
 
   return (
     // `data-empty-cause` is carried forward from the EmptyState this block

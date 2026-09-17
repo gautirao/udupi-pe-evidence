@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { ReactNode, RefObject, MutableRefObject, Dispatch, SetStateAction } from 'react';
 import { useDiscoverActions, useDiscoverNav, useDiscoverShell, useDiscoverViewport } from '@/features/discover/context/useDiscoverContext';
 import { PropertyMap, type PropertyListingWithImages } from '@/components/map/PropertyMap';
@@ -548,6 +548,8 @@ export function DiscoverMapCanvas({
   const viewport = useDiscoverViewport();
   const urlActions = useDiscoverActions();
   const shell = useDiscoverShell();
+
+  const [isMapTipDismissed, setIsMapTipDismissed] = useState(false);
 
   // Issue #2017 — read the SAME shared AREA_SET draft/nearby-candidate state
   // AreaSetChips (rendered below) drives, via the context extracted for
@@ -1331,6 +1333,46 @@ export function DiscoverMapCanvas({
         onCancel={handleCancelReplaceScope ?? (() => {})}
         container={mapContainerRef.current}
       />
+
+      {/* Step 4: Bottom-left map tip banner pill */}
+      {!isMapTipDismissed && (
+        <div
+          data-testid="discover-map-tip-pill"
+          className="absolute bottom-4 left-4 z-[500] flex items-center gap-2 px-3 py-1.5 bg-white/95 backdrop-blur-sm border border-slate-200 rounded-full shadow-md text-xs font-medium text-slate-700"
+        >
+          <span>Click an area marker to explore · The map will zoom for you</span>
+          <button
+            type="button"
+            onClick={() => setIsMapTipDismissed(true)}
+            aria-label="Close tip"
+            className="ml-1 text-slate-400 hover:text-slate-600 transition-colors flex items-center justify-center w-4 h-4 rounded-full"
+          >
+            [x]
+          </button>
+        </div>
+      )}
+
+      {/* Step 4: Bottom-right stacked Recenter button */}
+      <div className="absolute bottom-4 right-4 z-[500] flex flex-col items-end gap-2">
+        <button
+          type="button"
+          data-testid="map-recenter-city-button"
+          onClick={() => {
+            if (cityCenter) {
+              publishCameraIntent({
+                areaKey: nav.city || DEFAULT_CITY,
+                areaLabel: nav.city || DEFAULT_CITY,
+                geo_center_lat: cityCenter[0],
+                geo_center_lon: cityCenter[1],
+                bbox: null,
+              });
+            }
+          }}
+          className="px-3 py-1.5 bg-white/95 backdrop-blur-sm border border-slate-200 rounded-lg shadow-md text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors flex items-center gap-1.5"
+        >
+          Recenter on {nav.city || DEFAULT_CITY}
+        </button>
+      </div>
     </div>
   );
 }

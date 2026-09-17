@@ -13,7 +13,8 @@
  * Dispatch is on `levelKind` (from `nodeLevelKind`, never on `node.depth`),
  * mirroring the rest of this navigation module's discipline.
  */
-import { ArrowRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { ArrowRight, ChevronDown, X } from 'lucide-react';
 import { NavigationChildList } from './NavigationChildList';
 import { NavigationResolutionNotice } from './NavigationResolutionNotice';
 import {
@@ -59,6 +60,7 @@ export function NavigationLevelPanel({
   onBrowseListings,
   countKind = 'listings',
 }: NavigationLevelPanelProps) {
+  const [isTipDismissed, setIsTipDismissed] = useState(false);
   const { node, levelKind, children, resolutionNotice, nodeCount, selectNode } = journey;
 
   if (!node) {
@@ -101,7 +103,7 @@ export function NavigationLevelPanel({
   if (countKind === 'schools') {
     headingPrimaryLabel = nodeCount != null && nodeCount.schoolCount != null ? String(nodeCount.schoolCount) : null;
   } else {
-    headingPrimaryLabel = headingShowListingsLine ? formatListingCount(nodeCount.listingCount) : null;
+    headingPrimaryLabel = headingShowListingsLine && nodeCount != null ? String(nodeCount.listingCount) : null;
   }
   const headingPrimaryUnit = countKind === 'schools' ? 'schools' : 'listings';
 
@@ -159,9 +161,15 @@ export function NavigationLevelPanel({
             >
               {countKind === 'schools' ? 'Where do you want schools?' : 'Where do you want to explore?'}
             </h2>
-            {countKind === 'schools' && nodeCount?.schoolCount != null && (
-              <p className="mt-1.5 text-[12.5px] text-muted-foreground">
-                <span className="font-semibold text-foreground">{nodeCount.schoolCount} schools in these areas.</span> Pick a direction, or search a school by name in the bar above — knowing the school is always enough.
+            {countKind === 'schools' ? (
+              nodeCount?.schoolCount != null && (
+                <p className="mt-1.5 text-[12.5px] text-muted-foreground">
+                  <span className="font-semibold text-foreground">{nodeCount.schoolCount} schools in these areas.</span> Pick a direction, or search a school by name in the bar above — knowing the school is always enough.
+                </p>
+              )
+            ) : (
+              <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+                Choose an area from the map or the list below. Click an area marker to explore — the map will zoom for you.
               </p>
             )}
           </>
@@ -240,15 +248,27 @@ export function NavigationLevelPanel({
           className="mb-3 flex items-center justify-between border-b border-border pb-2"
           data-testid="navigation-level-section-label"
         >
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+          <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-foreground/80">
             {sectionLabel}
           </span>
-          <span
-            className="text-[11px] font-medium text-muted-foreground"
-            data-testid="navigation-level-section-count"
-          >
-            {children.length}
-          </span>
+          <div className="flex items-center gap-2">
+            {levelKind === 'directions' && countKind === 'listings' && (
+              <button
+                type="button"
+                className="flex items-center gap-1 text-[11.5px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+                data-testid="sort-areas-dropdown"
+              >
+                <span>Sort by Most listings</span>
+                <ChevronDown className="h-3 w-3" aria-hidden="true" />
+              </button>
+            )}
+            <span
+              className="text-[11px] font-medium text-muted-foreground"
+              data-testid="navigation-level-section-count"
+            >
+              {children.length}
+            </span>
+          </div>
         </div>
       )}
       
@@ -267,6 +287,26 @@ export function NavigationLevelPanel({
             onHoverChange={onHoverChange}
             countKind={countKind}
           />
+        </div>
+      )}
+
+      {!isTipDismissed && (
+        <div
+          data-testid="discover-tip-banner"
+          className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50/70 p-3 text-xs text-blue-900 shadow-xs"
+        >
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-blue-700">Tip:</span>
+            <span>Explore by area to see property trends, schools, price insights and more.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsTipDismissed(true)}
+            aria-label="Dismiss tip"
+            className="shrink-0 rounded p-1 text-blue-600 hover:bg-blue-100 hover:text-blue-900 transition-colors"
+          >
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
         </div>
       )}
     </div>

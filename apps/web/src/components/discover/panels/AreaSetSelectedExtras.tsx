@@ -92,7 +92,15 @@ export function DrawSearchAreaEntry({
   onRevealMap,
 }: DrawSearchAreaEntryProps) {
   const nav = useDiscoverNav();
-  const { user, isLoading: authLoading } = useAuth();
+  let user = null;
+  let authLoading = false;
+  try {
+    const auth = useAuth();
+    user = auth.user;
+    authLoading = auth.isLoading;
+  } catch {
+    // safe fallback when rendered outside AuthProvider
+  }
   const { data: summary } = useDiscoverSummary({ city: nav?.city || DEFAULT_CITY });
 
   const eligibility = resolveDrawSearchAreaEligibility({

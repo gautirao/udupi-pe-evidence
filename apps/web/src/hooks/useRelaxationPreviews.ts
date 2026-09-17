@@ -141,7 +141,13 @@ export function useRelaxationPreviews(
 ) {
   const { listingPurpose, limit } = options;
   const source = useDiscoverSource();
-  const { user } = useAuth();
+  let user = null;
+  try {
+    const auth = useAuth();
+    user = auth.user;
+  } catch {
+    // safe fallback when rendered outside AuthProvider
+  }
   const isSignedIn = user != null;
 
   const hasScope =

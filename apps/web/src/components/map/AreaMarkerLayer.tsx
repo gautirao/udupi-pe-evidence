@@ -439,26 +439,31 @@ function makeAreaCard(
       </div>
     </div>`;
   } else {
+    const sel = area.isSelected;
     let chipHtml: string;
     if (isSchoolMode) {
       const n = area.schoolCount as number;
       const txt = n === 1 ? '1 school' : `${n.toLocaleString()} schools`;
-      chipHtml = `<span style="display:inline-flex;align-items:center;gap:4px;font-family:${MONO};font-size:11px;font-weight:600;padding:1.5px 7px;border-radius:9999px;background:#F3F4F6;color:${C_MUTED};">${gradCapSvg(C_MUTED)}${escapeHtml(txt)}</span>`;
+      chipHtml = `<span style="display:inline-flex;align-items:center;gap:4px;font-family:${MONO};font-size:11px;font-weight:600;padding:1.5px 7px;border-radius:9999px;background:${sel ? 'rgba(255,255,255,0.2)' : '#F3F4F6'};color:${sel ? '#fff' : C_MUTED};">${gradCapSvg(sel ? '#fff' : C_MUTED)}${escapeHtml(txt)}</span>`;
     } else {
       const n = area.listingCount ?? 0;
       const txt = `${n.toLocaleString()} ${n === 1 ? 'property' : 'properties'}`;
-      chipHtml = `<span style="font-family:${MONO};font-size:11px;font-weight:600;padding:1.5px 7px;border-radius:9999px;background:${C_COPPER_TINT};color:${C_COPPER_HOVER};">${escapeHtml(txt)}</span>`;
+      chipHtml = `<span style="display:inline-flex;align-items:center;gap:4px;font-family:${MONO};font-size:11px;font-weight:600;padding:1.5px 7px;border-radius:9999px;background:${sel ? 'rgba(255,255,255,0.2)' : C_COPPER_TINT};color:${sel ? '#fff' : C_COPPER_HOVER};">${escapeHtml(txt)}</span>`;
     }
     const { text: repText, full: repFull } = truncateAreaLabel(area.areaLabel, truncate);
     const repLabel = escapeHtml(repText);
     const titleAttr = repFull ? ` title="${escapeHtml(repFull)}"` : '';
-    html = `<div data-testid="area-marker" style="transform:translate(-50%,-118%);font-family:inherit;opacity:${opacity};pointer-events:auto;cursor:pointer;">
-      <div class="area-marker-card"${titleAttr} style="display:inline-flex;align-items:center;gap:7px;padding:6px 8px 6px 11px;border-radius:9999px;background:${C_PAPER};border:1px solid ${C_BORDER};box-shadow:${PILL_SHADOW};white-space:nowrap;transition:transform .15s cubic-bezier(.4,0,.2,1),box-shadow .15s;">
-        ${pinSvg(C_COPPER)}
-        <span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;color:${C_INK};">${repLabel}</span>
+    const bg = sel ? '#1d4ed8' : C_PAPER;
+    const textColor = sel ? '#ffffff' : C_INK;
+    const pinColor = sel ? '#ffffff' : C_COPPER;
+    const border = sel ? '1px solid #1d4ed8' : `1px solid ${C_BORDER}`;
+    html = `<div data-testid="area-marker" data-selected="${Boolean(sel)}" style="transform:translate(-50%,-118%);font-family:inherit;opacity:${opacity};pointer-events:auto;cursor:pointer;">
+      <div class="area-marker-card"${titleAttr} style="display:inline-flex;align-items:center;gap:7px;padding:6px 8px 6px 11px;border-radius:9999px;background:${bg};border:${border};box-shadow:${PILL_SHADOW};white-space:nowrap;transition:transform .15s cubic-bezier(.4,0,.2,1),box-shadow .15s;">
+        ${pinSvg(pinColor)}
+        <span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;color:${textColor};">${repLabel}</span>
         ${chipHtml}
       </div>
-      <div style="width:8px;height:8px;background:${C_PAPER};border-right:1px solid ${C_BORDER};border-bottom:1px solid ${C_BORDER};transform:rotate(45deg);margin:-5px auto 0;box-shadow:${PILL_SHADOW};"></div>
+      <div style="width:8px;height:8px;background:${bg};border-right:${border};border-bottom:${border};transform:rotate(45deg);margin:-5px auto 0;box-shadow:${PILL_SHADOW};"></div>
     </div>`;
   }
 

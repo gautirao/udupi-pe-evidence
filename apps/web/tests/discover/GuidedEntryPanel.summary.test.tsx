@@ -165,7 +165,8 @@ function renderShell(initialUrl = '/discover?city=udupi', props: Partial<Paramet
 }
 
 function getRequestedParams(): URLSearchParams {
-  const [url] = mockGet.mock.calls[mockGet.mock.calls.length - 1] as [string, unknown];
+  const regionCall = [...mockGet.mock.calls].reverse().find(([url]: [string]) => url.includes('/regions'));
+  const url = regionCall ? (regionCall[0] as string) : (mockGet.mock.calls[mockGet.mock.calls.length - 1]?.[0] as string ?? '');
   return new URLSearchParams(url.split('?')[1]);
 }
 
@@ -279,7 +280,8 @@ describe('GuidedEntryPanel — listingPurpose separate from propertyType (Issue 
         ),
       ),
     );
-    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1));
+    const getRegionCalls = () => mockGet.mock.calls.filter(([url]: [string]) => url.includes('/regions'));
+    await waitFor(() => expect(getRegionCalls().length).toBe(1));
     expect(getRequestedParams().get('listingPurpose')).toBe('sale');
 
     rerender(
@@ -298,7 +300,7 @@ describe('GuidedEntryPanel — listingPurpose separate from propertyType (Issue 
       ),
     );
 
-    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(getRegionCalls().length).toBe(2));
     expect(getRequestedParams().get('listingPurpose')).toBe('rent');
   });
 });
