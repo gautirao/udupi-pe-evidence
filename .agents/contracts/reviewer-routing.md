@@ -28,4 +28,5 @@ Pushed exact HEAD commits are audited by independent PR subagents according to r
 2. **Token Efficiency**:
    - PR reviewers do NOT repeat resolved trivial inner-loop findings previously caught and fixed during pre-push review.
    - `final-merge-reviewer` consumes existing specialist verdicts/evidence and investigates ONLY gaps or contradictions.
-3. **Final Gatekeeper**: `final-merge-reviewer` runs after specialist PR reviews pass to consolidate findings, verify exact HEAD SHA, and post mandatory `OWNER APPROVED TO MERGE`.
+3. **Final Gatekeeper**: `final-merge-reviewer` runs after specialist PR reviews pass to consolidate findings, verify exact HEAD SHA, and post mandatory readiness verdict `READY_FOR_OWNER_MERGE_AUTHORIZATION`.
+4. **Merge Authorization**: Merge execution requires an explicit top-level comment authored by the project owner containing `OWNER_APPROVED_TO_MERGE head:<full-current-sha>`.

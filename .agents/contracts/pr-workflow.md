@@ -18,8 +18,9 @@ For every code-changing issue, feature, or bug fix:
    - PR Code Reviewer identifies itself on PR as `Reviewer: PR Code Reviewer`, `Exact HEAD: <sha>`.
    - If PR reviewers request changes: worker fixes locally -> `pre-push-reviewer` checks `CLEAN FOR COMMIT` -> worker commits and pushes new HEAD -> invalidates prior PR review -> fresh exact-HEAD PR review.
 7. **Authorization & Merge**:
-   - Merge requires mandatory `OWNER APPROVED TO MERGE` phrase from `final-merge-reviewer` auditing current exact HEAD.
-   - Once authorized, merge autonomously (`gh pr merge --squash --delete-branch`).
+   - `final-merge-reviewer` certifies PR readiness with `READY_FOR_OWNER_MERGE_AUTHORIZATION`.
+   - Merge authorization requires explicit owner top-level comment `OWNER_APPROVED_TO_MERGE head:<full-current-sha>`.
+   - Once owner authorization token is verified, execute squash merge autonomously (`gh pr merge --squash --delete-branch`).
 8. **Post-Merge Verification**:
    - For buyer-visible or production-sensitive features, run post-merge verification on served app.
    - Post `POST-MERGE VERIFIED` or `POST-MERGE REGRESSION FOUND` to PR.

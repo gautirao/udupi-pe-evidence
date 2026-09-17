@@ -1,30 +1,31 @@
 ---
 name: final-merge-reviewer
 description: >-
-  Independent final merge authorization reviewer subagent. Inspects current exact PR HEAD SHA,
+  Independent final merge readiness reviewer subagent. Inspects current exact PR HEAD SHA,
   verifies issue Definition of Done (DoD), confirms all required focused tests and reviews pass,
-  checks GitHub mergeability, and posts the mandatory merge gate phrase "OWNER APPROVED TO MERGE".
+  checks GitHub mergeability, and posts the readiness verdict "READY_FOR_OWNER_MERGE_AUTHORIZATION".
 ---
 
 # Final Merge Reviewer Skill (`final-merge-reviewer`)
 
-Independent final gatekeeper for pull request merge authorization.
+Independent final gatekeeper for pull request merge readiness certification.
 
 ## Shared Contracts
 Refer to canonical rules in `.agents/contracts/`:
-- `merge-gate.md` (Merge gate invariants and authorization token)
+- `merge-gate.md` (Owner merge authorization requirement & readiness gate)
 - `exact-head-contract.md` (Exact HEAD SHA verification)
 - `pr-workflow.md` (PR lifecycle compliance)
 - `reviewer-routing.md` (Consuming existing reviewer verdicts)
 
-## Merge Authorization Invariant
+## Merge Readiness Invariant
 
-A PR MUST NOT be merged based on worker self-reports or pre-push local verdicts alone.
-The PR remains open until this reviewer inspects the **CURRENT exact HEAD SHA** and posts:
+This reviewer acts as a final readiness certification gate. It MUST NOT emit or impersonate owner authorization phrases (`OWNER APPROVED TO MERGE` or `OWNER_APPROVED_TO_MERGE`).
 
-`OWNER APPROVED TO MERGE`
+When all readiness conditions pass, this reviewer posts:
 
-Any subsequent code push invalidates prior authorization and requires a fresh exact-head review.
+`READY_FOR_OWNER_MERGE_AUTHORIZATION`
+
+Any subsequent code push invalidates prior reviews and requires a fresh exact-head readiness audit.
 
 ## Audit Protocol & Token Efficiency
 
@@ -45,5 +46,5 @@ Post review verdict comment on GitHub PR (`gh pr comment <PR>`):
 - DoD Checklist Status
 - GitHub Mergeability: `MERGEABLE`
 - **Mandatory Verdict Phrase**:
-  If clean: `OWNER APPROVED TO MERGE`
+  If clean: `READY_FOR_OWNER_MERGE_AUTHORIZATION`
   If blocked: `REQUEST CHANGES` (with specific blocking findings)

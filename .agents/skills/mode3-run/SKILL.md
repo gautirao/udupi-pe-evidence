@@ -4,7 +4,7 @@ description: >-
   Orchestrate single or multiple issue lanes end-to-end. Default PR-first workflow for any code issue.
   Manages isolated worktrees, delegates implementation to quick, executes pre-push review loops until CLEAN FOR COMMIT,
   monitors progress via lane ledger, routes decisions via PR, dispatches parallel risk-based PR reviewers,
-  enforces exact-HEAD loops, autonomously merges upon OWNER APPROVED TO MERGE, and triggers post-merge verification.
+  enforces exact-HEAD loops, awaits OWNER_APPROVED_TO MERGE token, autonomously merges, and triggers post-merge verification.
 ---
 
 # Mode-3 Orchestrator Skill (`mode3-run <issue#>`)
@@ -17,7 +17,7 @@ Refer to canonical rules in `.agents/contracts/`:
 - `worktree-contract.md` (Lane isolation rules)
 - `pre-push-review-contract.md` (Inner-loop pre-push review rules)
 - `exact-head-contract.md` (HEAD commitment & invalidation)
-- `merge-gate.md` (Merge authorization gate)
+- `merge-gate.md` (Merge authorization gate & owner token requirement)
 - `reviewer-routing.md` (Risk-based parallel reviewer matrix)
 - `lane-ledger.md` (Compact state tracking)
 - `startup-check.md` (Pre-flight validation)
@@ -56,14 +56,17 @@ When worker pushes commit at exact HEAD:
 2. Select and dispatch applicable independent PR reviewers in parallel according to `reviewer-routing.md`.
 3. `code-reviewer` identifies as `Reviewer: PR Code Reviewer`, `Exact HEAD: <sha>`.
 
-### Phase 4: Review Loop & Autonomous Merge Gate
+### Phase 4: Review Loop & Owner Merge Authorization Gate
 1. If any PR reviewer requests changes:
    - Worker fixes locally -> orchestrator invokes `pre-push-reviewer` for `CLEAN FOR COMMIT` -> worker commits and pushes new HEAD.
    - Previous PR reviews are invalidated; dispatch fresh exact-HEAD PR review (using delta A..B evaluation).
-2. When `final-merge-reviewer` posts `OWNER APPROVED TO MERGE`:
-   - Verify current git HEAD matches reviewed SHA.
+2. When `final-merge-reviewer` posts `READY_FOR_OWNER_MERGE_AUTHORIZATION`:
+   - Await explicit owner top-level comment on GitHub PR containing:
+     `OWNER_APPROVED_TO_MERGE head:<full-current-sha>`
+3. Upon receiving owner authorization comment:
+   - Verify owner-approved HEAD SHA matches current remote PR HEAD SHA.
    - Confirm GitHub reports `MERGEABLE`.
-   - Execute autonomous merge (`gh pr merge <PR> --squash --delete-branch`). Do NOT wait for owner prompt.
+   - Execute autonomous merge (`gh pr merge <PR> --squash --delete-branch`).
 
 ### Phase 5: Post-Merge Verification & Close
 1. If issue is buyer-visible or production-sensitive, dispatch `post-merge-verifier`.

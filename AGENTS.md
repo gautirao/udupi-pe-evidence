@@ -35,8 +35,9 @@ Whenever the user asks to work on an issue, bug, feature, or PR (e.g. `work on <
    - Format decision requests cleanly on PR as `Decision required — <short title>`.
 
 6. **Merge Authorization & Autonomous Merging**:
-   - Implementation workers NEVER self-certify or merge.
-   - Final reviewer MUST inspect current exact HEAD SHA and post `OWNER APPROVED TO MERGE`.
+   - Implementation workers and reviewer subagents NEVER self-certify or synthesize owner merge approval.
+   - `final-merge-reviewer` inspects current exact HEAD SHA, DoD, test evidence, and PR mergeability, and posts `READY_FOR_OWNER_MERGE_AUTHORIZATION`.
+   - Merge authorization requires an explicit top-level GitHub comment authored by the project owner containing `OWNER_APPROVED_TO_MERGE head:<full-current-sha>`.
    - Once authorized, verify exact HEAD == PR HEAD, clean tests, served UI evidence (if applicable), and GitHub `MERGEABLE`, then execute autonomous merge (`gh pr merge --squash --delete-branch`) without waiting for owner prompt.
 
 7. **Post-Merge Verification**:
