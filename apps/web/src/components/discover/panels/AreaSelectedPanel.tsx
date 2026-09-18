@@ -310,6 +310,11 @@ interface AreaSelectedPanelProps {
    * Null/undefined = no selection.
    */
   selectedListingId?: string | null;
+  /**
+   * Issue #2616 — ephemeral hover/focus id driven from the map marker side.
+   * When set, the card matching this ID receives the hover highlight state.
+   */
+  hoveredListingId?: string | null;
   /** Issue #1547 — called when a card is activated, to sync the selected marker. */
   onSelectListing?: (id: string) => void;
   /**
@@ -531,6 +536,7 @@ export function AreaSelectedPanel({
   onAddSchool,
   intent = 'buy',
   selectedListingId = null,
+  hoveredListingId = null,
   onSelectListing,
   onHoverListing,
   cityLabel,
@@ -2816,6 +2822,7 @@ export function AreaSelectedPanel({
                     isAuthenticated={isAuthenticated}
                     onNavigate={() => navigate(`/listing/${listing.id}`)}
                     isSelected={selectedListingId === listing.id}
+                    isHovered={hoveredListingId === listing.id}
                     onSelect={onSelectListing}
                     onHover={onHoverListing}
                   />

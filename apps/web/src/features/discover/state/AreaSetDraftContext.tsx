@@ -22,9 +22,22 @@ import { DEFAULT_CITY } from '@/lib/localityUtils';
  * a context" refactor — AreaSetChips.tsx's own rendered output/behavior is
  * unchanged; see AreaSetDraftContextValue below for exactly what it consumes.
  */
+import { useCallback, useState } from 'react';
+import type { AreaSetAddResult } from '@/features/discover/state/useAreaSetDraft';
+
+export interface DraftAreaStats {
+  eligibleListingCount: number;
+  schoolCount: number;
+}
+
+export interface AreaSetDraftCommandsWithCandidate extends AreaSetDraftCommands {
+  addCandidate(candidate: { areaKey: string; eligibleListingCount: number; schoolCount: number }): AreaSetAddResult;
+}
+
 export interface AreaSetDraftContextValue {
   view: AreaSetDraftView;
-  commands: AreaSetDraftCommands;
+  commands: AreaSetDraftCommandsWithCandidate;
+  draftMemberStatsByAreaKey: Record<string, DraftAreaStats>;
   /** Active discover filters, in the shape passed to useNearbyAreaCandidates. Also used by AreaSetChips for its hasActiveFilters empty-state copy. */
   nearbyFilters: PropertyFilters;
   data: NearbyAreaCandidatesResponse | undefined;
@@ -39,7 +52,68 @@ export interface AreaSetDraftProviderProps {
 
 export function AreaSetDraftProvider({ children }: AreaSetDraftProviderProps) {
   const nav = useDiscoverNav();
-  const { view: draftView, commands } = useAreaSetDraft(nav.resultScope?.active ?? null);
+  const { view: draftView, commands: baseCommands } = useAreaSetDraft(nav.resultScope?.active ?? null);
+
+  const [draftMemberStatsByAreaKey, setDraftMemberStatsByAreaKey] = useState<Record<string, DraftAreaStats>>({});
+
+  const addCandidate = useCallback(
+    (candidate: { areaKey: string; eligibleListingCount: number; schoolCount: number }): AreaSetAddResult => {
+      const result = baseCommands.add(candidate.areaKey);
+      if (result === 'added') {
+        setDraftMemberStatsByAreaKey((prev) => ({
+          ...prev,
+          [candidate.areaKey]: {
+            eligibleListingCount: candidate.eligibleListingCount,
+            schoolCount: candidate.schoolCount,
+          },
+        }));
+      }
+      return result;
+    },
+    [baseCommands],
+  );
+
+  const add = useCallback(
+    (areaKey: string): AreaSetAddResult => {
+      return baseCommands.add(areaKey);
+    },
+    [baseCommands],
+  );
+
+  const remove = useCallback(
+    (areaKey: string) => {
+      baseCommands.remove(areaKey);
+      setDraftMemberStatsByAreaKey((prev) => {
+        if (!(areaKey in prev)) return prev;
+        const next = { ...prev };
+        delete next[areaKey];
+        return next;
+      });
+    },
+    [baseCommands],
+  );
+
+  const clear = useCallback(() => {
+    baseCommands.clear();
+    setDraftMemberStatsByAreaKey({});
+  }, [baseCommands]);
+
+  const resetToCommitted = useCallback(() => {
+    baseCommands.resetToCommitted();
+    setDraftMemberStatsByAreaKey({});
+  }, [baseCommands]);
+
+  const commands = useMemo<AreaSetDraftCommandsWithCandidate>(
+    () => ({
+      ...baseCommands,
+      add,
+      addCandidate,
+      remove,
+      clear,
+      resetToCommitted,
+    }),
+    [baseCommands, add, addCandidate, remove, clear, resetToCommitted],
+  );
 
   // Code-review Finding 2 (PR #2424) — active discover filters, derived from
   // nav.filters (URL state) into the PropertyFilters shape the backend query
@@ -101,8 +175,8 @@ export function AreaSetDraftProvider({ children }: AreaSetDraftProviderProps) {
   );
 
   const value = useMemo<AreaSetDraftContextValue>(
-    () => ({ view: draftView, commands, nearbyFilters, data, isLoading }),
-    [draftView, commands, nearbyFilters, data, isLoading],
+    () => ({ view: draftView, commands, draftMemberStatsByAreaKey, nearbyFilters, data, isLoading }),
+    [draftView, commands, draftMemberStatsByAreaKey, nearbyFilters, data, isLoading],
   );
 
   return <AreaSetDraftContext.Provider value={value}>{children}</AreaSetDraftContext.Provider>;

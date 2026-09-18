@@ -623,15 +623,13 @@ describe('AreaSelectedPanel — #2555 DoD items', () => {
      * redundant sentence. So each arm carries its single-meaning contrast — without them these
      * would pass against a panel that simply always printed a sentence.
      */
-    it('discloses WHICH area is compared when the selection spans more than one meaning', () => {
+    it('does not render disclosure text line when selection spans more than one meaning', () => {
       renderHost({ initialFilters: { propertyTypes: ['apartment', 'residential_plot'] } });
 
       // The row label is broad by design…
       expect(screen.getByTestId('quick-area-row').textContent ?? '').toContain('AREA (SQ FT)');
-      // …so the sentence naming each quantity and what it is measured ON is mandatory.
-      expect(screen.getByTestId('quick-area-disclosure')).toHaveTextContent(
-        'Compares built-up area for homes; plot size for plots.',
-      );
+      // …and disclosure line is removed per user request.
+      expect(screen.queryByTestId('quick-area-disclosure')).not.toBeInTheDocument();
     });
 
     it('renders NO disclosure when one meaning is in play — the label already names it', () => {
@@ -654,14 +652,14 @@ describe('AreaSelectedPanel — #2555 DoD items', () => {
       expect(chip).toHaveTextContent('1,000+ sq ft');
     });
 
-    it('carries the disclosure on the chip too when the selection is mixed', () => {
+    it('renders the area range without disclosure text on the chip when the selection is mixed', () => {
       renderHost({
         initialFilters: { propertyTypes: ['apartment', 'residential_plot'], areaMinSqft: 1000 },
       });
 
       const chip = screen.getByTestId('selected-chip-area');
       expect(chip).toHaveTextContent('1,000+ sq ft');
-      expect(chip).toHaveTextContent('Compares built-up area for homes; plot size for plots.');
+      expect(chip.textContent).not.toContain('Compares built-up area');
     });
 
     /**

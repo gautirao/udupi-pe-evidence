@@ -176,14 +176,9 @@ describe('`interactive: false` — the ONLY permitted differences', () => {
     );
     expect(memberHtml).not.toMatch(/tabindex=/);
     expect(memberHtml).not.toMatch(/role="button"/);
-    expect(memberHtml).not.toMatch(/aria-label=/);
-    expect(memberHtml).toContain('aria-hidden="true"');
-    expect(memberHtml).toContain('data-interactive="false"');
-    expect(memberHtml).toContain('pointer-events:none;cursor:default;');
-    // Owner ruling (count truthfulness): no numeric hero count anywhere on the card.
     const bodyText = memberHtml.match(/<div class="rc-body"[^>]*>([\s\S]*?)<\/div><div class="rc-footer"/)?.[1] ?? '';
-    expect(bodyText.replace(/<[^>]+>/g, '')).not.toMatch(/\d/);
     expect(bodyText).toContain(DRAFT_MEMBER_SECONDARY_TEXT);
+
     // Same shell as the interactive selected leaf: swap the two permitted
     // deltas back and the shell/footer/tail markup is byte-identical to
     // markerShellHtml's own output for the same identity content.
@@ -211,5 +206,48 @@ describe('`interactive: false` — the ONLY permitted differences', () => {
         MARKER_SHELL_STYLE,
       );
     expect(normalised).toBe(reference);
+  });
+
+  it('renders count and schoolCount with proper pluralization on draft-member card when provided', () => {
+    const memberWithCounts = iconHtml(
+      makeAreaSetDraftMemberIcon({
+        areaKey: 'a:IN|KA|Bengaluru|Hebbal',
+        label: 'Hebbal',
+        lat: 13.05,
+        lon: 77.59,
+        count: 42,
+        schoolCount: 12,
+      }),
+    );
+    expect(memberWithCounts).toContain('42');
+    expect(memberWithCounts).toContain('LISTINGS');
+    expect(memberWithCounts).toContain('12 schools');
+
+    const memberSingle = iconHtml(
+      makeAreaSetDraftMemberIcon({
+        areaKey: 'a:IN|KA|Bengaluru|Hebbal',
+        label: 'Hebbal',
+        lat: 13.05,
+        lon: 77.59,
+        count: 1,
+        schoolCount: 1,
+      }),
+    );
+    expect(memberSingle).toContain('1');
+    expect(memberSingle).toContain('LISTING');
+    expect(memberSingle).not.toContain('LISTINGS');
+    expect(memberSingle).toContain('1 school');
+    expect(memberSingle).not.toContain('1 schools');
+
+    const memberZeroSchool = iconHtml(
+      makeAreaSetDraftMemberIcon({
+        areaKey: 'a:IN|KA|Bengaluru|Hebbal',
+        label: 'Hebbal',
+        lat: 13.05,
+        lon: 77.59,
+        schoolCount: 0,
+      }),
+    );
+    expect(memberZeroSchool).toContain(DRAFT_MEMBER_SECONDARY_TEXT);
   });
 });

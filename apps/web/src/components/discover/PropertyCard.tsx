@@ -107,6 +107,11 @@ export interface PropertyCardProps {
    */
   isSelected?: boolean;
   /**
+   * Issue #1547 / #2616 — ephemeral hover/focus state driven from card or map marker.
+   * When true, renders a subtle copper hover border and highlight shadow.
+   */
+  isHovered?: boolean;
+  /**
    * Issue #1547 — optional selection callback (does NOT replace onNavigate; the card
    * click still navigates). Currently selection is driven from the map marker side, so
    * this is reserved for symmetric card→marker wiring and defaults to a no-op.
@@ -142,6 +147,7 @@ export function PropertyCard({
   isAuthenticated,
   onNavigate,
   isSelected = false,
+  isHovered = false,
   onSelect,
   onHover,
   areaLabel,
@@ -332,7 +338,11 @@ export function PropertyCard({
         'group block cursor-pointer scroll-mt-4 overflow-hidden rounded-xl border bg-card shadow-sm',
         'transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-copper focus-visible:ring-offset-1',
-        isSelected ? 'border-copper ring-2 ring-copper/40' : 'border-border',
+        isSelected
+          ? 'border-copper ring-2 ring-copper/40'
+          : isHovered
+            ? 'border-copper/80 bg-copper-50/20 shadow-md ring-1 ring-copper/30'
+            : 'border-border',
       )}
     >
       {/* Image header (full-bleed) with trust badge + distance badge overlays */}

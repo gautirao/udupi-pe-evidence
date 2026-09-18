@@ -3,7 +3,7 @@ import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { escapeHtml } from '@/lib/security';
 import { markerShellHtml, homeGlyphSvg } from '@/components/map/markerPrimitives';
-import { PAPER, COPPER_500, GREY_500, FONT_SANS } from '@/components/map/markerTokens';
+import { PAPER, COPPER_500, GREY_500, GREY_700, NAVY_800, FONT_SANS, FONT_MONO } from '@/components/map/markerTokens';
 import { AREA_CARD_FOOTPRINT_WIDTH_PX } from '@/features/discover/navigation/areaClustering';
 
 /**
@@ -37,19 +37,16 @@ export interface AreaSetCandidateCallout {
  * `area-single-marker` navigation leaf card, i.e. the frozen mock's
  * `areaPinHTML` selected branch — rendered NON-INTERACTIVE. Geo centre and
  * label come from `useDiscoverAreas` (the member's own area record).
- *
- * Owner ruling (count truthfulness, #2465): the card carries NO numeric
- * hero count. The only counts reachable here are the area's unfiltered
- * totals, and the nearby contract excludes members by construction, so a
- * number would contradict the panel's filter-aware "N shown" figure. Per the
- * #2017 count-correctness ruling that is resolved with non-numeric wording,
- * never an approximate number.
+ * Issue #2616: displays listing count and school count when available on the area card,
+ * or falls back to "Selected · in your draft" when counts are omitted.
  */
 export interface AreaSetDraftMemberMarker {
   areaKey: string;
   label: string;
   lat: number;
   lon: number;
+  count?: number;
+  schoolCount?: number;
 }
 
 interface AreaSetCandidateCalloutLayerProps {
@@ -60,7 +57,8 @@ interface AreaSetCandidateCalloutLayerProps {
 
 const NO_MEMBERS: AreaSetDraftMemberMarker[] = [];
 const FONT_SANS_ATTR = escapeHtml(FONT_SANS);
-/** Non-numeric secondary line (owner ruling: no unfiltered total beside a filter-aware panel count). */
+const FONT_MONO_ATTR = escapeHtml(FONT_MONO);
+/** Secondary line when counts are not provided. */
 export const DRAFT_MEMBER_SECONDARY_TEXT = 'Selected · in your draft';
 
 /**
@@ -68,18 +66,32 @@ export const DRAFT_MEMBER_SECONDARY_TEXT = 'Selected · in your draft';
  * `makeDestinationCard` paint — with `isSelected: true` and
  * `interactive: false` (`pointer-events:none`, no cursor), and shell attrs
  * WITHOUT `tabindex`/`role`/`aria-label` (`aria-hidden`; the panel is the
- * accessible surface). Identity: pin + name + non-numeric wording; footer:
+ * accessible surface). Identity: pin + name + count/school or draft wording; footer:
  * the selected card's "View homes ›". Width = the leaf card's footprint.
  */
 export function makeAreaSetDraftMemberIcon(member: AreaSetDraftMemberMarker): L.DivIcon {
   const label = escapeHtml(member.label);
   const nameMaxWidthPx = AREA_CARD_FOOTPRINT_WIDTH_PX - 24 - 11 - 6 - 2;
+  const countVal = member.count;
+  const countHtml =
+    countVal != null
+      ? `<span style="display:flex;align-items:baseline;gap:4px;margin-top:4px;"><span style="font-family:${FONT_MONO_ATTR};font-size:18px;font-weight:800;letter-spacing:-0.02em;line-height:1;color:${NAVY_800};">${countVal.toLocaleString()}</span><span style="font-family:${FONT_SANS_ATTR};font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${GREY_500};">${countVal === 1 ? 'LISTING' : 'LISTINGS'}</span></span>`
+      : '';
+  const schoolHtml =
+    member.schoolCount != null
+      ? `<span style="margin-top:2px;font-family:${FONT_SANS_ATTR};font-size:10.5px;font-weight:600;color:${GREY_700};white-space:nowrap;">${member.schoolCount} ${member.schoolCount === 1 ? 'school' : 'schools'}</span>`
+      : '';
+  const hasCounts = countVal != null;
+  const secondaryHtml = hasCounts
+    ? `${countHtml}${schoolHtml}`
+    : `<span data-testid="area-set-draft-member-secondary" style="margin-top:6px;font-size:11px;font-weight:600;color:${GREY_500};">${DRAFT_MEMBER_SECONDARY_TEXT}</span>`;
+
   const identityHtml =
     `<span style="display:flex;align-items:center;gap:6px;max-width:100%;">` +
     pinSvg(COPPER_500) +
     `<span style="font-size:13.5px;font-weight:800;letter-spacing:-0.01em;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:${nameMaxWidthPx}px;">${label}</span>` +
     `</span>` +
-    `<span data-testid="area-set-draft-member-secondary" style="margin-top:6px;font-size:11px;font-weight:600;color:${GREY_500};">${DRAFT_MEMBER_SECONDARY_TEXT}</span>`;
+    secondaryHtml;
   const html = markerShellHtml({
     shellAttrs: `data-testid="area-set-draft-member-marker" data-node-key="${escapeHtml(member.areaKey)}" data-selected="true" data-interactive="false" aria-hidden="true"`,
     titleAttr: '',

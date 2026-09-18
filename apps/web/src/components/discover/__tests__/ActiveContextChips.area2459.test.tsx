@@ -82,21 +82,18 @@ describe('ActiveContextChips — contextual area chip (#2459 AC6)', () => {
 
     const chip = screen.getByTestId('chip-area');
     expect(chip).toHaveTextContent('Residential built-up/plot: 800 – 1,200 sq ft');
-    // The SHORT form is visible-layer only: the full quantity names survive in the disclosure, so
-    // the accessible name still says "built-up area" and "plot size" in full.
-    expect(chip).toHaveTextContent('built-up area for homes');
-    expect(chip).toHaveTextContent('plot size for plots');
+    expect(chip.textContent).not.toContain('built-up area for homes');
   });
 
-  it('discloses on the broadest selection too, where nothing is narrowed', () => {
+  it('renders range without disclosure on the broadest selection too, where nothing is narrowed', () => {
     renderChips({ areaMinSqft: 500 });
 
     const chip = screen.getByTestId('chip-area');
     expect(chip).toHaveTextContent('Mixed built-up/warehouse/plot: 500+ sq ft');
-    expect(chip).toHaveTextContent('warehouse area for warehouses and godowns');
+    expect(chip.textContent).not.toContain('warehouse area for warehouses and godowns');
   });
 
-  it('carries the disclosure in the accessible name, not only the visual label', () => {
+  it('carries the range in the accessible name without disclosure text', () => {
     renderChips({
       propertyTypes: ['apartment', 'residential_plot'],
       areaMaxSqft: 1500,
@@ -104,7 +101,7 @@ describe('ActiveContextChips — contextual area chip (#2459 AC6)', () => {
 
     const accessibleName = screen.getByTestId('chip-area').getAttribute('aria-label') ?? '';
     expect(accessibleName).toContain('Active filter:');
-    expect(accessibleName).toContain('plot size for plots');
+    expect(accessibleName).toContain('Up to 1,500 sq ft');
   });
 
   it('formats a max-only bound with an explicit unit', () => {
@@ -223,7 +220,7 @@ describe('ActiveContextChips — the area chip leads with the compared quantity 
       commercialSubtypes: filters.commercialSubtypes,
     });
     expect(meanings.length).toBeGreaterThan(1);
-    expect(disclosure).not.toBeNull();
+    expect(disclosure).toBeNull();
 
     expect(label.startsWith(shortLabel)).toBe(true);
     expect(label.toLowerCase().startsWith('area')).toBe(false);

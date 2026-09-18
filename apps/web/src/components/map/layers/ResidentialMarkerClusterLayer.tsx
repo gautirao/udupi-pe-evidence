@@ -39,12 +39,54 @@ import { createMarkerIcon, createSelectedMarkerIcon } from './markerIcons';
  */
 const MARKER_REVEAL_HOLD_ZOOM = 24;
 
+/**
+ * Determines the cluster badge label (HOMES / PLOTS / LISTINGS) and accessible noun
+ * based on child marker listings family membership.
+ */
+export function getClusterNounInfo(
+  childListings: Array<{ property_type?: string | null }>,
+  count: number,
+): { nounLabel: string; noun: string } {
+  let nounLabel = 'HOMES';
+  let noun = count === 1 ? 'home' : 'homes';
+
+  if (childListings.length > 0) {
+    const isCommercial = (t: string) =>
+      ['commercial', 'commercial_building', 'warehouse', 'commercial_land', 'shop', 'office'].includes(t);
+    const isPlot = (t: string) => ['land', 'plot'].includes(t);
+
+    const allCommercial = childListings.every((l) => isCommercial((l?.property_type ?? '').toLowerCase()));
+    const allPlots = childListings.every((l) => isPlot((l?.property_type ?? '').toLowerCase()));
+    const allHomes = childListings.every((l) => {
+      const t = (l?.property_type ?? '').toLowerCase();
+      return !isCommercial(t) && !isPlot(t);
+    });
+
+    if (allCommercial) {
+      nounLabel = 'LISTINGS';
+      noun = count === 1 ? 'listing' : 'listings';
+    } else if (allPlots) {
+      nounLabel = 'PLOTS';
+      noun = count === 1 ? 'plot' : 'plots';
+    } else if (allHomes) {
+      nounLabel = 'HOMES';
+      noun = count === 1 ? 'home' : 'homes';
+    } else {
+      nounLabel = 'LISTINGS';
+      noun = count === 1 ? 'listing' : 'listings';
+    }
+  }
+
+  return { nounLabel, noun };
+}
+
 // Marker cluster layer component
 export function MarkerClusterLayer({
   listings,
   onSelectListing,
   selectedListingId,
   hoveredListingId,
+  onHoverListing,
   onMarkerClickWithPosition,
   onMarkerClusterCameraIntent,
 }: {
@@ -56,6 +98,7 @@ export function MarkerClusterLayer({
   /** Issue #1547 — ephemeral hover/focus id (React state, NOT URL). When set, the
    *  matching marker renders with the copper icon; clears on mouseleave/blur. */
   hoveredListingId?: string | null;
+  onHoverListing?: (id: string | null) => void;
   /** a3 — fires with the pixel position of the marker click relative to the map container. */
   onMarkerClickWithPosition?: (pos: { x: number; y: number }) => void;
   /**
@@ -248,7 +291,7 @@ export function MarkerClusterLayer({
         // the correct highlighted/price-band state), so a singleton cluster
         // renders pixel-identical to an individual pin.
         if (count === 1) {
-          const soleMarker = cluster.getAllChildMarkers()[0];
+          const soleMarker = typeof cluster.getAllChildMarkers === 'function' ? cluster.getAllChildMarkers()[0] : undefined;
           const soleIcon = soleMarker?.options.icon;
           if (soleIcon) return soleIcon;
         }
@@ -277,7 +320,10 @@ export function MarkerClusterLayer({
         // using the SAME wording as those other marker tiers. The outer
         // .custom-marker-cluster class name is preserved unchanged — several
         // E2E specs select on it for presence/visibility only.
-        const noun = count === 1 ? 'home' : 'homes';
+        const childMarkers = typeof cluster.getAllChildMarkers === 'function' ? cluster.getAllChildMarkers() : [];
+        const childListings = childMarkers.map((m) => listingByMarker.get(m)).filter(Boolean);
+        const { nounLabel, noun } = getClusterNounInfo(childListings as Array<{ property_type?: string | null }>, count);
+
         const ariaLabel = escapeHtml(
           `${count} ${noun} in this cluster. Activate to zoom in.`,
         );
@@ -292,7 +338,7 @@ export function MarkerClusterLayer({
           // the same value passed to iconSize below) fixes that.
           html: `<div class="custom-marker-cluster custom-marker-cluster-${size}" style="width:${sizeNum}px;height:${sizeNum}px;" tabindex="0" role="button" aria-label="${ariaLabel}">
             <span class="custom-marker-cluster-count">${count}</span>
-            <span class="custom-marker-cluster-label">HOMES</span>
+            <span class="custom-marker-cluster-label">${nounLabel}</span>
             <span class="custom-marker-cluster-cap" aria-hidden="true">Tap to zoom in <span class="custom-marker-cluster-cap-arrow">&#8250;</span></span>
           </div>`,
           className: '',
@@ -345,13 +391,18 @@ export function MarkerClusterLayer({
       // no flyTo / camera movement occurs for either path.
       const isHighlighted =
         listing.id === selectedListingId || listing.id === hoveredListingId;
-      // Issue #1942 — thread priceBand (anon coarse price, #1941) into both icon
-      // builders so anon individual pins show the band instead of a bare '—'.
-      // Issue #2051 — also thread monthly_rent/monthlyRentBand so rent/lease pins
-      // render a price instead of falling through to the '—' residual (AC6c).
+      // Issue #2616 — contextual metadata (bedrooms / sqft / commercial subtype) on map markers
+      const sqft = listing.carpet_area ?? listing.built_area ?? listing.land_area ?? (listing as { builtArea?: number; landArea?: number }).builtArea ?? (listing as { builtArea?: number; landArea?: number }).landArea;
+      const subtypeLabel = (listing as { commercialSubtype?: string }).commercialSubtype;
+      const context = {
+        bedrooms: listing.bedrooms,
+        sqft,
+        subtypeLabel,
+      };
+
       const icon = isHighlighted
-        ? createSelectedMarkerIcon(listing.property_type, listing.price, listing.priceBand, listing.monthly_rent, listing.monthlyRentBand)
-        : createMarkerIcon(listing.property_type, listing.price, listing.priceBand, listing.monthly_rent, listing.monthlyRentBand);
+        ? createSelectedMarkerIcon(listing.property_type, listing.price, listing.priceBand, listing.monthly_rent, listing.monthlyRentBand, context)
+        : createMarkerIcon(listing.property_type, listing.price, listing.priceBand, listing.monthly_rent, listing.monthlyRentBand, context);
       // Issue #2139 — render at the coincident-offset position (identical
       // to the raw listing coordinates for any non-coincident listing).
       const position = coincidentOffsets.get(listing.id) ?? { latitude: listing.latitude!, longitude: listing.longitude! };
@@ -367,6 +418,14 @@ export function MarkerClusterLayer({
       marker.on('add', () => {
         const el = marker.getElement();
         if (el) el.setAttribute('data-listing-id', listing.id);
+      });
+
+      marker.on('mouseover', () => {
+        onHoverListing?.(listing.id);
+      });
+
+      marker.on('mouseout', () => {
+        onHoverListing?.(null);
       });
 
       marker.on('click', (e: L.LeafletMouseEvent) => {
@@ -418,7 +477,7 @@ export function MarkerClusterLayer({
       // no zoom/fit, no spiderfy, one tap opens the listing preview
       // directly. Bypasses every split/spiderfy decision below entirely.
       if (cluster.getChildCount() === 1) {
-        const soleMarker = cluster.getAllChildMarkers()[0];
+        const soleMarker = typeof cluster.getAllChildMarkers === 'function' ? cluster.getAllChildMarkers()[0] : undefined;
         const listing = soleMarker ? listingByMarker.get(soleMarker) : undefined;
         if (listing) {
           onSelectListing?.(listing);
@@ -478,7 +537,7 @@ export function MarkerClusterLayer({
       // every child (every marker in this clusterGroup was registered in
       // rawLatLngByMarker during the forEach above), so this fallback only
       // engages for test doubles that don't model child markers.
-      const childMarkers = cluster.getAllChildMarkers();
+      const childMarkers = typeof cluster.getAllChildMarkers === 'function' ? cluster.getAllChildMarkers() : [];
       const rawLatLngs = childMarkers
         .map((m) => rawLatLngByMarker.get(m))
         .filter((ll): ll is { lat: number; lng: number } => ll != null);

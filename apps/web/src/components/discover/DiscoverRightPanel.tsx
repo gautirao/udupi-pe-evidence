@@ -887,6 +887,10 @@ export interface DiscoverRightPanelProps {
    */
   selectedListingId?: string | null;
   /**
+   * Ephemeral hover/focus id driven from map marker side to highlight corresponding card.
+   */
+  hoveredListingId?: string | null;
+  /**
    * Called when a residential result card is activated, so the parent can sync the
    * selected map marker. Optional — when absent the card simply navigates.
    */
@@ -1172,6 +1176,7 @@ export function DiscoverRightPanel({
   onSetLocality,
   onClearLocality,
   selectedListingId = null,
+  hoveredListingId = null,
   onSelectResultListing,
   onHoverResultListing,
   isLoadingAreaGroupsForSchool = false,
@@ -1396,6 +1401,7 @@ export function DiscoverRightPanel({
             isAuthenticated={false}
             onNavigate={() => navigate(`/listing/${listing.id}`)}
             isSelected={selectedListingId === listing.id}
+            isHovered={hoveredListingId === listing.id}
             onSelect={onSelectResultListing}
             onHover={onHoverResultListing}
           />
@@ -1861,6 +1867,7 @@ export function DiscoverRightPanel({
             onAddSchool={onAddSchool}
             intent={intent}
             selectedListingId={selectedListingId}
+            hoveredListingId={hoveredListingId}
             onSelectListing={onSelectResultListing}
             onHoverListing={onHoverResultListing}
             // Issue #1606 / Issue #1798 PR-B1 — area-first results redesign: breadcrumb + in-panel controls.

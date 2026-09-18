@@ -154,67 +154,41 @@ describe('resolvePrimaryAreaControlLabel — single meaning needs no disclosure'
   });
 });
 
-describe('resolvePrimaryAreaControlLabel — AC6: a mixed selection MUST disclose', () => {
-  it('discloses both quantities for a broad/mixed Residential selection', () => {
+describe('resolvePrimaryAreaControlLabel — disclosure text removed', () => {
+  it('returns null for disclosure for a broad/mixed Residential selection', () => {
     const r = resolvePrimaryAreaControlLabel({
       propertyTypes: ['apartment', 'house', 'residential_plot'],
     });
     expect(r.label).toBe(BROAD_PRIMARY_AREA_LABEL);
-    expect(r.disclosure).toBe('Compares built-up area for homes; plot size for plots.');
+    expect(r.disclosure).toBeNull();
     expect(r.meanings).toEqual(['BUILT_UP', 'PLOT']);
   });
 
-  it('discloses all three quantities for a broad/mixed Commercial selection', () => {
+  it('returns null for disclosure for a broad/mixed Commercial selection', () => {
     const r = resolvePrimaryAreaControlLabel({
       propertyTypes: ['commercial', 'commercial_building', 'warehouse', 'commercial_land'],
     });
     expect(r.label).toBe(BROAD_PRIMARY_AREA_LABEL);
-    expect(r.disclosure).toBe(
-      'Compares built-up area for shops, offices and commercial buildings; ' +
-        'warehouse area for warehouses and godowns; plot size for commercial land.',
-    );
+    expect(r.disclosure).toBeNull();
     expect(r.meanings).toEqual(['BUILT_UP', 'WAREHOUSE', 'PLOT']);
   });
 
-  it('discloses only the quantities actually in play, not the family’s whole vocabulary', () => {
+  it('returns null for disclosure regardless of selected property types', () => {
     const r = resolvePrimaryAreaControlLabel({ propertyTypes: ['warehouse', 'commercial_land'] });
-    expect(r.disclosure).toBe(
-      'Compares warehouse area for warehouses and godowns; plot size for commercial land.',
-    );
-    expect(r.disclosure).not.toContain('built-up');
+    expect(r.disclosure).toBeNull();
   });
 
-  it('spans families when the selection does', () => {
+  it('returns null for disclosure when spanning families', () => {
     const r = resolvePrimaryAreaControlLabel({ propertyTypes: ['apartment', 'warehouse'] });
-    expect(r.disclosure).toBe(
-      'Compares built-up area for homes; warehouse area for warehouses and godowns.',
-    );
+    expect(r.disclosure).toBeNull();
   });
 
-  it('treats "nothing selected" as the broadest mixture and still discloses', () => {
+  it('returns null for disclosure when nothing selected', () => {
     const empty = resolvePrimaryAreaControlLabel({});
     expect(empty.label).toBe(BROAD_PRIMARY_AREA_LABEL);
-    expect(empty.disclosure).not.toBeNull();
+    expect(empty.disclosure).toBeNull();
     expect(empty.meanings).toEqual(['BUILT_UP', 'WAREHOUSE', 'PLOT']);
-    // An empty array must behave identically to an absent one.
     expect(resolvePrimaryAreaControlLabel({ propertyTypes: [] })).toEqual(empty);
-  });
-
-  it('NEVER returns a broad label without a disclosure while more than one meaning is in play', () => {
-    // The failure mode D1 forbids, asserted as an invariant over every subset rather than as a
-    // property of the handful of selections spelled out above.
-    const types = ['apartment', 'villa', 'house', 'residential_plot', 'land', 'agricultural_land',
-      'commercial', 'commercial_building', 'warehouse', 'commercial_land', 'other'];
-    for (let mask = 1; mask < 1 << types.length; mask++) {
-      const propertyTypes = types.filter((_, i) => mask & (1 << i));
-      const r = resolvePrimaryAreaControlLabel({ propertyTypes });
-      if (r.meanings.length > 1) {
-        expect(r.label, JSON.stringify(propertyTypes)).toBe(BROAD_PRIMARY_AREA_LABEL);
-        expect(r.disclosure, JSON.stringify(propertyTypes)).not.toBeNull();
-      } else if (r.meanings.length === 1) {
-        expect(r.label, JSON.stringify(propertyTypes)).toBe(PRIMARY_AREA_LABELS[r.meanings[0]]);
-      }
-    }
   });
 });
 

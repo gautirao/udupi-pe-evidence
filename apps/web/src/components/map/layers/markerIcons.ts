@@ -98,60 +98,118 @@ function buildDiscSvg(glyphPath: string, discColour: string): string {
  * Cache key includes type colour so two different types with the same formatted price
  * are never cache-collided (R1 invariant).
  */
+export interface MarkerContext {
+  bedrooms?: number | null;
+  sqft?: number | null;
+  subtypeLabel?: string | null;
+}
+
+export function formatMarkerContextText(
+  propertyType: string,
+  context?: MarkerContext | null,
+): string | null {
+  if (!context) return null;
+  const { bedrooms, sqft, subtypeLabel } = context;
+
+  const typeLower = (propertyType || '').toLowerCase();
+  const isCommercial = [
+    'commercial',
+    'commercial_building',
+    'warehouse',
+    'commercial_land',
+    'shop',
+    'office',
+    'building',
+  ].includes(typeLower) || (Boolean(subtypeLabel) && !['apartment', 'villa', 'plot', 'land', 'plots'].includes(subtypeLabel!.toLowerCase()));
+
+  const parts: string[] = [];
+
+  if (isCommercial) {
+    if (subtypeLabel) {
+      parts.push(subtypeLabel);
+    } else if (typeLower === 'shop') {
+      parts.push('Shop');
+    } else if (typeLower === 'office') {
+      parts.push('Office');
+    } else if (typeLower === 'warehouse') {
+      parts.push('Warehouse');
+    } else if (typeLower === 'commercial_land') {
+      parts.push('Commercial Land');
+    } else if (typeLower === 'commercial_building' || typeLower === 'building') {
+      parts.push('Commercial Building');
+    }
+  } else {
+    if (bedrooms != null && bedrooms > 0) {
+      parts.push(`${bedrooms} BHK`);
+    }
+  }
+
+  if (sqft != null && sqft > 0) {
+    parts.push(`${sqft.toLocaleString('en-IN')} sq ft`);
+  }
+
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+/**
+ * R-A — White rounded pill marker icon.
+ * Shape: bg-white rounded-full pill, left type-coloured disc + glyph, right price text.
+ * NULL/zero price: shows '—'; pill is still TYPE-distinguishable via disc colour + glyph.
+ *
+ * Cache key includes type colour so two different types with the same formatted price
+ * are never cache-collided (R1 invariant).
+ */
 export const createMarkerIcon = (
   propertyType: string,
   price: number | null | undefined,
   priceBand?: string | null,
   monthlyRent?: number | null,
   monthlyRentBand?: string | null,
+  context?: MarkerContext | null,
 ): L.DivIcon => {
   const { label, isBand } = deriveMarkerLabel(propertyType, price, priceBand, monthlyRent, monthlyRentBand);
   const visual = getPropertyTypeVisual(propertyType);
-  // R1: key on colour (not just type) so that types sharing the same label get distinct icons.
-  // The label now encodes exact price / band / '—' residual, so distinct bands (or a band
-  // vs. an exact price sharing the same text) still produce distinct cache keys.
-  const cacheKey = `${propertyType}|${visual.colour}|${label}|default`;
+  const contextText = formatMarkerContextText(propertyType, context);
+  const contextKey = contextText ? `|${contextText}` : '';
+  const cacheKey = `${propertyType}|${visual.colour}|${label}${contextKey}|default`;
   const cached = iconCache.get(cacheKey);
   if (cached) return cached;
 
   const glyphPath = GLYPH_SVG_PATHS[visual.glyph];
   const discSvg = buildDiscSvg(glyphPath, visual.colour);
   const safeLabel = escapeHtml(label);
-  // Issue #1942 — aria-label for the pill: residual → neutral "Price unavailable"
-  // (under #1941's contract, anon responses always carry priceBand when a price
-  // exists, so reaching residual means no price data exists — a sign-in prompt
-  // would be a false promise); band → approximate-price copy; exact price → the
-  // visible price text is itself the accessible name (no aria-label needed).
+  const safeContext = contextText ? escapeHtml(contextText) : null;
   const ariaLabel = isBand
-    ? `aria-label="${escapeHtml(`Approximate price ${label}`)}"`
+    ? `aria-label="${escapeHtml(`Approximate price ${label}${contextText ? `, ${contextText}` : ''}`)}"`
     : label === '—'
       ? `aria-label="${escapeHtml('Price unavailable')}"`
-      : '';
+      : contextText
+        ? `aria-label="${escapeHtml(`${label}, ${contextText}`)}"`
+        : '';
 
-  // Pill dimensions: disc (22px) + gap (7px) + text (~60px max) + h-padding (5+12=17px)
-  // Width estimated; Leaflet will clip if too narrow — use auto width via transform.
+  const contentHtml = safeContext
+    ? `<div style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.2;">
+        <span style="font-family:ui-monospace,'Geist Mono','SF Mono',monospace;font-size:12px;font-weight:700;letter-spacing:-0.01em;color:hsl(221 39% 11%);">${safeLabel}</span>
+        <span style="font-size:10px;font-weight:600;color:#6B7280;margin-top:1px;">${safeContext}</span>
+       </div>`
+    : `<span style="font-family:ui-monospace,'Geist Mono','SF Mono',monospace;font-size:12.5px;font-weight:700;letter-spacing:-0.01em;color:hsl(221 39% 11%);line-height:1;">${safeLabel}</span>`;
+
   const pillHtml = `
     <div data-testid="property-marker" ${ariaLabel} style="
       background:#FFFFFF;
       border:1px solid rgba(0,0,0,0.12);
-      border-radius:9999px;
+      border-radius:12px;
       box-shadow:0 4px 10px rgba(17,24,39,0.07),0 2px 4px rgba(17,24,39,0.05);
       display:inline-flex;
       align-items:center;
       gap:7px;
-      padding:5px 12px 5px 5px;
+      padding:${safeContext ? '4px 10px 4px 5px' : '5px 12px 5px 5px'};
       white-space:nowrap;
       pointer-events:auto;
+      cursor:pointer;
     ">
       ${discSvg}
-      <span style="
-        font-family:ui-monospace,'Geist Mono','SF Mono',monospace;
-        font-size:12.5px;
-        font-weight:700;
-        letter-spacing:-0.01em;
-        color:hsl(221 39% 11%);
-        line-height:1;
-      ">${safeLabel}</span>
+      ${contentHtml}
     </div>`;
 
   // Wrap in a translate so the pill bottom-edge sits at the listing coordinates.
@@ -189,12 +247,13 @@ export const createSelectedMarkerIcon = (
   priceBand?: string | null,
   monthlyRent?: number | null,
   monthlyRentBand?: string | null,
+  context?: MarkerContext | null,
 ): L.DivIcon => {
   const { label, isBand } = deriveMarkerLabel(propertyType, price, priceBand, monthlyRent, monthlyRentBand);
   const visual = getPropertyTypeVisual(propertyType);
-  // R1: include colour in key so types sharing the same price label are not collided.
-  // The label encodes exact price / band / '—' residual — distinct bands get distinct keys.
-  const cacheKey = `${propertyType}|${visual.colour}|${label}|selected`;
+  const contextText = formatMarkerContextText(propertyType, context);
+  const contextKey = contextText ? `|${contextText}` : '';
+  const cacheKey = `${propertyType}|${visual.colour}|${label}${contextKey}|selected`;
   const cached = iconCache.get(cacheKey);
   if (cached) return cached;
 
@@ -202,40 +261,40 @@ export const createSelectedMarkerIcon = (
   // SELECTED: disc = semi-transparent white on the navy pill background
   const discSvg = buildDiscSvg(glyphPath, 'rgba(255,255,255,0.18)');
   const safeLabel = escapeHtml(label);
-  // Issue #1942 — same aria-label contract as createMarkerIcon (R5: selected-marker
-  // parity); residual reads "Price unavailable", not a sign-in prompt.
+  const safeContext = contextText ? escapeHtml(contextText) : null;
   const ariaLabel = isBand
-    ? `aria-label="${escapeHtml(`Approximate price ${label}`)}"`
+    ? `aria-label="${escapeHtml(`Approximate price ${label}${contextText ? `, ${contextText}` : ''}`)}"`
     : label === '—'
       ? `aria-label="${escapeHtml('Price unavailable')}"`
-      : '';
+      : contextText
+        ? `aria-label="${escapeHtml(`${label}, ${contextText}`)}"`
+        : '';
 
-  // Navy pill — #1B2A45 = hsl(219 44% 19%) = --primary
+  const contentHtml = safeContext
+    ? `<div style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.2;">
+        <span style="font-family:ui-monospace,'Geist Mono','SF Mono',monospace;font-size:12px;font-weight:700;letter-spacing:-0.01em;color:#FFFFFF;">${safeLabel}</span>
+        <span style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.85);margin-top:1px;">${safeContext}</span>
+       </div>`
+    : `<span style="font-family:ui-monospace,'Geist Mono','SF Mono',monospace;font-size:12.5px;font-weight:700;letter-spacing:-0.01em;color:#FFFFFF;line-height:1;">${safeLabel}</span>`;
+
   const pillHtml = `
     <div data-testid="property-marker" data-selected="true" ${ariaLabel} style="
       background:#1B2A45;
       border:1px solid rgba(0,0,0,0.15);
-      border-radius:9999px;
+      border-radius:12px;
       box-shadow:0 0 0 3px rgba(176,92,58,0.35),0 4px 10px rgba(17,24,39,0.12),0 2px 4px rgba(17,24,39,0.08);
       display:inline-flex;
       align-items:center;
       gap:7px;
-      padding:5px 12px 5px 5px;
+      padding:${safeContext ? '4px 10px 4px 5px' : '5px 12px 5px 5px'};
       white-space:nowrap;
       pointer-events:auto;
+      cursor:pointer;
     ">
       ${discSvg}
-      <span style="
-        font-family:ui-monospace,'Geist Mono','SF Mono',monospace;
-        font-size:12.5px;
-        font-weight:700;
-        letter-spacing:-0.01em;
-        color:#FFFFFF;
-        line-height:1;
-      ">${safeLabel}</span>
+      ${contentHtml}
     </div>`;
 
-  // scale(1.09) gives the slight size-up; translate(-50%,-100%) anchors pill bottom to coords.
   const html = `<div style="transform:translate(-50%,-100%) scale(1.09);transform-origin:50% 100%;display:inline-block;">${pillHtml}</div>`;
 
   const icon = L.divIcon({

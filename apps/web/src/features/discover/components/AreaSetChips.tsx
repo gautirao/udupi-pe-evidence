@@ -666,7 +666,7 @@ export function AreaSetChips() {
                       // here any more. The panel only closes via Escape, an
                       // outside click, or the bottom bar's Show/Cancel.
                       if (draft.atLimit) return;
-                      commands.add(candidate.areaKey);
+                      commands.addCandidate(candidate);
                     }}
                     data-testid={`area-set-suggestion-${candidate.areaKey}-add`}
                   >

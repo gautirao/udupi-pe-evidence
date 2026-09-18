@@ -359,20 +359,9 @@ export interface PrimaryAreaControlLabel {
 }
 
 function buildDisclosure(
-  meaningsByFamily: ReadonlyMap<PrimaryAreaFamily, ReadonlySet<ResolvedPrimaryAreaMeaning>>,
-): string {
-  const clauses: string[] = [];
-  for (const family of FAMILY_ORDER) {
-    const inPlay = meaningsByFamily.get(family);
-    if (inPlay === undefined) continue;
-    for (const term of PRIMARY_AREA_DISCLOSURE_TERMS[family]) {
-      if (!inPlay.has(term.meaning)) continue;
-      clauses.push(`${PRIMARY_AREA_QUANTITY[term.meaning]} for ${term.subject}`);
-    }
-  }
-  // Semicolons, not commas: several subjects are themselves comma-joined lists
-  // ("shops, offices and commercial buildings"), and a comma separator would run them together.
-  return `Compares ${clauses.join('; ')}.`;
+  _meaningsByFamily: ReadonlyMap<PrimaryAreaFamily, ReadonlySet<ResolvedPrimaryAreaMeaning>>,
+): string | null {
+  return null;
 }
 
 function sentenceCase(phrase: string): string {

@@ -68,9 +68,11 @@ import { render } from '@testing-library/react';
 import {
   AreaSetCandidateCalloutLayer,
   makeAreaSetCandidateCalloutIcon,
+  makeAreaSetDraftMemberIcon,
   type AreaSetCandidateCallout,
   type AreaSetDraftMemberMarker,
 } from '../AreaSetCandidateCalloutLayer';
+import { NAVY_800, GREY_700, GREY_500, PAPER } from '@/components/map/markerTokens';
 
 const RR_NAGAR_MEMBER: AreaSetDraftMemberMarker = {
   areaKey: 'IN|KA|Bengaluru|RR Nagar',
@@ -299,5 +301,32 @@ describe('AreaSetCandidateCalloutLayer — draft members (owner ruling C2): cano
     const { unmount } = render(<AreaSetCandidateCalloutLayer candidates={[HENNUR]} members={[RR_NAGAR_MEMBER]} />);
     unmount();
     for (const call of capturedMarkerCalls) expect(call.handle.remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('makeAreaSetDraftMemberIcon renders candidate snapshot count (9 LISTINGS) and schoolCount (0 schools) with dark legible text on white card body', () => {
+    const kadugodiMember: AreaSetDraftMemberMarker = {
+      areaKey: 'IN|KA|Bengaluru|Kadugodi',
+      label: 'Kadugodi',
+      lat: 12.99,
+      lon: 77.76,
+      count: 9,
+      schoolCount: 0,
+    };
+    const icon = makeAreaSetDraftMemberIcon(kadugodiMember);
+    const html = String((icon as unknown as { options: { html: string } }).options.html);
+
+    expect(html).toContain('Kadugodi');
+    expect(html).toContain('>9<');
+    expect(html).toContain('LISTINGS');
+    expect(html).toContain('0 schools');
+    expect(html).not.toContain('126');
+    expect(html).not.toContain('5 schools');
+
+    // Visual-semantic assertions: text must be dark (NAVY_800 / GREY_500 / GREY_700) and NOT white (PAPER) on white card body
+    expect(html).toContain(`color:${NAVY_800}`);
+    expect(html).toContain(`color:${GREY_500}`);
+    expect(html).toContain(`color:${GREY_700}`);
+    expect(html).not.toContain(`color:${PAPER};">9<`);
+    expect(html).not.toContain(`color:rgba(255,255,255`);
   });
 });

@@ -564,7 +564,7 @@ export function DiscoverMapCanvas({
   // Issue #2456 (owner ruling) — `commands` is deliberately NOT read here:
   // the map has no path that mutates the draft. Adding a candidate happens
   // only through the panel (AreaSetDraftPanel / AreaSetChips).
-  const { view: areaSetDraftView, data: nearbyAreaCandidatesData } = useAreaSetDraftContext();
+  const { view: areaSetDraftView, data: nearbyAreaCandidatesData, draftMemberStatsByAreaKey } = useAreaSetDraftContext();
 
   // Issue #2426 — real-measured clearance so SearchThisAreaCta (rendered
   // below) never overlaps DiscoverMapContextOverlay's breadcrumb or the
@@ -657,8 +657,7 @@ export function DiscoverMapCanvas({
   // `selected` branch). Members are resolved through the same
   // `useDiscoverAreas(city)` record AreaSetDraftPanel/AreaSetChips label
   // their chips from (cached query; no new fetch), which also supplies the
-  // geo centre. No count crosses (owner ruling: the area's unfiltered total
-  // must not sit beside the panel's filter-aware figure). A member whose
+  // geo centre. Supplies listingCount and schoolCount when available. A member whose
   // area record is not (yet) loaded is simply not drawn — never placed at a
   // fabricated position. Gated on the draft being open like the callouts;
   // `undefined` closes the layer. Read-only: no command is derived here, so
@@ -667,6 +666,7 @@ export function DiscoverMapCanvas({
   const areaSetDraftMembers: AreaSetDraftMemberMarker[] | undefined = shell.isAreaSetDraftOpen
     ? areaSetDraftView.draftAreaKeys.flatMap((areaKey) => {
         const area = discoverAreasData?.areas.find((a) => a.areaKey === areaKey);
+        const snapshot = draftMemberStatsByAreaKey[areaKey];
         return area
           ? [
               {
@@ -674,6 +674,8 @@ export function DiscoverMapCanvas({
                 label: area.name,
                 lat: area.geoCenterLat,
                 lon: area.geoCenterLon,
+                count: snapshot?.eligibleListingCount ?? area.listingCount,
+                schoolCount: snapshot?.schoolCount ?? area.schoolCount,
               },
             ]
           : [];

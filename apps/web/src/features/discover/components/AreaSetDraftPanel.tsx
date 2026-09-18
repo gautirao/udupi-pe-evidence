@@ -230,7 +230,7 @@ export function AreaSetDraftPanel() {
                   aria-disabled={draft.atLimit}
                   onClick={() => {
                     if (draft.atLimit) return;
-                    commands.add(candidate.areaKey);
+                    commands.addCandidate(candidate);
                   }}
                   data-testid={`area-set-draft-panel-suggestion-${candidate.areaKey}-add`}
                 >
