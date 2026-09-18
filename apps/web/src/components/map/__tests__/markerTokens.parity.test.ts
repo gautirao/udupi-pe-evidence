@@ -13,7 +13,9 @@ import { fileURLToPath } from 'node:url';
 import * as tokens from '../markerTokens';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const TOKENS_DIR = path.resolve(HERE, '../../../../docs/design/retrends-design-system/tokens');
+const WEBDOCS_DIR = path.resolve(HERE, '../../../../docs/design/retrends-design-system/tokens');
+const ROOTDOCS_DIR = path.resolve(HERE, '../../../../../../docs/design/retrends-design-system/tokens');
+const TOKENS_DIR = fs.existsSync(WEBDOCS_DIR) ? WEBDOCS_DIR : ROOTDOCS_DIR;
 
 function read(file: string): string {
   return fs.readFileSync(path.join(TOKENS_DIR, file), 'utf8');

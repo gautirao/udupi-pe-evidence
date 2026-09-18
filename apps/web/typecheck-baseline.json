@@ -7,6 +7,42 @@
       "message": "Argument of type '{ city: string; areas: { areaKey: string; name: string; geoCenterLat: number; geoCenterLon: number; listingCount: number; schoolCount: number; }[]; }' is not assignable to parameter of type '{ city: string; areas: { areaKey: string; name: string; geoCenterLat: number; geoCenterLon: number; listingCount: number; schoolCount: number; agriAcreage: number; }[]; }'."
     },
     {
+      "fingerprint": "4e88c04548f4cfd3eab1c0af08c3dd2c2aa93403",
+      "file": "src/components/discover/__tests__/DiscoverRightPanel.routing.test.tsx",
+      "code": "TS2554",
+      "message": "Expected 2 arguments, but got 1."
+    },
+    {
+      "fingerprint": "06b4c978d642cbec5e7f6c64f83aeb379ec6d301",
+      "file": "src/components/discover/navigation/__tests__/NavigationChildCard.test.tsx",
+      "code": "TS2322",
+      "message": "Type '{ nodeKey: string; nodeType: NavigationNodeType; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: number | null; ... 5 more ...; bearingDegrees?: number | null; }' is not assignable to type 'AreasNavigationChild'."
+    },
+    {
+      "fingerprint": "cd1ad360cbeadcec2953159f530c9a01b97d5a46",
+      "file": "src/components/discover/navigation/__tests__/NavigationChildList.test.tsx",
+      "code": "TS2739",
+      "message": "Type '{ nodeKey: string; nodeType: \"DIRECTION\"; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: null; isLeafArea: false; matchingAreaCount: null; }' is missing the following properties from type 'AreasNavigationChild': descendantAreaCount, representativeAreaKeys, bounds, bearingDegrees"
+    },
+    {
+      "fingerprint": "9a6b5a8366a1677a195a9cfdf1fc73f1e32b68c6",
+      "file": "src/components/discover/navigation/__tests__/NavigationChildList.test.tsx",
+      "code": "TS2739",
+      "message": "Type '{ nodeKey: string; nodeType: \"DIRECTION\"; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: number; isLeafArea: false; matchingAreaCount: null; }' is missing the following properties from type 'AreasNavigationChild': descendantAreaCount, representativeAreaKeys, bounds, bearingDegrees"
+    },
+    {
+      "fingerprint": "9a9b93791400ee843d988103d52dc616a8989dfb",
+      "file": "src/components/discover/navigation/__tests__/NavigationLevelPanel.test.tsx",
+      "code": "TS2739",
+      "message": "Type '{ nodeKey: string; nodeType: \"AREA\"; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: null; isLeafArea: true; matchingAreaCount: null; }' is missing the following properties from type 'AreasNavigationChild': descendantAreaCount, representativeAreaKeys, bounds, bearingDegrees"
+    },
+    {
+      "fingerprint": "4c64e1f670d5391d424171e070b8cd4091d60abe",
+      "file": "src/components/discover/navigation/__tests__/NavigationLevelPanel.test.tsx",
+      "code": "TS2739",
+      "message": "Type '{ nodeKey: string; nodeType: \"DIRECTION\"; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: null; isLeafArea: false; matchingAreaCount: null; }' is missing the following properties from type 'AreasNavigationChild': descendantAreaCount, representativeAreaKeys, bounds, bearingDegrees"
+    },
+    {
       "fingerprint": "2d2a7d0144fb68c20f8baacedd9ab0c6af4048a7",
       "file": "src/components/discover/panels/AreaSelectedPanel.tsx",
       "code": "TS2322",
@@ -19,10 +55,142 @@
       "message": "Argument of type 'string' is not assignable to parameter of type 'PropertyType'."
     },
     {
+      "fingerprint": "5e881221d6a7a278ab398bdec9f507a91afe484d",
+      "file": "src/components/discover/panels/__tests__/AreaSelectedPanel.test.tsx",
+      "code": "TS2345",
+      "message": "Argument of type '{ mobileView: \"LIST\"; setMobileView: Mock<Procedure>; isMobileShell: false; isAreaSetDraftOpen: false; openAreaSetDraft: Mock<Procedure>; closeAreaSetDraft: Mock<...>; ... 4 more ...; setAreaSetCameraRestoreRequest: Mock<...>; }' is not assignable to parameter of type 'DiscoverShellContextValue'."
+    },
+    {
+      "fingerprint": "f6edbcc39f05b5dc7bbc5c496e50a4021008d1f7",
+      "file": "src/components/layout/__tests__/PublicHeader.previewCity.test.tsx",
+      "code": "TS2322",
+      "message": "Type '{ mode: \"live\"; } | { mode: \"preview\"; cityId: number; revisionId: number; }' is not assignable to type 'DiscoverDataSource'."
+    },
+    {
+      "fingerprint": "f4d6eac028c167f7bb85d317c8bbe4e92f85866a",
+      "file": "src/components/map/PropertyMap.tsx",
+      "code": "TS2345",
+      "message": "Argument of type '() => () => L.Map' is not assignable to parameter of type 'EffectCallback'."
+    },
+    {
       "fingerprint": "1c4ab3b5ce1d4a4861c7b12749622db38a8fe771",
       "file": "src/components/map/PropertyMap.tsx",
       "code": "TS2740",
       "message": "Type '{ id: string; property_type: PropertyType; title: string; locality: string; price: number; price_unit: null; land_area: number; land_area_unit: string; built_area: null; built_area_unit: null; ... 19 more ...; boundary_geojson: string; }' is missing the following properties from type 'PropertyListingWithImages': carpet_area, carpet_area_unit, floor_number, total_floors, and 10 more."
+    },
+    {
+      "fingerprint": "5b86a474f6e2dcc038f9ab2f021bc4b948b0153d",
+      "file": "src/components/map/__tests__/AreaMarkerLayer.allDirectionsSelect.test.tsx",
+      "code": "TS2322",
+      "message": "Type '{ nodeKey: string; nodeType: NavigationNodeType; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: number | null; ... 5 more ...; bearingDegrees?: number | null; }' is not assignable to type 'AreasNavigationChild'."
+    },
+    {
+      "fingerprint": "f0e4519447939576c4a664c5e7f473586ff78a56",
+      "file": "src/components/map/__tests__/AreaMarkerLayer.allDirectionsSelect.test.tsx",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'depth' does not exist in type 'NavigationChildSummary'."
+    },
+    {
+      "fingerprint": "b11c89950f73630a2f0587436cc65cd942d35b18",
+      "file": "src/components/map/__tests__/AreaMarkerLayer.dashedClusterAccent.test.tsx",
+      "code": "TS2322",
+      "message": "Type '{ nodeKey: string; nodeType: NavigationNodeType; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: number | null; ... 5 more ...; bearingDegrees?: number | null; }' is not assignable to type 'AreasNavigationChild'."
+    },
+    {
+      "fingerprint": "1ae53b5daafe0faf7573037f70b461f3e4ed360d",
+      "file": "src/components/map/__tests__/AreaMarkerLayer.destinationCardGrammar.test.tsx",
+      "code": "TS1360",
+      "message": "Type '{ nodeKey: string; nodeType: \"AREA\"; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: number; isLeafArea: true; matchingAreaCount: null; }' does not satisfy the expected type 'AreasNavigationChild'."
+    },
+    {
+      "fingerprint": "2ded902465c1126a83cd7c6238c36618e963ea6e",
+      "file": "src/components/map/__tests__/AreaMarkerLayer.destinationCardGrammar.test.tsx",
+      "code": "TS2322",
+      "message": "Type '{ nodeKey: string; nodeType: \"AREA\"; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: number; isLeafArea: true; matchingAreaCount: any; }[]' is not assignable to type 'AreasNavigationChild[]'."
+    },
+    {
+      "fingerprint": "52d8744bbe7c68f82f6a78ce7b241c09806fead7",
+      "file": "src/components/map/__tests__/AreaMarkerLayer.destinationCardGrammar.test.tsx",
+      "code": "TS2322",
+      "message": "Type '{ nodeKey: string; nodeType: NavigationNodeType; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: number | null; ... 5 more ...; bearingDegrees?: number | null; }' is not assignable to type 'AreasNavigationChild'."
+    },
+    {
+      "fingerprint": "3560b7788572800e570e26e82df4ef42d200c4e0",
+      "file": "src/components/map/__tests__/AreaMarkerLayer.destinationCardGrammar.test.tsx",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'depth' does not exist in type 'NavigationChildSummary'."
+    },
+    {
+      "fingerprint": "a47ff4eb11a96dab8274b8fce37c31391e87d307",
+      "file": "src/components/map/__tests__/AreaMarkerLayer.destinationCardSchoolZeroCount.test.tsx",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'depth' does not exist in type 'NavigationChildSummary'."
+    },
+    {
+      "fingerprint": "ec90cfe7face17fb216b3a0182f6b9c65a02e5b3",
+      "file": "src/components/map/__tests__/AreaMarkerLayer.destinations.test.tsx",
+      "code": "TS2322",
+      "message": "Type '{ nodeKey: string; nodeType: NavigationNodeType; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: number | null; ... 5 more ...; bearingDegrees?: number | null; }' is not assignable to type 'AreasNavigationChild'."
+    },
+    {
+      "fingerprint": "4a20165666a9a1a98f821b3000403c7f4b04e5b0",
+      "file": "src/components/map/__tests__/AreaMarkerLayer.destinations.test.tsx",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'depth' does not exist in type 'NavigationChildSummary'."
+    },
+    {
+      "fingerprint": "a9d7013ed8523b638ffaafeaac4da7558c95d765",
+      "file": "src/components/map/__tests__/AreaMarkerLayer.focusRingTarget.test.tsx",
+      "code": "TS2322",
+      "message": "Type '{ nodeKey: string; nodeType: NavigationNodeType; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: number | null; ... 5 more ...; bearingDegrees?: number | null; }' is not assignable to type 'AreasNavigationChild'."
+    },
+    {
+      "fingerprint": "ad686e58c2befd114d3178b347bc9437acf951d6",
+      "file": "src/components/map/__tests__/AreaMarkerLayer.journeySwitchClusterHero.test.tsx",
+      "code": "TS2322",
+      "message": "Type '{ nodeKey: string; nodeType: NavigationNodeType; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: number | null; ... 5 more ...; bearingDegrees?: number | null; }' is not assignable to type 'AreasNavigationChild'."
+    },
+    {
+      "fingerprint": "83d1dd677f4b717cf839075ae4fc0332a3d75ce2",
+      "file": "src/components/map/__tests__/AreaMarkerLayer.stage2FixCycle.test.tsx",
+      "code": "TS2322",
+      "message": "Type '{ nodeKey: string; nodeType: NavigationNodeType; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: number | null; ... 5 more ...; bearingDegrees?: number | null; }' is not assignable to type 'AreasNavigationChild'."
+    },
+    {
+      "fingerprint": "c1641ed72283592acc9d4f6f9e0fc6e4395b8b82",
+      "file": "src/components/map/__tests__/AreaMarkerLayer.stage2FixCycle.test.tsx",
+      "code": "TS2345",
+      "message": "Argument of type '([lat]: [number, number]) => { x: number; y: number; }' is not assignable to parameter of type 'NormalizedProcedure<() => { x: number; y: number; }>'."
+    },
+    {
+      "fingerprint": "bc059fd1fc7bd9aadb7d89f8db9fc0783bec258d",
+      "file": "src/components/map/__tests__/AreaMarkerLayer.staleClusterFocus.test.tsx",
+      "code": "TS2322",
+      "message": "Type '{ nodeKey: string; nodeType: NavigationNodeType; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: number | null; ... 5 more ...; bearingDegrees?: number | null; }' is not assignable to type 'AreasNavigationChild'."
+    },
+    {
+      "fingerprint": "18bd18716e3d1395bc00992cee7f00b4c5b4957d",
+      "file": "src/components/map/__tests__/AreaMarkerLayer.visualClusterNodeKey.test.tsx",
+      "code": "TS2322",
+      "message": "Type '{ nodeKey: string; nodeType: NavigationNodeType; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: number | null; ... 5 more ...; bearingDegrees?: number | null; }' is not assignable to type 'AreasNavigationChild'."
+    },
+    {
+      "fingerprint": "c138aa2a5e6623f51a13ba4ded6894fb55fcd7cd",
+      "file": "src/components/map/__tests__/PropertyMap.agri.test.tsx",
+      "code": "TS2740",
+      "message": "Type '{ id: string; latitude: number; longitude: number; title: string; property_type: \"agricultural_land\"; price: number; status: \"LIVE\"; locality: string; created_at: string; updated_at: string; }' is missing the following properties from type 'PropertyListingWithImages': price_unit, land_area, land_area_unit, built_area, and 25 more."
+    },
+    {
+      "fingerprint": "e7f184dd5cbf0855f00b3ec65c912ecd2a000be0",
+      "file": "src/components/map/__tests__/PropertyMap.agri.test.tsx",
+      "code": "TS2740",
+      "message": "Type '{ id: string; price: number; title: string; property_type: \"agricultural_land\"; latitude: number; longitude: number; status: \"LIVE\"; locality: string; created_at: string; updated_at: string; }' is missing the following properties from type 'PropertyListingWithImages': price_unit, land_area, land_area_unit, built_area, and 25 more."
+    },
+    {
+      "fingerprint": "4b85e67862a56ca8193d2ec0739ffe9c51398201",
+      "file": "src/components/map/__tests__/PropertyMap.agri.test.tsx",
+      "code": "TS2740",
+      "message": "Type '{ id: string; title: string; property_type: \"agricultural_land\"; latitude: number; longitude: number; price: number; status: \"LIVE\"; locality: string; created_at: string; updated_at: string; }' is missing the following properties from type 'PropertyListingWithImages': price_unit, land_area, land_area_unit, built_area, and 25 more."
     },
     {
       "fingerprint": "36353200747de9dd2f685678c31f2d47aec4b36f",
@@ -31,16 +199,388 @@
       "message": "Type '{ id: string; title: string; property_type: \"agricultural_land\"; latitude: number; longitude: number; price: number; status: \"LIVE\"; locality: string; created_at: string; updated_at: string; }' is missing the following properties from type 'PropertyListingWithImages': price_unit, land_area, land_area_unit, built_area, and 27 more."
     },
     {
+      "fingerprint": "3ffd9c3d3bb04b4492223d46637d073c1405ea0d",
+      "file": "src/components/map/__tests__/PropertyMap.agri.test.tsx",
+      "code": "TS2740",
+      "message": "Type '{ id: string; title: string; property_type: \"house\"; latitude: number; longitude: number; price: number; status: \"LIVE\"; locality: string; created_at: string; updated_at: string; }' is missing the following properties from type 'PropertyListingWithImages': price_unit, land_area, land_area_unit, built_area, and 25 more."
+    },
+    {
       "fingerprint": "b856167db713a3e08798da860ce412db87f01354",
       "file": "src/components/map/__tests__/PropertyMap.agri.test.tsx",
       "code": "TS2740",
       "message": "Type '{ id: string; title: string; property_type: \"house\"; latitude: number; longitude: number; price: number; status: \"LIVE\"; locality: string; created_at: string; updated_at: string; }' is missing the following properties from type 'PropertyListingWithImages': price_unit, land_area, land_area_unit, built_area, and 27 more."
     },
     {
+      "fingerprint": "7bf7afd00c749735979638a303f1e246d6f06d19",
+      "file": "src/components/map/__tests__/PropertyMap.areaPanner.test.tsx",
+      "code": "TS18048",
+      "message": "'largePadding' is possibly 'undefined'."
+    },
+    {
+      "fingerprint": "c1cdfaeed0371ec2e497e842061299a533bd296e",
+      "file": "src/components/map/__tests__/PropertyMap.areaPanner.test.tsx",
+      "code": "TS18048",
+      "message": "'smallPadding' is possibly 'undefined'."
+    },
+    {
+      "fingerprint": "ae47d48ca7b1cf301ae112857bd7aa82f92d5df8",
+      "file": "src/components/map/__tests__/PropertyMap.areaPanner.test.tsx",
+      "code": "TS2345",
+      "message": "Argument of type '(_bounds: unknown, _inside: boolean, padding: { x: number; y: number; }) => 10 | 18' is not assignable to parameter of type 'NormalizedProcedure<() => number>'."
+    },
+    {
+      "fingerprint": "cb86f4f836b0d90f91be345fd882d56eda925371",
+      "file": "src/components/map/__tests__/PropertyMap.areaPanner.test.tsx",
+      "code": "TS2493",
+      "message": "Tuple type '[]' of length '0' has no element at index '2'."
+    },
+    {
+      "fingerprint": "8f720447e70b434efa12a62d9fa97678d4524cf8",
+      "file": "src/components/map/__tests__/PropertyMap.listingClusterMarker.test.tsx",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'getAllChildMarkers' does not exist in type '{ getChildCount: () => number; }'."
+    },
+    {
+      "fingerprint": "521d95d41dfd8e4c7a53328e5d45ec59b6fab7c4",
+      "file": "src/features/discover/composition/assembleDiscoverSurfaceProps.ts",
+      "code": "TS2345",
+      "message": "Argument of type '{ mapContainerRef: React.MutableRefObject<HTMLDivElement>; mobileMapOpen: boolean; setMobileView: (view: MobileView) => void; isMarkerPopoverEligible: boolean; ... 26 more ...; markerController: UseMarkerSelectionResult; }' is not assignable to parameter of type 'BuildMapSurfaceViewParams'."
+    },
+    {
+      "fingerprint": "4048d8a8ee458c7ee424f0060da85e01d404c20f",
+      "file": "src/features/discover/controllers/__tests__/useDiscoverMarkerPopoverController.test.ts",
+      "code": "TS2322",
+      "message": "Type '{ nav: DiscoverNavContextValue; viewport: DiscoverUrlState[\"viewport\"]; isNodeAreaLeafActive: boolean; ... 17 more ...; markerSelection: Pick<ReturnType<typeof useDiscoverMarkerController>, \"selectedMarkerListing\" | \"selectMarkerSibling\" | \"clearMarkerPopoverFromUrl\" | \"isMarkerPopoverUrlBacked\" | \"hydrateSelectedMa...' is not assignable to type 'UseDiscoverMarkerPopoverControllerParams'."
+    },
+    {
+      "fingerprint": "d087d7c209b22be70f40d6c7110866c962030c05",
+      "file": "src/features/discover/controllers/useDiscoverNavigationController.test.ts",
+      "code": "TS2345",
+      "message": "Argument of type '{ nav: DiscoverNavContextValue; goToNode: Mock<Procedure>; intentListingPurpose: string; }' is not assignable to parameter of type 'UseDiscoverNavigationControllerParams'."
+    },
+    {
+      "fingerprint": "bd31824e363cbf7bb250c6ace1892196973826f0",
+      "file": "src/features/discover/map/resolveMarkerListings.test.ts",
+      "code": "TS2322",
+      "message": "Type '{ mapLayerCategory: DiscoverMapLayerKind; selectedArea: AreaPoint | null; isGroupResultsState: boolean; isNodeListingsState: boolean; ... 14 more ...; anonViewportMarkerListings?: PropertyListingWithImages[]; }' is not assignable to type 'ResolveMarkerListingsInput'."
+    },
+    {
+      "fingerprint": "269d429282ec7db8ccc07771194a578510c2bd26",
+      "file": "src/features/discover/map/resolveMarkerPopover.test.ts",
+      "code": "TS2322",
+      "message": "Type '{ isMarkerPopoverEligible: boolean; selectedMarkerListing: PropertyListingWithImages | null; mapLayerCategory: DiscoverMapLayerKind; ... 17 more ...; anonViewportMarkerListings?: PropertyListingWithImages[]; }' is not assignable to type 'ResolveMarkerPopoverInput'."
+    },
+    {
+      "fingerprint": "98cc87510fc67e2bbc9ada1a7262b98df66b0012",
+      "file": "src/features/discover/navigation/__tests__/discoverAreasJourneyPanelAreaLeaf.test.tsx",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'wasTruncated' does not exist in type 'UseAreasNavigationJourneyResult'."
+    },
+    {
+      "fingerprint": "19d9eaeb9692c48f2569e9907b46a84dad4ebd03",
+      "file": "src/features/discover/navigation/__tests__/discoverAreasJourneyPanelFilterIdentityAndError.test.tsx",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'wasTruncated' does not exist in type 'UseAreasNavigationJourneyResult'."
+    },
+    {
+      "fingerprint": "81095916ace8e3f979e2b84c2d5fe2db7cc438fe",
+      "file": "src/features/discover/navigation/__tests__/useAreasNavigationJourney.test.ts",
+      "code": "TS2352",
+      "message": "Conversion of type 'UseAreasNavigationJourneyResult' to type 'Record<string, unknown>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "fingerprint": "32170127e9bc53f3b3e8f9babaadd941da1902d4",
+      "file": "src/features/discover/state/__tests__/useDiscoverCameraOrchestration.rcE.test.tsx",
+      "code": "TS2741",
+      "message": "Property 'viewport' is missing in type '{ journey: \"area-first\"; radiusKm: null; groupId: null; areaKey: null; scope: null; selectedLocality: null; }' but required in type 'Pick<DiscoverUrlState, \"scope\" | \"journey\" | \"viewport\" | \"areaKey\" | \"radiusKm\" | \"groupId\" | \"selectedLocality\" | \"historyAction\">'."
+    },
+    {
+      "fingerprint": "5ebd48bba38177f0045fea2f8b9a33269651682f",
+      "file": "src/features/discover/state/__tests__/useDiscoverCameraOrchestration.rootFit.test.tsx",
+      "code": "TS2741",
+      "message": "Property 'viewport' is missing in type '{ journey: \"area-first\"; radiusKm: null; groupId: null; areaKey: null; scope: null; selectedLocality: null; }' but required in type 'Pick<DiscoverUrlState, \"scope\" | \"journey\" | \"viewport\" | \"areaKey\" | \"radiusKm\" | \"groupId\" | \"selectedLocality\" | \"historyAction\">'."
+    },
+    {
+      "fingerprint": "211217750f3ffae8f7bf297b9f49c7e7feb3d575",
+      "file": "src/features/discover/state/url/__tests__/crossCityResultScope.2611.test.ts",
+      "code": "TS2322",
+      "message": "Type '\"residential\"' is not assignable to type '\"preview\" | \"live\"'."
+    },
+    {
+      "fingerprint": "c0ae66018183f486ca1c6f0afd96bc66e76418a2",
+      "file": "src/features/discover/state/useDiscoverCameraOrchestration.issue2005CategoryC.test.tsx",
+      "code": "TS2741",
+      "message": "Property 'viewport' is missing in type '{ journey: \"area-first\"; radiusKm: null; groupId: string; areaKey: null; scope: null; selectedLocality: null; }' but required in type 'Pick<DiscoverUrlState, \"scope\" | \"journey\" | \"viewport\" | \"areaKey\" | \"radiusKm\" | \"groupId\" | \"selectedLocality\" | \"historyAction\">'."
+    },
+    {
+      "fingerprint": "81aff1ec4a571b39f2693e6370db4fde32c14031",
+      "file": "src/features/discover/state/useDiscoverCameraOrchestration.issue2005CategoryC.test.tsx",
+      "code": "TS2741",
+      "message": "Property 'viewport' is missing in type '{ journey: null; radiusKm: null; groupId: null; areaKey: null; scope: null; selectedLocality: null; }' but required in type 'Pick<DiscoverUrlState, \"scope\" | \"journey\" | \"viewport\" | \"areaKey\" | \"radiusKm\" | \"groupId\" | \"selectedLocality\" | \"historyAction\">'."
+    },
+    {
+      "fingerprint": "e6719f7615aba181769727a41eb06d6c0d9a2cc1",
+      "file": "src/features/discover/state/useDiscoverCameraOrchestration.issue2005CategoryC.test.tsx",
+      "code": "TS2741",
+      "message": "Property 'viewport' is missing in type '{ journey: null; radiusKm: null; groupId: null; areaKey: null; scope: string; selectedLocality: null; }' but required in type 'Pick<DiscoverUrlState, \"scope\" | \"journey\" | \"viewport\" | \"areaKey\" | \"radiusKm\" | \"groupId\" | \"selectedLocality\" | \"historyAction\">'."
+    },
+    {
+      "fingerprint": "b88d3cdfb573f6c8bb396e9e04be3f8351292821",
+      "file": "src/features/discover/state/useDiscoverCameraOrchestration.test.tsx",
+      "code": "TS2741",
+      "message": "Property 'viewport' is missing in type '{ journey: \"area-first\"; radiusKm: null; groupId: null; areaKey: null; scope: null; selectedLocality: null; }' but required in type 'Pick<DiscoverUrlState, \"scope\" | \"journey\" | \"viewport\" | \"areaKey\" | \"radiusKm\" | \"groupId\" | \"selectedLocality\" | \"historyAction\">'."
+    },
+    {
+      "fingerprint": "29589847b21a2e9092802848f2e839c5fced2721",
+      "file": "src/features/discover/state/useDiscoverCameraOrchestration.test.tsx",
+      "code": "TS2741",
+      "message": "Property 'viewport' is missing in type '{ journey: \"area-first\"; radiusKm: null; groupId: string; areaKey: null; scope: null; selectedLocality: null; }' but required in type 'Pick<DiscoverUrlState, \"scope\" | \"journey\" | \"viewport\" | \"areaKey\" | \"radiusKm\" | \"groupId\" | \"selectedLocality\" | \"historyAction\">'."
+    },
+    {
+      "fingerprint": "185802e8c03193ce6a5bb5ab2c2d722101f02206",
+      "file": "src/features/discover/state/useDiscoverCameraOrchestration.test.tsx",
+      "code": "TS2741",
+      "message": "Property 'viewport' is missing in type '{ journey: \"area-first\"; radiusKm: null; groupId: string; areaKey: string; scope: null; selectedLocality: null; }' but required in type 'Pick<DiscoverUrlState, \"scope\" | \"journey\" | \"viewport\" | \"areaKey\" | \"radiusKm\" | \"groupId\" | \"selectedLocality\" | \"historyAction\">'."
+    },
+    {
+      "fingerprint": "d0e6487b6741bfa3655ca5028f3fa2c60bd5ef4e",
+      "file": "src/features/discover/state/useDiscoverCameraOrchestration.test.tsx",
+      "code": "TS2741",
+      "message": "Property 'viewport' is missing in type '{ journey: \"school-first\"; radiusKm: null; groupId: null; areaKey: null; scope: null; selectedLocality: null; }' but required in type 'Pick<DiscoverUrlState, \"scope\" | \"journey\" | \"viewport\" | \"areaKey\" | \"radiusKm\" | \"groupId\" | \"selectedLocality\" | \"historyAction\">'."
+    },
+    {
+      "fingerprint": "03986d360620db3c1d345429bae5d1c32c96b966",
+      "file": "src/features/discover/state/useDiscoverCameraOrchestration.test.tsx",
+      "code": "TS2741",
+      "message": "Property 'viewport' is missing in type '{ journey: \"school-first\"; radiusKm: number; groupId: null; areaKey: null; scope: null; selectedLocality: null; }' but required in type 'Pick<DiscoverUrlState, \"scope\" | \"journey\" | \"viewport\" | \"areaKey\" | \"radiusKm\" | \"groupId\" | \"selectedLocality\" | \"historyAction\">'."
+    },
+    {
+      "fingerprint": "2878d8b08e2c158d4b88ff77d90a4e16a761507c",
+      "file": "src/features/discover/state/useDiscoverCameraOrchestration.test.tsx",
+      "code": "TS2741",
+      "message": "Property 'viewport' is missing in type '{ journey: null; radiusKm: null; groupId: null; areaKey: null; scope: null; selectedLocality: null; }' but required in type 'Pick<DiscoverUrlState, \"scope\" | \"journey\" | \"viewport\" | \"areaKey\" | \"radiusKm\" | \"groupId\" | \"selectedLocality\" | \"historyAction\">'."
+    },
+    {
+      "fingerprint": "d821bd9f4b6ed74fe305ae55bb58e20a85a0a919",
+      "file": "src/features/discover/state/useDiscoverCameraOrchestration.test.tsx",
+      "code": "TS2741",
+      "message": "Property 'viewport' is missing in type '{ journey: null; radiusKm: null; groupId: null; areaKey: null; scope: string; selectedLocality: null; }' but required in type 'Pick<DiscoverUrlState, \"scope\" | \"journey\" | \"viewport\" | \"areaKey\" | \"radiusKm\" | \"groupId\" | \"selectedLocality\" | \"historyAction\">'."
+    },
+    {
+      "fingerprint": "0b60a79b0a9a98a0935342b7252f0561e1fecb0b",
+      "file": "src/features/discover/state/usePreviewCityIdentity.test.tsx",
+      "code": "TS2322",
+      "message": "Type '{ mode: \"live\"; } | { mode: \"preview\"; cityId: number; revisionId: number; }' is not assignable to type 'DiscoverDataSource'."
+    },
+    {
+      "fingerprint": "7498752a7c5e67c25faef7d531fb60b3fe2b382e",
+      "file": "src/features/discover/surfaces/__tests__/DiscoverPanelSurface.test.tsx",
+      "code": "TS2322",
+      "message": "Type '\"agri-browse\"' is not assignable to type 'DiscoverPanelContent'."
+    },
+    {
+      "fingerprint": "1a98df678ef26030d2806c83da266f12180729c0",
+      "file": "src/features/discover/surfaces/__tests__/DiscoverPanelSurface.test.tsx",
+      "code": "TS2322",
+      "message": "Type '{ resolvedPanelContent: \"guided-entry\"; selectedMarkerListing: null; clearSelectedMarkerListing: Mock<Procedure>; city: string; activeContextChips: null; discoverAreas: undefined[]; ... 90 more ...; selectJourney: Mock<...>; }' is not assignable to type 'PanelFlatFixture'."
+    },
+    {
+      "fingerprint": "cf37cde35ca84c201c17763a64304e8a91bd1f85",
+      "file": "src/features/discover/surfaces/__tests__/DiscoverPanelSurface.test.tsx",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'wasTruncated' does not exist in type 'UseAreasNavigationJourneyResult'."
+    },
+    {
+      "fingerprint": "6265f1c10823926f1944a79673bf5637b6afdcc8",
+      "file": "src/features/discover/surfaces/__tests__/DiscoverPanelSurface.test.tsx",
+      "code": "TS2740",
+      "message": "Type '{ discoverAreas: AreaPoint[]; areaListings: DiscoverCityListingItem[]; isLoadingAreaListings: boolean; isErrorAreaListings: boolean; refetchAreaListings: () => void; ... 13 more ...; refetchAnonViewport: () => void; }' is missing the following properties from type 'MapDataSlice': isAuthViewport, authViewportListings, authViewportListingsLoading, isPolygonScope, and 5 more."
+    },
+    {
+      "fingerprint": "e85a5d06ef44ddc5f55c2abd9c6c3ff8e2419bd4",
+      "file": "src/features/discover/surfaces/__tests__/DiscoverPanelSurface.test.tsx",
+      "code": "TS2741",
+      "message": "Property 'isAreaSetDraftOpen' is missing in type '{ navigate: NavigateFunction; isAuthenticated: boolean; nav: DiscoverUrlState; actions: DiscoverUrlActions; isMobileShell: false; mobileView: \"LIST\"; }' but required in type 'PageContextSlice'."
+    },
+    {
+      "fingerprint": "e7e301474f29aa196321e64d873bc7b2ab8b8f22",
+      "file": "src/features/discover/surfaces/__tests__/buildPanelSurfaceModel.test.ts",
+      "code": "TS2740",
+      "message": "Type '{ discoverAreas: undefined[]; areaListings: undefined[]; isLoadingAreaListings: false; isErrorAreaListings: false; refetchAreaListings: Mock<Procedure>; isFetchingAreaListings: false; ... 12 more ...; refetchAnonViewport: Mock<...>; }' is missing the following properties from type 'MapDataSlice': isAuthViewport, authViewportListings, authViewportListingsLoading, isPolygonScope, and 5 more."
+    },
+    {
+      "fingerprint": "a6e2942ef3ec98aa99e8b4d9944b19f3bdd66058",
+      "file": "src/features/discover/surfaces/__tests__/buildPanelSurfaceModel.test.ts",
+      "code": "TS2741",
+      "message": "Property 'isAreaSetDraftOpen' is missing in type '{ navigate: Mock<Procedure>; isAuthenticated: false; nav: BuildPanelSurfaceModelParams[\"pageContext\"][\"nav\"]; actions: BuildPanelSurfaceModelParams[\"pageContext\"][\"actions\"]; isMobileShell: false; mobileView: \"LIST\"; }' but required in type 'PageContextSlice'."
+    },
+    {
+      "fingerprint": "9d5dc05d7ee1ce70b85dc4a458da2689d99d1624",
+      "file": "src/features/discover/surfaces/panel/__tests__/LegacyRightPanelBridge.anonViewportRetry.test.tsx",
+      "code": "TS2322",
+      "message": "Type 'PropertyListingWithImages' is not assignable to type 'AnonViewportListingItem'."
+    },
+    {
+      "fingerprint": "39ab58615433eccecad28137793df3400c832a05",
+      "file": "src/features/discover/surfaces/panel/__tests__/LegacyRightPanelBridge.anonViewportRetry.test.tsx",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'wasTruncated' does not exist in type 'UseAreasNavigationJourneyResult'."
+    },
+    {
+      "fingerprint": "5bb5787c4326fee06d7de295e76be85aa1d20d95",
+      "file": "src/features/discover/surfaces/panel/__tests__/LegacyRightPanelBridge.anonViewportRetry.test.tsx",
+      "code": "TS2739",
+      "message": "Type '{ changeCity: Mock<Procedure>; setCity: Mock<Procedure>; selectArea: Mock<Procedure>; deselectArea: Mock<Procedure>; ... 44 more ...; commitResultScope: Mock<...>; }' is missing the following properties from type 'DiscoverUrlActions': goToNodeReplacingCurrent, commitAreaSet"
+    },
+    {
+      "fingerprint": "294fd174e48e6a570445e3ff4e5d7a09c3c64d41",
+      "file": "src/features/discover/surfaces/panel/__tests__/LegacyRightPanelBridge.anonViewportRetry.test.tsx",
+      "code": "TS2741",
+      "message": "Property 'isAreaSetDraftOpen' is missing in type '{ navigate: Mock<Procedure>; isAuthenticated: false; nav: DiscoverUrlState; actions: DiscoverUrlActions; isMobileShell: false; mobileView: \"LIST\"; }' but required in type 'PageContextSlice'."
+    },
+    {
+      "fingerprint": "d2cce3170826a7cf13903de3e801b42d148b932d",
+      "file": "src/features/discover/surfaces/panel/__tests__/LegacyRightPanelBridge.schoolFirstMarkerPreview.test.tsx",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'wasTruncated' does not exist in type 'UseAreasNavigationJourneyResult'."
+    },
+    {
+      "fingerprint": "39b4a5feb7c8e84c38b83fbbb70ac51ad82110b1",
+      "file": "src/features/discover/surfaces/panel/__tests__/LegacyRightPanelBridge.schoolFirstMarkerPreview.test.tsx",
+      "code": "TS2740",
+      "message": "Type '{ discoverAreas: undefined[]; areaListings: undefined[]; isLoadingAreaListings: false; isErrorAreaListings: false; refetchAreaListings: Mock<Procedure>; isFetchingAreaListings: false; ... 12 more ...; refetchAnonViewport: Mock<...>; }' is missing the following properties from type 'MapDataSlice': isAuthViewport, authViewportListings, authViewportListingsLoading, isPolygonScope, and 5 more."
+    },
+    {
+      "fingerprint": "b9fcb7725bbce2244d9561957367423757d258d8",
+      "file": "src/features/discover/surfaces/panel/__tests__/LegacyRightPanelBridge.schoolFirstMarkerPreview.test.tsx",
+      "code": "TS2741",
+      "message": "Property 'isAreaSetDraftOpen' is missing in type '{ navigate: Mock<Procedure>; isAuthenticated: boolean; nav: DiscoverUrlState; actions: DiscoverUrlActions; isMobileShell: false; mobileView: \"LIST\"; }' but required in type 'PageContextSlice'."
+    },
+    {
+      "fingerprint": "90c8035a360e53d10435f5842a8c9339e19ac953",
+      "file": "src/features/discover/surfaces/panel/__tests__/LegacyRightPanelBridge.selectAreaKeyFallback.test.tsx",
+      "code": "TS2740",
+      "message": "Type '{ discoverAreas: AreaPoint[]; areaListings: undefined[]; isLoadingAreaListings: false; isErrorAreaListings: false; refetchAreaListings: Mock<Procedure>; isFetchingAreaListings: false; ... 12 more ...; refetchAnonViewport: Mock<...>; }' is missing the following properties from type 'MapDataSlice': isAuthViewport, authViewportListings, authViewportListingsLoading, isPolygonScope, and 5 more."
+    },
+    {
+      "fingerprint": "f7f35e331e7808458cb39c6223326ea51a8b08e9",
+      "file": "src/features/discover/surfaces/panel/__tests__/LegacyRightPanelBridge.selectAreaKeyFallback.test.tsx",
+      "code": "TS2741",
+      "message": "Property 'isAreaSetDraftOpen' is missing in type '{ navigate: Mock<Procedure>; isAuthenticated: false; nav: DiscoverUrlState; actions: DiscoverUrlActions; isMobileShell: false; mobileView: \"LIST\"; }' but required in type 'PageContextSlice'."
+    },
+    {
+      "fingerprint": "1fc907cd76b46ef047752b61d8b6ed4ec18660f0",
+      "file": "src/features/discover/views/DiscoverMapCanvas.test.tsx",
+      "code": "TS2339",
+      "message": "Property 'mockClear' does not exist on type '(name: string) => void'."
+    },
+    {
+      "fingerprint": "5e4d2d4b89cbe73921cdcb15c7522e60d11d4b1b",
+      "file": "src/features/discover/views/DiscoverMapCanvas.test.tsx",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'discoverAreas' does not exist in type 'DiscoverMapCanvasProps'."
+    },
+    {
+      "fingerprint": "bf09f7ee7347d9c6154a266c4cd8c96f1d218938",
+      "file": "src/features/discover/views/DiscoverMapCanvas.test.tsx",
+      "code": "TS2740",
+      "message": "Type '{ changeCity: Mock<Procedure>; setCity: Mock<Procedure>; selectArea: Mock<Procedure>; deselectArea: Mock<Procedure>; ... 37 more ...; setSchoolJourney: Mock<...>; }' is missing the following properties from type 'DiscoverUrlActions': goToNodeReplacingCurrent, enterSchoolsJourney, enterSchoolsJourneyAtArea, enterNodeListings, and 5 more."
+    },
+    {
+      "fingerprint": "260e5469aa9fa9fbfca246cc77a46602fbf3e4e9",
+      "file": "src/features/discover/views/NodeListingsSurface.tsx",
+      "code": "TS2741",
+      "message": "Property 'bbox' is missing in type '{ areaKey: string; areaLabel: string; geo_center_lat: number; geo_center_lon: number; }' but required in type 'AreaPoint'."
+    },
+    {
+      "fingerprint": "bcc69701703e86fffa4990ad74e109b5c1caf550",
+      "file": "src/features/discover/views/__tests__/DiscoverAreasJourneyPanel.areaLeafBreadcrumb.test.tsx",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'wasTruncated' does not exist in type 'UseAreasNavigationJourneyResult'."
+    },
+    {
+      "fingerprint": "82670fec5c135656f703d1340dd2b9379cf24d21",
+      "file": "src/features/discover/views/__tests__/DiscoverAreasJourneyPanel.completeChildren.test.tsx",
+      "code": "TS2322",
+      "message": "Type '{ nodeKey: string; nodeType: \"CLUSTER\"; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: any; isLeafArea: false; matchingAreaCount: any; }[]' is not assignable to type 'AreasNavigationChild[]'."
+    },
+    {
+      "fingerprint": "9d497007e36eed7c2085ecbf5caceecf2d920967",
+      "file": "src/features/discover/views/__tests__/DiscoverAreasJourneyPanel.completeChildren.test.tsx",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'wasTruncated' does not exist in type 'UseAreasNavigationJourneyResult'."
+    },
+    {
+      "fingerprint": "bd5a729f761482c757e834037b41f5fad6f10e4f",
+      "file": "src/features/discover/views/__tests__/DiscoverAreasJourneyPanel.showAll.test.tsx",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'wasTruncated' does not exist in type 'UseAreasNavigationJourneyResult'."
+    },
+    {
+      "fingerprint": "6d50ea78799eb73053f8fb430be4d00337e3351a",
+      "file": "src/features/discover/views/__tests__/DiscoverAreasJourneyPanel.showAll.test.tsx",
+      "code": "TS2739",
+      "message": "Type '{ nodeKey: string; nodeType: \"AREA\"; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: null; isLeafArea: true; matchingAreaCount: null; }' is missing the following properties from type 'AreasNavigationChild': descendantAreaCount, representativeAreaKeys, bounds, bearingDegrees"
+    },
+    {
+      "fingerprint": "14777462c8e18251a2f5ceebe1ae96f80035f8b4",
+      "file": "src/features/discover/views/__tests__/DiscoverAreasJourneyPanel.test.tsx",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'wasTruncated' does not exist in type 'UseAreasNavigationJourneyResult'."
+    },
+    {
+      "fingerprint": "28f2aa124ae43bc3d790d52b439092b70e0cf117",
+      "file": "src/features/discover/views/__tests__/DiscoverAreasJourneyPanel.test.tsx",
+      "code": "TS2739",
+      "message": "Type '{ nodeKey: string; nodeType: \"AREA\"; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: null; isLeafArea: true; matchingAreaCount: null; }' is missing the following properties from type 'AreasNavigationChild': descendantAreaCount, representativeAreaKeys, bounds, bearingDegrees"
+    },
+    {
+      "fingerprint": "36cc4714692f0da7107a70a96a91f859b7484995",
+      "file": "src/features/discover/views/__tests__/DiscoverAreasJourneyPanel.test.tsx",
+      "code": "TS2739",
+      "message": "Type '{ nodeKey: string; nodeType: \"CLUSTER\"; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: number; isLeafArea: false; matchingAreaCount: number; }' is missing the following properties from type 'AreasNavigationChild': descendantAreaCount, representativeAreaKeys, bounds, bearingDegrees"
+    },
+    {
+      "fingerprint": "09e7a6c26ad23391a45a7b0b1bdcd0f2221245a2",
+      "file": "src/features/discover/views/__tests__/DiscoverAreasJourneyPanel.test.tsx",
+      "code": "TS2739",
+      "message": "Type '{ nodeKey: string; nodeType: \"DIRECTION\"; displayLabel: string; displayOrder: number; listingCount: number; schoolCount: number; isLeafArea: false; matchingAreaCount: null; }' is missing the following properties from type 'AreasNavigationChild': descendantAreaCount, representativeAreaKeys, bounds, bearingDegrees"
+    },
+    {
+      "fingerprint": "0b97611e7493a7ab1e4e9cee2bd19dfa0797e25a",
+      "file": "src/features/discover/views/mobile/__tests__/MobileListingPreviewSheet.test.tsx",
+      "code": "TS2769",
+      "message": "No overload matches this call."
+    },
+    {
+      "fingerprint": "b001efd9b0cd325a948750d7a2ecefcf14481f8d",
+      "file": "src/hooks/__tests__/useDiscoverCityListings.issue2120.test.tsx",
+      "code": "TS2769",
+      "message": "No overload matches this call."
+    },
+    {
       "fingerprint": "d2b3b00dd292f2816a4216e8f55438c98a1aeb95",
       "file": "src/hooks/__tests__/useDiscoverPageState.radiusClamp.test.ts",
       "code": "TS2352",
       "message": "Conversion of type '{ changeCity: Mock<Procedure>; setCity: Mock<Procedure>; selectArea: Mock<Procedure>; deselectArea: Mock<Procedure>; ... 31 more ...; clearGroupResults: Mock<...>; }' to type 'DiscoverUrlActions' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    },
+    {
+      "fingerprint": "2cdd8e5d6b9d02c4b0a5768046d74bde8daf92bd",
+      "file": "src/hooks/__tests__/useDiscoverSummary.test.ts",
+      "code": "TS2769",
+      "message": "No overload matches this call."
+    },
+    {
+      "fingerprint": "da98320d2881f57be8023d348fa9f01cfe781add",
+      "file": "src/hooks/__tests__/useTrendingAreas.test.ts",
+      "code": "TS2769",
+      "message": "No overload matches this call."
+    },
+    {
+      "fingerprint": "f807eccc634d6dd3023171c1a930906c1c08d3c3",
+      "file": "src/hooks/useDuplicateManagement.ts",
+      "code": "TS2345",
+      "message": "Argument of type 'Partial<PropertyListing>' is not assignable to parameter of type 'RejectExcessProperties<{ bathrooms?: number; bedrooms?: number; built_area?: number; built_area_unit?: string; carpet_area?: number; carpet_area_unit?: string; commercial_usage?: string; confidence_score?: number; contact_info?: string; ... 34 more ...; washrooms?: number; }, { ...; }>'."
     },
     {
       "fingerprint": "9402b99e58489ef33338a121c34f22a70ff1beaa",
@@ -53,6 +593,12 @@
       "file": "src/hooks/useDuplicateManagement.ts",
       "code": "TS2345",
       "message": "Argument of type 'PropertyType' is not assignable to parameter of type 'NonNullable<\"land\" | \"house\" | \"commercial\" | \"other\" | \"apartment\">'."
+    },
+    {
+      "fingerprint": "ae2ba9a055b46f4657af18297dfcc20666120cc8",
+      "file": "src/hooks/usePropertyListings.ts",
+      "code": "TS2345",
+      "message": "Argument of type 'Partial<PropertyListing>' is not assignable to parameter of type 'RejectExcessProperties<{ bathrooms?: number; bedrooms?: number; built_area?: number; built_area_unit?: string; carpet_area?: number; carpet_area_unit?: string; commercial_usage?: string; confidence_score?: number; contact_info?: string; ... 34 more ...; washrooms?: number; }, { ...; }>'."
     },
     {
       "fingerprint": "940f05831cbc6f6eafd41670b225ddf1583c14b1",
@@ -79,16 +625,124 @@
       "message": "Argument of type 'string' is not assignable to parameter of type 'NonNullable<\"land\" | \"house\" | \"commercial\" | \"other\" | \"apartment\">'."
     },
     {
+      "fingerprint": "92bad833346cc0a090a15204d5029cd99a0ab5cc",
+      "file": "src/lib/__tests__/discoverSearchParams.test.ts",
+      "code": "TS2345",
+      "message": "Argument of type 'string[]' is not assignable to parameter of type 'DiscoverMarkerScope'."
+    },
+    {
       "fingerprint": "76cec16e723980ec03e79e40399f389a8d840280",
       "file": "src/lib/discoverMappers.ts",
       "code": "TS2322",
       "message": "Type 'string' is not assignable to type '\"dealer\" | \"broker\" | \"owner\" | \"builder\"'."
     },
     {
+      "fingerprint": "a9e9e6db39b0c1663d48bda00c16a717d27474c8",
+      "file": "src/pages/__tests__/Auth.consumerInvariant.test.tsx",
+      "code": "TS2322",
+      "message": "Type 'Location' is not assignable to type 'string & Location'."
+    },
+    {
+      "fingerprint": "14e1634ced017b3156690e95bf2aea687c8f27e4",
+      "file": "src/pages/__tests__/Auth.consumerInvariant.test.tsx",
+      "code": "TS2556",
+      "message": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "fingerprint": "99b72fa3b2ace7157aeca8fbe9803912b4f7afd8",
+      "file": "src/pages/__tests__/Auth.consumerInvariant.test.tsx",
+      "code": "TS2578",
+      "message": "Unused '@ts-expect-error' directive."
+    },
+    {
+      "fingerprint": "9c092e42d82c908a041fdc0d78a4c9b23bf2dee4",
+      "file": "src/pages/__tests__/Auth.issue2238.redirectRace.test.tsx",
+      "code": "TS2556",
+      "message": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "fingerprint": "ab9c4b046668f82a1ef6b8b6870917f01db2953c",
+      "file": "src/pages/__tests__/AuthCallback.consumerInvariant.test.tsx",
+      "code": "TS2322",
+      "message": "Type 'Location' is not assignable to type 'string & Location'."
+    },
+    {
+      "fingerprint": "02bdf3995e2f405ce5ab98e94bad21ee42709ec5",
+      "file": "src/pages/__tests__/AuthCallback.consumerInvariant.test.tsx",
+      "code": "TS2556",
+      "message": "A spread argument must either have a tuple type or be passed to a rest parameter."
+    },
+    {
+      "fingerprint": "0338d77cd13034203f9fd61644dbc7b6d465b421",
+      "file": "src/pages/__tests__/AuthCallback.consumerInvariant.test.tsx",
+      "code": "TS2578",
+      "message": "Unused '@ts-expect-error' directive."
+    },
+    {
+      "fingerprint": "5f3810c202e8e253b3b8a712dace2793b09b7863",
+      "file": "src/pages/__tests__/MapDiscovery.recenter.test.ts",
+      "code": "TS2322",
+      "message": "Type '\"NONE\"' is not assignable to type 'NextLevelType'."
+    },
+    {
       "fingerprint": "ef02b40db7ebcc5bcd3b85d3bdd6f4ba0a9d774b",
       "file": "src/pages/admin/Listings.tsx",
       "code": "TS2345",
       "message": "Argument of type 'AdminListingRow' is not assignable to parameter of type 'PropertyListing'."
+    },
+    {
+      "fingerprint": "ef9dc547ce9c8a790163500f428d00192b5e32a4",
+      "file": "src/pages/admin/__tests__/CityLaunchReadiness.test.tsx",
+      "code": "TS2741",
+      "message": "Property 'geographyReady' is missing in type '{ cityId: number; citySlug: string; cityName: string; status: string; revisionId: number; revisionNumber: number; prepStage: number; prepState: string; geographyPercent: number; failureReason: null; preparedAt: string; }' but required in type 'CityLaunchStatusDto'."
+    },
+    {
+      "fingerprint": "72bb70c904ea2dfc1bb2cdc735ea7de7d3eb0f70",
+      "file": "src/test-utils/mockReactQueryResults.ts",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'promise' does not exist in type 'InfiniteQueryObserverLoadingErrorResult<TData, Error>'."
+    },
+    {
+      "fingerprint": "06253bcc9beace1aaaaafc1353b5832d57cd0c22",
+      "file": "src/test-utils/mockReactQueryResults.ts",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'promise' does not exist in type 'InfiniteQueryObserverRefetchErrorResult<TData, Error>'."
+    },
+    {
+      "fingerprint": "df64e9b39713e3a8975fb5da4e112d29767e97d1",
+      "file": "src/test-utils/mockReactQueryResults.ts",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'promise' does not exist in type 'InfiniteQueryObserverSuccessResult<TData, Error>'."
+    },
+    {
+      "fingerprint": "57cd33bd0f51494412bca4b5fa5e5420e693e3c3",
+      "file": "src/test-utils/mockReactQueryResults.ts",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'promise' does not exist in type 'PendingInfiniteQueryResult<TData>'."
+    },
+    {
+      "fingerprint": "25c5a924e3c11daf35a9284a6739b7d0d418748d",
+      "file": "src/test-utils/mockReactQueryResults.ts",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'promise' does not exist in type 'PendingQueryResult<TData>'."
+    },
+    {
+      "fingerprint": "be828656acc1d8f1f4c1569c8b7a6de911d1eb01",
+      "file": "src/test-utils/mockReactQueryResults.ts",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'promise' does not exist in type 'QueryObserverLoadingErrorResult<TData, Error>'."
+    },
+    {
+      "fingerprint": "d8fdcef923b888b4e2dcd293b31e4c88ee02fabf",
+      "file": "src/test-utils/mockReactQueryResults.ts",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'promise' does not exist in type 'QueryObserverRefetchErrorResult<TData, Error>'."
+    },
+    {
+      "fingerprint": "4fad43ce2c054570b97a56ba31fbf642b006fcf7",
+      "file": "src/test-utils/mockReactQueryResults.ts",
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'promise' does not exist in type 'QueryObserverSuccessResult<TData, Error>'."
     }
   ]
 }

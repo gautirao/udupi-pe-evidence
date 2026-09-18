@@ -453,10 +453,10 @@ function makeAreaCard(
     const { text: repText, full: repFull } = truncateAreaLabel(area.areaLabel, truncate);
     const repLabel = escapeHtml(repText);
     const titleAttr = repFull ? ` title="${escapeHtml(repFull)}"` : '';
-    const bg = sel ? '#1d4ed8' : C_PAPER;
+    const bg = sel ? C_NAVY : C_PAPER;
     const textColor = sel ? '#ffffff' : C_INK;
     const pinColor = sel ? '#ffffff' : C_COPPER;
-    const border = sel ? '1px solid #1d4ed8' : `1px solid ${C_BORDER}`;
+    const border = sel ? `1px solid ${C_NAVY}` : `1px solid ${C_BORDER}`;
     html = `<div data-testid="area-marker" data-selected="${Boolean(sel)}" style="transform:translate(-50%,-118%);font-family:inherit;opacity:${opacity};pointer-events:auto;cursor:pointer;">
       <div class="area-marker-card"${titleAttr} style="display:inline-flex;align-items:center;gap:7px;padding:6px 8px 6px 11px;border-radius:9999px;background:${bg};border:${border};box-shadow:${PILL_SHADOW};white-space:nowrap;transition:transform .15s cubic-bezier(.4,0,.2,1),box-shadow .15s;">
         ${pinSvg(pinColor)}
@@ -884,14 +884,6 @@ function makeDestinationCard(
     selected: isSelected,
     ariaLabel,
   });
-  // Issue #2330 — Explore now renders via the shared `markerShellHtml`
-  // connected-card shell (dark navy identity + solid accent footer),
-  // replacing the pre-#2330 floating "Tap to zoom"-style pill. Content
-  // (name/count/pill derivation above) is UNCHANGED — only the shell/palette
-  // this content is painted inside changes. `isHovered` no longer drives a
-  // JS-baked border swap: hover/keyboard-focus lift is a CSS concern now
-  // (index.css, keyed on `data-marker-shell`/`data-journey`/`data-action-kind`
-  // per AC16), matching every other variant of this shared shell.
   const isSchools = eligibilityJourney === 'schools';
 
   const listingsCountText = listingsLabel != null ? child.listingCount.toLocaleString('en-IN') : null;
@@ -899,35 +891,55 @@ function makeDestinationCard(
   const primaryCountNum = isSchools ? (child.schoolCount ?? 0) : child.listingCount;
   const primaryCountText = isSchools ? schoolCountText : listingsCountText;
   const primaryCountLabel = isSchools ? 'schools' : 'listings';
-  const secondaryLabel = isSchools ? listingsLabel : schoolLabel;
-  // Issue #2346 — mirrors makeSingleAreaChildCard's primaryCountKnown gate:
-  // a KNOWN zero schoolCount renders the hardcoded "0 schools" hero metric,
-  // but an unresolved (null) schoolCount must omit the hero metric entirely
-  // rather than being treated as if it were zero.
   const isKnownZeroSchools = isSchools && child.schoolCount === 0;
 
-  const countFontSizePx = Math.round(22 + Math.min(1, primaryCountNum / (isSchools ? 20 : 240)) * 9);
-  const widthPx = inventoryScaledWidthPx(primaryCountNum, isSchools, false);
-  const nameMaxWidthPx = widthPx - 28;
+  const countFontSizePx = Math.round(20 + Math.min(1, primaryCountNum / (isSchools ? 20 : 240)) * 6);
+
+  const shortAreaCountText =
+    child.matchingAreaCount != null && child.matchingAreaCount > 0
+      ? `${child.matchingAreaCount} ${child.matchingAreaCount === 1 ? 'area' : 'areas'}`
+      : null;
+
+  // Combine areas and schools into secondary metadata line (e.g. "58 areas · 10 schools")
+  let secondaryMetaText: string | null = null;
+  if (shortAreaCountText != null && schoolLabel != null && !isSchools) {
+    secondaryMetaText = `${shortAreaCountText} · ${schoolLabel}`;
+  } else if (shortAreaCountText != null && !isSchools) {
+    secondaryMetaText = shortAreaCountText;
+  } else if (listingsLabel != null && isSchools) {
+    secondaryMetaText = listingsLabel;
+  }
+
+  const baseWidthPx = inventoryScaledWidthPx(primaryCountNum, isSchools, false);
+  const widthPx = secondaryMetaText ? Math.max(baseWidthPx, 180) : baseWidthPx;
+  const nameMaxWidthPx = widthPx - 38;
+
+  // Visual location identity pin (Explore marker has dark navy body in both rest and selected)
+  const pinColor = '#ffffff';
+  const iconSvg = isSchools ? gradCapSvg(pinColor) : pinSvg(pinColor);
+
+  const textColor = '#ffffff';
+  const labelColor = 'rgba(255,255,255,0.8)';
+  const metaColor = 'rgba(255,255,255,0.85)';
 
   const identityHtml =
-    `<span style="font-family:${FONT_SANS_ATTR};font-size:12.5px;font-weight:700;letter-spacing:-0.01em;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:${nameMaxWidthPx}px;">${label}</span>` +
+    `<span style="display:flex;align-items:center;gap:5px;max-width:100%;">` +
+    iconSvg +
+    `<span style="font-family:${FONT_SANS_ATTR};font-size:13px;font-weight:700;letter-spacing:-0.01em;line-height:1.2;color:${textColor};display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:${nameMaxWidthPx}px;">${label}</span>` +
+    `</span>` +
     (primaryCountText != null && (!isSchools || child.schoolCount! > 0)
-      ? `<span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
-        <span style="font-family:${FONT_MONO_ATTR};font-size:${countFontSizePx}px;font-weight:800;line-height:1;letter-spacing:-0.02em;">${primaryCountText}</span>
-        <span style="font-family:${FONT_SANS_ATTR};font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${DESTINATION_TEXT_MUTED};">${primaryCountLabel}</span>
+      ? `<span style="display:flex;align-items:baseline;gap:4px;margin-top:3px;">
+        <span style="font-family:${FONT_MONO_ATTR};font-size:${countFontSizePx}px;font-weight:800;line-height:1;letter-spacing:-0.02em;color:${textColor};">${primaryCountText}</span>
+        <span style="font-family:${FONT_SANS_ATTR};font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${labelColor};">${primaryCountLabel}</span>
       </span>`
       : isKnownZeroSchools
-        ? `<span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
-        <span style="font-family:${FONT_MONO_ATTR};font-size:16px;font-weight:800;line-height:1;letter-spacing:-0.02em;color:${DESTINATION_TEXT_MUTED};">0</span>
-        <span style="font-family:${FONT_SANS_ATTR};font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${DESTINATION_TEXT_MUTED};">schools</span>
+        ? `<span style="display:flex;align-items:baseline;gap:4px;margin-top:3px;">
+        <span style="font-family:${FONT_MONO_ATTR};font-size:16px;font-weight:800;line-height:1;letter-spacing:-0.02em;color:${labelColor};">0</span>
+        <span style="font-family:${FONT_SANS_ATTR};font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${labelColor};">schools</span>
       </span>`
         : '') +
-    (areasLabel != null
-      ? `<span style="font-family:${FONT_SANS_ATTR};margin-top:${primaryCountText != null ? 3 : 4}px;padding:1px 9px;border-radius:${RADIUS_FULL};background:${DESTINATION_PILL_BG};font-size:10px;font-weight:600;color:${primaryCountText != null ? DESTINATION_TEXT_SOFT : DESTINATION_TEXT_SOFT_DIM};white-space:nowrap;">${areasLabel}</span>`
-      : '') +
-    (secondaryLabel != null && !isKnownZeroSchools
-      ? `<span style="font-family:${FONT_SANS_ATTR};font-size:10.5px;font-weight:600;color:${DESTINATION_TEXT_MUTED};white-space:nowrap;">${secondaryLabel}</span>`
+    (secondaryMetaText != null
+      ? `<span style="font-family:${FONT_SANS_ATTR};margin-top:2px;font-size:10.5px;font-weight:600;color:${metaColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${secondaryMetaText}</span>`
       : '');
 
   const html = markerShellHtml({
@@ -940,7 +952,7 @@ function makeDestinationCard(
     journeyAttr: isSchools ? 'data-journey="schools"' : '',
     fontSansAttr: FONT_SANS_ATTR,
     identityHtml,
-    footerIconHtml: compassGlyphSvg(PAPER),
+    footerIconHtml: compassGlyphSvg('#ffffff'),
     footerLabelText: 'Explore',
   });
   return L.divIcon({ className: 'area-destination-marker-icon', html, iconSize: undefined, iconAnchor: [0, 0] });
@@ -959,31 +971,12 @@ export function makeSingleAreaChildCard(
   isHovered: boolean,
   eligibilityJourney: 'schools' | 'areas',
 ): L.DivIcon {
-  // UD-1/UD-3 (fix-cycle-3) — this card type is one of the two grid-clustered
-  // builders (see areaClustering.ts's AREA_CARD_FOOTPRINT_WIDTH_PX doc): its
-  // CSS width is fixed to that SAME shared constant (never a locally re-typed
-  // number) so the no-overlap geometry and the pixels actually painted can
-  // never drift apart. Truncation (existing `truncateAreaLabel` helper, never
-  // reimplemented) plus a matching CSS max-width/ellipsis on the name span is
-  // the belt-and-suspenders that keeps the rendered width from ever exceeding
-  // that fixed footprint even for a long real label; the ACCESSIBLE name
-  // below always carries the full untruncated label.
   const { text: shortLabel, full: fullLabel } = truncateAreaLabel(child.displayLabel, true);
   const label = escapeHtml(shortLabel);
   const ariaLabelName = escapeHtml(child.displayLabel);
   const titleAttr = fullLabel ? ` title="${escapeHtml(fullLabel)}"` : '';
   const isSchools = eligibilityJourney === 'schools';
 
-  // Issue #2330 (AC5/AC11) — the leaf's exact count is now the HERO METRIC
-  // inside the identity section (mono digit + uppercase unit), never a small
-  // label beside the pin — matching `VISUAL_RULES.md`'s "View homes / View
-  // schools" row exactly. `primaryCountNum` preserves the EXACT three-case
-  // school-count rule this file has always used: a KNOWN zero renders as an
-  // explicit "0" hero metric, while an unavailable (null/undefined) count
-  // omits the hero metric (digit + unit + aria phrase) entirely rather than
-  // fabricating a "0" — `listingCount` is always server-known and is never
-  // subject to this distinction. Only the visual split (hero digit vs. plain
-  // secondary line) changes vs. the legacy rendering.
   const primaryCountNum: number | null = isSchools ? child.schoolCount ?? null : child.listingCount;
   const primaryCountKnown = primaryCountNum != null;
   const heroNoun = primaryCountKnown
@@ -1007,13 +1000,10 @@ export function makeSingleAreaChildCard(
       ? escapeHtml(`${secondaryCountNum} ${secondaryNoun}`)
       : null;
 
-  const primaryAccent = isSchools ? C_PLUM : DESTINATION_ACCENT;
+  const primaryAccent = isSchools ? C_PLUM : C_NAVY;
   const ariaLabel = [ariaLabelName, primaryCountLabel, secondaryCountLabel].filter((p): p is string => p != null).join(', ');
   const cardWidthPx = AREA_CARD_FOOTPRINT_WIDTH_PX;
-  const nameMaxWidthPx = cardWidthPx - 24 /* padding */ - 11 /* icon */ - 6 /* gap */ - 2 /* border */;
-  // Issue #2088 (commit 2) — ported to the shared markerPrimitives fragments
-  // + markerTokens constants; byte-identical output (see makeDestinationCard's
-  // equivalent comment above).
+  const nameMaxWidthPx = cardWidthPx - 36;
   const singleAreaShellAttrs = markerInteractiveAttrs({
     testId: 'area-single-marker',
     nodeKey: escapeHtml(child.nodeKey),
@@ -1021,20 +1011,24 @@ export function makeSingleAreaChildCard(
     ariaLabel,
   });
 
-  const identityIcon = isSchools ? gradCapSvg(primaryAccent) : pinSvg(primaryAccent);
+  const textColor = isSelected ? '#ffffff' : '#0f172a';
+  const labelColor = isSelected ? 'rgba(255,255,255,0.8)' : '#64748b';
+  const metaColor = isSelected ? 'rgba(255,255,255,0.85)' : '#64748b';
+  const identityIcon = isSchools ? gradCapSvg(isSelected ? '#ffffff' : primaryAccent) : pinSvg(isSelected ? '#ffffff' : primaryAccent);
+
   const identityHtml =
-    `<span style="display:flex;align-items:center;gap:6px;max-width:100%;">` +
+    `<span style="display:flex;align-items:center;gap:5px;max-width:100%;">` +
     identityIcon +
-    `<span style="font-size:13.5px;font-weight:800;letter-spacing:-0.01em;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:${nameMaxWidthPx}px;">${label}</span>` +
+    `<span style="font-family:${FONT_SANS_ATTR};font-size:13px;font-weight:800;letter-spacing:-0.01em;line-height:1.2;color:${textColor};display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:${nameMaxWidthPx}px;">${label}</span>` +
     `</span>` +
     (heroCountText != null && heroNoun != null
-      ? `<span style="display:flex;align-items:baseline;gap:5px;margin-top:6px;">` +
-        `<span style="font-family:${MONO};font-size:22px;font-weight:800;letter-spacing:-0.02em;line-height:1;">${heroCountText}</span>` +
-        `<span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${C_MUTED};">${heroNoun}</span>` +
+      ? `<span style="display:flex;align-items:baseline;gap:4px;margin-top:4px;">` +
+        `<span style="font-family:${MONO};font-size:20px;font-weight:800;letter-spacing:-0.02em;line-height:1;color:${textColor};">${heroCountText}</span>` +
+        `<span style="font-family:${FONT_SANS_ATTR};font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${labelColor};">${heroNoun}</span>` +
         `</span>`
       : '') +
     (secondaryCountLabel != null
-      ? `<span style="margin-top:3px;font-size:11px;font-weight:600;color:${C_MUTED};">${secondaryCountLabel}</span>`
+      ? `<span style="margin-top:2px;font-family:${FONT_SANS_ATTR};font-size:10.5px;font-weight:600;color:${metaColor};white-space:nowrap;">${secondaryCountLabel}</span>`
       : '');
 
   const html = markerShellHtml({

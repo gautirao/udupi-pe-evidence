@@ -159,12 +159,12 @@ export function JourneySwitcher({
         { label: 'Locality insights' },
       ],
       cta: 'Explore areas',
-      cardHover: 'hover:border-blue-600',
-      tile: 'bg-white/20 text-white',
-      glyph: 'text-white',
-      ctaText: '',
-      accentBorder: 'border-blue-600',
-      accentBg: 'bg-[#1d4ed8]',
+      cardHover: 'hover:border-[hsl(var(--copper))]',
+      tile: 'bg-[hsl(var(--copper-tint))] text-[hsl(var(--copper))]',
+      glyph: 'text-[hsl(var(--copper))]',
+      ctaText: 'group-hover:text-[hsl(var(--copper))]',
+      accentBorder: 'border-[hsl(var(--copper))]',
+      accentBg: 'bg-[hsl(var(--copper-tint))]',
       checkBg: 'bg-[hsl(var(--copper))] text-white',
       metaBg: 'bg-[hsl(var(--copper-tint))]',
       metaIcon: 'text-[hsl(var(--copper))]',
@@ -309,8 +309,8 @@ export function JourneySwitcher({
                     'group flex min-w-0 items-center gap-2 rounded-lg border-[1.5px] p-2.5 text-left transition-colors',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                     j.primary
-                      ? (isSelected ? 'border-blue-700 bg-blue-700 text-white shadow-md' : 'border-blue-600 bg-[#1d4ed8] text-white hover:bg-blue-700 shadow-sm')
-                      : (isSelected ? cn(j.accentBorder, j.accentBg, 'border-border bg-card text-foreground') : 'border-border bg-card text-foreground hover:border-slate-300 shadow-xs'),
+                      ? (isSelected ? 'border-[hsl(var(--copper))] bg-[hsl(var(--copper-tint))] text-foreground shadow-sm' : 'border-border bg-card text-foreground hover:border-[hsl(var(--copper))] shadow-xs')
+                      : (isSelected ? cn(j.accentBorder, j.accentBg, 'text-foreground') : 'border-border bg-card text-foreground hover:border-slate-300 shadow-xs'),
                   )
             }
           >
@@ -332,16 +332,16 @@ export function JourneySwitcher({
 
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <h3 className={cn("text-[12.5px] font-bold leading-snug tracking-tight", j.primary ? "text-white" : "text-foreground")}>
+                    <h3 className="text-[12.5px] font-bold leading-snug tracking-tight text-foreground">
                       {j.title}
                     </h3>
                     {j.primary && (
-                      <span className="inline-flex shrink-0 items-center rounded-full bg-white/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.03em] text-white">
+                      <span className="inline-flex shrink-0 items-center rounded-full bg-[hsl(var(--copper-tint))] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.03em] text-[hsl(var(--copper))]">
                         Recommended
                       </span>
                     )}
                   </div>
-                  <p className={cn("mb-0 line-clamp-1 text-[11px] leading-snug", j.primary ? "text-blue-100" : "text-muted-foreground")}>
+                  <p className="mb-0 line-clamp-1 text-[11px] leading-snug text-muted-foreground">
                     {j.desc}
                   </p>
 
@@ -363,7 +363,7 @@ export function JourneySwitcher({
                   )}
                 </div>
 
-                <ChevronRight className={cn("h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5", j.primary ? "text-white/80" : "text-muted-foreground")} aria-hidden="true" />
+                <ChevronRight className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5 text-muted-foreground" aria-hidden="true" />
 
                 {isSelected && (
                   <span

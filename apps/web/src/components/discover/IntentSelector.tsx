@@ -91,8 +91,8 @@ export function IntentSelector({
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
                 fill && 'flex-1 h-full py-0',
                 selected
-                  ? 'bg-card text-foreground shadow-[0_1px_2px_rgba(24,16,12,0.12)] ring-1 ring-border/60'
-                  : 'text-muted-foreground hover:text-foreground',
+                  ? 'bg-[#1B2A45] text-white shadow-sm font-bold'
+                  : 'text-slate-600 hover:text-slate-900 bg-transparent font-medium',
               )}
             >
               {label}

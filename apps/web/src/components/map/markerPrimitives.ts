@@ -295,7 +295,11 @@ interface MarkerPalette {
  * `VISUAL_RULES.md`'s "Colours (exact)" and "Areas vs Schools palette
  * mapping" sections are this function's source of truth.
  */
-function resolveMarkerPalette(actionKind: MarkerActionKind, journey: MarkerJourney): MarkerPalette {
+function resolveMarkerPalette(
+  actionKind: MarkerActionKind,
+  journey: MarkerJourney,
+  isSelected: boolean,
+): MarkerPalette {
   const isSchools = journey === 'schools';
   if (actionKind === 'explore') {
     const accent = isSchools ? PLUM_600 : COPPER_500;
@@ -303,12 +307,12 @@ function resolveMarkerPalette(actionKind: MarkerActionKind, journey: MarkerJourn
       bodyBg: NAVY_800,
       bodyFg: PAPER,
       borderRest: 'rgba(27,42,69,0.24)',
-      borderSelected: 'rgba(27,42,69,0.4)',
+      borderSelected: accent,
       borderIsAccentSolid: false,
       footerBg: accent,
       footerFg: PAPER,
       tailColor: accent,
-      selectedOutlineColor: NAVY_800,
+      selectedOutlineColor: accent,
     };
   }
   if (actionKind === 'zoom') {
@@ -426,7 +430,7 @@ export function markerShellHtml(opts: MarkerShellHtmlOptions): string {
   } = opts;
 
   const shellStyle = interactive ? MARKER_SHELL_STYLE : MARKER_SHELL_STYLE_INERT;
-  const palette = resolveMarkerPalette(actionKind, journey);
+  const palette = resolveMarkerPalette(actionKind, journey, isSelected);
   const borderColor = palette.borderIsAccentSolid
     ? palette.borderRest
     : isSelected

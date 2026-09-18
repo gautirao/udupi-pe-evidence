@@ -293,17 +293,17 @@ export function NavigationLevelPanel({
       {!isTipDismissed && (
         <div
           data-testid="discover-tip-banner"
-          className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50/70 p-3 text-xs text-blue-900 shadow-xs"
+          className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-[hsl(var(--copper-border))] bg-[hsl(var(--copper-tint))] p-3 text-xs text-[hsl(var(--navy-800))] shadow-xs"
         >
           <div className="flex items-center gap-2">
-            <span className="font-bold text-blue-700">Tip:</span>
+            <span className="font-bold text-[hsl(var(--copper-600))]">Tip:</span>
             <span>Explore by area to see property trends, schools, price insights and more.</span>
           </div>
           <button
             type="button"
             onClick={() => setIsTipDismissed(true)}
             aria-label="Dismiss tip"
-            className="shrink-0 rounded p-1 text-blue-600 hover:bg-blue-100 hover:text-blue-900 transition-colors"
+            className="shrink-0 rounded p-1 text-[hsl(var(--copper-600))] hover:bg-[hsl(var(--copper-tint))]/80 hover:text-[hsl(var(--navy-800))] transition-colors"
           >
             <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>

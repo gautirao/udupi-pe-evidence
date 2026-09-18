@@ -70,7 +70,7 @@ describe('AreaDestinationMarkerLayer zero-school rendering', () => {
     expect(html).toContain('aria-label="Koramangala, 0 schools, 42 listings"');
     const heroMatches = html.match(/>0<\/span>/g);
     expect(heroMatches).toHaveLength(1);
-    expect(html).toMatch(/>0<\/span>[\s\S]{0,200}>SCHOOLS</);
+    expect(html).toMatch(/>0<\/span>[\s\S]{0,400}>SCHOOLS</);
 
     // Must contain the listing count (42 listings) since the zero state preserves useful listing metadata
     expect(html).toContain('42 listings');

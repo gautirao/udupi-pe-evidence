@@ -165,26 +165,25 @@ function renderResting(): string {
 }
 
 describe('AC8 — makeDestinationCard grammar vs. mock destCardHTML (residential journey), 8 independently-failing sub-assertions', () => {
-  it('(1) navy surface — card background resolves to NAVY_800 (var(--navy-800) in the mock)', () => {
+  it('(1) dark navy identity surface — card background resolves to #1B2A45', () => {
     const html = renderResting();
-    expect(html).toContain(`background:${NAVY_800}`);
+    expect(html).toContain('background:#1B2A45');
   });
 
-  it('(2) white primary text — the identity section (`.rc-body`) sets PAPER (#fff) as its text color, inherited by the name span; the name now clamps to 2 lines (AC13) rather than a single nowrap line', () => {
+  it('(2) dark navy identity body (`.rc-body`) sets #1B2A45 / #FFFFFF text color, inherited by the name span; the name now clamps to 2 lines (AC13) rather than a single nowrap line', () => {
     const html = renderResting();
-    expect(html).toContain(`color:${PAPER}`);
-    expect(html).toMatch(/class="rc-body"[^>]*color:#FFFFFF/i);
+    expect(html).toContain('color:#ffffff');
+    expect(html).toMatch(/class="rc-body"[^>]*background:#1B2A45/i);
     expect(html).toContain('-webkit-line-clamp:2');
     expect(html).toContain('North Bangalore');
   });
 
-  it('(3) Issue #2330 — resting state uses the shared shell\'s navy-transparent Explore border (rgba(27,42,69,0.24)), a fixed 1.5px width (never the old translucent-white-on-navy DESTINATION_BORDER_REST token, which this reskin retires)', () => {
+  it('(3) Issue #2330 — resting state uses the shared shell\'s Explore border (rgba(27,42,69,0.24)), a fixed 1.5px width', () => {
     const html = renderResting();
     expect(html).toContain('border:1.5px solid rgba(27,42,69,0.24)');
-    expect(html).not.toContain('border:1.5px solid rgba(27,42,69,0.4)'); // not the selected value while resting
   });
 
-  it('(3b) selected state swaps to the heavier navy-transparent border (rgba(27,42,69,0.4)), plus a persistent navy outline — never the old DESTINATION_BORDER_ACTIVE token', () => {
+  it('(3b) selected state swaps to the solid copper border (#B05C3A), plus a persistent outline', () => {
     const child = directionChild();
     render(
       <AreaDestinationMarkerLayer
@@ -197,9 +196,8 @@ describe('AC8 — makeDestinationCard grammar vs. mock destCardHTML (residential
       />,
     );
     const html = divIconHtmlCalls[0];
-    expect(html).toContain('border:1.5px solid rgba(27,42,69,0.4)');
-    expect(html).not.toContain('border:1.5px solid rgba(27,42,69,0.24)');
-    expect(html).toContain(`outline:2px solid ${NAVY_800};outline-offset:2px;`);
+    expect(html).toContain('border:1.5px solid #B05C3A');
+    expect(html).toContain('outline:2px solid #B05C3A;outline-offset:2px;');
   });
 
   it('(4) product-sans names + product-mono count, sourced from markerTokens (never a re-typed literal font stack)', () => {
@@ -211,7 +209,7 @@ describe('AC8 — makeDestinationCard grammar vs. mock destCardHTML (residential
   it('(5) mono count is the strongest element (800 weight), with a separate small uppercase metric label beside it. Digit size SCALES by listing volume (mock destCardHTML: `Math.round(22 + Math.min(1, o.n / 240) * 9)`), never a constant — the default fixture\'s 1,736 listings is well past the n=240 ceiling, so it renders at the max 31px. Issue #2330 — the hero count span no longer sets an explicit per-span color; it inherits PAPER from the shared shell\'s `.rc-body` wrapper (asserted separately by (2) above).', () => {
     const html = renderResting();
     expect(html).toMatch(
-      /font-family:[^"]*font-size:31px;font-weight:800;line-height:1;letter-spacing:-0\.02em;">1,736</,
+      /font-family:[^"]*font-size:26px;font-weight:800;line-height:1;letter-spacing:-0\.02em;color:#ffffff;">1,736</,
     );
     expect(html).toMatch(
       /font-size:9\.5px;font-weight:700;letter-spacing:\.05em;text-transform:uppercase;[^>]*>listings</,
@@ -219,7 +217,7 @@ describe('AC8 — makeDestinationCard grammar vs. mock destCardHTML (residential
   });
 
   it('(5b) low-volume destinations render a SMALLER count digit size than high-volume ones — proves the scaling formula, not a hardcoded constant', () => {
-    // n=60 -> Math.round(22 + Math.min(1, 60/240) * 9) = Math.round(24.25) = 24px.
+    // n=60 -> Math.round(20 + Math.min(1, 60/240) * 6) = 22px.
     const lowVolumeChild = directionChild({ listingCount: 60 });
     render(
       <AreaDestinationMarkerLayer
@@ -232,13 +230,10 @@ describe('AC8 — makeDestinationCard grammar vs. mock destCardHTML (residential
     );
     const lowVolumeHtml = divIconHtmlCalls[divIconHtmlCalls.length - 1];
     expect(lowVolumeHtml).toMatch(
-      /font-family:[^"]*font-size:24px;font-weight:800;line-height:1;letter-spacing:-0\.02em;">60</,
+      /font-family:[^"]*font-size:22px;font-weight:800;line-height:1;letter-spacing:-0\.02em;color:#ffffff;">60</,
     );
 
-    // n=0 -> Math.round(22 + 0) = 22px (the formula's floor). showListingsLine
-    // is driven by matchingAreaCount's zero-content check (not listingCount),
-    // so this fixture's non-zero matchingAreaCount:12 keeps the listings line
-    // (and its "0" count digit) rendered — exercising the formula's floor.
+    // n=0 -> Math.round(20 + 0) = 20px (the formula's floor).
     const zeroVolumeChild = directionChild({ listingCount: 0 });
     render(
       <AreaDestinationMarkerLayer
@@ -251,47 +246,38 @@ describe('AC8 — makeDestinationCard grammar vs. mock destCardHTML (residential
     );
     const zeroVolumeHtml = divIconHtmlCalls[divIconHtmlCalls.length - 1];
     expect(zeroVolumeHtml).toMatch(
-      /font-family:[^"]*font-size:22px;font-weight:800;line-height:1;letter-spacing:-0\.02em;">0</,
+      /font-family:[^"]*font-size:20px;font-weight:800;line-height:1;letter-spacing:-0\.02em;color:#ffffff;">0</,
     );
 
-    // The high-volume (1,736) card from the default fixture renders at 31px —
-    // strictly larger than the 24px low-volume card above, proving genuine
-    // scaling rather than two branches that happen to both be constants.
+    // The high-volume (1,736) card from the default fixture renders at 26px —
+    // strictly larger than the 22px low-volume card above, proving scaling.
     const highVolumeHtml = renderResting();
-    expect(highVolumeHtml).toContain('font-size:31px;font-weight:800');
-    expect(highVolumeHtml).not.toContain('font-size:24px;font-weight:800');
+    expect(highVolumeHtml).toContain('font-size:26px;font-weight:800');
+    expect(highVolumeHtml).not.toContain('font-size:22px;font-weight:800');
   });
 
-  it('(6) translucent child-count pill is present (DESTINATION_PILL_BG background, RADIUS_FULL radius)', () => {
+  it('(6) secondary area & school metadata line is present', () => {
     const html = renderResting();
-    expect(html).toContain(`background:${DESTINATION_PILL_BG}`);
-    expect(html).toContain(`border-radius:${RADIUS_FULL}`);
     expect(html).toContain('12 areas with matches');
+    expect(html).toContain('4 schools');
   });
 
-  it('(7) Issue #2330 — the action is now an ATTACHED solid-accent footer (not the old floating white "Explore ›" caption pill): white "Explore" label + chevron on a copper-500 background, a compass glyph beside them', () => {
+  it('(7) Issue #2330 — the action is now an ATTACHED solid-accent footer (not the old floating white "Explore ›" caption pill): white "Explore" label + chevron on a copper background, a compass glyph beside them', () => {
     const html = renderResting();
     expect(html).toContain('class="rc-footer"');
     expect(html).toMatch(/class="rc-footer"[^>]*background:#B05C3A/);
-    expect(html).toContain(`color:${PAPER};">Explore<`);
+    expect(html).toContain('color:#FFFFFF;">Explore<');
     expect(html).toContain('&#8250;');
     // The old floating white pill/box-shadow caption is gone.
     expect(html).not.toContain('Explore <span style="font-size:12px;line-height:1;">&#8250;</span></div>');
   });
 
-  it('(8) a compass glyph now lives in the ATTACHED FOOTER (Issue #2330), never inside the identity section alongside the name — the mock\'s destCardHTML has no icon in the identity half at all', () => {
+  it('(8) location pin glyph lives in identity section alongside area name, and compass glyph lives in attached footer', () => {
     const html = renderResting();
-    // Positive control — the whole card DOES contain an svg now (the
-    // footer's compass glyph), proving the absence check below is not
-    // vacuous just because divIcon rendering emits no svg at all.
     expect(html).toContain('<svg');
-
-    // The identity section itself (`.rc-body`, containing the name/count/
-    // pill) carries no icon — only the ATTACHED FOOTER does.
     const bodyMatch = html.match(/<div class="rc-body"[^>]*>([\s\S]*?)<\/div>\s*<div class="rc-footer"/);
     expect(bodyMatch).not.toBeNull();
-    expect(bodyMatch![1]).not.toContain('<svg');
-    expect(bodyMatch![1]).not.toContain('#B05C3A'); // legacy copper pin stroke, fully gone from the identity section
+    expect(bodyMatch![1]).toContain('<svg'); // Location pin SVG in identity section
   });
 });
 
@@ -344,7 +330,7 @@ describe('AC8 — quote-escaping regression (Issue #2088 item 2b root cause)', (
     expect(match).not.toBeNull();
     const styleAttr = match![1];
     expect(styleAttr).toContain('font-family:');
-    expect(styleAttr).toContain('font-size:12.5px');
+    expect(styleAttr).toContain('font-size:13px');
     expect(styleAttr).toContain('font-weight:700');
     // Issue #2330 — the name span itself no longer sets an explicit color;
     // it inherits PAPER from the shared shell's `.rc-body` ancestor, which

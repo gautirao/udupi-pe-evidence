@@ -108,16 +108,16 @@ describe('markerShellHtml — accessibility', () => {
 });
 
 describe('markerShellHtml — palette per (actionKind, journey), orthogonal', () => {
-  it('explore/areas: navy body + white text, solid copper footer with white text', () => {
+  it('explore/areas: ink navy body + white text, solid copper footer with white text', () => {
     const html = markerShellHtml(
       baseOptions({ actionKind: 'explore', journey: 'areas', footerLabelText: 'Explore' }),
     );
     expect(html).toMatch(/class="rc-body"[^>]*background:#1B2A45;color:#FFFFFF/i);
     expect(html).toMatch(/class="rc-footer"[^>]*background:#B05C3A/);
-    expect(html).toContain(`color:${PAPER};">Explore<`);
+    expect(html).toContain('color:#FFFFFF;">Explore<');
   });
 
-  it('explore/schools: navy body stays navy (identity is geography, not journey-specific); footer flips to plum', () => {
+  it('explore/schools: ink navy body; footer flips to solid plum with white text', () => {
     const html = markerShellHtml(baseOptions({ actionKind: 'explore', journey: 'schools' }));
     expect(html).toMatch(/class="rc-body"[^>]*background:#1B2A45;color:#FFFFFF/i);
     expect(html).toMatch(/class="rc-footer"[^>]*background:#5E5286/);
@@ -162,14 +162,14 @@ describe('markerShellHtml — palette per (actionKind, journey), orthogonal', ()
 });
 
 describe('markerShellHtml — selected state', () => {
-  it('explore: selected adds a persistent navy outline + shadow-lg; border stays the resting rgba(27,42,69,0.24) unless the caller\'s own border logic changes it', () => {
+  it('explore: selected renders persistent copper outline + shadow-lg', () => {
     const html = markerShellHtml(baseOptions({ actionKind: 'explore', journey: 'areas', isSelected: true }));
-    expect(html).toContain(`outline:2px solid ${NAVY_800};outline-offset:2px;`);
+    expect(html).toContain('outline:2px solid #B05C3A;outline-offset:2px;');
     expect(html).toContain(`box-shadow:${SHADOW_LG}`);
-    expect(html).toContain('border:1.5px solid rgba(27,42,69,0.4)');
+    expect(html).toContain('border:1.5px solid #B05C3A');
   });
 
-  it('explore: unselected has no outline, shadow-md, and the resting border', () => {
+  it('explore: unselected has no outline, shadow-md, and dark navy border', () => {
     const html = markerShellHtml(baseOptions({ actionKind: 'explore', journey: 'areas', isSelected: false }));
     expect(html).not.toContain('outline:2px solid');
     expect(html).toContain(`box-shadow:${SHADOW_MD}`);
