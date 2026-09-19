@@ -207,10 +207,9 @@ describe('useDiscoverMapData — multi-value narrowing reaches the city-listings
     expect(params.getAll('bedrooms')).toEqual(['3']);
   });
 
-  // Falsifiability control, same query shape: with NO property filter selected
-  // the param must be absent entirely. Without this, a fix that unconditionally
-  // appended every known type would pass the two tests above.
-  it('omits both params entirely when nothing is selected', async () => {
+  // Issue #2622 — with NO property filter selected (family-silent), the propertyType param
+  // defaults to the Residential family shapes, while bedrooms remains omitted.
+  it('defaults propertyType to Residential family shapes when nothing is selected (#2622)', async () => {
     renderHook(
       () =>
         useDiscoverMapData({
@@ -224,7 +223,13 @@ describe('useDiscoverMapData — multi-value narrowing reaches the city-listings
     await waitFor(() => expect(findCityListingsCall()).toBeDefined());
 
     const params = paramsOf(findCityListingsCall()!);
-    expect(params.has('propertyType')).toBe(false);
+    expect(params.getAll('propertyType')).toEqual([
+      'apartment',
+      'house',
+      'villa',
+      'residential_plot',
+      'land',
+    ]);
     expect(params.has('bedrooms')).toBe(false);
   });
 });

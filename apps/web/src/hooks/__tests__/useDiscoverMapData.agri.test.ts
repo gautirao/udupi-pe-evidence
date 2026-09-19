@@ -153,6 +153,9 @@ function setupDefaultMocks() {
   });
   // Default api.get: blended response; agri response for the filtered call
   mockDiscoverAreasGet.mockImplementation((url: string) => {
+    if (url.includes('/listings')) {
+      return Promise.resolve(CITY_LISTINGS_RESPONSE);
+    }
     if (url.includes('propertyType=agricultural_land')) {
       return Promise.resolve(AGRI_AREAS_RESPONSE);
     }
@@ -198,8 +201,7 @@ describe('useDiscoverMapData — agri-first journey (Issue #1371)', () => {
       { wrapper: makeWrapper() },
     );
 
-    await waitFor(() => result.current.agriAreasData !== undefined);
-    expect(result.current.agriAreasData).toBeDefined();
+    await waitFor(() => expect(result.current.agriAreasData?.[0]).toBeDefined());
     expect(result.current.agriAreasData![0].listingCount).toBe(7);
     expect(result.current.agriAreasData![0].agriAcreage).toBe(12.5);
   });
@@ -214,7 +216,7 @@ describe('useDiscoverMapData — agri-first journey (Issue #1371)', () => {
       { wrapper: makeWrapper() },
     );
 
-    await waitFor(() => result.current.discoverAreas.length > 0);
+    await waitFor(() => expect(result.current.discoverAreas[0]).toBeDefined());
     // discoverAreas is derived from the BLENDED areas call — listingCount must be 42
     expect(result.current.discoverAreas[0].listingCount).toBe(42);
   });

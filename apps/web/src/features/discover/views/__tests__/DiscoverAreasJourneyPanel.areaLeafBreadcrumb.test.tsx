@@ -155,13 +155,11 @@ describe('DiscoverAreasJourneyPanel — AC5.9 full breadcrumb at the canonical A
 
   it('renders the Region AND Group crumbs (not just City) for a full-depth node', () => {
     const selectNode = vi.fn();
-    render(
-      <MemoryRouter>
-        <DiscoverAreasJourneyPanel
-          journey={makeJourney({ node: makeFullDepthAreaLeafNode(), selectNode })}
-          buildNodeHref={NOOP_BUILD_HREF}
-        />
-      </MemoryRouter>,
+    renderWithProviders(
+      <DiscoverAreasJourneyPanel
+        journey={makeJourney({ node: makeFullDepthAreaLeafNode(), selectNode })}
+        buildNodeHref={NOOP_BUILD_HREF}
+      />,
     );
     // Region crumb — the exact defect: this used to be silently absent.
     expect(screen.getByTestId('breadcrumb-region')).toHaveTextContent('West Bangalore');
@@ -176,13 +174,11 @@ describe('DiscoverAreasJourneyPanel — AC5.9 full breadcrumb at the canonical A
   it('clicking the Region crumb calls journey.selectNode with the Region ancestor nodeKey — no second navigation mechanism', async () => {
     const user = userEvent.setup();
     const selectNode = vi.fn();
-    render(
-      <MemoryRouter>
-        <DiscoverAreasJourneyPanel
-          journey={makeJourney({ node: makeFullDepthAreaLeafNode(), selectNode })}
-          buildNodeHref={NOOP_BUILD_HREF}
-        />
-      </MemoryRouter>,
+    renderWithProviders(
+      <DiscoverAreasJourneyPanel
+        journey={makeJourney({ node: makeFullDepthAreaLeafNode(), selectNode })}
+        buildNodeHref={NOOP_BUILD_HREF}
+      />,
     );
     await user.click(screen.getByTestId('breadcrumb-region'));
     expect(selectNode).toHaveBeenCalledTimes(1);
@@ -192,13 +188,11 @@ describe('DiscoverAreasJourneyPanel — AC5.9 full breadcrumb at the canonical A
   it('clicking the Group crumb calls journey.selectNode with the Group ancestor nodeKey', async () => {
     const user = userEvent.setup();
     const selectNode = vi.fn();
-    render(
-      <MemoryRouter>
-        <DiscoverAreasJourneyPanel
-          journey={makeJourney({ node: makeFullDepthAreaLeafNode(), selectNode })}
-          buildNodeHref={NOOP_BUILD_HREF}
-        />
-      </MemoryRouter>,
+    renderWithProviders(
+      <DiscoverAreasJourneyPanel
+        journey={makeJourney({ node: makeFullDepthAreaLeafNode(), selectNode })}
+        buildNodeHref={NOOP_BUILD_HREF}
+      />,
     );
     await user.click(screen.getByTestId('breadcrumb-group'));
     expect(selectNode).toHaveBeenCalledTimes(1);
@@ -208,13 +202,11 @@ describe('DiscoverAreasJourneyPanel — AC5.9 full breadcrumb at the canonical A
   it('clicking the Home crumb and the City crumb both call journey.selectNode with the city root key', async () => {
     const user = userEvent.setup();
     const selectNode = vi.fn();
-    render(
-      <MemoryRouter>
-        <DiscoverAreasJourneyPanel
-          journey={makeJourney({ node: makeFullDepthAreaLeafNode(), selectNode })}
-          buildNodeHref={NOOP_BUILD_HREF}
-        />
-      </MemoryRouter>,
+    renderWithProviders(
+      <DiscoverAreasJourneyPanel
+        journey={makeJourney({ node: makeFullDepthAreaLeafNode(), selectNode })}
+        buildNodeHref={NOOP_BUILD_HREF}
+      />,
     );
     await user.click(screen.getByTestId('breadcrumb-home'));
     expect(selectNode).toHaveBeenNthCalledWith(1, 'root');
@@ -229,10 +221,8 @@ describe('DiscoverAreasJourneyPanel — AC5.9 full breadcrumb at the canonical A
       depth: 1,
       ancestry: [{ nodeKey: 'd:w', nodeType: 'DIRECTION', displayLabel: 'West Bangalore', displayOrder: 0 }],
     };
-    render(
-      <MemoryRouter>
-        <DiscoverAreasJourneyPanel journey={makeJourney({ node: depth1Node })} buildNodeHref={NOOP_BUILD_HREF} />
-      </MemoryRouter>,
+    renderWithProviders(
+      <DiscoverAreasJourneyPanel journey={makeJourney({ node: depth1Node })} buildNodeHref={NOOP_BUILD_HREF} />,
     );
     expect(screen.getByTestId('breadcrumb-region')).toHaveTextContent('West Bangalore');
     expect(screen.queryByTestId('breadcrumb-group')).not.toBeInTheDocument();
@@ -248,14 +238,12 @@ describe('DiscoverAreasJourneyPanel — AC5.10/AC5.10c selected-listing preview 
 
   it('reports null when no listing is selected', () => {
     const onSelectedListingPreviewChange = vi.fn();
-    render(
-      <MemoryRouter>
-        <DiscoverAreasJourneyPanel
-          journey={makeJourney({ node: makeFullDepthAreaLeafNode() })}
-          buildNodeHref={NOOP_BUILD_HREF}
-          onSelectedListingPreviewChange={onSelectedListingPreviewChange}
-        />
-      </MemoryRouter>,
+    renderWithProviders(
+      <DiscoverAreasJourneyPanel
+        journey={makeJourney({ node: makeFullDepthAreaLeafNode() })}
+        buildNodeHref={NOOP_BUILD_HREF}
+        onSelectedListingPreviewChange={onSelectedListingPreviewChange}
+      />,
     );
     expect(onSelectedListingPreviewChange).toHaveBeenCalledWith(null);
   });
@@ -309,14 +297,12 @@ describe('DiscoverAreasJourneyPanel — AC5.10/AC5.10c selected-listing preview 
   it('reports null when the selected id is not present in this area\'s own fetched result set', () => {
     mockSelectedListing = 'not-in-this-area';
     const onSelectedListingPreviewChange = vi.fn();
-    render(
-      <MemoryRouter>
-        <DiscoverAreasJourneyPanel
-          journey={makeJourney({ node: makeFullDepthAreaLeafNode() })}
-          buildNodeHref={NOOP_BUILD_HREF}
-          onSelectedListingPreviewChange={onSelectedListingPreviewChange}
-        />
-      </MemoryRouter>,
+    renderWithProviders(
+      <DiscoverAreasJourneyPanel
+        journey={makeJourney({ node: makeFullDepthAreaLeafNode() })}
+        buildNodeHref={NOOP_BUILD_HREF}
+        onSelectedListingPreviewChange={onSelectedListingPreviewChange}
+      />,
     );
     expect(onSelectedListingPreviewChange).toHaveBeenCalledWith(null);
   });

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { resolveEffectiveCity, resolveEffectiveAreaLeafFilters } from './effectiveDiscoverContext';
+import {
+  resolveEffectiveCity,
+  resolveEffectiveAreaLeafFilters,
+  resolveEffectiveResultFamily,
+  resolveEffectiveQueryFilters,
+} from './effectiveDiscoverContext';
 import { DEFAULT_CITY } from '@/lib/localityUtils';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import type { DiscoverUrlFilters } from '@/hooks/useDiscoverUrlState';
@@ -92,3 +97,63 @@ describe('resolveEffectiveAreaLeafFilters (#2353 — single source for the AreaL
     });
   });
 });
+
+describe('resolveEffectiveResultFamily & resolveEffectiveQueryFilters (#2622 — Residential family default)', () => {
+  it('resolves family to residential by default when filters are family-silent', () => {
+    expect(resolveEffectiveResultFamily({ filters: {} })).toBe('residential');
+    expect(resolveEffectiveResultFamily({ filters: undefined })).toBe('residential');
+  });
+
+  it('resolves family to residential when explicit residential propertyTypes are present', () => {
+    expect(resolveEffectiveResultFamily({ filters: { propertyTypes: ['apartment'] } })).toBe('residential');
+    expect(resolveEffectiveResultFamily({ filters: { propertyTypes: ['villa', 'house'] } })).toBe('residential');
+  });
+
+  it('resolves family to commercial when commercialSubtypes are present', () => {
+    expect(resolveEffectiveResultFamily({ filters: { commercialSubtypes: ['SHOP'] } })).toBe('commercial');
+    expect(resolveEffectiveResultFamily({ filters: { commercialSubtypes: ['OFFICE', 'WAREHOUSE'] } })).toBe('commercial');
+  });
+
+  it('resolves family to commercial when commercial propertyTypes are present', () => {
+    expect(resolveEffectiveResultFamily({ filters: { propertyTypes: ['commercial'] } })).toBe('commercial');
+    expect(resolveEffectiveResultFamily({ filters: { propertyTypes: ['warehouse'] } })).toBe('commercial');
+  });
+
+  it('resolves family to agricultural when in agri journey or agricultural_land is selected', () => {
+    expect(resolveEffectiveResultFamily({ filters: {}, isAgriJourney: true })).toBe('agricultural');
+    expect(resolveEffectiveResultFamily({ filters: { propertyTypes: ['agricultural_land'] } })).toBe('agricultural');
+  });
+
+  it('defaults query propertyTypes to all residential shapes when family is silent', () => {
+    const effective = resolveEffectiveQueryFilters({});
+    expect(effective.propertyTypes).toEqual([
+      'apartment',
+      'house',
+      'villa',
+      'residential_plot',
+      'land',
+    ]);
+  });
+
+  it('preserves explicit residential propertyTypes in query filters', () => {
+    const effective = resolveEffectiveQueryFilters({ propertyTypes: ['apartment'] });
+    expect(effective.propertyTypes).toEqual(['apartment']);
+  });
+
+  it('preserves commercialSubtypes and does not force residential propertyTypes in commercial mode', () => {
+    const effective = resolveEffectiveQueryFilters({ commercialSubtypes: ['SHOP'] });
+    expect(effective.commercialSubtypes).toEqual(['SHOP']);
+    expect(effective.propertyTypes).toBeUndefined();
+  });
+
+  it('preserves commercial propertyTypes in commercial mode', () => {
+    const effective = resolveEffectiveQueryFilters({ propertyTypes: ['commercial'] });
+    expect(effective.propertyTypes).toEqual(['commercial']);
+  });
+
+  it('forces agricultural_land propertyType in agricultural mode', () => {
+    const effective = resolveEffectiveQueryFilters({}, true);
+    expect(effective.propertyTypes).toEqual(['agricultural_land']);
+  });
+});
+

@@ -5,6 +5,8 @@ import { snapBbox } from '@/lib/bboxUtils';
 import type { DiscoverCommercialFactsDto } from '@/hooks/useDiscoverListings';
 import type { CommercialSubtype } from '@/lib/listing-constants';
 import { shouldSubmitBedrooms } from '@/features/discover/filters/bedroomApplicability';
+import { resolveEffectiveQueryFilters } from '@/features/discover/selectors/effectiveDiscoverContext';
+
 
 /**
  * Client freshness for public city listings, mirroring the endpoint's
@@ -275,6 +277,13 @@ export function useDiscoverCityListings({
   const snappedBbox =
     bbox != null && bbox.every(Number.isFinite) ? snapBbox(bbox) : null;
 
+  const effectiveQueryFilters = resolveEffectiveQueryFilters({
+    propertyTypes: propertyType,
+    commercialSubtypes,
+  });
+  const effectivePropertyType = effectiveQueryFilters.propertyTypes;
+  const effectiveCommercialSubtypes = effectiveQueryFilters.commercialSubtypes;
+
   return useQuery<DiscoverCityListingsResponse>({
     queryKey: discoverKey(
       source,
@@ -292,7 +301,7 @@ export function useDiscoverCityListings({
       // `[AGRICULTURAL_LAND_PROPERTY_TYPE]`) cannot fragment the cache by identity.
       // The WIRE order below is left as the caller supplied it.
       bedrooms?.length ? [...bedrooms].sort((a, b) => a - b).join(',') : null,
-      propertyType?.length ? [...propertyType].sort().join(',') : null,
+      effectivePropertyType?.length ? [...effectivePropertyType].sort().join(',') : null,
       // Issue #2531 — same sorted-join treatment as the two axes above, for the same
       // reasons: the backend's IN-list is order-insensitive (so two click orders of the
       // same set are genuinely one result and should share a cache entry), and a
@@ -300,7 +309,7 @@ export function useDiscoverCityListings({
       // fragmenting the cache by identity. Omitting this segment would be the worse bug:
       // the subtype would reach the wire but NOT the key, so switching Shop→Office would
       // hit the cached Shop response and render the wrong rows without a refetch.
-      commercialSubtypes?.length ? [...commercialSubtypes].sort().join(',') : null,
+      effectiveCommercialSubtypes?.length ? [...effectiveCommercialSubtypes].sort().join(',') : null,
       q?.trim() || null,
       listingPurpose ?? null,
       readyToMove ?? null,
@@ -380,14 +389,14 @@ export function useDiscoverCityListings({
       // `commercialSubtypes`), so it cannot disagree with what the request actually asks for.
       // `bedrooms` is NOT cleared from state or from the cache key — suppression is about
       // SUBMISSION, so switching back to a dwelling re-emits the buyer's value untouched.
-      if (shouldSubmitBedrooms({ propertyTypes: propertyType, commercialSubtypes })) {
+      if (shouldSubmitBedrooms({ propertyTypes: effectivePropertyType, commercialSubtypes: effectiveCommercialSubtypes })) {
         bedrooms?.forEach((b) => params.append('bedrooms', String(b)));
       }
-      propertyType?.forEach((t) => params.append('propertyType', t));
+      effectivePropertyType?.forEach((t) => params.append('propertyType', t));
       // Issue #2531 — repeated param, PLURAL name (see the field's doc above). Same
       // empty-array-appends-nothing rule as the two axes above: "nothing selected" must
       // stay indistinguishable from "param absent", never become "match none".
-      commercialSubtypes?.forEach((s) => params.append('commercialSubtypes', s));
+      effectiveCommercialSubtypes?.forEach((s) => params.append('commercialSubtypes', s));
       if (q?.trim()) params.append('q', q.trim());
       if (listingPurpose) params.append('listingPurpose', listingPurpose);
       if (readyToMove) params.append('readyToMove', 'true');

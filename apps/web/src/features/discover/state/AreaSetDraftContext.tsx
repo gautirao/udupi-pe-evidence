@@ -11,6 +11,7 @@ import {
 } from '@/hooks/useNearbyAreaCandidates';
 import { PropertyFilters } from '@/hooks/usePropertyListings';
 import { DEFAULT_CITY } from '@/lib/localityUtils';
+import { resolveEffectiveQueryFilters } from '@/features/discover/selectors/effectiveDiscoverContext';
 
 /**
  * Issue #2017 — shared AREA_SET draft + nearby-candidate state, extracted out
@@ -122,8 +123,9 @@ export function AreaSetDraftProvider({ children }: AreaSetDraftProviderProps) {
   // here now that it feeds useNearbyAreaCandidates from this provider.
   const nearbyFilters: PropertyFilters = useMemo(() => {
     const f = nav.filters;
-    return {
+    const raw: PropertyFilters = {
       propertyTypes: f.propertyTypes as PropertyFilters['propertyTypes'],
+      commercialSubtypes: f.commercialSubtypes as PropertyFilters['commercialSubtypes'],
       bedrooms: f.bedrooms,
       priceMin: f.priceMin,
       priceMax: f.priceMax,
@@ -137,12 +139,14 @@ export function AreaSetDraftProvider({ children }: AreaSetDraftProviderProps) {
       dateFrom: f.dateFrom ? new Date(f.dateFrom) : undefined,
       dateTo: f.dateTo ? new Date(f.dateTo) : undefined,
     };
+    return resolveEffectiveQueryFilters(raw, nav.journey === 'agri-first');
     // nav.filters object identity changes on every URL change — use the
     // individual scalar fields as deps so React can skip re-derivation when
     // nothing changed. Mirrors useDiscoverPageContext.ts's urlDiscoverFilters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     nav.filters.propertyTypes,
+    nav.filters.commercialSubtypes,
     nav.filters.bedrooms,
     nav.filters.priceMin,
     nav.filters.priceMax,
@@ -155,6 +159,7 @@ export function AreaSetDraftProvider({ children }: AreaSetDraftProviderProps) {
     nav.filters.readyToMove,
     nav.filters.dateFrom,
     nav.filters.dateTo,
+    nav.journey,
   ]);
 
   // Issue #2456 — the same intent → listingPurpose mapping the listings query

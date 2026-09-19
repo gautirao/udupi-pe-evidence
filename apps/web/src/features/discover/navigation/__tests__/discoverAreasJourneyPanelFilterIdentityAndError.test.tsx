@@ -162,8 +162,8 @@ describe('DiscoverAreasJourneyPanel — AREA-leaf filter identity + listing-erro
     // identity performance-analyst flagged as diverging from the chips.
     expect(mockUseDiscoverCityListings).toHaveBeenCalledWith(
       expect.objectContaining({
-        propertyType: 'apartment',
-        bedrooms: 3,
+        propertyType: ['apartment'],
+        bedrooms: [3],
         minPrice: 5000, // priceMin (rupees) * 100 -> paise
         maxPrice: 10000,
       }),

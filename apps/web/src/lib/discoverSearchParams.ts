@@ -1,5 +1,6 @@
 import { PropertyFilters } from '@/hooks/usePropertyListings';
 import { shouldSubmitBedrooms } from '@/features/discover/filters/bedroomApplicability';
+import { resolveEffectiveQueryFilters } from '@/features/discover/selectors/effectiveDiscoverContext';
 
 export interface DiscoverSearchParamsOptions {
   city: string;
@@ -50,6 +51,8 @@ export function buildDiscoverSearchParams({
   const params = new URLSearchParams();
   params.set('city', city);
 
+  const effectiveFilters = resolveEffectiveQueryFilters(filters);
+
   if (page !== undefined && page !== null) {
     params.set('page', String(page));
   }
@@ -73,43 +76,44 @@ export function buildDiscoverSearchParams({
     params.set('nodeKey', nodeKey);
   }
 
-  filters.propertyTypes?.forEach((t) => params.append('propertyTypes', t));
+  effectiveFilters.propertyTypes?.forEach((t) => params.append('propertyTypes', t));
   // Issue #2431 — Commercial subtype. Emitted here, in the ONE builder both the listings hook and
   // the markers hook call, which is what makes cards and map markers ask the server the same
   // question. Adding it at either hook instead would let the two drift.
-  filters.commercialSubtypes?.forEach((s) => params.append('commercialSubtypes', s));
-  filters.localities?.forEach((l) => params.append('localities', l));
+  effectiveFilters.commercialSubtypes?.forEach((s) => params.append('commercialSubtypes', s));
+  effectiveFilters.localities?.forEach((l) => params.append('localities', l));
 
-  if (filters.priceMin != null) {
-    params.set('priceMin', String(filters.priceMin));
+  if (effectiveFilters.priceMin != null) {
+    params.set('priceMin', String(effectiveFilters.priceMin));
   }
-  if (filters.priceMax != null) {
-    params.set('priceMax', String(filters.priceMax));
+  if (effectiveFilters.priceMax != null) {
+    params.set('priceMax', String(effectiveFilters.priceMax));
   }
+
 
   // Issue #2459 — contextual square-foot bounds. Emitted here, in the ONE builder both the
   // listings hook and the markers hook call, for the same reason `commercialSubtypes` is: the two
   // endpoints share a single server-side validator (`AreaBoundsParam.validate`) and so cannot
   // accept different ranges. Emitting at either hook instead would let cards and markers drift.
   // Always SQUARE FEET — the per-row column the server compares against varies, the unit does not.
-  if (filters.areaMinSqft != null) {
-    params.set('areaMinSqft', String(filters.areaMinSqft));
+  if (effectiveFilters.areaMinSqft != null) {
+    params.set('areaMinSqft', String(effectiveFilters.areaMinSqft));
   }
-  if (filters.areaMaxSqft != null) {
-    params.set('areaMaxSqft', String(filters.areaMaxSqft));
+  if (effectiveFilters.areaMaxSqft != null) {
+    params.set('areaMaxSqft', String(effectiveFilters.areaMaxSqft));
   }
 
   // dateFrom/dateTo: PropertyFilters may hold Date objects — always serialise to ISO string
-  if (filters.dateFrom != null) {
+  if (effectiveFilters.dateFrom != null) {
     params.set(
       'dateFrom',
-      filters.dateFrom instanceof Date ? filters.dateFrom.toISOString() : String(filters.dateFrom)
+      effectiveFilters.dateFrom instanceof Date ? effectiveFilters.dateFrom.toISOString() : String(effectiveFilters.dateFrom)
     );
   }
-  if (filters.dateTo != null) {
+  if (effectiveFilters.dateTo != null) {
     params.set(
       'dateTo',
-      filters.dateTo instanceof Date ? filters.dateTo.toISOString() : String(filters.dateTo)
+      effectiveFilters.dateTo instanceof Date ? effectiveFilters.dateTo.toISOString() : String(effectiveFilters.dateTo)
     );
   }
 
@@ -118,37 +122,37 @@ export function buildDiscoverSearchParams({
   // both `/api/discover/listings` and `/api/discover/markers` call, so cards and map markers
   // cannot disagree about whether a bedroom constraint was applied. Nothing is mutated:
   // `filters.bedrooms` is left intact for the moment the buyer returns to a dwelling type.
-  if (filters.bedrooms != null && shouldSubmitBedrooms(filters)) {
-    filters.bedrooms.forEach((b) => params.append('bedrooms', String(b)));
+  if (effectiveFilters.bedrooms != null && shouldSubmitBedrooms(effectiveFilters)) {
+    effectiveFilters.bedrooms.forEach((b) => params.append('bedrooms', String(b)));
   }
 
-  filters.sellerTypes?.forEach((st) => params.append('sellerTypes', st));
+  effectiveFilters.sellerTypes?.forEach((st) => params.append('sellerTypes', st));
 
-  if (filters.backOnMarket) {
+  if (effectiveFilters.backOnMarket) {
     params.set('backOnMarket', 'true');
   }
-  if (filters.newToMarket) {
+  if (effectiveFilters.newToMarket) {
     params.set('newToMarket', 'true');
   }
-  if (filters.reraRegistered) {
+  if (effectiveFilters.reraRegistered) {
     params.set('reraRegistered', 'true');
   }
-  if (filters.readyToMove) {
+  if (effectiveFilters.readyToMove) {
     params.set('readyToMove', 'true');
   }
 
-  if (filters.polygon) {
-    params.set('polygon', JSON.stringify(filters.polygon));
+  if (effectiveFilters.polygon) {
+    params.set('polygon', JSON.stringify(effectiveFilters.polygon));
   }
 
-  if (filters.schoolLat != null) {
-    params.set('schoolLat', String(filters.schoolLat));
+  if (effectiveFilters.schoolLat != null) {
+    params.set('schoolLat', String(effectiveFilters.schoolLat));
   }
-  if (filters.schoolLon != null) {
-    params.set('schoolLon', String(filters.schoolLon));
+  if (effectiveFilters.schoolLon != null) {
+    params.set('schoolLon', String(effectiveFilters.schoolLon));
   }
-  if (filters.schoolRadiusKm != null) {
-    params.set('schoolRadiusKm', String(filters.schoolRadiusKm));
+  if (effectiveFilters.schoolRadiusKm != null) {
+    params.set('schoolRadiusKm', String(effectiveFilters.schoolRadiusKm));
   }
 
   if (trimmedQ) {
