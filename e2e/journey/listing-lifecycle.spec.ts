@@ -340,7 +340,7 @@ test.describe('LIVE → ARCHIVED → DRAFT lifecycle (LC1)', () => {
       await fetch(`${BACKEND}/api/listings/${listingId}/images`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${brokerToken}` },
-        body: JSON.stringify({ storagePath, url: `https://placeholder.invalid/${fn}` }),
+        body: JSON.stringify({ storagePath }),
       });
     }
 

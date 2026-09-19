@@ -134,10 +134,7 @@ test.describe('@integration-ui Listing rejection + broker re-submit (RR1)', () =
           'Content-Type': 'application/json',
           Authorization: `Bearer ${brokerToken}`,
         },
-        body: JSON.stringify({
-          storagePath,
-          url: `https://placeholder.invalid/${fn}`,
-        }),
+        body: JSON.stringify({ storagePath }),
       });
     }
 

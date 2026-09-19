@@ -104,7 +104,7 @@ async function registerImage(
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ storagePath, url }),
+        body: JSON.stringify({ storagePath }),
       });
 
       // 201 Created or 409 Conflict (idempotent duplicate) — both mean the image

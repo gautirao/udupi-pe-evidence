@@ -1,6 +1,6 @@
 package com.example.realestate.listing.image;
 
-import com.example.realestate.listing.storage.SupabaseStorageService;
+import com.example.realestate.listing.storage.ListingImageStorage;
 import com.example.realestate.quality.QualityRecomputeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,11 +31,11 @@ class ListingImageService {
     private static final Logger log = LoggerFactory.getLogger(ListingImageService.class);
 
     private final ListingImageRepository imageRepository;
-    private final SupabaseStorageService storageService;
+    private final ListingImageStorage storageService;
     private final QualityRecomputeService qualityRecomputeService;
 
     ListingImageService(ListingImageRepository imageRepository,
-                        SupabaseStorageService storageService,
+                        ListingImageStorage storageService,
                         QualityRecomputeService qualityRecomputeService) {
         this.imageRepository = imageRepository;
         this.storageService = storageService;

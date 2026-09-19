@@ -5,8 +5,9 @@ import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
 import com.example.realestate.listing.exception.ListingOwnershipException;
+import com.example.realestate.listing.storage.ListingImageStorage;
 import com.example.realestate.listing.storage.LocalDevStorageService;
-import com.example.realestate.listing.storage.SupabaseStorageService;
+import com.example.realestate.listing.storage.UploadTarget;
 import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
@@ -93,7 +94,7 @@ class ListingImageControllerTest {
     private ListingImageRepository imageRepository;
 
     @MockitoBean
-    private SupabaseStorageService storageService;
+    private ListingImageStorage storageService;
 
     @MockitoBean
     private LocalDevStorageService localDevStorageService;
@@ -156,8 +157,8 @@ class ListingImageControllerTest {
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"storagePath":"%s","url":"%s"}
-                                """.formatted(validPath(), validUrl())))
+                                {"storagePath":"%s"}
+                                """.formatted(validPath())))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(IMAGE_ID.toString()))
                 .andExpect(jsonPath("$.position").value(2))
@@ -177,8 +178,8 @@ class ListingImageControllerTest {
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"storagePath":"%s","url":"%s"}
-                                """.formatted(validPath(), validUrl())))
+                                {"storagePath":"%s"}
+                                """.formatted(validPath())))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Maximum 10 images per listing"));
 
@@ -198,8 +199,8 @@ class ListingImageControllerTest {
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"storagePath":"%s","url":"%s"}
-                                """.formatted(validPath(), validUrl())))
+                                {"storagePath":"%s"}
+                                """.formatted(validPath())))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Cannot modify images for listing with status LIVE"));
     }
@@ -215,7 +216,7 @@ class ListingImageControllerTest {
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"storagePath":"%s","url":"https://example.com/photo.gif"}
+                                {"storagePath":"%s"}
                                 """.formatted(gifPath)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Allowed image types: jpg, jpeg, png, webp"));
@@ -232,7 +233,7 @@ class ListingImageControllerTest {
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"storagePath":"%s","url":"https://example.com/photo.jpg"}
+                                {"storagePath":"%s"}
                                 """.formatted(wrongPath)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").exists());
@@ -252,7 +253,7 @@ class ListingImageControllerTest {
                         .with(jwt().jwt(j -> j.subject(OTHER_DEALER.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"storagePath":"listings/%s/%s/photo.jpg","url":"https://x.com/p.jpg"}
+                                {"storagePath":"listings/%s/%s/photo.jpg"}
                                 """.formatted(OTHER_DEALER, LISTING_ID)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Listing not found"));
@@ -271,8 +272,8 @@ class ListingImageControllerTest {
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"storagePath":"%s","url":"%s"}
-                                """.formatted(validPath(), validUrl())))
+                                {"storagePath":"%s"}
+                                """.formatted(validPath())))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Image already registered"));
     }
@@ -555,7 +556,7 @@ class ListingImageControllerTest {
                         .with(jwt().jwt(j -> j.subject(adminId.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"storagePath":"listings/some-path/photo.jpg","url":"https://x.com/photo.jpg"}
+                                {"storagePath":"listings/some-path/photo.jpg"}
                                 """))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Cannot upload images to a listing with no owner"));
@@ -661,8 +662,8 @@ class ListingImageControllerTest {
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"storagePath":"%s","url":"%s"}
-                                """.formatted(validPath(), validUrl())))
+                                {"storagePath":"%s"}
+                                """.formatted(validPath())))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(header().string("Retry-After", "1"))
                 .andExpect(jsonPath("$.error").value("Upload temporarily busy, please retry"));
@@ -695,7 +696,7 @@ class ListingImageControllerTest {
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"storagePath":"listings/some-path/photo.jpg","url":"https://x.com/photo.jpg"}
+                                {"storagePath":"listings/some-path/photo.jpg"}
                                 """))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Access denied: listing has no owner"));
@@ -718,8 +719,8 @@ class ListingImageControllerTest {
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"storagePath":"%s","url":"%s"}
-                                """.formatted(validPath(), validUrl())))
+                                {"storagePath":"%s"}
+                                """.formatted(validPath())))
                 .andExpect(status().isCreated());
 
         verify(badgeInvalidationService).invalidateSpecificDimension(LISTING_ID, "PHOTOS", "IMAGE_CHANGE");
@@ -748,13 +749,19 @@ class ListingImageControllerTest {
 
     private static final String SIGNED_URL =
             "https://example.supabase.co/storage/v1/object/upload/sign/listing-images/listings/uid/lid/uuid.jpg?token=tok";
+    private static final UploadTarget UPLOAD_TARGET = new UploadTarget(
+            SIGNED_URL, "listings/uid/lid/uuid.jpg", null, Map.of("Content-Type", "image/jpeg"));
 
     /** Test 26: happy path — owner + DRAFT + valid input → 200. */
     @Test
     void uploadUrl_ownerDraftValidInput_returns200() throws Exception {
         stubDealerWithDraftListing();
-        when(storageService.createSignedUploadUrl(eq("listing-images"), anyString()))
-                .thenReturn(Optional.of(SIGNED_URL));
+        when(storageService.createUploadTarget(eq("listing-images"), anyString(), anyString()))
+                .thenAnswer(inv -> {
+                    String path = inv.getArgument(1);
+                    String ct = inv.getArgument(2);
+                    return Optional.of(new UploadTarget(SIGNED_URL, path, null, Map.of("Content-Type", ct)));
+                });
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images/upload-url")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
@@ -770,7 +777,7 @@ class ListingImageControllerTest {
                 .andExpect(jsonPath("$.serviceRoleKey").doesNotExist())
                 .andExpect(jsonPath("$.authorization").doesNotExist());
 
-        verify(storageService).createSignedUploadUrl(eq("listing-images"), anyString());
+        verify(storageService).createUploadTarget(eq("listing-images"), anyString(), anyString());
     }
 
     /** Test 27: no JWT → 401. */
@@ -783,7 +790,7 @@ class ListingImageControllerTest {
                                 """))
                 .andExpect(status().isUnauthorized());
 
-        verify(storageService, never()).createSignedUploadUrl(any(), any());
+        verify(storageService, never()).createUploadTarget(any(), any(), any());
     }
 
     /** Test 28: authenticated non-owner (existing listing owned by DEALER_ID, caller=OTHER_DEALER) → 404. */
@@ -803,7 +810,7 @@ class ListingImageControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Listing not found"));
 
-        verify(storageService, never()).createSignedUploadUrl(any(), any());
+        verify(storageService, never()).createUploadTarget(any(), any(), any());
     }
 
     /** Test 29: scraped listing (null createdBy) + non-admin caller → 403 from findOwnedListing. */
@@ -827,10 +834,10 @@ class ListingImageControllerTest {
                                 """))
                 .andExpect(status().isForbidden());
 
-        verify(storageService, never()).createSignedUploadUrl(any(), any());
+        verify(storageService, never()).createUploadTarget(any(), any(), any());
     }
 
-    /** Test 30: contentType not in allowlist (application/pdf) → 400; createSignedUploadUrl NOT called. */
+    /** Test 30: contentType not in allowlist (application/pdf) → 400; createUploadTarget NOT called. */
     @Test
     void uploadUrl_invalidContentType_returns400_noSignCall() throws Exception {
         stubDealerWithDraftListing();
@@ -844,10 +851,10 @@ class ListingImageControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").exists());
 
-        verify(storageService, never()).createSignedUploadUrl(any(), any());
+        verify(storageService, never()).createUploadTarget(any(), any(), any());
     }
 
-    /** Test 31: sizeBytes > 5 MB → 400; createSignedUploadUrl NOT called. */
+    /** Test 31: sizeBytes > 5 MB → 400; createUploadTarget NOT called. */
     @Test
     void uploadUrl_fileTooLarge_returns400_noSignCall() throws Exception {
         stubDealerWithDraftListing();
@@ -862,14 +869,14 @@ class ListingImageControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").exists());
 
-        verify(storageService, never()).createSignedUploadUrl(any(), any());
+        verify(storageService, never()).createUploadTarget(any(), any(), any());
     }
 
-    /** Test 32: storage disabled / sign failure (createSignedUploadUrl returns empty) → 503. */
+    /** Test 32: storage disabled / sign failure (createUploadTarget returns empty) → 503. */
     @Test
     void uploadUrl_storageUnavailable_returns503() throws Exception {
         stubDealerWithDraftListing();
-        when(storageService.createSignedUploadUrl(eq("listing-images"), anyString()))
+        when(storageService.createUploadTarget(eq("listing-images"), anyString(), anyString()))
                 .thenReturn(Optional.empty());
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images/upload-url")
@@ -882,7 +889,7 @@ class ListingImageControllerTest {
                 .andExpect(jsonPath("$.error").exists());
     }
 
-    /** Test 33: listing in non-mutable status (LIVE) → 400; createSignedUploadUrl NOT called. */
+    /** Test 33: listing in non-mutable status (LIVE) → 400; createUploadTarget NOT called. */
     @Test
     void uploadUrl_liveStatus_returns400() throws Exception {
         draftListing.setStatus(ListingStatus.LIVE.toDbValue());
@@ -898,7 +905,7 @@ class ListingImageControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").exists());
 
-        verify(storageService, never()).createSignedUploadUrl(any(), any());
+        verify(storageService, never()).createUploadTarget(any(), any(), any());
     }
 
     // ==================== Helper ====================
@@ -952,7 +959,7 @@ class ListingImageControllerTest {
         private ListingImageRepository imageRepository;
 
         @MockitoBean
-        private SupabaseStorageService storageService;
+        private ListingImageStorage storageService;
 
         @MockitoBean
         private LocalDevStorageService localDevStorageService;
@@ -977,8 +984,8 @@ class ListingImageControllerTest {
             stubOwnedDraftListing(withinLimitOwner);
             stubOwnedDraftListing(overLimitOwner);
             stubOwnedDraftListing(unaffectedOwner);
-            when(storageService.createSignedUploadUrl(eq("listing-images"), anyString()))
-                    .thenReturn(Optional.of(SIGNED_URL));
+            when(storageService.createUploadTarget(eq("listing-images"), anyString(), anyString()))
+                    .thenReturn(Optional.of(UPLOAD_TARGET));
         }
 
         private void stubOwnedDraftListing(UUID ownerId) {
@@ -1020,7 +1027,7 @@ class ListingImageControllerTest {
                     .andExpect(status().isTooManyRequests())
                     .andExpect(jsonPath("$.error").value("RATE_LIMIT_EXCEEDED"));
 
-            verify(storageService, times(2)).createSignedUploadUrl(eq("listing-images"), anyString());
+            verify(storageService, times(2)).createUploadTarget(eq("listing-images"), anyString(), anyString());
         }
 
         /**
@@ -1056,7 +1063,7 @@ class ListingImageControllerTest {
             performUploadUrl(unaffectedOwner).andExpect(status().isOk());
             performUploadUrl(unaffectedOwner).andExpect(status().isOk());
 
-            verify(storageService, times(2)).createSignedUploadUrl(eq("listing-images"), anyString());
+            verify(storageService, times(2)).createUploadTarget(eq("listing-images"), anyString(), anyString());
         }
 
         private Listing ownedListing(UUID ownerId) {

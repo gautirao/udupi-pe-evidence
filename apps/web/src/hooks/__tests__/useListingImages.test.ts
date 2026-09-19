@@ -72,13 +72,19 @@ function fakeFile(name = 'photo.jpg', sizeKB = 100): File {
 }
 
 function fakeUploadUrlResponse(
-  overrides?: Partial<{ signedUrl: string; storagePath: string; expiresAt: string | null }>,
+  overrides?: Partial<{
+    signedUrl: string;
+    storagePath: string;
+    expiresAt: string | null;
+    requiredHeaders?: Record<string, string>;
+  }>,
 ) {
   return {
     signedUrl:
       'https://storage.supabase.co/object/sign/listing-images/listings/user-1/listing-1/uuid.jpg?token=abc123',
     storagePath: 'listings/user-1/listing-1/uuid.jpg',
     expiresAt: null,
+    requiredHeaders: { 'Content-Type': 'image/jpeg' },
     ...overrides,
   };
 }
@@ -106,9 +112,8 @@ describe('useListingImages', () => {
         wrapper: createWrapper(),
       });
 
-      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      await waitFor(() => expect(result.current.imageCount).toBe(2));
       expect(result.current.canSubmit).toBe(false);
-      expect(result.current.imageCount).toBe(2);
     });
 
     it('returns canSubmit=true when 3 or more images', async () => {
@@ -122,9 +127,8 @@ describe('useListingImages', () => {
         wrapper: createWrapper(),
       });
 
-      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      await waitFor(() => expect(result.current.imageCount).toBe(3));
       expect(result.current.canSubmit).toBe(true);
-      expect(result.current.imageCount).toBe(3);
     });
   });
 
@@ -361,7 +365,6 @@ describe('useListingImages', () => {
       const [key, upload] = entries[0];
       expect(upload.status).toBe('finalize_failed');
       expect(upload.storagePath).toBe(urlResp.storagePath);
-      expect(upload.url).toBeDefined();
 
       // Retry finalize: metadata succeeds this time
       mockApiPost.mockResolvedValueOnce({ id: 'img-1' });
@@ -719,7 +722,7 @@ describe('useListingImages', () => {
         wrapper: createWrapper(),
       });
 
-      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      await waitFor(() => expect(result.current.imageCount).toBe(2));
       expect(result.current.imageCount).toBe(2);
       expect(result.current.remainingSlots).toBe(8);
       expect(result.current.canSubmit).toBe(false); // min-3 guidance: not yet met

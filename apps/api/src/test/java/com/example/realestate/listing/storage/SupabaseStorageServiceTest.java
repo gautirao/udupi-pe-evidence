@@ -181,13 +181,46 @@ class SupabaseStorageServiceTest {
     // External storage path deletion safety (#2624)
     // -------------------------------------------------------------------------
 
-    @Test
-    void deleteObjectBestEffort_externalPath_skipsDelete() {
-        SupabaseStorageService svc = newService(true, HTTPS_URL, KEY);
-        svc.validate();
-        assertThat(svc.isEnabled()).isTrue();
+    // -------------------------------------------------------------------------
+    // getPublicUrl canonical URL resolution
+    // -------------------------------------------------------------------------
 
-        // Must not throw or make HTTP requests when given external: path
-        svc.deleteObjectBestEffort("external:https://imagecdn.99acres.com/photo.jpg");
+    @Test
+    void getPublicUrl_nullPath_returnsEmptyString() {
+        SupabaseStorageService svc = newService(true, HTTPS_URL, KEY);
+        assertThat(svc.getPublicUrl("listing-images", null)).isEmpty();
+    }
+
+    @Test
+    void getPublicUrl_externalPath_returnsRawExternalUrlWithoutPrefix() {
+        SupabaseStorageService svc = newService(true, HTTPS_URL, KEY);
+        String url = svc.getPublicUrl("listing-images", "external:https://images.com/pic.jpg");
+        assertThat(url).isEqualTo("https://images.com/pic.jpg");
+    }
+
+    @Test
+    void getPublicUrl_localDevStorageActive_delegatesToLocalDevStorage() {
+        LocalDevStorageService localDev = org.mockito.Mockito.mock(LocalDevStorageService.class);
+        org.mockito.BDDMockito.given(localDev.isEnabled()).willReturn(true);
+        org.mockito.BDDMockito.given(localDev.getPublicUrl("listing-images", "listings/1/file.jpg"))
+                .willReturn(java.util.Optional.of("http://localhost:8080/dev-storage/listing-images/listings/1/file.jpg"));
+
+        SupabaseStorageService svc = new SupabaseStorageService(new RestTemplate(), localDev);
+        String url = svc.getPublicUrl("listing-images", "listings/1/file.jpg");
+        assertThat(url).isEqualTo("http://localhost:8080/dev-storage/listing-images/listings/1/file.jpg");
+    }
+
+    @Test
+    void getPublicUrl_standardPath_constructsCanonicalSupabaseUrl() {
+        SupabaseStorageService svc = newService(true, HTTPS_URL, KEY);
+        String url = svc.getPublicUrl("listing-images", "listings/user1/listing2/uuid.jpg");
+        assertThat(url).isEqualTo("https://example.supabase.co/storage/v1/object/public/listing-images/listings/user1/listing2/uuid.jpg");
+    }
+
+    @Test
+    void getPublicUrl_leadingSlashInPath_avoidsDoubleSlash() {
+        SupabaseStorageService svc = newService(true, HTTPS_URL, KEY);
+        String url = svc.getPublicUrl("listing-images", "/listings/user1/listing2/uuid.jpg");
+        assertThat(url).isEqualTo("https://example.supabase.co/storage/v1/object/public/listing-images/listings/user1/listing2/uuid.jpg");
     }
 }

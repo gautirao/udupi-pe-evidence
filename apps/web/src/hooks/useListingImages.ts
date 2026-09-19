@@ -1,11 +1,9 @@
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import imageCompression from 'browser-image-compression';
-import { supabase } from '@/integrations/supabase/client';
 import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
-const BUCKET = 'listing-images';
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'];
 const MAX_IMAGES = 10;
@@ -275,14 +273,21 @@ export function useListingImages(listingId: string | undefined) {
 
       let signedUrl: string;
       let storagePath: string;
+      let requiredHeaders: Record<string, string> | undefined;
 
       try {
-        const urlResp = await api.post<{ signedUrl: string; storagePath: string; expiresAt: string | null }>(
+        const urlResp = await api.post<{
+          signedUrl: string;
+          storagePath: string;
+          expiresAt: string | null;
+          requiredHeaders?: Record<string, string>;
+        }>(
           `/api/listings/${listingId}/images/upload-url`,
           { fileName: fileToUpload.name, contentType, sizeBytes },
         );
         signedUrl = urlResp.signedUrl;
         storagePath = urlResp.storagePath;
+        requiredHeaders = urlResp.requiredHeaders;
         // expiresAt is informational only; null is valid — no countdown shown
       } catch (err) {
         const apiErr = err instanceof ApiError ? err : null;
@@ -296,7 +301,7 @@ export function useListingImages(listingId: string | undefined) {
       }
 
       // Step 2: PUT bytes directly to the pre-signed URL
-      // The URL already carries its own auth token — do NOT add an Authorization header.
+      // Use provider-supplied requiredHeaders (or default to Content-Type)
       setUploads((prev) => ({
         ...prev,
         [uploadKey]: { fileName: file.name, progress: 40, status: 'uploading', file, originalSize, compressedSize, signature },
@@ -307,7 +312,7 @@ export function useListingImages(listingId: string | undefined) {
         putResponse = await fetch(signedUrl, {
           method: 'PUT',
           body: fileToUpload,
-          headers: { 'Content-Type': contentType },
+          headers: requiredHeaders ?? { 'Content-Type': contentType },
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Network error during upload.';
@@ -329,10 +334,6 @@ export function useListingImages(listingId: string | undefined) {
         return;
       }
 
-      // Derive public display URL from server-returned storagePath (bucket is public)
-      const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(storagePath);
-      const publicUrl = urlData.publicUrl;
-
       // Step 3: Register metadata with backend using the SERVER-returned storagePath
       setUploads((prev) => ({
         ...prev,
@@ -342,7 +343,6 @@ export function useListingImages(listingId: string | undefined) {
       try {
         await api.post(`/api/listings/${listingId}/images`, {
           storagePath,
-          url: publicUrl,
         });
 
         setUploads((prev) => ({
@@ -382,7 +382,7 @@ export function useListingImages(listingId: string | undefined) {
           return;
         }
 
-        // Keep storagePath/url for retry — orphan cleanup handles eventual removal (section 5)
+        // Keep storagePath for retry — orphan cleanup handles eventual removal
         const message = apiErr?.message ?? 'Failed to register image metadata.';
         setUploads((prev) => ({
           ...prev,
@@ -392,7 +392,6 @@ export function useListingImages(listingId: string | undefined) {
             status: 'finalize_failed',
             error: message,
             storagePath,
-            url: publicUrl,
             signature,
           },
         }));
@@ -422,7 +421,7 @@ export function useListingImages(listingId: string | undefined) {
   const retryFinalize = useCallback(
     async (uploadKey: string) => {
       const entry = uploads[uploadKey];
-      if (!entry?.storagePath || !entry?.url || !listingId) return;
+      if (!entry?.storagePath || !listingId) return;
 
       setUploads((prev) => ({
         ...prev,
@@ -432,7 +431,6 @@ export function useListingImages(listingId: string | undefined) {
       try {
         await api.post(`/api/listings/${listingId}/images`, {
           storagePath: entry.storagePath,
-          url: entry.url,
         });
 
         setUploads((prev) => ({

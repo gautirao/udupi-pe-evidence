@@ -1,6 +1,7 @@
 package com.example.realestate.listing.image;
 
 import com.example.realestate.listing.core.ListingRepository;
+import com.example.realestate.listing.storage.ListingImageStorage;
 import com.example.realestate.listing.storage.LocalDevStorageService;
 import com.example.realestate.quality.QualityRecomputeService;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,12 +42,15 @@ class ListingImageRegistrarTest {
     @Mock
     private LocalDevStorageService localDevStorageService;
 
+    @Mock
+    private ListingImageStorage storageService;
+
     private ListingImageRegistrar registrar;
 
     @BeforeEach
     void setUp() {
         registrar = new ListingImageRegistrar(listingRepository, imageRepository, qualityRecomputeService,
-                localDevStorageService);
+                localDevStorageService, storageService);
 
         // findByIdWithLock is called at the start of every register() call.
         // Return an empty Optional — the lock is acquired and the result is not used by the method.
@@ -55,8 +59,11 @@ class ListingImageRegistrarTest {
 
     private ListingImageController.RegisterImageRequest validRequest() {
         String path = "listings/" + CALLER_ID + "/" + LISTING_ID + "/photo.jpg";
-        String url  = "https://storage.example.com/" + path;
-        return new ListingImageController.RegisterImageRequest(path, url);
+        return new ListingImageController.RegisterImageRequest(path);
+    }
+
+    private String validUrl() {
+        return "https://storage.supabase.co/storage/v1/object/public/listing-images/" + validRequest().storagePath();
     }
 
     // ==================== Test 1: valid upload → 201 ====================
@@ -64,12 +71,13 @@ class ListingImageRegistrarTest {
     @Test
     void register_validUpload_returns201() {
         when(imageRepository.countByListingId(LISTING_ID)).thenReturn(2L);
+        when(storageService.getPublicUrl("listing-images", validRequest().storagePath())).thenReturn(validUrl());
 
         ListingImage saved = new ListingImage();
         saved.setId(IMAGE_ID);
         saved.setListingId(LISTING_ID);
         saved.setStoragePath(validRequest().storagePath());
-        saved.setUrl(validRequest().url());
+        saved.setUrl(validUrl());
         saved.setPosition(2);
         saved.setCreatedAt(OffsetDateTime.now());
 
@@ -84,22 +92,18 @@ class ListingImageRegistrarTest {
         assertThat(body.position()).isEqualTo(2);
     }
 
-    // ==================== Test 1b: local dev storage enabled → response URL is the local display URL, not the client-supplied Supabase URL ====================
+    // ==================== Test 1b: local dev storage enabled → response URL is the local display URL ====================
 
-    /**
-     * #2351 BLOCKING fix: when local dev storage is enabled, the registered image's response URL
-     * must come from {@link LocalDevStorageService#getPublicUrl}, never from the client-supplied
-     * {@code img.getUrl()} — otherwise the frontend renders a dead Supabase URL in local dev.
-     */
     @Test
     void register_localDevStorageEnabled_returnsLocalDisplayUrlNotClientSuppliedUrl() {
         when(imageRepository.countByListingId(LISTING_ID)).thenReturn(0L);
+        when(storageService.getPublicUrl("listing-images", validRequest().storagePath())).thenReturn(validUrl());
 
         ListingImage saved = new ListingImage();
         saved.setId(IMAGE_ID);
         saved.setListingId(LISTING_ID);
         saved.setStoragePath(validRequest().storagePath());
-        saved.setUrl(validRequest().url()); // client-supplied Supabase-style URL — must NOT be trusted
+        saved.setUrl(validUrl());
         saved.setPosition(0);
         saved.setCreatedAt(OffsetDateTime.now());
 
@@ -107,7 +111,7 @@ class ListingImageRegistrarTest {
         String localUrl = "http://localhost:8085/api/dev/local-storage/public/listing-images/"
                 + validRequest().storagePath();
         when(localDevStorageService.resolveDisplayUrl(
-                eq("listing-images"), eq(validRequest().storagePath()), eq(validRequest().url())))
+                eq("listing-images"), eq(validRequest().storagePath()), eq(validUrl())))
                 .thenReturn(localUrl);
 
         ResponseEntity<?> response = registrar.register(LISTING_ID, validRequest(), CALLER_ID);
@@ -115,33 +119,33 @@ class ListingImageRegistrarTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         ListingImageController.ImageResponse body = (ListingImageController.ImageResponse) response.getBody();
         assertThat(body.url()).isEqualTo(localUrl);
-        assertThat(body.url()).isNotEqualTo(validRequest().url());
     }
 
-    // ==================== Test 1c: local dev storage disabled → Supabase URL pass-through unchanged (regression guard) ====================
+    // ==================== Test 1c: local dev storage disabled → derived URL pass-through unchanged ====================
 
     @Test
     void register_localDevStorageDisabled_passesThroughClientSuppliedUrlUnchanged() {
         when(imageRepository.countByListingId(LISTING_ID)).thenReturn(0L);
+        when(storageService.getPublicUrl("listing-images", validRequest().storagePath())).thenReturn(validUrl());
 
         ListingImage saved = new ListingImage();
         saved.setId(IMAGE_ID);
         saved.setListingId(LISTING_ID);
         saved.setStoragePath(validRequest().storagePath());
-        saved.setUrl(validRequest().url());
+        saved.setUrl(validUrl());
         saved.setPosition(0);
         saved.setCreatedAt(OffsetDateTime.now());
 
         when(imageRepository.saveAndFlush(any(ListingImage.class))).thenReturn(saved);
         when(localDevStorageService.resolveDisplayUrl(
-                eq("listing-images"), eq(validRequest().storagePath()), eq(validRequest().url())))
-                .thenReturn(validRequest().url());
+                eq("listing-images"), eq(validRequest().storagePath()), eq(validUrl())))
+                .thenReturn(validUrl());
 
         ResponseEntity<?> response = registrar.register(LISTING_ID, validRequest(), CALLER_ID);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         ListingImageController.ImageResponse body = (ListingImageController.ImageResponse) response.getBody();
-        assertThat(body.url()).isEqualTo(validRequest().url());
+        assertThat(body.url()).isEqualTo(validUrl());
     }
 
     // ==================== Test 2: listing already has 10 images → 400 ====================
@@ -160,12 +164,13 @@ class ListingImageRegistrarTest {
     @Test
     void register_countBelowLimit_isAllowed() {
         when(imageRepository.countByListingId(LISTING_ID)).thenReturn(9L);
+        when(storageService.getPublicUrl("listing-images", validRequest().storagePath())).thenReturn(validUrl());
 
         ListingImage saved = new ListingImage();
         saved.setId(IMAGE_ID);
         saved.setListingId(LISTING_ID);
         saved.setStoragePath(validRequest().storagePath());
-        saved.setUrl(validRequest().url());
+        saved.setUrl(validUrl());
         saved.setPosition(9);
         saved.setCreatedAt(OffsetDateTime.now());
 
@@ -234,12 +239,13 @@ class ListingImageRegistrarTest {
         // findByIdWithLock returns empty (listing deleted between controller check and here)
         when(listingRepository.findByIdWithLock(LISTING_ID)).thenReturn(Optional.empty());
         when(imageRepository.countByListingId(LISTING_ID)).thenReturn(0L);
+        when(storageService.getPublicUrl("listing-images", validRequest().storagePath())).thenReturn(validUrl());
 
         ListingImage saved = new ListingImage();
         saved.setId(IMAGE_ID);
         saved.setListingId(LISTING_ID);
         saved.setStoragePath(validRequest().storagePath());
-        saved.setUrl(validRequest().url());
+        saved.setUrl(validUrl());
         saved.setPosition(0);
         saved.setCreatedAt(OffsetDateTime.now());
 

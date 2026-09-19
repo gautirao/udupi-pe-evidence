@@ -1,6 +1,7 @@
 package com.example.realestate.listing.image;
 
 import com.example.realestate.listing.core.ListingRepository;
+import com.example.realestate.listing.storage.ListingImageStorage;
 import com.example.realestate.listing.storage.LocalDevStorageService;
 import com.example.realestate.quality.QualityRecomputeService;
 import org.slf4j.Logger;
@@ -48,20 +49,24 @@ class ListingImageRegistrar {
 
     private static final int MAX_IMAGES = 10;
     private static final String RETRY_AFTER_SECONDS = "1";
+    private static final String LISTING_IMAGES_BUCKET = "listing-images";
 
     private final ListingRepository listingRepository;
     private final ListingImageRepository imageRepository;
     private final QualityRecomputeService qualityRecomputeService;
     private final LocalDevStorageService localDevStorageService;
+    private final ListingImageStorage storageService;
 
     ListingImageRegistrar(ListingRepository listingRepository,
                           ListingImageRepository imageRepository,
                           QualityRecomputeService qualityRecomputeService,
-                          LocalDevStorageService localDevStorageService) {
+                          LocalDevStorageService localDevStorageService,
+                          ListingImageStorage storageService) {
         this.listingRepository = listingRepository;
         this.imageRepository = imageRepository;
         this.qualityRecomputeService = qualityRecomputeService;
         this.localDevStorageService = localDevStorageService;
+        this.storageService = storageService;
     }
 
     @Transactional(noRollbackFor = {
@@ -98,10 +103,12 @@ class ListingImageRegistrar {
                     .body(Map.of("error", "Maximum " + MAX_IMAGES + " images per listing"));
         }
 
+        String url = storageService.getPublicUrl(LISTING_IMAGES_BUCKET, req.storagePath());
+
         ListingImage image = new ListingImage();
         image.setListingId(listingId);
         image.setStoragePath(req.storagePath());
-        image.setUrl(req.url());
+        image.setUrl(url);
         image.setPosition((int) currentCount);
         image.setCreatedAt(OffsetDateTime.now());
 

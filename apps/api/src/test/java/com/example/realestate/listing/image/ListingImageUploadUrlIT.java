@@ -225,8 +225,13 @@ class ListingImageUploadUrlIT {
     @Test
     @DisplayName("IT1: owner + DRAFT + valid input → 200; storagePath uses DB createdBy (real ownership read)")
     void ownerDraftValidInput_returns200_storagePathPrefixedByOwner() throws Exception {
-        when(storageService.createSignedUploadUrl(eq("listing-images"), any()))
-                .thenReturn(Optional.of(SIGNED_URL));
+        when(storageService.createUploadTarget(eq("listing-images"), any(), any()))
+                .thenAnswer(inv -> {
+                    String path = inv.getArgument(1);
+                    String ct = inv.getArgument(2);
+                    return Optional.of(new com.example.realestate.listing.storage.UploadTarget(
+                            SIGNED_URL, path, null, java.util.Map.of("Content-Type", ct != null ? ct : "image/jpeg")));
+                });
 
         mockMvc.perform(post("/api/listings/" + listingId + "/images/upload-url")
                         .header("Authorization", "Bearer " + OWNER_ID)
@@ -243,7 +248,7 @@ class ListingImageUploadUrlIT {
                 .andExpect(jsonPath("$.serviceRoleKey").doesNotExist())
                 .andExpect(jsonPath("$.authorization").doesNotExist());
 
-        verify(storageService).createSignedUploadUrl(eq("listing-images"), any());
+        verify(storageService).createUploadTarget(eq("listing-images"), any(), any());
     }
 
     // =========================================================================
@@ -269,7 +274,7 @@ class ListingImageUploadUrlIT {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Listing not found"));
 
-        verify(storageService, never()).createSignedUploadUrl(any(), any());
+        verify(storageService, never()).createUploadTarget(any(), any(), any());
     }
 
     // =========================================================================
@@ -294,7 +299,7 @@ class ListingImageUploadUrlIT {
                                 """))
                 .andExpect(status().isForbidden());
 
-        verify(storageService, never()).createSignedUploadUrl(any(), any());
+        verify(storageService, never()).createUploadTarget(any(), any(), any());
     }
 
     // =========================================================================
@@ -320,7 +325,7 @@ class ListingImageUploadUrlIT {
                                 """))
                 .andExpect(status().isBadRequest());
 
-        verify(storageService, never()).createSignedUploadUrl(any(), any());
+        verify(storageService, never()).createUploadTarget(any(), any(), any());
     }
 
     // =========================================================================

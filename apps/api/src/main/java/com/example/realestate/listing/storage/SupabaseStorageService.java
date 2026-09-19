@@ -35,7 +35,7 @@ import java.util.Optional;
  * deleted first; this call is best-effort. Orphan cleanup (§5) covers any missed objects.
  */
 @Service
-public class SupabaseStorageService {
+public class SupabaseStorageService implements ListingImageStorage {
 
     private static final Logger log = LoggerFactory.getLogger(SupabaseStorageService.class);
 
@@ -198,6 +198,34 @@ public class SupabaseStorageService {
     }
 
     /**
+     * Derives the canonical public URL for a storage object.
+     *
+     * @param storageBucket bucket name (e.g. "listing-images")
+     * @param storagePath   path within bucket (e.g. "listings/user/listing/uuid.jpg" or "external:https://...")
+     * @return canonical public URL
+     */
+    @Override
+    public String getPublicUrl(String storageBucket, String storagePath) {
+        if (storagePath == null) {
+            return "";
+        }
+        if (storagePath.startsWith("external:")) {
+            return storagePath.substring("external:".length());
+        }
+        if (localDevStorageService != null && localDevStorageService.isEnabled()) {
+            return localDevStorageService.getPublicUrl(storageBucket, storagePath).orElse("");
+        }
+        String cleanPath = storagePath.startsWith("/") ? storagePath.substring(1) : storagePath;
+        String baseUrl = (supabaseUrl != null && !supabaseUrl.isBlank())
+                ? supabaseUrl
+                : "https://storage.supabase.co";
+        return UriComponentsBuilder.fromHttpUrl(baseUrl)
+                .pathSegment("storage", "v1", "object", "public", storageBucket)
+                .path("/" + cleanPath)
+                .build().toUriString();
+    }
+
+    /**
      * Create a short-lived signed URL for a private Storage object.
      * Uses the Supabase Storage {@code POST /object/sign} endpoint.
      *
@@ -328,6 +356,7 @@ public class SupabaseStorageService {
      *
      * @param storagePath path relative to bucket root (e.g. {@code listings/{userId}/{listingId}/file.jpg})
      */
+    @Override
     public void deleteObjectBestEffort(String storagePath) {
         if (storagePath == null || storagePath.startsWith("external:")) {
             log.debug("Storage delete skipped (external or null): path={}", storagePath);
@@ -359,5 +388,31 @@ public class SupabaseStorageService {
         } catch (Exception e) {
             log.warn("Best-effort Storage delete failed — path={} error={}", storagePath, e.getClass().getSimpleName());
         }
+    }
+
+    @Override
+    public Optional<UploadTarget> createUploadTarget(String storageBucket, String storagePath, String contentType) {
+        Optional<String> signedUrlOpt = createSignedUploadUrl(storageBucket, storagePath);
+        if (signedUrlOpt.isEmpty()) {
+            return Optional.empty();
+        }
+        Map<String, String> headers = (contentType != null && !contentType.isBlank())
+                ? Map.of("Content-Type", contentType)
+                : Map.of();
+        return Optional.of(new UploadTarget(signedUrlOpt.get(), storagePath, null, headers));
+    }
+
+    @Override
+    public ImageObjectMetadata inspect(String storagePath) {
+        if (storagePath == null) {
+            return ImageObjectMetadata.notFound();
+        }
+        if (storagePath.startsWith("external:")) {
+            return new ImageObjectMetadata(true, null, null);
+        }
+        if (!enabled && (localDevStorageService == null || !localDevStorageService.isEnabled())) {
+            return ImageObjectMetadata.notFound();
+        }
+        return new ImageObjectMetadata(true, null, null);
     }
 }

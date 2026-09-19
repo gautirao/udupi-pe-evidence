@@ -6,8 +6,9 @@ import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
 import com.example.realestate.listing.exception.ListingNotFoundException;
 import com.example.realestate.listing.exception.ListingOwnershipException;
+import com.example.realestate.listing.storage.ListingImageStorage;
 import com.example.realestate.listing.storage.LocalDevStorageService;
-import com.example.realestate.listing.storage.SupabaseStorageService;
+import com.example.realestate.listing.storage.UploadTarget;
 import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.security.CallerInfo;
 import com.example.realestate.trust.BadgeInvalidationService;
@@ -64,7 +65,7 @@ public class ListingImageController {
     private final ListingImageService imageService;
     private final ListingWorkflowService listingWorkflowService;
     private final BadgeInvalidationService badgeInvalidationService;
-    private final SupabaseStorageService storageService;
+    private final ListingImageStorage storageService;
     private final LocalDevStorageService localDevStorageService;
     private final RateLimiterService rateLimiterService;
 
@@ -74,7 +75,7 @@ public class ListingImageController {
                                    ListingImageService imageService,
                                    ListingWorkflowService listingWorkflowService,
                                    BadgeInvalidationService badgeInvalidationService,
-                                   SupabaseStorageService storageService,
+                                   ListingImageStorage storageService,
                                    LocalDevStorageService localDevStorageService,
                                    RateLimiterService rateLimiterService) {
         this.listingRepository = listingRepository;
@@ -136,11 +137,6 @@ public class ListingImageController {
         String extension = extractExtension(req.storagePath());
         if (extension == null || !ALLOWED_EXTENSIONS.contains(extension)) {
             return badRequest("Allowed image types: jpg, jpeg, png, webp");
-        }
-
-        // Validate url present (before acquiring the lock)
-        if (req.url() == null || req.url().isBlank()) {
-            return badRequest("URL is required");
         }
 
         // Delegate to a separate Spring bean so @Transactional proxy is honoured.
@@ -235,16 +231,23 @@ public class ListingImageController {
         String storagePath = "listings/" + listing.getCreatedBy() + "/" + listingId
                 + "/" + UUID.randomUUID() + "." + ext;
 
-        Optional<String> signedUrlOpt = storageService.createSignedUploadUrl(LISTING_IMAGES_BUCKET, storagePath);
-        if (signedUrlOpt.isEmpty()) {
+        Optional<UploadTarget> targetOpt = storageService.createUploadTarget(
+                LISTING_IMAGES_BUCKET, storagePath, req.contentType());
+        if (targetOpt.isEmpty()) {
             log.warn("POST /api/listings/{}/images/upload-url -> 503 storage unavailable userId={}",
                     listingId, caller.userId());
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                     .body(Map.of("error", "Image storage unavailable, please retry later"));
         }
 
-        // expiresAt is null — upload token lifetime is server-fixed; see UploadUrlResponse javadoc.
-        UploadUrlResponse response = new UploadUrlResponse(signedUrlOpt.get(), storagePath, null);
+        UploadTarget target = targetOpt.get();
+        String expiresAtStr = target.expiresAt() != null ? target.expiresAt().toString() : null;
+        UploadUrlResponse response = new UploadUrlResponse(
+                target.signedUrl(),
+                target.storagePath(),
+                expiresAtStr,
+                target.requiredHeaders()
+        );
         log.info("POST /api/listings/{}/images/upload-url -> 200 storagePath={} userId={}",
                 listingId, storagePath, caller.userId());
         return ResponseEntity.ok(response);
@@ -399,7 +402,7 @@ public class ListingImageController {
 
     // ===== DTOs =====
 
-    public record RegisterImageRequest(String storagePath, String url) {}
+    public record RegisterImageRequest(String storagePath) {}
     public record ReorderRequest(List<UUID> imageIds) {}
     public record ImageResponse(UUID id, UUID listingId, String storagePath, String url,
                                  int position, String createdAt) {}
