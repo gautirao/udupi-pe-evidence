@@ -79,12 +79,23 @@ BE_PID=""; FE_PID=""
 cleanup_on_failure() {
   local code=$?
   if [[ $code -ne 0 ]]; then
-    [[ -n "$FE_PID" ]] && kill "$FE_PID" 2>/dev/null || true
-    [[ -n "$BE_PID" ]] && kill "$BE_PID" 2>/dev/null || true
+    [[ -n "$FE_PID" ]] && terminate_service "frontend" "$FE_PID" "$FE_PORT" 3
+    [[ -n "$BE_PID" ]] && terminate_service "backend" "$BE_PID" "$BE_PORT" 3
+    verify_ports_released "$FE_PORT" "$BE_PORT" || true
     printf '\n\033[31mStack not started.\033[0m Logs: %s %s\n' "$BE_LOG" "$FE_LOG" >&2
   fi
 }
+handle_stack_signal() {
+  local sig="$1"
+  echo "Received signal $sig — stopping dev stack..." >&2
+  cleanup_on_failure
+  trap - "$sig"
+  kill -s "$sig" "$$" 2>/dev/null || exit 1
+}
 trap cleanup_on_failure EXIT
+trap 'handle_stack_signal INT' INT
+trap 'handle_stack_signal TERM' TERM
+trap 'handle_stack_signal HUP' HUP
 
 # ── 1. worktree identity ─────────────────────────────────────────────────────
 step "Worktree"

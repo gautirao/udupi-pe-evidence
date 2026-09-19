@@ -124,6 +124,21 @@ exit 0
 EOF
 chmod +x "$MOCKBIN/mvn"
 
+cat > "$MOCKBIN/docker" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == *"ps"* ]]; then
+  echo "mock-container-id-123"
+fi
+exit 0
+EOF
+chmod +x "$MOCKBIN/docker"
+
+cat > "$MOCKBIN/psql" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "$MOCKBIN/psql"
+
 # ---------------------------------------------------------------------------
 # T-LIB — port_holder_belongs_to_worktree() pure predicate
 # ---------------------------------------------------------------------------
@@ -231,10 +246,24 @@ new_e2e_sandbox() {
   local sb
   sb="$(mktemp -d)"
   CLEANUP_DIRS+=("$sb")
-  mkdir -p "$sb/scripts/dev/lib" "$sb/apps/api"
+  mkdir -p "$sb/scripts/dev/lib" "$sb/scripts/db" "$sb/apps/api"
   cp "$REPO_ROOT/scripts/run-e2e-local.sh" "$sb/scripts/run-e2e-local.sh"
   chmod +x "$sb/scripts/run-e2e-local.sh"
   cp "$REPO_ROOT/scripts/dev/lib/port-ownership.sh" "$sb/scripts/dev/lib/port-ownership.sh"
+  cp "$REPO_ROOT/scripts/dev/lib/e2e-identity-seed.sh" "$sb/scripts/dev/lib/e2e-identity-seed.sh" 2>/dev/null || cat > "$sb/scripts/dev/lib/e2e-identity-seed.sh" <<'EOF'
+#!/usr/bin/env bash
+e2e_seed_identity() { return 0; }
+EOF
+  cat > "$sb/scripts/db/restore-test-fixture.sh" <<'EOF'
+#!/usr/bin/env bash
+echo "[fixture] Restoring fixture..."
+echo "postgresql://postgres:pass@localhost:5434/postgres"
+EOF
+  chmod +x "$sb/scripts/db/restore-test-fixture.sh"
+  cat > "$sb/apps/api/.env" <<'EOF'
+SUPABASE_PROJECT_REF=test-ref
+AI_API_KEY=test-key
+EOF
   cat > "$sb/.env.e2e" <<EOF
 PLAYWRIGHT_BASE_URL=http://localhost:$1
 BACKEND_BASE_URL=http://localhost:$2
@@ -356,6 +385,83 @@ if [[ ! -s "$BACKEND_CAP6" ]]; then
 else
   not_ok "T6: no replacement backend is started while the old one might still be serving"
 fi
+
+# ===========================================================================
+# T7 — kill_process_tree & terminate_service process cleanup primitives (#2525)
+# ===========================================================================
+
+# Spawn a parent process that spawns a child process
+set -m
+CHILD_PID_FILE="$(mktemp)"
+CLEANUP_DIRS+=("$CHILD_PID_FILE")
+
+(
+  ( sleep 30 ) &
+  cpid=$!
+  echo "$cpid" > "$CHILD_PID_FILE"
+  wait "$cpid"
+) &
+parent_pid=$!
+sleep 0.3
+child_pid="$(cat "$CHILD_PID_FILE" 2>/dev/null || true)"
+
+if [[ -n "$parent_pid" && -n "$child_pid" ]]; then
+  if kill -0 "$parent_pid" 2>/dev/null && kill -0 "$child_pid" 2>/dev/null; then
+    ok "T7: test parent and child processes spawned successfully"
+  else
+    not_ok "T7: test parent and child processes spawned successfully"
+  fi
+
+  kill_process_tree "$parent_pid" TERM
+  sleep 0.3
+
+  if ! kill -0 "$parent_pid" 2>/dev/null && ! kill -0 "$child_pid" 2>/dev/null; then
+    ok "T7: kill_process_tree successfully killed parent and descendant child process"
+  else
+    not_ok "T7: kill_process_tree successfully killed parent and descendant child process"
+    kill -9 "$parent_pid" "$child_pid" 2>/dev/null || true
+  fi
+else
+  not_ok "T7: failed to spawn test parent/child processes"
+  not_ok "T7: kill_process_tree test skipped"
+fi
+
+# ===========================================================================
+# T8 — verify_ports_released primitive (#2525)
+# ===========================================================================
+
+VPORT_FREE=9991
+VPORT_BOUND=9992
+
+if verify_ports_released "$VPORT_FREE" >/dev/null 2>&1; then
+  ok "T8: verify_ports_released returns 0 when port is free"
+else
+  not_ok "T8: verify_ports_released returns 0 when port is free"
+fi
+
+( export PATH="$MOCKBIN:$ORIG_PATH" MOCK_LSOF_PID=8888 MOCK_LSOF_CWD="/some/path"; verify_ports_released "$VPORT_BOUND" >/dev/null 2>&1 )
+V_RC=$?
+if [[ $V_RC -ne 0 ]]; then
+  ok "T8: verify_ports_released returns non-zero when a port is bound"
+else
+  not_ok "T8: verify_ports_released returns non-zero when a port is bound"
+fi
+
+# ===========================================================================
+# T9 — pre-flight port guard before service start (#2525)
+# ===========================================================================
+
+SB9="$(new_e2e_sandbox 8080 8085)"
+run_e2e "$SB9" MOCK_LSOF_PID=9999 MOCK_LSOF_CWD="/other/path"
+RC9=$?
+LOG9="$(cat "$SB9/run.log" 2>/dev/null || true)"
+
+if [[ $RC9 -ne 0 ]]; then
+  ok "T9: pre-flight port guard rejects startup when port is held (non-zero exit)"
+else
+  not_ok "T9: pre-flight port guard rejects startup when port is held (non-zero exit)"
+fi
+assert_contains "T9: pre-flight log identifies process ownership failure" "$LOG9" "does not belong to this worktree"
 
 # ===========================================================================
 # Summary

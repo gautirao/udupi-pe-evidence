@@ -165,6 +165,8 @@ EOF
   cp "$REPO_ROOT/scripts/dev/local-fixture-backend.sh" "$sb/scripts/dev/local-fixture-backend.sh"
   chmod +x "$sb/scripts/dev/local-fixture-backend.sh"
   cp "$REPO_ROOT/scripts/dev/lib/e2e-auth-common.sh" "$sb/scripts/dev/lib/e2e-auth-common.sh"
+  cp "$REPO_ROOT/scripts/dev/lib/e2e-identity-seed.sh" "$sb/scripts/dev/lib/e2e-identity-seed.sh"
+  cp "$REPO_ROOT/scripts/dev/lib/port-ownership.sh" "$sb/scripts/dev/lib/port-ownership.sh"
 
   cat > "$sb/scripts/db/restore-test-fixture.sh" <<'EOF'
 #!/usr/bin/env bash

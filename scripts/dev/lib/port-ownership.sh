@@ -34,3 +34,69 @@ port_holder_belongs_to_worktree() {
   [[ -n "$holder_cwd" ]] || return 1
   [[ "$holder_cwd" == "$worktree_root" || "$holder_cwd" == "$worktree_root"/* ]]
 }
+
+# Recursively send signal (default: TERM) to process group -$pid and all child processes.
+kill_process_tree() {
+  local pid="$1"
+  local sig="${2:-TERM}"
+  [ -z "$pid" ] && return 0
+  kill -0 "$pid" 2>/dev/null || return 0
+
+  # 1. Try process group kill if pid is PGID leader
+  kill -"$sig" "-$pid" 2>/dev/null || true
+
+  # 2. Find and kill all descendant processes recursively
+  local children
+  children="$(pgrep -P "$pid" 2>/dev/null || true)"
+  for child in $children; do
+    [ -n "$child" ] && kill_process_tree "$child" "$sig"
+  done
+
+  # 3. Kill the target process itself
+  kill -"$sig" "$pid" 2>/dev/null || true
+}
+
+# Gracefully terminate a process and its child process group/tree, falling back to SIGKILL.
+terminate_service() {
+  local name="$1" pid="$2" port="${3:-}" max_wait="${4:-3}"
+  [ -z "$pid" ] && return 0
+  kill -0 "$pid" 2>/dev/null || return 0
+
+  echo "[cleanup] Stopping $name (PID $pid)..."
+  kill_process_tree "$pid" TERM
+
+  local waited=0
+  while kill -0 "$pid" 2>/dev/null || { [ -n "$port" ] && [ -n "$(port_holder_pid "$port")" ]; }; do
+    if [ "$waited" -ge "$max_wait" ]; then
+      echo "[cleanup] $name (PID $pid) did not terminate gracefully after ${max_wait}s; sending SIGKILL..." >&2
+      kill_process_tree "$pid" KILL
+      sleep 0.5
+      break
+    fi
+    sleep 0.5
+    waited=$((waited + 1))
+  done
+}
+
+# Verify specified ports are free. Returns 0 if all free, 1 if any port is still bound.
+verify_ports_released() {
+  local leaked=0
+  for port in "$@"; do
+    [ -z "$port" ] && continue
+    local pid
+    pid="$(port_holder_pid "$port")"
+    if [ -n "$pid" ]; then
+      local cwd
+      cwd="$(port_holder_cwd "$pid")"
+      echo "ERROR: port $port is still bound by PID $pid (cwd: ${cwd:-unknown}) after teardown!" >&2
+      leaked=1
+    else
+      echo "[cleanup] port $port confirmed free."
+    fi
+  done
+  if [ "$leaked" -eq 1 ]; then
+    return 1
+  fi
+  return 0
+}
+

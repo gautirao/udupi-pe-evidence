@@ -46,6 +46,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # (#2427). Steps E and F below are thin callers of it.
 # shellcheck source=lib/e2e-identity-seed.sh
 source "${SCRIPT_DIR}/lib/e2e-identity-seed.sh"
+# shellcheck source=lib/port-ownership.sh
+source "${SCRIPT_DIR}/lib/port-ownership.sh"
 
 BACKEND_ENV_FILE="${REPO_ROOT}/apps/api/.env"
 E2E_ENV_FILE="${REPO_ROOT}/.env.e2e"
@@ -201,6 +203,14 @@ PG_TEST_PORT="${PG_TEST_PORT:-5434}"
 PG_TEST_PASSWORD="${PG_TEST_PASSWORD:-fixture_test_only}"
 export PG_TEST_PORT PG_TEST_PASSWORD
 
+TARGET_SERVER_PORT="${SERVER_PORT:-8085}"
+HOLDING_PID="$(port_holder_pid "$TARGET_SERVER_PORT")"
+if [[ -n "$HOLDING_PID" ]]; then
+  echo "ERROR: backend port ${TARGET_SERVER_PORT} is already held by PID ${HOLDING_PID}." >&2
+  echo "Refusing to start local fixture backend on an occupied port." >&2
+  exit 1
+fi
+
 echo ">>> Effective fixture config: PG_TEST_PORT=${PG_TEST_PORT} (password masked)"
 
 # ---------------------------------------------------------------------------
@@ -278,6 +288,9 @@ trap 'rm -f "$TOKEN_FILE"' EXIT
 printf '%s' "$ACCESS_TOKEN" > "$TOKEN_FILE"
 
 echo ">>> Access token written to: $TOKEN_FILE (mode 600; build your own 'Authorization: Bearer \$(cat $TOKEN_FILE)' header)"
+if [[ "${MOCK_FAIL_AFTER_TOKEN:-}" == "true" ]]; then
+  exit 1
+fi
 echo ">>> NOTE: this script execs apps/api/run-local.sh at the end (Step G) to keep it in the"
 echo "    foreground, and bash's EXIT trap does NOT fire across exec. The token file above"
 echo "    therefore intentionally survives past this script's own lifetime — use it before"

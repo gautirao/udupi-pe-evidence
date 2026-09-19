@@ -47,6 +47,9 @@ FRONTEND_LOG="${TMPDIR:-/tmp}/frontend-e2e-${FRONTEND_PORT}.log"
 # worktree's backend/frontend, most obviously — must never be touched. This
 # used to unconditionally `kill` whatever held the port, which is exactly
 # what took over a concurrent worktree's process during issue #2040 (#2078).
+# Enable job control so background jobs get distinct process groups
+set -m
+
 ensure_port_owned_or_free() {
   local role="$1" port="$2" timeout_seconds="$3"
   local pid cwd waited
@@ -56,14 +59,7 @@ ensure_port_owned_or_free() {
   cwd="$(port_holder_cwd "$pid")"
   if port_holder_belongs_to_worktree "$WORKTREE_ROOT" "$cwd"; then
     echo "[e2e] $role port $port is held by this worktree's own process (pid $pid) — stopping to restart with latest code."
-    kill "$pid" 2>/dev/null || true
-    # A signalled process is not necessarily a DEAD process — mvn's spawned
-    # java child, for one, does not die just because the wrapper script that
-    # started it was killed. Sleeping a fixed interval and trusting it worked
-    # let a replacement backend/frontend fail to bind while the later curl
-    # health checks kept passing against the STALE process — Playwright would
-    # then validate old code while this script reported success. Poll until
-    # the port is actually free; fail closed if it never clears (#2078).
+    terminate_service "$role" "$pid" "$port" "$timeout_seconds"
     waited=0
     while [ -n "$(port_holder_pid "$port")" ]; do
       if [ "$waited" -ge "$timeout_seconds" ]; then
@@ -103,15 +99,34 @@ BACKEND_PID=""
 FRONTEND_PID=""
 E2E_DB_CONTAINER_NAME=""
 
-# Cleanup on exit — stop services (and the local DB fixture) we started. Set
-# up before anything below can fail, so a mid-setup error (fixture start,
-# safety gate, .env parsing) never leaks the docker container.
+CLEANUP_DONE=0
 cleanup() {
-  [ -n "$BACKEND_PID" ] && kill "$BACKEND_PID" 2>/dev/null || true
-  [ -n "$FRONTEND_PID" ] && kill "$FRONTEND_PID" 2>/dev/null || true
-  [ -n "$E2E_DB_CONTAINER_NAME" ] && docker rm -f "$E2E_DB_CONTAINER_NAME" >/dev/null 2>&1 || true
+  local exit_code=$?
+  if [ "$CLEANUP_DONE" -eq 1 ]; then
+    return $exit_code
+  fi
+  CLEANUP_DONE=1
+
+  [ -n "${BACKEND_PID:-}" ] && terminate_service "backend" "$BACKEND_PID" "${BACKEND_PORT:-}" 3
+  [ -n "${FRONTEND_PID:-}" ] && terminate_service "frontend" "$FRONTEND_PID" "${FRONTEND_PORT:-}" 3
+  [ -n "${E2E_DB_CONTAINER_NAME:-}" ] && docker rm -f "$E2E_DB_CONTAINER_NAME" >/dev/null 2>&1 || true
+
+  verify_ports_released "${FRONTEND_PORT:-}" "${BACKEND_PORT:-}" || true
+  return $exit_code
 }
+
+handle_signal() {
+  local sig="$1"
+  echo "[e2e] Received signal $sig — cleaning up and exiting..." >&2
+  cleanup
+  trap - "$sig"
+  kill -s "$sig" "$$" 2>/dev/null || exit 1
+}
+
 trap cleanup EXIT
+trap 'handle_signal INT' INT
+trap 'handle_signal TERM' TERM
+trap 'handle_signal HUP' HUP
 
 # ---------------------------------------------------------------------------
 # Ephemeral local Postgres/PostGIS fixture (#2422 follow-up)
@@ -274,6 +289,17 @@ export SPRING_DATASOURCE_HIKARI_DATA_SOURCE_PROPERTIES_SSLMODE=disable
 export SPRING_FLYWAY_ENABLED=false
 export SUPABASE_PROJECT_REF="$E2E_SUPABASE_PROJECT_REF"
 export AI_API_KEY="$E2E_AI_API_KEY"
+
+for role_spec in "backend:$BACKEND_PORT" "frontend:$FRONTEND_PORT"; do
+  role="${role_spec%%:*}"
+  port="${role_spec##*:}"
+  check_pid="$(port_holder_pid "$port")"
+  if [ -n "$check_pid" ]; then
+    echo "ERROR: $role port $port is currently held by PID $check_pid prior to service start." >&2
+    echo "Refusing to start $role on an occupied port." >&2
+    exit 1
+  fi
+done
 
 echo "[e2e] Starting backend..."
 "$SCRIPT_DIR/../apps/api/run-local.sh" > "$BACKEND_LOG" 2>&1 &

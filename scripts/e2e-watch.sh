@@ -23,10 +23,13 @@
 #   - apps/api/.env (database connection for Spring Boot)
 #   - Playwright browsers installed: npx playwright install chromium
 set -euo pipefail
+set -m
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR/.."
 ENV_FILE="$PROJECT_ROOT/.env.e2e"
+# shellcheck source=dev/lib/port-ownership.sh
+source "$SCRIPT_DIR/dev/lib/port-ownership.sh"
 
 # ── Parse --slow flag (consume it before passing $@ to Playwright) ───────────
 SLOW_MODE=""
@@ -80,11 +83,32 @@ service_ok() { curl -sf "$1" > /dev/null 2>&1; }
 BACKEND_PID=""
 FRONTEND_PID=""
 
+CLEANUP_DONE=0
 cleanup() {
-  [ -n "$BACKEND_PID" ] && kill "$BACKEND_PID" 2>/dev/null && echo "[cleanup] Stopped backend ($BACKEND_PID)" || true
-  [ -n "$FRONTEND_PID" ] && kill "$FRONTEND_PID" 2>/dev/null && echo "[cleanup] Stopped frontend ($FRONTEND_PID)" || true
+  local exit_code=$?
+  if [ "$CLEANUP_DONE" -eq 1 ]; then
+    return $exit_code
+  fi
+  CLEANUP_DONE=1
+
+  [ -n "${BACKEND_PID:-}" ] && terminate_service "backend" "$BACKEND_PID" "${BACKEND_PORT:-}" 3
+  [ -n "${FRONTEND_PID:-}" ] && terminate_service "frontend" "$FRONTEND_PID" "${FRONTEND_PORT:-}" 3
+  verify_ports_released "${FRONTEND_PORT:-}" "${BACKEND_PORT:-}" || true
+  return $exit_code
 }
+
+handle_signal() {
+  local sig="$1"
+  echo "[e2e-watch] Received signal $sig — cleaning up and exiting..." >&2
+  cleanup
+  trap - "$sig"
+  kill -s "$sig" "$$" 2>/dev/null || exit 1
+}
+
 trap cleanup EXIT
+trap 'handle_signal INT' INT
+trap 'handle_signal TERM' TERM
+trap 'handle_signal HUP' HUP
 
 # ── Backend ──────────────────────────────────────────────────────────────────
 if port_in_use "$BACKEND_PORT"; then

@@ -157,7 +157,7 @@ new_fixture_sandbox() {
   local sb
   sb="$(mktemp -d)"
   CLEANUP_DIRS+=("$sb")
-  mkdir -p "$sb/apps/api" "$sb/scripts/db" "$sb/scripts/dev"
+  mkdir -p "$sb/apps/api" "$sb/scripts/db" "$sb/scripts/dev/lib"
 
   cat > "$sb/apps/api/.env" <<'EOF'
 SUPABASE_PROJECT_REF=testref
@@ -177,6 +177,8 @@ EOF
 
   cp "$REPO_ROOT/scripts/dev/local-fixture-backend.sh" "$sb/scripts/dev/local-fixture-backend.sh"
   chmod +x "$sb/scripts/dev/local-fixture-backend.sh"
+  cp "$REPO_ROOT/scripts/dev/lib/e2e-identity-seed.sh" "$sb/scripts/dev/lib/e2e-identity-seed.sh"
+  cp "$REPO_ROOT/scripts/dev/lib/port-ownership.sh" "$sb/scripts/dev/lib/port-ownership.sh"
 
   cat > "$sb/scripts/db/restore-test-fixture.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -582,7 +584,7 @@ run_fixture_script "$SB11" \
   MOCK_LOGIN_RESPONSE="$VALID_LOGIN_JSON" \
   MOCK_DOCKER_CONTAINER_RUNNING=true \
   MOCK_PSQL_UNREACHABLE=false \
-  MOCK_PSQL_SEED_FAIL=true \
+  MOCK_FAIL_AFTER_TOKEN=true \
   RUN_LOCAL_CAPTURE="$RUN_LOCAL_CAP11" \
   PSQL_CALL_LOG="$PSQL_CALL_LOG11" \
   PSQL_SEED_LOG="$PSQL_SEED_LOG11" \
