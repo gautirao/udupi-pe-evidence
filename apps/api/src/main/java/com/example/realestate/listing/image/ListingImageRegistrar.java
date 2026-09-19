@@ -1,6 +1,7 @@
 package com.example.realestate.listing.image;
 
 import com.example.realestate.listing.core.ListingRepository;
+import com.example.realestate.listing.storage.ImageObjectMetadata;
 import com.example.realestate.listing.storage.ListingImageStorage;
 import com.example.realestate.listing.storage.LocalDevStorageService;
 import com.example.realestate.quality.QualityRecomputeService;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -50,6 +52,8 @@ class ListingImageRegistrar {
     private static final int MAX_IMAGES = 10;
     private static final String RETRY_AFTER_SECONDS = "1";
     private static final String LISTING_IMAGES_BUCKET = "listing-images";
+    private static final long MAX_FILE_SIZE = 5L * 1024 * 1024; // 5 MB
+    private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
 
     private final ListingRepository listingRepository;
     private final ListingImageRepository imageRepository;
@@ -101,6 +105,33 @@ class ListingImageRegistrar {
         if (currentCount >= MAX_IMAGES) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(Map.of("error", "Maximum " + MAX_IMAGES + " images per listing"));
+        }
+
+        // Post-upload object verification (inspect exact R2 object before inserting metadata)
+        ImageObjectMetadata meta = storageService.inspect(req.storagePath());
+        if (!meta.exists()) {
+            log.warn("POST /api/listings/{}/images -> 400 object inspection failed (not found): path={}",
+                    listingId, req.storagePath());
+            storageService.deleteObjectBestEffort(req.storagePath());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", "Uploaded image object not found in storage"));
+        }
+        if (meta.contentLength() != null && (meta.contentLength() <= 0 || meta.contentLength() > MAX_FILE_SIZE)) {
+            log.warn("POST /api/listings/{}/images -> 400 object inspection failed (invalid size={}): path={}",
+                    listingId, meta.contentLength(), req.storagePath());
+            storageService.deleteObjectBestEffort(req.storagePath());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", "Image object size must be between 1 byte and 5 MB"));
+        }
+        if (meta.contentType() != null) {
+            String cleanContentType = meta.contentType().split(";")[0].trim().toLowerCase();
+            if (!ALLOWED_CONTENT_TYPES.contains(cleanContentType)) {
+                log.warn("POST /api/listings/{}/images -> 400 object inspection failed (disallowed type={}): path={}",
+                        listingId, meta.contentType(), req.storagePath());
+                storageService.deleteObjectBestEffort(req.storagePath());
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "Allowed content types: image/jpeg, image/png, image/webp"));
+            }
         }
 
         String url = storageService.getPublicUrl(LISTING_IMAGES_BUCKET, req.storagePath());

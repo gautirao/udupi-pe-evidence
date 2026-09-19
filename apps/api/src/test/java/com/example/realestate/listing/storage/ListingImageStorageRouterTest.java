@@ -20,13 +20,16 @@ class ListingImageStorageRouterTest {
     private SupabaseStorageService supabaseStorageService;
 
     @Mock
+    private R2StorageService r2StorageService;
+
+    @Mock
     private LocalDevStorageService localDevStorageService;
 
     private ListingImageStorageRouter router;
 
     @BeforeEach
     void setUp() {
-        router = new ListingImageStorageRouter(supabaseStorageService, localDevStorageService, "supabase");
+        router = new ListingImageStorageRouter(supabaseStorageService, r2StorageService, localDevStorageService, "supabase");
     }
 
     @Test
@@ -39,6 +42,20 @@ class ListingImageStorageRouterTest {
     void getActiveProviderName_whenLocalDevEnabled_returnsLocalDev() {
         given(localDevStorageService.isEnabled()).willReturn(true);
         assertThat(router.getActiveProviderName()).isEqualTo("local-dev");
+    }
+
+    @Test
+    void resolveActiveStorage_routesToR2WhenConfigured() {
+        ListingImageStorageRouter r2Router = new ListingImageStorageRouter(
+                supabaseStorageService, r2StorageService, localDevStorageService, "r2");
+        org.mockito.Mockito.lenient().when(localDevStorageService.isEnabled()).thenReturn(false);
+        given(r2StorageService.getPublicUrl("listing-images", "listings/1/file.jpg"))
+                .willReturn("https://img.propertysignal.in/listings/1/file.jpg");
+
+        String url = r2Router.getPublicUrl("listing-images", "listings/1/file.jpg");
+
+        assertThat(url).isEqualTo("https://img.propertysignal.in/listings/1/file.jpg");
+        verify(r2StorageService).getPublicUrl("listing-images", "listings/1/file.jpg");
     }
 
     @Test

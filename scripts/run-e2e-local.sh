@@ -288,6 +288,7 @@ export SPRING_DATASOURCE_HIKARI_DATA_SOURCE_PROPERTIES_SSLMODE=disable
 # match the CONCURRENTLY-stripped copy it migrated with, and fail startup.
 export SPRING_FLYWAY_ENABLED=false
 export SUPABASE_PROJECT_REF="$E2E_SUPABASE_PROJECT_REF"
+export LOCAL_DEV_STORAGE_ENABLED="${LOCAL_DEV_STORAGE_ENABLED:-true}"
 export AI_API_KEY="$E2E_AI_API_KEY"
 
 for role_spec in "backend:$BACKEND_PORT" "frontend:$FRONTEND_PORT"; do

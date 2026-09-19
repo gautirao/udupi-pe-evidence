@@ -26,14 +26,17 @@ public class ListingImageStorageRouter implements ListingImageStorage {
     private static final Logger log = LoggerFactory.getLogger(ListingImageStorageRouter.class);
 
     private final SupabaseStorageService supabaseStorageService;
+    private final R2StorageService r2StorageService;
     private final LocalDevStorageService localDevStorageService;
     private final String configuredProvider;
 
     public ListingImageStorageRouter(
             SupabaseStorageService supabaseStorageService,
+            R2StorageService r2StorageService,
             LocalDevStorageService localDevStorageService,
             @Value("${listing.images.storage.provider:supabase}") String configuredProvider) {
         this.supabaseStorageService = supabaseStorageService;
+        this.r2StorageService = r2StorageService;
         this.localDevStorageService = localDevStorageService;
         this.configuredProvider = configuredProvider != null ? configuredProvider.trim().toLowerCase() : "supabase";
     }
@@ -46,6 +49,9 @@ public class ListingImageStorageRouter implements ListingImageStorage {
     }
 
     private ListingImageStorage resolveActiveStorage() {
+        if ("r2".equalsIgnoreCase(configuredProvider)) {
+            return r2StorageService;
+        }
         if ("supabase".equalsIgnoreCase(configuredProvider)) {
             return supabaseStorageService;
         }

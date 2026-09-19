@@ -1,6 +1,7 @@
 package com.example.realestate.listing.image;
 
 import com.example.realestate.listing.core.ListingRepository;
+import com.example.realestate.listing.storage.ImageObjectMetadata;
 import com.example.realestate.listing.storage.ListingImageStorage;
 import com.example.realestate.listing.storage.LocalDevStorageService;
 import com.example.realestate.quality.QualityRecomputeService;
@@ -53,8 +54,9 @@ class ListingImageRegistrarTest {
                 localDevStorageService, storageService);
 
         // findByIdWithLock is called at the start of every register() call.
-        // Return an empty Optional — the lock is acquired and the result is not used by the method.
         when(listingRepository.findByIdWithLock(LISTING_ID)).thenReturn(Optional.empty());
+        // Default inspect response: object exists and is valid (lenient for short-circuit error paths)
+        org.mockito.Mockito.lenient().when(storageService.inspect(any())).thenReturn(new ImageObjectMetadata(true, 1024L, "image/jpeg"));
     }
 
     private ListingImageController.RegisterImageRequest validRequest() {
@@ -257,5 +259,46 @@ class ListingImageRegistrarTest {
         // A real FK on property_listings.id would instead surface a
         // DataIntegrityViolationException → 409.
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    }
+
+    // ==================== Test 7: object inspection fails (not found) → 400 & deleteBestEffort ====================
+
+    @Test
+    void register_objectNotFoundInStorage_returns400AndDeletesObject() {
+        when(imageRepository.countByListingId(LISTING_ID)).thenReturn(0L);
+        when(storageService.inspect(validRequest().storagePath())).thenReturn(ImageObjectMetadata.notFound());
+
+        ResponseEntity<?> response = registrar.register(LISTING_ID, validRequest(), CALLER_ID);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        org.mockito.Mockito.verify(storageService).deleteObjectBestEffort(validRequest().storagePath());
+    }
+
+    // ==================== Test 8: object size > 5 MB → 400 & deleteBestEffort ====================
+
+    @Test
+    void register_objectSizeExceeds5MB_returns400AndDeletesObject() {
+        when(imageRepository.countByListingId(LISTING_ID)).thenReturn(0L);
+        when(storageService.inspect(validRequest().storagePath()))
+                .thenReturn(new ImageObjectMetadata(true, 6L * 1024 * 1024, "image/jpeg"));
+
+        ResponseEntity<?> response = registrar.register(LISTING_ID, validRequest(), CALLER_ID);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        org.mockito.Mockito.verify(storageService).deleteObjectBestEffort(validRequest().storagePath());
+    }
+
+    // ==================== Test 9: object disallowed Content-Type → 400 & deleteBestEffort ====================
+
+    @Test
+    void register_objectDisallowedContentType_returns400AndDeletesObject() {
+        when(imageRepository.countByListingId(LISTING_ID)).thenReturn(0L);
+        when(storageService.inspect(validRequest().storagePath()))
+                .thenReturn(new ImageObjectMetadata(true, 1024L, "application/pdf"));
+
+        ResponseEntity<?> response = registrar.register(LISTING_ID, validRequest(), CALLER_ID);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        org.mockito.Mockito.verify(storageService).deleteObjectBestEffort(validRequest().storagePath());
     }
 }
