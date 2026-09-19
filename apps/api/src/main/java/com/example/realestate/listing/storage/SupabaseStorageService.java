@@ -329,11 +329,15 @@ public class SupabaseStorageService {
      * @param storagePath path relative to bucket root (e.g. {@code listings/{userId}/{listingId}/file.jpg})
      */
     public void deleteObjectBestEffort(String storagePath) {
+        if (storagePath == null || storagePath.startsWith("external:")) {
+            log.debug("Storage delete skipped (external or null): path={}", storagePath);
+            return;
+        }
         if (!enabled) {
             log.debug("Storage delete skipped (disabled): path={}", storagePath);
             return;
         }
-        if (storagePath == null || storagePath.contains("..")) {
+        if (storagePath.contains("..")) {
             log.warn("Storage delete rejected — unsafe path: path={}", storagePath);
             return;
         }

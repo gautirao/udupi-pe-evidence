@@ -381,4 +381,128 @@ class CommercialImportPromotion2575IT {
                 .as("detail rows cascade with their listing")
                 .isZero();
     }
+
+    @Test
+    @DisplayName("materializes commercial source images into listing_images with position, limit, deduplication and idempotency (#2624)")
+    void promoteMaterializesListingImages() throws Exception {
+        // Set up custom raw_payload for candidates
+        // 1. IT-SHOP-1: 2 valid HTTPS images
+        jdbc.update("""
+                UPDATE public.commercial_import_candidate
+                SET raw_payload = jsonb_build_object('images', jsonb_build_array(
+                    'https://imagecdn.99acres.com/a.jpg',
+                    'https://imagecdn.99acres.com/b.jpg'
+                ))
+                WHERE source_listing_id = 'IT-SHOP-1'
+                """);
+
+        // 2. IT-OFFICE-1: zero images
+        jdbc.update("""
+                UPDATE public.commercial_import_candidate
+                SET raw_payload = jsonb_build_object('images', jsonb_build_array())
+                WHERE source_listing_id = 'IT-OFFICE-1'
+                """);
+
+        // 3. IT-BUILDING-1: 12 images (should cap at 10)
+        jdbc.update("""
+                UPDATE public.commercial_import_candidate
+                SET raw_payload = jsonb_build_object('images', jsonb_build_array(
+                    'https://imagecdn.99acres.com/img0.jpg',
+                    'https://imagecdn.99acres.com/img1.jpg',
+                    'https://imagecdn.99acres.com/img2.jpg',
+                    'https://imagecdn.99acres.com/img3.jpg',
+                    'https://imagecdn.99acres.com/img4.jpg',
+                    'https://imagecdn.99acres.com/img5.jpg',
+                    'https://imagecdn.99acres.com/img6.jpg',
+                    'https://imagecdn.99acres.com/img7.jpg',
+                    'https://imagecdn.99acres.com/img8.jpg',
+                    'https://imagecdn.99acres.com/img9.jpg',
+                    'https://imagecdn.99acres.com/img10.jpg',
+                    'https://imagecdn.99acres.com/img11.jpg'
+                ))
+                WHERE source_listing_id = 'IT-BUILDING-1'
+                """);
+
+        // 4. IT-WAREHOUSE-1: duplicates (a.jpg, a.jpg, b.jpg)
+        jdbc.update("""
+                UPDATE public.commercial_import_candidate
+                SET raw_payload = jsonb_build_object('images', jsonb_build_array(
+                    'https://imagecdn.99acres.com/dup-a.jpg',
+                    'https://imagecdn.99acres.com/dup-a.jpg',
+                    'https://imagecdn.99acres.com/dup-b.jpg'
+                ))
+                WHERE source_listing_id = 'IT-WAREHOUSE-1'
+                """);
+
+        // Run promote.sql
+        runSqlFileInOneTransaction("promote.sql");
+
+        // Assert IT-SHOP-1 images
+        List<Map<String, Object>> shopImages = jdbc.queryForList("""
+                SELECT storage_path, url, position
+                FROM public.listing_images
+                WHERE listing_id = (md5('99acres:IT-SHOP-1'))::uuid
+                ORDER BY position ASC
+                """);
+        assertThat(shopImages).hasSize(2);
+        assertThat(shopImages.get(0).get("position")).isEqualTo(0);
+        assertThat(shopImages.get(0).get("storage_path")).isEqualTo("external:https://imagecdn.99acres.com/a.jpg");
+        assertThat(shopImages.get(0).get("url")).isEqualTo("https://imagecdn.99acres.com/a.jpg");
+        assertThat(shopImages.get(1).get("position")).isEqualTo(1);
+        assertThat(shopImages.get(1).get("storage_path")).isEqualTo("external:https://imagecdn.99acres.com/b.jpg");
+
+        // Assert IT-OFFICE-1 images
+        assertThat(count("SELECT count(*) FROM public.listing_images WHERE listing_id = (md5('99acres:IT-OFFICE-1'))::uuid"))
+                .isZero();
+
+        // Assert IT-BUILDING-1 images (capped at 10)
+        List<Map<String, Object>> buildingImages = jdbc.queryForList("""
+                SELECT storage_path, url, position
+                FROM public.listing_images
+                WHERE listing_id = (md5('99acres:IT-BUILDING-1'))::uuid
+                ORDER BY position ASC
+                """);
+        assertThat(buildingImages).hasSize(10);
+        assertThat(buildingImages.get(9).get("position")).isEqualTo(9);
+
+        // Assert IT-WAREHOUSE-1 images (deduplicated: dup-a.jpg @ 0, dup-b.jpg @ 1)
+        List<Map<String, Object>> warehouseImages = jdbc.queryForList("""
+                SELECT storage_path, url, position
+                FROM public.listing_images
+                WHERE listing_id = (md5('99acres:IT-WAREHOUSE-1'))::uuid
+                ORDER BY position ASC
+                """);
+        assertThat(warehouseImages).hasSize(2);
+        assertThat(warehouseImages.get(0).get("storage_path")).isEqualTo("external:https://imagecdn.99acres.com/dup-a.jpg");
+        assertThat(warehouseImages.get(0).get("position")).isEqualTo(0);
+        assertThat(warehouseImages.get(1).get("storage_path")).isEqualTo("external:https://imagecdn.99acres.com/dup-b.jpg");
+        assertThat(warehouseImages.get(1).get("position")).isEqualTo(1);
+
+        // Re-run promotion / backfill: idempotency check (second run inserts 0 new rows)
+        long countBefore = count("SELECT count(*) FROM public.listing_images");
+        runSqlFileInOneTransaction("backfill-listing-images.sql");
+        long countAfter = count("SELECT count(*) FROM public.listing_images");
+        assertThat(countAfter).isEqualTo(countBefore);
+    }
+
+    @Test
+    @DisplayName("preserves pre-existing dealer uploaded images without deletion or clobbering (#2624)")
+    void existingUploadedImagesArePreserved() throws Exception {
+        runSqlFileInOneTransaction("promote.sql");
+
+        // Insert a pre-existing dealer uploaded image row for a promoted listing
+        String dealerPath = "listings/dealer-101/shop-hero-photo.jpg";
+        jdbc.update("""
+                INSERT INTO public.listing_images (id, listing_id, storage_path, url, position)
+                VALUES (gen_random_uuid(), (md5('99acres:IT-SHOP-1'))::uuid, ?, ?, 99)
+                """,
+                dealerPath, "https://storage.supabase.co/" + dealerPath);
+
+        // Run backfill again
+        runSqlFileInOneTransaction("backfill-listing-images.sql");
+
+        // Assert pre-existing dealer row exists untouched
+        long dealerRowCount = count("SELECT count(*) FROM public.listing_images WHERE storage_path = '" + dealerPath + "'");
+        assertThat(dealerRowCount).as("pre-existing dealer uploaded image row must be preserved").isEqualTo(1);
+    }
 }

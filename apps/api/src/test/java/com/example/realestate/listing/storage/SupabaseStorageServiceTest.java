@@ -176,4 +176,18 @@ class SupabaseStorageServiceTest {
         assertThat(SupabaseStorageService.STORAGE_DISABLED_SENTINEL_PREFIX)
                 .isEqualTo("storage-disabled://");
     }
+
+    // -------------------------------------------------------------------------
+    // External storage path deletion safety (#2624)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void deleteObjectBestEffort_externalPath_skipsDelete() {
+        SupabaseStorageService svc = newService(true, HTTPS_URL, KEY);
+        svc.validate();
+        assertThat(svc.isEnabled()).isTrue();
+
+        // Must not throw or make HTTP requests when given external: path
+        svc.deleteObjectBestEffort("external:https://imagecdn.99acres.com/photo.jpg");
+    }
 }

@@ -262,6 +262,54 @@ FROM public.commercial_import_candidate c
 WHERE c.outcome = 'STAGED' AND c.property_type = 'commercial_land'
 ON CONFLICT (listing_id) DO NOTHING;
 
+-- 2e. listing_images (external hotlinked image references, #2624).
+-- Up to 10 valid HTTPS source images per listing in source order.
+WITH raw_imgs AS (
+    SELECT
+        (md5(c.source_platform || ':' || c.source_listing_id))::uuid AS listing_id,
+        elem.val AS img_url,
+        elem.ord AS ord
+    FROM public.commercial_import_candidate c
+    CROSS JOIN LATERAL jsonb_array_elements_text(c.raw_payload->'images') WITH ORDINALITY AS elem(val, ord)
+    WHERE c.outcome = 'STAGED'
+      AND jsonb_typeof(c.raw_payload->'images') = 'array'
+      AND elem.val IS NOT NULL
+      AND trim(elem.val) <> ''
+      AND elem.val LIKE 'https://%'
+),
+deduped_imgs AS (
+    SELECT
+        listing_id,
+        img_url,
+        MIN(ord) AS first_ord
+    FROM raw_imgs
+    GROUP BY listing_id, img_url
+),
+ordered_imgs AS (
+    SELECT
+        listing_id,
+        img_url,
+        ROW_NUMBER() OVER (
+            PARTITION BY listing_id
+            ORDER BY first_ord ASC
+        ) - 1 AS position
+    FROM deduped_imgs
+)
+INSERT INTO public.listing_images (
+    listing_id,
+    storage_path,
+    url,
+    position
+)
+SELECT
+    listing_id,
+    'external:' || img_url,
+    img_url,
+    position
+FROM ordered_imgs
+WHERE position < 10
+ON CONFLICT (listing_id, storage_path) DO NOTHING;
+
 -- ── 3. close the loop on the staging rows ────────────────────────────────────
 -- A candidate that has been promoted records WHICH listing it became. Without this
 -- the staging table cannot answer "was this promoted?", and a rerun could not tell a
