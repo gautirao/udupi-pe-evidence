@@ -41,12 +41,25 @@ Whenever the user asks to work on an issue, bug, feature, or PR (e.g. `work on <
    - **Head-Bound Owner Approval**: Owner approval is bound strictly to the exact HEAD SHA. Any code-changing push invalidates it (`OWNER APPROVAL = STALE`), requiring new visual evidence + new owner approval.
    - **Visual Evidence Contract**: Evidence must be visible on GitHub PR (mock ref, BEFORE screenshot, AFTER screenshot, same route/scenario/viewport, mobile AFTER, selected/hover states, preview URL, exact HEAD). Local file paths or prose statements are NOT sufficient.
    - **Visual Reviewer Role**: The visual reviewer (`ui-reviewer`) is an evidence/difference verifier comparing MOCK vs BEFORE vs AFTER (verdicts: `VISUAL_MATCH`, `VISUAL_MISMATCH`, `PARTIAL`). It cannot authorize merge.
-   - **Final Merge Reviewer Role**: Verifies exact HEAD SHA, zero unresolved blockers, all applicable reviews PASS/MATCH, CI state, visual evidence, and human owner approval. For UI work, it emits `READY_TO_MERGE` ONLY AFTER explicit human owner visual approval is recorded for current exact HEAD. It MUST NEVER emit `OWNER_APPROVED_TO_MERGE` itself.
-   - **Merge Authority**: Non-UI work allows normal autonomous merge after all required independent reviews pass. Material UI work allows autonomous merge ONLY AFTER actual human visual approval is observed for current exact HEAD.
+   - **Final Merge Reviewer Role**: Verifies exact HEAD SHA, zero unresolved blockers, all applicable reviews PASS/MATCH, CI state, visual evidence, and human owner approval. For non-UI work, it emits `READY_FOR_OWNER_APPROVAL`. For material UI work, it emits `READY_FOR_OWNER_VISUAL_APPROVAL`. It MUST NEVER emit `OWNER_APPROVED_TO_MERGE` itself.
+   - **Merge Authority**: No PR (UI or non-UI) may be merged without an explicit human owner approval token (`OWNER_APPROVED_TO_MERGE` or explicit owner merge command) posted for the exact current HEAD SHA. `READY_FOR_OWNER_APPROVAL` and `READY_FOR_OWNER_VISUAL_APPROVAL` are readiness signals for human owner decision and MUST NOT be treated as merge authorization. Transition to `READY_TO_MERGE` and merge execution occur ONLY AFTER explicit human owner approval is recorded for current exact HEAD.
 
 7. **Post-Merge Verification**:
    - For buyer-visible bugs/features or production-sensitive behavior, automatically run post-merge verification (`post-merge-verifier`).
    - Post `POST-MERGE VERIFIED` or `POST-MERGE REGRESSION FOUND`.
+
+8. **Mandatory Review Reconciliation Phase**:
+   - AGY MUST NOT finish its lifecycle upon merely dispatching PR reviewers. It MUST execute a mandatory Review Reconciliation Phase after PUSH and EXACT-HEAD REVIEWERS dispatch.
+   - **PR Cursor Tracking**: Maintain a progress cursor (`last_processed_pr_event_id`, `last_processed_timestamp`) to incrementally fetch and consume new PR events/reviews/comments. Do not re-process historical events repeatedly.
+   - **Review Consumption**: A reviewer merely having run is insufficient; AGY must actively consume, classify, and reconcile its posted findings.
+   - **Hard Block Invariant**: A later PASS cannot erase another reviewer's unresolved `PARTIAL`, `BLOCK`, `REQUEST_CHANGES`, `FAIL`, or `NEEDS_WORK` finding.
+   - **Contradiction State**: Contradictory reviewer evidence evaluates to `REVIEW_STATE_CONTRADICTION` and sets state to `BLOCKED`.
+   - **Empirical Test Resolution**: Resolve test failure claims reported in PR comments empirically against current exact HEAD SHA (run tests locally on HEAD SHA) rather than blindly editing code.
+   - **Owner Input**: Owner comments arriving on PR during reconciliation are new input, update the cursor, and MUST be read immediately.
+   - **Push Invalidation**: Every code-changing push invalidates previous exact-head certifications, clears consecutive quiet polls (`consecutive_quiet_polls = 0`), and resets status to `REVIEW_RECONCILIATION_IN_PROGRESS`.
+   - **Quiet Poll Exit Criteria**: Transitioning out of `REVIEW_RECONCILIATION_IN_PROGRESS` requires **2 consecutive quiet polls** with unchanged HEAD, 0 unresolved current-head findings, and 0 contradictions.
+   - **Closeout Guard**: `closeout-reporter` cannot run while review reconciliation is incomplete (`REVIEW_RECONCILIATION_IN_PROGRESS`).
+   - **Final Allowed States**: `REVIEW_RECONCILIATION_IN_PROGRESS`, `BLOCKED`, `READY_FOR_OWNER_APPROVAL`, `READY_FOR_OWNER_VISUAL_APPROVAL`, `READY_TO_MERGE`.
 
 ---
 

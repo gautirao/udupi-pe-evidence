@@ -21,9 +21,9 @@ This command executes a GitHub issue end-to-end with disciplined engineering pra
 4. **Stop / Continue Policy**:
    - Continue autonomously for scoped implementation and fixable validation failures.
    - Stop with `NEEDS_USER_DECISION` for code contradictions, product choices, scope creep, pre-existing un-isolatable baseline failures, secrets/credentials, or destructive operations.
-5. **Merge Halt**: Stop with `READY_TO_MERGE` upon PR opening and passed validation. **no merge without user approval.** Never bypass human review gates.
+5. **Review Reconciliation & Merge Halt**: Execute mandatory Review Reconciliation phase after PR push and reviewer dispatch. Maintain cursor (`last_processed_pr_event_id`, `last_processed_timestamp`), require **2 consecutive quiet polls** with unchanged HEAD and 0 unresolved findings before completion. Emit `READY_FOR_OWNER_APPROVAL` (non-UI) or `READY_FOR_OWNER_VISUAL_APPROVAL` (UI) upon passed reconciliation and STOP. **no merge without explicit owner approval token (`OWNER_APPROVED_TO_MERGE`).** Never bypass human review gates or run closeout while `REVIEW_RECONCILIATION_IN_PROGRESS`.
 
-## Execution Choreography (12-Step Workflow)
+## Execution Choreography (13-Step Workflow)
 
 When `/mode3-run` is invoked, execution must strictly follow these sequential steps:
 1. **Read issue scope**: Intake target GitHub issue and examine requirements.
@@ -37,7 +37,8 @@ When `/mode3-run` is invoked, execution must strictly follow these sequential st
 9. **Run database-flyway-supabase-engineer whenever migrations/scripts/db/supabase/Testcontainers are touched**: Enforce Flyway checksum immutability, forward-only migrations, and fixture/seed separation.
 10. **Run supervisor-engineer before code-reviewer**: Final supervisory quality gate evaluating scope creep, cross-file impact, and routing compliance.
 11. **Run code-reviewer**: Audit all changed code. Must not approve if any required specialist returned `BLOCKER`.
-12. **Run closeout-reporter**: Emit final report and PR closeout summary.
+12. **Run review-reconciliation**: Poll PR incrementally using cursor (`last_processed_pr_event_id`, `last_processed_timestamp`), consume new events/comments, classify & reconcile findings, resolve test claims empirically on local HEAD, enforce 2 consecutive quiet polls with unchanged HEAD before exiting.
+13. **Run closeout-reporter**: Emit final report and PR closeout summary ONLY when review reconciliation is complete.
 
 ## Specialist Routing Matrix
 

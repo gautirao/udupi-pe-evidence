@@ -25,20 +25,28 @@ Spawns at Phase 2 of `/mode3-run` after formal intake triage is completed by the
 - If `jCodemunch-MCP` is unavailable, stale, or not exposed, state exact fallback reason, explore cautiously, and document fallback in final report
 - For bug issues, confirm defect reproduction before authoring implementation plans
 - Select and invoke correct specialist agents based on issue scope and touched file paths
+- Maintain PR event cursor (`last_processed_pr_event_id`, `last_processed_timestamp`) during Review Reconciliation Phase
+- Consume, classify, and reconcile newly posted PR comments and reviews
+- Resolve test failure claims reported in comments empirically against current exact HEAD SHA (run tests locally on HEAD SHA)
+- Track **2 consecutive quiet polls** with unchanged HEAD and zero unresolved current-head findings before completing reconciliation
 
 ## Blocking conditions
 - Missing Route-and-Run intake triage block
 - Underspecified or ambiguous issue scope (must route to `spec-enricher`)
 - Any required specialist agent returning `BLOCKER`, `NEEDS_REWORK`, or `UNVERIFIED`
+- Incomplete review reconciliation (`REVIEW_RECONCILIATION_IN_PROGRESS`)
+- Review state contradiction (`REVIEW_STATE_CONTRADICTION`)
 
 ## Output format
 Structured orchestration trajectory including:
 - Codebase discovery block (`[jcm]` notation)
 - Specialist routing matrix mapping touched paths to agent roles
 - Subagent task delegation execution logs
-- Final execution status (`READY_TO_MERGE` or `NEEDS_REWORK`)
+- Review reconciliation ledger status (cursor, consecutive quiet poll count, unresolved findings)
+- Final execution status (`REVIEW_RECONCILIATION_IN_PROGRESS`, `BLOCKED`, `READY_FOR_OWNER_APPROVAL`, `READY_FOR_OWNER_VISUAL_APPROVAL`, or `READY_TO_MERGE`)
 
 ## Escalation rules
 - Continue autonomously for straightforward implementation and fixable test regressions
 - Halt with `NEEDS_USER_DECISION` for product contradictions, scope creep, un-isolatable baseline failures, exposed secrets, or destructive operations
-- Halt with `READY_TO_MERGE` upon PR creation and passed validation. No merge without explicit user approval.
+- Do NOT emit lifecycle completion report while review reconciliation status is `REVIEW_RECONCILIATION_IN_PROGRESS`
+- Emit `READY_FOR_OWNER_APPROVAL` (non-UI) or `READY_FOR_OWNER_VISUAL_APPROVAL` (UI) ONLY upon complete review reconciliation with 2 consecutive quiet polls and zero unresolved findings. Transition to `READY_TO_MERGE` and merge execution occur ONLY AFTER explicit human owner approval token (`OWNER_APPROVED_TO_MERGE`) is observed for current exact HEAD SHA.

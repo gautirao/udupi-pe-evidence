@@ -59,6 +59,21 @@ When worker pushes commit at exact HEAD:
 4. **Hard Block Enforcement**: If ANY reviewer reports `PARTIAL`, `BLOCK`, `REQUEST_CHANGES`, `FAIL`, `NEEDS_WORK`, or `*_PENDING`, `lane-ledger` merge state MUST evaluate to `BLOCKED`. A subsequent `PASS` from another reviewer does NOT erase an unresolved `PARTIAL`/`BLOCK`.
 5. **Contradiction Check**: Scan current-head reviewer verdicts. If contradictions exist (e.g. `PASS` vs `PARTIAL`), set `Contradiction check: REVIEW_STATE_CONTRADICTION` and do NOT choose optimistic results.
 
+### Phase 3.5: Mandatory Review Reconciliation Phase
+1. Set `Review Reconciliation Status: REVIEW_RECONCILIATION_IN_PROGRESS`. Do NOT attempt closeout while reconciliation is in progress.
+2. **Polling Cursor Maintenance**: Record `last_processed_pr_event_id` and `last_processed_timestamp`. Fetch incremental PR comments/reviews (`gh pr view --json comments,reviews` or `gh api`) arriving after the cursor. Do not re-process historical events repeatedly.
+3. **Owner Comment Consumption**: Read owner comments arriving during reconciliation immediately and update cursor.
+4. **Empirical Test Resolution**:
+   - When a review comment claims a test failure or regression, AGY must run the referenced tests locally on the current exact HEAD SHA.
+   - If tests pass cleanly on HEAD SHA, classify the claim as empirically resolved/stale rather than blindly modifying code.
+5. **Actionable Fix Loop**:
+   - If findings are actionable, stay in the SAME WORKER LANE -> fix locally -> dispatch `pre-push-reviewer` -> commit & push new HEAD.
+   - Code-changing pushes invalidate prior exact-head certifications, reset `consecutive_quiet_polls = 0`, and reset status to `REVIEW_RECONCILIATION_IN_PROGRESS`.
+6. **Quiet Poll Exit Criteria**:
+   - A quiet poll is a polling cycle yielding 0 new PR events since cursor with target branch HEAD SHA unchanged.
+   - Exit reconciliation ONLY when **2 consecutive quiet polls** complete with 0 unresolved current-head findings and clean contradiction check (`CLEAN`).
+7. Transition `Review Reconciliation Status` to `READY_FOR_OWNER_APPROVAL`, `READY_FOR_OWNER_VISUAL_APPROVAL`, `READY_TO_MERGE`, or `BLOCKED`.
+
 ### Phase 4: Visual Evidence & Owner Approval Gate (Material UI Tasks)
 1. If the PR involves material buyer-visible UI changes:
    - Deploy exact HEAD preview URL.
@@ -76,16 +91,15 @@ When worker pushes commit at exact HEAD:
    - **STOP Execution & Await Human Owner Visual Approval**.
    - NEVER emit `OWNER_APPROVED_TO_MERGE` or agent-synthesized approval tokens.
 
-### Phase 5: Final Merge Review & Autonomous Merge
-1. Once all independent reviewers pass (or visual approval is granted for UI tasks):
+### Phase 5: Final Merge Review & Owner Approval Gate
+1. Once all independent reviewers pass and Review Reconciliation completes:
    - Dispatch `final-merge-reviewer`.
-   - For non-UI work: `final-merge-reviewer` emits `READY_FOR_OWNER_APPROVAL`.
-   - For material UI work: `final-merge-reviewer` verifies human owner visual approval for current exact HEAD, then emits `READY_TO_MERGE`.
-2. Merge Execution:
-   - Verify `lane-ledger` merge state is clean with zero unresolved blockers and zero contradictions.
-   - Verify remote PR HEAD SHA matches approved exact HEAD SHA.
-   - Confirm GitHub reports `MERGEABLE`.
-   - Execute autonomous squash merge (`gh pr merge <PR> --squash --delete-branch`).
+   - For non-UI work: `final-merge-reviewer` emits `READY_FOR_OWNER_APPROVAL` and STOPs for explicit human owner merge decision.
+   - For material UI work: `final-merge-reviewer` emits `READY_FOR_OWNER_VISUAL_APPROVAL` and STOPs for explicit human owner visual/merge decision.
+2. Merge Execution Authority:
+   - NO PR (UI or non-UI) may be merged without observing explicit human owner merge authorization token (`OWNER_APPROVED_TO_MERGE` or explicit owner merge command) for the exact current HEAD SHA.
+   - Neither `READY_FOR_OWNER_APPROVAL` nor `READY_FOR_OWNER_VISUAL_APPROVAL` permits merge execution.
+   - Upon observing explicit human owner approval for current exact HEAD SHA: transition state to `READY_TO_MERGE`, verify remote PR HEAD SHA matches approved SHA and GitHub reports `MERGEABLE`, then execute squash merge (`gh pr merge <PR> --squash --delete-branch`).
 
 ### Phase 6: Post-Merge Verification & Close
 1. If issue is buyer-visible or production-sensitive, dispatch `post-merge-verifier`.

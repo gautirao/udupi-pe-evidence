@@ -24,7 +24,8 @@ This reviewer MUST NEVER emit `OWNER_APPROVED_TO_MERGE` or agent-synthesized app
 
 When all readiness conditions pass, this reviewer emits:
 - For Non-UI work: `READY_FOR_OWNER_APPROVAL`
-- For Material UI work (after explicit human owner visual approval is recorded for current exact HEAD): `READY_TO_MERGE`
+- For Material UI work: `READY_FOR_OWNER_VISUAL_APPROVAL`
+- ONLY AFTER explicit human owner approval token (`OWNER_APPROVED_TO_MERGE` or explicit owner merge command) is verified for current exact HEAD SHA: `READY_TO_MERGE`
 
 Any subsequent code push invalidates prior reviews (`OWNER APPROVAL = STALE`) and requires a fresh exact-head audit.
 
@@ -38,11 +39,12 @@ Any subsequent code push invalidates prior reviews (`OWNER APPROVAL = STALE`) an
    - A subsequent `PASS` from one reviewer does NOT erase an unresolved `PARTIAL`/`BLOCK` from another reviewer.
    - If reviewer verdicts contradict (e.g. `code-reviewer` PASS but `ui-reviewer` PARTIAL), report `REVIEW_STATE_CONTRADICTION` and fail merge certification.
 3. **Audit Checklist**:
+   - Confirm Review Reconciliation Phase is complete (status is NOT `REVIEW_RECONCILIATION_IN_PROGRESS` and `Consecutive Quiet Polls >= 2`).
    - Confirm exact HEAD SHA on target remote branch matches reviewed commit SHA.
    - Verify DoD acceptance criteria from issue description.
    - Confirm all required specialist PR reviews passed cleanly (`PASS` / `VISUAL_MATCH`).
    - Confirm GitHub-visible visual evidence exists for UI tasks (mock reference, BEFORE, AFTER, mobile AFTER, selected/hover states, preview URL, exact HEAD).
-   - Confirm explicit human owner visual approval exists on PR for current exact HEAD (for material UI tasks).
+   - Confirm explicit human owner approval exists on PR for current exact HEAD (for material UI tasks or final merge).
    - Confirm 0 unapproved file edits outside scope.
    - Confirm GitHub mergeability (`gh pr view <PR> --json mergeable`).
 
@@ -56,5 +58,6 @@ Post review verdict comment on GitHub PR (`gh pr comment <PR>`):
 - GitHub Mergeability: `MERGEABLE`
 - **Mandatory Verdict Phrase**:
   - For Non-UI work when clean: `READY_FOR_OWNER_APPROVAL`
-  - For Material UI work when human owner visual approval is verified for current exact HEAD: `READY_TO_MERGE`
+  - For Material UI work when clean: `READY_FOR_OWNER_VISUAL_APPROVAL`
+  - When explicit human owner approval token is verified for current exact HEAD: `READY_TO_MERGE`
   - If blocked or contradictory state exists: `REQUEST CHANGES` (with specific blocking findings and `REVIEW_STATE_CONTRADICTION` details)

@@ -34,6 +34,7 @@ Must ensure final report contains:
 ## Blocking conditions
 - Missing PR number or unverified test logs
 - Any unresolved `BLOCKER` in specialist review matrix
+- Incomplete review reconciliation (`REVIEW_RECONCILIATION_IN_PROGRESS`)
 
 ## Output format
 Standardized closeout report:

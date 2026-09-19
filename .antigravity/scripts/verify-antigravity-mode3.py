@@ -10,6 +10,10 @@ import subprocess
 import sys
 
 REQUIRED_FILES = [
+    "AGENTS.md",
+    ".agents/contracts/pr-workflow.md",
+    ".agents/contracts/lane-ledger.md",
+    ".agents/contracts/merge-gate.md",
     ".antigravity/README.md",
     ".antigravity/commands/mode3-run.md",
     ".antigravity/commands/route-and-run.md",
@@ -59,6 +63,11 @@ KEY_PHRASES = [
     "Specialist review matrix:",
     "database-flyway-supabase-engineer",
     "V90__idx_property_listings_agri_live.sql",
+    "REVIEW_RECONCILIATION_IN_PROGRESS",
+    "last processed PR event id",
+    "consecutive quiet poll",
+    "REVIEW_STATE_CONTRADICTION",
+    "empirical",
 ]
 
 FORBIDDEN_MODIFIED_PREFIXES = [
