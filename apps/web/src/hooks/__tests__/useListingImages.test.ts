@@ -47,6 +47,11 @@ vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: mockToast }),
 }));
 
+const mockImageCompression = vi.fn();
+vi.mock('browser-image-compression', () => ({
+  default: (...args: unknown[]) => mockImageCompression(...args),
+}));
+
 // Mock global fetch used for the PUT to the pre-signed URL
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
@@ -95,6 +100,9 @@ describe('useListingImages', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetPublicUrl.mockReturnValue({ data: { publicUrl: 'https://storage.example.com/file.jpg' } });
+    mockImageCompression.mockImplementation(async (file: File) => {
+      return new File([new Uint8Array(50 * 1024)], file.name, { type: 'image/webp' });
+    });
     // Default: successful PUT to pre-signed URL
     mockFetch.mockResolvedValue({ ok: true, status: 200 });
   });
@@ -197,6 +205,108 @@ describe('useListingImages', () => {
         (u) => u.status === 'error' || u.status === 'finalize_failed',
       );
       expect(errorEntry).toBeUndefined();
+    });
+  });
+
+  // --- Image compression & upload parameters ---
+
+  describe('image compression & upload options', () => {
+    it('compresses large images with 1920px max dimension, 1MB target, useWebWorker=true and sends post-compression MIME/size to upload-url', async () => {
+      mockApiGet.mockResolvedValue([]);
+      const urlResp = fakeUploadUrlResponse();
+      mockApiPost.mockResolvedValueOnce(urlResp).mockResolvedValueOnce({ id: 'img-1' });
+
+      const { result } = renderHook(() => useListingImages('listing-1'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      // 500 KB image > 200 KB threshold
+      const file = fakeFile('large.jpg', 500);
+
+      await act(async () => {
+        await result.current.uploadImage(file);
+      });
+
+      // Verify browser-image-compression options (1920px max dimension, 1MB target, Web Worker)
+      expect(mockImageCompression).toHaveBeenCalledTimes(1);
+      expect(mockImageCompression).toHaveBeenCalledWith(
+        file,
+        expect.objectContaining({
+          maxSizeMB: 1,
+          maxWidthOrHeight: 1920,
+          useWebWorker: true,
+        }),
+      );
+
+      // Verify POST /upload-url receives compressed file's MIME type and size (50 KB = 51200 bytes)
+      expect(mockApiPost).toHaveBeenNthCalledWith(
+        1,
+        '/api/listings/listing-1/images/upload-url',
+        expect.objectContaining({
+          fileName: 'large.jpg',
+          contentType: 'image/webp',
+          sizeBytes: 51200,
+        }),
+      );
+    });
+
+    it('skips compression for small images below 200KB threshold (prevents upscaling/unnecessary work)', async () => {
+      mockApiGet.mockResolvedValue([]);
+      const urlResp = fakeUploadUrlResponse();
+      mockApiPost.mockResolvedValueOnce(urlResp).mockResolvedValueOnce({ id: 'img-1' });
+
+      const { result } = renderHook(() => useListingImages('listing-1'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      // 100 KB image <= 200 KB threshold
+      const smallFile = fakeFile('small.jpg', 100);
+
+      await act(async () => {
+        await result.current.uploadImage(smallFile);
+      });
+
+      // Compression should NOT run
+      expect(mockImageCompression).not.toHaveBeenCalled();
+
+      // POST /upload-url should receive original file MIME and size
+      expect(mockApiPost).toHaveBeenNthCalledWith(
+        1,
+        '/api/listings/listing-1/images/upload-url',
+        expect.objectContaining({
+          fileName: 'small.jpg',
+          contentType: 'image/jpeg',
+          sizeBytes: 102400,
+        }),
+      );
+    });
+
+    it('PUTs bytes using exact requiredHeaders returned from upload-url response', async () => {
+      mockApiGet.mockResolvedValue([]);
+      const customHeaders = {
+        'Content-Type': 'image/webp',
+        'x-amz-meta-uploader': 'broker-123',
+      };
+      const urlResp = fakeUploadUrlResponse({ requiredHeaders: customHeaders });
+      mockApiPost.mockResolvedValueOnce(urlResp).mockResolvedValueOnce({ id: 'img-1' });
+
+      const { result } = renderHook(() => useListingImages('listing-1'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      await act(async () => {
+        await result.current.uploadImage(fakeFile('photo.jpg', 100));
+      });
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [, putInit] = mockFetch.mock.calls[0] as [string, RequestInit & { headers: Record<string, string> }];
+      expect(putInit.headers).toEqual(customHeaders);
     });
   });
 

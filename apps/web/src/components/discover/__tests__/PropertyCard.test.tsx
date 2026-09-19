@@ -1399,4 +1399,15 @@ describe('PropertyCard', () => {
       expect(screen.queryByTestId('simulated-listing-drawer')).not.toBeInTheDocument();
     });
   });
+
+  describe('image loading hints', () => {
+    it('applies loading="lazy" and decoding="async" browser hints to the primary image', () => {
+      const listing = makeListing({ primaryImageUrl: 'https://example.com/photo.jpg' });
+      const { container } = renderCard({ listing });
+      const img = container.querySelector('img');
+      expect(img).not.toBeNull();
+      expect(img).toHaveAttribute('loading', 'lazy');
+      expect(img).toHaveAttribute('decoding', 'async');
+    });
+  });
 });

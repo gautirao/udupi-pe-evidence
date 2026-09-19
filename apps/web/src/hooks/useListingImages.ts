@@ -249,12 +249,13 @@ export function useListingImages(listingId: string | undefined) {
         try {
           const compressed = await imageCompression(file, {
             maxSizeMB: COMPRESSION_MAX_SIZE_MB,
+            maxWidthOrHeight: 1920,
             useWebWorker: true,
           });
           originalSize = file.size;
           compressedSize = compressed.size;
           // Keep original filename on the File object for display
-          fileToUpload = new File([compressed], file.name, { type: compressed.type });
+          fileToUpload = new File([compressed], file.name, { type: compressed.type || file.type });
         } catch {
           // If compression fails, fall back to original file
           fileToUpload = file;
