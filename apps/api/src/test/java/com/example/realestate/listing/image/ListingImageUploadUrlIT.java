@@ -3,6 +3,7 @@ package com.example.realestate.listing.image;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
+import com.example.realestate.listing.storage.ListingImageStorage;
 import com.example.realestate.listing.storage.SupabaseStorageService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -136,12 +137,12 @@ class ListingImageUploadUrlIT {
     private ListingRepository listingRepository;
 
     /**
-     * Mock replaces the real SupabaseStorageService so createSignedUploadUrl returns a
-     * deterministic URL without a live Supabase call. The DB ownership path (controller →
+     * Mock replaces the storage service so createUploadTarget returns a
+     * deterministic URL without a live storage call. The DB ownership path (controller →
      * ListingWorkflowService → ListingRepository → Postgres) is fully real.
      */
     @MockitoBean
-    private SupabaseStorageService storageService;
+    private ListingImageStorage storageService;
 
     // -------------------------------------------------------------------------
     // Stable test UUIDs — embed "1686" to identify as upload-url IT fixtures

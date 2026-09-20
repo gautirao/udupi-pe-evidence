@@ -87,7 +87,7 @@ public class R2StorageService implements ListingImageStorage {
             LocalDevStorageService localDevStorageService,
             S3Client s3Client,
             S3Presigner s3Presigner) {
-        this.configuredProvider = configuredProvider != null ? configuredProvider.trim().toLowerCase() : "supabase";
+        this.configuredProvider = configuredProvider != null ? configuredProvider.trim().toLowerCase() : "r2";
         this.accountId = accountId != null ? accountId.trim() : "";
         this.accessKeyId = accessKeyId != null ? accessKeyId.trim() : "";
         this.secretAccessKey = secretAccessKey != null ? secretAccessKey.trim() : "";

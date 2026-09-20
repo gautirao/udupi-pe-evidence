@@ -83,7 +83,7 @@ class R2StorageServiceTest {
     }
 
     @Test
-    void validate_disabledWhenRequiredConfigMissing() {
+    void validate_disabledWhenRequiredConfigMissing_failsClosedWithoutCrashing() {
         R2StorageService service = new R2StorageService(
                 "r2",
                 "",
@@ -98,6 +98,35 @@ class R2StorageServiceTest {
         );
         assertThat(service.isEnabled()).isFalse();
         assertThat(service.getStatusReason()).isEqualTo("missing-credentials");
+        // Verify local test fallback behavior: functions don't crash
+        given(localDevStorageService.isEnabled()).willReturn(false);
+        assertThat(service.createUploadTarget("listing-images", "listings/1/photo.jpg", "image/jpeg")).isEmpty();
+        assertThat(service.inspect("listings/1/photo.jpg").exists()).isFalse();
+        service.deleteObjectBestEffort("listings/1/photo.jpg");
+    }
+
+    @Test
+    void createUploadTarget_whenUnconfiguredAndLocalDevEnabled_delegatesToLocalDevStorage() {
+        R2StorageService unconfiguredService = new R2StorageService(
+                "r2",
+                "",
+                "",
+                "",
+                "listing-images",
+                "https://img.propertysignal.in",
+                300,
+                localDevStorageService,
+                null,
+                null
+        );
+        given(localDevStorageService.isEnabled()).willReturn(true);
+        given(localDevStorageService.createSignedUploadUrl("listing-images", "listings/1/photo.jpg"))
+                .willReturn(Optional.of("http://localhost:8085/api/dev/local-storage/upload/listing-images/listings/1/photo.jpg"));
+
+        Optional<UploadTarget> targetOpt = unconfiguredService.createUploadTarget("listing-images", "listings/1/photo.jpg", "image/jpeg");
+
+        assertThat(targetOpt).isPresent();
+        assertThat(targetOpt.get().signedUrl()).isEqualTo("http://localhost:8085/api/dev/local-storage/upload/listing-images/listings/1/photo.jpg");
     }
 
     @Test

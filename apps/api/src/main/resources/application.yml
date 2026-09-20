@@ -170,7 +170,7 @@ listing:
       enabled: true
   images:
     storage:
-      provider: ${LISTING_IMAGE_STORAGE_PROVIDER:supabase}
+      provider: ${LISTING_IMAGES_STORAGE_PROVIDER:${LISTING_IMAGE_STORAGE_PROVIDER:supabase}}
     upload-url:
       # Per-user in-memory Bucket4j rate limit for POST /api/listings/{id}/images/upload-url (#1699).
       # Local/in-memory/per-instance only — not distributed across app instances.
@@ -202,12 +202,12 @@ supabase:
     upload-url-ttl-seconds: 300
 
 # Cloudflare R2 Storage — used by R2StorageService for S3-compatible image storage (#2630).
-# Set LISTING_IMAGE_STORAGE_PROVIDER=r2 + R2_ACCOUNT_ID + R2_ACCESS_KEY_ID + R2_SECRET_ACCESS_KEY + R2_LISTING_IMAGE_BUCKET + R2_LISTING_IMAGE_PUBLIC_BASE_URL before enabling.
+# Set LISTING_IMAGES_STORAGE_PROVIDER=r2 + R2_ACCOUNT_ID + R2_ACCESS_KEY_ID + R2_SECRET_ACCESS_KEY + R2_BUCKET + R2_LISTING_IMAGE_PUBLIC_BASE_URL before enabling.
 r2:
   account-id: ${R2_ACCOUNT_ID:}
   access-key-id: ${R2_ACCESS_KEY_ID:}
   secret-access-key: ${R2_SECRET_ACCESS_KEY:}
-  listing-image-bucket: ${R2_LISTING_IMAGE_BUCKET:listing-images}
+  listing-image-bucket: ${R2_LISTING_IMAGE_BUCKET:${R2_BUCKET:listing-images}}
   public-base-url: ${R2_LISTING_IMAGE_PUBLIC_BASE_URL:https://img.propertysignal.in}
   upload-url-ttl-seconds: 300
 

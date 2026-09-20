@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -15,7 +16,7 @@ import java.util.Optional;
  * {@link ListingImageStorage} is injected.
  *
  * <p>Reads configuration property {@code listing.images.storage.provider}
- * (environment variable {@code LISTING_IMAGE_STORAGE_PROVIDER}, default {@code supabase}).
+ * (environment variable {@code LISTING_IMAGES_STORAGE_PROVIDER}, default {@code supabase}).
  * When {@link LocalDevStorageService#isEnabled()} is true in local dev worktrees,
  * local storage routing takes precedence.
  */
@@ -29,6 +30,47 @@ public class ListingImageStorageRouter implements ListingImageStorage {
     private final R2StorageService r2StorageService;
     private final LocalDevStorageService localDevStorageService;
     private final String configuredProvider;
+
+    private final ListingImageStorage localDevAdapter = new ListingImageStorage() {
+        @Override
+        public String getPublicUrl(String storageBucket, String storagePath) {
+            if (storagePath == null || storagePath.isBlank()) {
+                return "";
+            }
+            if (storagePath.startsWith("external:")) {
+                return storagePath.substring("external:".length());
+            }
+            return localDevStorageService != null ? localDevStorageService.getPublicUrl(storageBucket, storagePath).orElse("") : "";
+        }
+
+        @Override
+        public Optional<UploadTarget> createUploadTarget(String storageBucket, String storagePath, String contentType) {
+            if (localDevStorageService == null) {
+                return Optional.empty();
+            }
+            return localDevStorageService.createSignedUploadUrl(storageBucket, storagePath)
+                    .map(url -> new UploadTarget(url, storagePath, null, Map.of()));
+        }
+
+        @Override
+        public void deleteObjectBestEffort(String storagePath) {
+            // Local dev storage best-effort delete — no-op
+        }
+
+        @Override
+        public ImageObjectMetadata inspect(String storagePath) {
+            if (storagePath == null || storagePath.isBlank()) {
+                return ImageObjectMetadata.notFound();
+            }
+            if (storagePath.startsWith("external:")) {
+                return new ImageObjectMetadata(true, null, null);
+            }
+            if (localDevStorageService != null && localDevStorageService.isEnabled()) {
+                return new ImageObjectMetadata(true, null, null);
+            }
+            return ImageObjectMetadata.notFound();
+        }
+    };
 
     public ListingImageStorageRouter(
             SupabaseStorageService supabaseStorageService,
@@ -55,8 +97,10 @@ public class ListingImageStorageRouter implements ListingImageStorage {
         if ("supabase".equalsIgnoreCase(configuredProvider)) {
             return supabaseStorageService;
         }
-        log.warn("Unknown listing image storage provider '{}', falling back to Supabase", configuredProvider);
-        return supabaseStorageService;
+        if ("local".equalsIgnoreCase(configuredProvider) || "local-dev".equalsIgnoreCase(configuredProvider) || "localdev".equalsIgnoreCase(configuredProvider)) {
+            return localDevAdapter;
+        }
+        throw new IllegalArgumentException("Unknown listing image storage provider: " + configuredProvider);
     }
 
     @Override
