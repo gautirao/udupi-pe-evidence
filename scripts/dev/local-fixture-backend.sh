@@ -343,6 +343,10 @@ echo ">>> Starting Spring Boot against the local fixture (hosted JWT validation 
 # at a high ceiling removes the harness capacity artefact while leaving the filter wired.
 # Still overridable from the caller's environment, so a developer testing the limiter can export a low
 # value and get the production behaviour back.
+# SPRING_TASK_SCHEDULING_ENABLED=false (#2569, set further below alongside SPRING_FLYWAY_ENABLED):
+# background @Scheduled jobs (rollups, outbox pollers, retention jobs) have no business running
+# against this disposable local fixture — see SchedulingSuppressionConfig (issue #2114) for the
+# mechanism this actually wires into.
 RATE_LIMIT_DISCOVER_REQUESTS_PER_MINUTE="${RATE_LIMIT_DISCOVER_REQUESTS_PER_MINUTE:-6000}" \
 SKIP_BACKEND_ENV_LOAD=true \
 SUPABASE_DB_HOST=localhost \
@@ -353,6 +357,7 @@ SUPABASE_DB_PASSWORD="$PG_TEST_PASSWORD" \
 SPRING_DATASOURCE_HIKARI_DATA_SOURCE_PROPERTIES_SSL=false \
 SPRING_DATASOURCE_HIKARI_DATA_SOURCE_PROPERTIES_SSLMODE=disable \
 SPRING_FLYWAY_ENABLED=false \
+SPRING_TASK_SCHEDULING_ENABLED=false \
 SUPABASE_PROJECT_REF="$SUPABASE_PROJECT_REF" \
 AI_API_KEY="${AI_API_KEY:-}" \
 exec "${REPO_ROOT}/apps/api/run-local.sh"

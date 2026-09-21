@@ -150,6 +150,11 @@ new_runlocal_sandbox() {
   mkdir -p "$sb/apps/api"
   cp "$REPO_ROOT/apps/api/run-local.sh" "$sb/apps/api/run-local.sh"
   chmod +x "$sb/apps/api/run-local.sh"
+  # run-local.sh (#2569) resolves REPO_ROOT as two directories up from its own
+  # location and sources scripts/dev/lib/remote-db-safety.sh from there —
+  # mirror that same layout inside the sandbox so it sources the real file.
+  mkdir -p "$sb/scripts/dev/lib"
+  cp "$REPO_ROOT/scripts/dev/lib/remote-db-safety.sh" "$sb/scripts/dev/lib/remote-db-safety.sh"
   echo "$sb"
 }
 
@@ -224,7 +229,7 @@ VALID_LOGIN_JSON='{"access_token":"mock-access-token-secret","user":{"id":"11111
 
 SB1="$(new_runlocal_sandbox)"
 cat > "$SB1/apps/api/.env" <<'EOF'
-SUPABASE_DB_HOST=fromenv-host
+SUPABASE_DB_HOST=127.0.0.1
 SUPABASE_DB_USER=fromenv-user
 SUPABASE_DB_PASSWORD=fromenv-pass-secret
 SUPABASE_PROJECT_REF=fromenv-ref
@@ -237,7 +242,11 @@ RC1=$?
 CAP1="$(cat "$MVN_CAP1" 2>/dev/null || true)"
 
 if [[ $RC1 -eq 0 ]]; then ok "T1: run-local.sh (SKIP_BACKEND_ENV_LOAD unset) exits 0"; else not_ok "T1: run-local.sh (SKIP_BACKEND_ENV_LOAD unset) exits 0 (rc=$RC1)"; fi
-assert_contains "T1: apps/api/.env values are sourced and passed to mvn (AC1)" "$CAP1" "SUPABASE_DB_HOST=fromenv-host"
+# SUPABASE_DB_HOST is 127.0.0.1 (loopback), not an arbitrary placeholder:
+# #2569's safety guard now fails closed on a non-loopback host, and this test
+# exists to prove apps/api/.env values are sourced at all, not to exercise
+# that guard.
+assert_contains "T1: apps/api/.env values are sourced and passed to mvn (AC1)" "$CAP1" "SUPABASE_DB_HOST=127.0.0.1"
 
 # ===========================================================================
 # T2 — SKIP_BACKEND_ENV_LOAD=true preserves caller-exported overrides
@@ -255,7 +264,7 @@ MVN_CAP2="$(mktemp)"
 LOG2="$(mktemp)"
 run_runlocal "$SB2" \
   SKIP_BACKEND_ENV_LOAD=true \
-  SUPABASE_DB_HOST=preset-host \
+  SUPABASE_DB_HOST=127.0.0.1 \
   SUPABASE_DB_USER=preset-user \
   SUPABASE_DB_PASSWORD=preset-pass-secret \
   SUPABASE_PROJECT_REF=preset-ref \
@@ -265,7 +274,9 @@ RC2=$?
 CAP2="$(cat "$MVN_CAP2" 2>/dev/null || true)"
 
 if [[ $RC2 -eq 0 ]]; then ok "T2: run-local.sh (SKIP_BACKEND_ENV_LOAD=true) exits 0"; else not_ok "T2: run-local.sh (SKIP_BACKEND_ENV_LOAD=true) exits 0 (rc=$RC2)"; fi
-assert_contains "T2: caller-exported SUPABASE_DB_HOST survives (AC2)" "$CAP2" "SUPABASE_DB_HOST=preset-host"
+# SUPABASE_DB_HOST is 127.0.0.1 (loopback) for the same #2569 reason as T1
+# above — this test's own subject is override precedence, not the guard.
+assert_contains "T2: caller-exported SUPABASE_DB_HOST survives (AC2)" "$CAP2" "SUPABASE_DB_HOST=127.0.0.1"
 assert_not_contains "T2: apps/api/.env is NOT sourced when skipping" "$CAP2" "fromenv-host-should-not-be-used"
 
 # ===========================================================================

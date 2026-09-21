@@ -192,8 +192,19 @@ new_runlocal_sandbox() {
   mkdir -p "$sb/apps/api"
   cp "$REPO_ROOT/apps/api/run-local.sh" "$sb/apps/api/run-local.sh"
   chmod +x "$sb/apps/api/run-local.sh"
+  # run-local.sh (#2569) resolves REPO_ROOT as two directories up from its own
+  # location and sources scripts/dev/lib/remote-db-safety.sh from there —
+  # mirror that same layout inside the sandbox so it sources the real file.
+  mkdir -p "$sb/scripts/dev/lib"
+  cp "$REPO_ROOT/scripts/dev/lib/remote-db-safety.sh" "$sb/scripts/dev/lib/remote-db-safety.sh"
+  # SUPABASE_DB_HOST is 127.0.0.1 (loopback), not an arbitrary placeholder:
+  # #2569's safety guard now fails closed on a non-loopback host, and this
+  # fixture exists to test SERVER_PORT/CORS_ALLOWED_ORIGINS precedence, not
+  # that guard — 127.0.0.1 keeps this test passing through the guard while
+  # remaining an obvious, harmless placeholder (nothing here ever actually
+  # connects to it).
   cat > "$sb/apps/api/.env" <<'ENVEOF'
-SUPABASE_DB_HOST=fromenv-host
+SUPABASE_DB_HOST=127.0.0.1
 SUPABASE_DB_USER=fromenv-user
 SUPABASE_DB_PASSWORD=fromenv-pass-secret
 SUPABASE_PROJECT_REF=fromenv-ref
