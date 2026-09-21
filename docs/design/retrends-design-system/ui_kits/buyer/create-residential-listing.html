@@ -16,6 +16,12 @@
   textarea { font-family: var(--font-sans); }
   @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .cl-poi-modes { scrollbar-width: none; }
+  .cl-poi-modes::-webkit-scrollbar { display: none; }
+  @media (max-width: 1080px){
+    .cl-poi-modes { gap: 16px !important; flex-wrap: wrap !important; row-gap: 0 !important; }
+    .cl-poi-modes > button { font-size: 12.5px !important; }
+  }
   @media (max-width: 920px){
     .cl-edit-grid, .cl-rev-grid { grid-template-columns: 1fr !important; }
     .cl-photo-grid { grid-template-columns: repeat(3,1fr) !important; }
@@ -24,6 +30,10 @@
   @media (max-width: 560px){
     .cl-loc-search { flex-direction: column !important; align-items: stretch !important; }
     .cl-loc-search > button { width: 100% !important; }
+    .cl-poi-modes > button { font-size: 12px !important; }
+    .cl-poi-row { flex-wrap: wrap !important; }
+    .cl-poi-actions { width: 100% !important; padding-left: 39px; }
+    .cl-area-row > div { width: 108px !important; }
   }
 </style>
 </head>
@@ -66,6 +76,7 @@ const I = {
   camera:`<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>`,
   navigation:`<polygon points="3 11 22 2 13 21 11 13"/>`,
   search:`<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>`,
+  plus:`<path d="M12 5v14M5 12h14"/>`,
 };
 const ICON = { 'bed':I.bed, 'bath':I.bath, 'maximize':I.maximize, 'building':I.building, 'route':I.route, 'map-pin':I.pin, 'layers':I.layers };
 
@@ -92,8 +103,10 @@ const EDITLINK = 'font-size:12px;font-weight:600;color:var(--navy-800);backgroun
 class CreateResidentialListing extends React.Component {
   constructor(props){
     super(props);
-    this.state = { ptype:'apartment', purpose:'sale', v:{ areaUnit:'Sq.ft' }, moreOpen:false, photos:0, coverPhoto:0, nearby:[], poiDraft:{}, mode:'edit', published:false, desc:'', descTouched:false, aiState:'idle', tone:null, descUsed:false, locQuery:'', locStatus:'empty', locResults:[], resolved:null, locSource:null, geo:'idle', pinDone:false, pickerOpen:false, pinPos:{x:50,y:44} };
+    this.state = { ptype:'apartment', purpose:'sale', v:{ areaUnit:'Sq.ft' }, moreOpen:false, photos:0, coverPhoto:0, suggested:[], approved:[], poiTab:'suggested', poiFetch:'idle', poiForce:null, poiJustAdded:null, poiDraft:{}, draftSaved:false, mode:'edit', published:false, desc:'', descTouched:false, aiState:'idle', tone:null, descUsed:false, locQuery:'', locStatus:'empty', locResults:[], resolved:null, locSource:null, geo:'idle', pinDone:false, pickerOpen:false, pinPos:{x:50,y:44} };
   }
+
+  componentDidMount(){ try{ window.__CL=this; }catch(e){} }
 
   set(n,val){ this.setState(s=>({ v:{...s.v,[n]:val} })); }
   toggleVal(n){ this.setState(s=>({ v:{...s.v,[n]:!s.v[n]} })); }
@@ -111,6 +124,8 @@ class CreateResidentialListing extends React.Component {
   chips(n,vals,fmt){ const cur=this.state.v[n]; return vals.map(val=>({ key:val, label:fmt?fmt(val):val, onClick:()=>this.set(n, cur===val?undefined:val), style:this.chipStyle(cur===val) })); }
   multi(n,vals){ const cur=this.state.v[n]||[]; return vals.map(val=>({ key:val, label:val, onClick:()=>this.toggleMulti(n,val), style:this.chipStyle(cur.includes(val)) })); }
   seg(n,vals){ const cur=this.state.v[n]; return vals.map(val=>({ key:val, label:val, onClick:()=>this.set(n,val), style:this.segStyle(cur===val) })); }
+  areaChips(field,vals){ const cur=this.num(this.state.v[field]); return vals.map(val=>({ key:val, label:val.toLocaleString('en-IN')+' sqft', onClick:()=>this.set(field, cur===val?'':String(val)), style:this.chipStyle(cur===val) })); }
+  poiTabStyle(sel){ const a=this.accent(); return 'display:inline-flex;align-items:center;gap:7px;padding:14px 2px;margin-bottom:-1px;background:transparent;border:none;border-bottom:2px solid '+(sel?a.line:'transparent')+';font-family:var(--font-sans);font-size:13px;font-weight:'+(sel?'700':'600')+';color:'+(sel?a.fg:'var(--text-muted)')+';cursor:pointer;white-space:nowrap;'; }
 
   num(x){ return parseInt(String(x||'').replace(/[^0-9]/g,''))||0; }
   fmtINR(raw){ const n=this.num(raw); if(!n) return ''; if(n>=1e7) return '₹'+(n/1e7).toFixed(2).replace(/\.?0+$/,'')+' Cr'; if(n>=1e5) return '₹'+(n/1e5).toFixed(2).replace(/\.?0+$/,'')+' L'; return '₹'+n.toLocaleString('en-IN'); }
@@ -142,22 +157,41 @@ class CreateResidentialListing extends React.Component {
   }
   generate(tone){ this.setState({ aiState:'generating' }); clearTimeout(this._t); this._t=setTimeout(()=>{ this.setState({ desc:this.buildDesc(tone), aiState:'ready', tone, descTouched:false, descUsed:false }); }, 650); }
 
-  deriveNearby(){
-    const v=this.state.v; const base=[
-      {name:'Neighbourhood school', category:'School', dist:'0.8 km'},
-      {name:'Multi-speciality hospital', category:'Hospital / clinic', dist:'1.2 km'},
-      {name:'Metro / bus stop', category:'Transport', dist:'0.6 km'},
-      {name:'Local market', category:'Market / shopping', dist:'0.5 km'},
-      {name:'Cafes & restaurants', category:'Restaurant / cafe', dist:'0.4 km'},
-      {name:'Temple / landmark', category:'Temple / landmark', dist:'0.9 km'}
-    ];
-    if((v.views||[]).some(x=>/beach|sea|river/i.test(x))) base.push({name:'Waterfront / coast', category:'Beach / river / coast', dist:'1.6 km'});
-    return base.map((b,i)=>({ ...b, id:'d'+i, hidden:false, manual:false }));
+  /* ---------- nearby POI: provider suggestions, broker curation, manual entry ---------- */
+  deriveSuggestions(res){ const r=res||this.state.resolved; const a=((r&&r.publicLoc)?r.publicLoc.split(',')[0]:'Local').trim();
+    return [
+      { name:a+' Public School', category:'School', dist:'0.8 km' },
+      { name:a+' Multi-speciality Hospital', category:'Hospital / clinic', dist:'1.2 km' },
+      { name:a+' Bus Stand', category:'Transport', dist:'0.6 km' },
+      { name:a+' Main Market', category:'Market / shopping', dist:'0.5 km' },
+      { name:'Cafes on '+a+' Main Road', category:'Restaurant / cafe', dist:'0.4 km' },
+      { name:a+' Temple', category:'Temple / landmark', dist:'0.9 km' }
+    ].map((b,i)=>({ ...b, id:'s'+i, manual:false }));
   }
-  toggleNearbyHide(id){ this.setState(s=>({ nearby:s.nearby.map(n=>n.id===id?{...n,hidden:!n.hidden}:n) })); }
+  fetchPoi(retry){ clearTimeout(this._poi); this.setState({ poiFetch: retry?'retrying':'loading', poiJustAdded:null }); this._poi=setTimeout(()=>{ const f=this.state.poiForce; if(f==='error'){ this.setState({ poiFetch:'error', suggested:[] }); return; } if(f==='empty'){ this.setState({ poiFetch:'empty', suggested:[] }); return; } const list=this.deriveSuggestions().filter(x=>!(this.state.approved||[]).some(a=>a.name===x.name)); this.setState({ poiFetch:list.length?'ready':'empty', suggested:list }); }, retry?1100:900); }
+  approvePoi(id){ this.setState(s=>{ const it=(s.suggested||[]).find(x=>x.id===id); if(!it) return {}; return { suggested:s.suggested.filter(x=>x.id!==id), approved:[...s.approved, {...it, manual:false}], poiJustAdded:null }; }); }
+  dismissPoi(id){ this.setState(s=>({ suggested:s.suggested.filter(x=>x.id!==id) })); }
+  removeApproved(id){ this.setState(s=>({ approved:s.approved.filter(x=>x.id!==id), poiJustAdded:null })); }
+  setPoiTab(t){ this.setState({ poiTab:t }); }
   setPoi(k,val){ this.setState(s=>({ poiDraft:{...(s.poiDraft||{}), [k]:val} })); }
-  addPoi(){ const d=this.state.poiDraft||{}; if(!d.name) return; this.setState(s=>({ nearby:[...s.nearby, { id:'m'+Date.now(), name:d.name, category:d.cat||'Other', dist:d.note||'', hidden:false, manual:true }], poiDraft:{} })); }
-  movePin(){ this.setState(s=>({ nearby:[ ...this.deriveNearby(), ...s.nearby.filter(n=>n.manual) ] })); }
+  addPoi(){ const d=this.state.poiDraft||{}; const nm=(d.name||'').trim(); if(!nm) return; const raw=(d.dist||'').trim(); const unit=d.unit||'km'; const ok=/^\d*\.?\d+$/.test(raw) && parseFloat(raw)>0; if(raw && !ok) return; const dist = ok ? (parseFloat(raw)+' '+unit) : ''; this.setState(s=>({ approved:[...s.approved, { id:'m'+Date.now(), name:nm, category:d.cat||'Other', dist, manual:true }], poiDraft:{ unit }, poiTab:'approved', poiJustAdded:nm })); }
+  /* prototype-only: lets reviewers walk every POI state without a live provider */
+  demoLoc(){ return this.state.resolved || { id:'demo', line:'Manipal, Udupi 576104', sub:'Locality \u00b7 Udupi', publicLoc:'Manipal' }; }
+  poiDemo(kind){ const r=this.demoLoc(); const full=this.deriveSuggestions(r);
+    const base={ resolved:r, locSource:'search', locStatus:'resolved', locQuery:((this.state.locQuery||'').trim()||r.publicLoc), pickerOpen:false, poiForce:null, poiJustAdded:null, v:{...this.state.v, locality:r.publicLoc} };
+    const M={
+      unpinned:{ pinDone:false, poiFetch:'idle', suggested:[], approved:[], poiTab:'suggested' },
+      loading:{ pinDone:true, poiFetch:'loading', suggested:[], poiTab:'suggested' },
+      ready:{ pinDone:true, poiFetch:'ready', suggested:full, poiTab:'suggested' },
+      error:{ pinDone:true, poiFetch:'error', suggested:[], poiTab:'suggested' },
+      retrying:{ pinDone:true, poiFetch:'retrying', suggested:[], poiTab:'suggested' },
+      empty:{ pinDone:true, poiFetch:'empty', suggested:[], approved:[], poiTab:'suggested' },
+      approvedEmpty:{ pinDone:true, poiFetch:'ready', suggested:full, approved:[], poiTab:'approved' },
+      approved:{ pinDone:true, poiFetch:'ready', suggested:full.slice(2), approved:full.slice(0,2), poiTab:'approved' },
+      manual:{ pinDone:true, poiFetch:'ready', suggested:full, poiTab:'manual' }
+    };
+    if(M[kind]) this.setState({ ...base, ...M[kind] });
+  }
 
   /* ---------- location resolution + map-pin flow ---------- */
   hashStr(x){ let h=0; for(let i=0;i<x.length;i++){ h=(h*31+x.charCodeAt(i))|0; } return h; }
@@ -166,16 +200,16 @@ class CreateResidentialListing extends React.Component {
     { id:'r2', line:area+' Metro Station, '+city, sub:'Transit stop \u00b7 '+city, publicLoc:area+', '+city },
     { id:'r3', line:area+' Main Road, '+city, sub:'Street \u00b7 '+city, publicLoc:area+', '+city }
   ]; }
-  onLocQuery(e){ const val=e.target.value; this.setState(s=>({ locQuery:val, locStatus: val.trim()?'typed':'empty', resolved:null, locSource:null, pinDone:false, pickerOpen:false, nearby:[], v:{...s.v, locality:''} })); }
+  onLocQuery(e){ const val=e.target.value; this.setState(s=>({ locQuery:val, locStatus: val.trim()?'typed':'empty', resolved:null, locSource:null, pinDone:false, pickerOpen:false, suggested:[], approved:[], poiFetch:'idle', poiTab:'suggested', v:{...s.v, locality:''} })); }
   findLocation(){ const q=(this.state.locQuery||'').trim(); if(!q) return; this.setState({ locStatus:'searching', locResults:[], resolved:null, pinDone:false, geo:'idle' }); clearTimeout(this._loc); this._loc=setTimeout(()=>{ const ok=q.replace(/[^a-z0-9]/gi,'').length>=3 && /[a-z]/i.test(q); this.setState({ locStatus: ok?'results':'notfound', locResults: ok?this.mockResults(q):[] }); }, 750); }
   selectResult(r){ this.setState(s=>({ locStatus:'resolved', resolved:{...r}, locSource:'search', pinDone:false, pickerOpen:false, v:{...s.v, locality:r.publicLoc} })); }
-  changeLocation(){ this.setState(s=>({ locStatus:(s.locQuery||'').trim()?'typed':'empty', resolved:null, locSource:null, pinDone:false, pickerOpen:false, nearby:[], v:{...s.v, locality:''} })); }
+  changeLocation(){ this.setState(s=>({ locStatus:(s.locQuery||'').trim()?'typed':'empty', resolved:null, locSource:null, pinDone:false, pickerOpen:false, suggested:[], approved:[], poiFetch:'idle', poiTab:'suggested', v:{...s.v, locality:''} })); }
   useBrowserLoc(){ this.setState({ geo:'prompt' }); }
   denyGeo(){ this.setState(s=>({ geo:'idle', locStatus:(s.locQuery||'').trim()?'typed':'empty' })); }
   allowGeo(){ this.setState({ geo:'locating', locStatus:'searching', locResults:[] }); clearTimeout(this._geo); this._geo=setTimeout(()=>{ const r={ id:'geo', line:'Near MG Road, Bengaluru 560001', sub:'Your current location', publicLoc:'MG Road, Bengaluru' }; this.setState(s=>({ geo:'done', locStatus:'resolved', resolved:r, locSource:'browser', pinDone:false, v:{...s.v, locality:r.publicLoc} })); }, 900); }
   openPicker(){ if(!this.state.resolved) return; this.setState({ pickerOpen:true }); }
   cancelPicker(){ this.setState({ pickerOpen:false }); }
-  confirmPin(){ this.setState(s=>({ pickerOpen:false, pinDone:true, nearby: s.nearby.length? s.nearby : this.deriveNearby() })); }
+  confirmPin(){ this.setState({ pickerOpen:false, pinDone:true }, ()=>{ if(this.state.poiFetch==='idle'||!(this.state.suggested||[]).length) this.fetchPoi(false); }); }
   onPinMove(e){ const box=e.currentTarget.getBoundingClientRect(); let x=((e.clientX-box.left)/box.width)*100; let y=((e.clientY-box.top)/box.height)*100; x=Math.max(6,Math.min(94,x)); y=Math.max(12,Math.min(88,y)); this.setState({ pinPos:{x,y} }); }
 
   /* ---------- small render helpers ---------- */
@@ -195,7 +229,7 @@ class CreateResidentialListing extends React.Component {
   ); }
 
   rv(){
-    const v=this.state.v; const { ptype, purpose, photos, aiState, desc, moreOpen, descUsed, mode, coverPhoto, nearby, poiDraft, published, locQuery, locStatus, locResults, resolved, locSource, geo, pinDone, pickerOpen, pinPos } = this.state;
+    const v=this.state.v; const { ptype, purpose, photos, aiState, desc, moreOpen, descUsed, mode, coverPhoto, suggested, approved, poiTab, poiFetch, poiJustAdded, poiDraft, draftSaved, published, locQuery, locStatus, locResults, resolved, locSource, geo, pinDone, pickerOpen, pinPos } = this.state;
     const pinned = pinDone && !!resolved;
     const isApt=ptype==='apartment', isHouse=ptype==='house', isVilla=ptype==='villa', isPlot=ptype==='plot';
     const isHV=isHouse||isVilla; const isResidence=isApt||isHV; const isSale=purpose==='sale', isRent=purpose==='rent';
@@ -205,6 +239,15 @@ class CreateResidentialListing extends React.Component {
     const areaField = isApt?'carpet':(isHV?'builtup':'plotarea');
     vv.areaPrimary = v[areaField] ?? '';
     h.areaPrimary = e=>this.set(areaField, e.target.value);
+    const AREA_STEPS=[600,800,1000,1200,1500,2000], PLOT_STEPS=[1200,1800,2400,3000,4000,6000];
+    const carpetChips=this.areaChips('carpet',AREA_STEPS), builtupChips=this.areaChips('builtup',AREA_STEPS), plotAreaChips=this.areaChips('plotarea',PLOT_STEPS);
+    const carpetNum=this.num(v.carpet), builtupNum=this.num(v.builtup), plotNum=this.num(v.plotarea);
+    const areaRatio=(carpetNum&&builtupNum)?builtupNum/carpetNum:0;
+    const areaRatioNote = !areaRatio ? '' : (areaRatio>=1 ? ('Built-up is '+(Math.round(areaRatio*100)/100)+'\u00d7 carpet area') : 'Built-up area is normally larger than carpet area \u2014 check both values.');
+    const areaRatioColor = (areaRatio&&areaRatio<1) ? 'var(--ochre-600)' : 'var(--text-muted)';
+    const areaCustom=(n,steps)=>(n&&steps.indexOf(n)<0)?('Custom \u00b7 '+n.toLocaleString('en-IN')+' sq.ft'):'';
+    const carpetCustom=areaCustom(carpetNum,AREA_STEPS), builtupCustom=areaCustom(builtupNum,AREA_STEPS), plotCustom=areaCustom(plotNum,PLOT_STEPS);
+    const reqAreaOk = isPlot ? !!plotNum : !!builtupNum;
 
     const ts={}; ['apartment','house','villa','plot'].forEach(t=>ts[t]={ onClick:()=>this.setState({ptype:t}), style:this.cardStyle(ptype===t) });
     const ps={ sale:{onClick:()=>this.setState({purpose:'sale'}),style:this.segStyle(isSale)}, rent:{onClick:()=>this.setState({purpose:'rent'}),style:this.segStyle(isRent)} };
@@ -273,25 +316,42 @@ class CreateResidentialListing extends React.Component {
     const statusText = isRent ? (v.availability?('Available: '+v.availability):'') : (v.propStatus||'');
     const priceDisplay = priceStr ? (priceStr + (isRent?' /mo':'')) : 'Add a price';
 
-    const checks=[true,true,!!resolved,!!(isApt?v.carpet:(isHV?v.builtup:v.plotarea)),!!priceNum,!!v.title,!!(isPlot?v.plotarea:v.bhk),photos>0,pinned,(desc||'').length>20];
+    const checks=[true,true,!!resolved,reqAreaOk,!!priceNum,!!v.title,!!(isPlot?v.plotarea:v.bhk),photos>0,pinned,(approved||[]).length>0,(desc||'').length>20];
     const done=checks.filter(Boolean).length; const strengthPct=Math.round(done/checks.length*100);
     const strengthLabel = strengthPct>=80?'Strong' : strengthPct>=55?'Good' : strengthPct>=30?'Fair' : 'Just started';
     const strengthColor = strengthPct>=80?'var(--evergreen-600)' : strengthPct>=55?'var(--navy-800)' : 'var(--ochre-600)';
-    const confirm=[{label:photos+' photo'+(photos===1?'':'s')+' added',on:photos>0},{label:'Location entered',on:!!resolved},{label:'Map pin confirmed',on:pinned},{label:'Listed by verified broker',on:true}];
+    const confirm=[{label:photos+' photo'+(photos===1?'':'s')+' added',on:photos>0},{label:'Location entered',on:!!resolved},{label:'Map pin confirmed',on:pinned},{label:'Nearby places approved',on:(approved||[]).length>0},{label:'Listed by verified broker',on:true}];
     const confirmChips=confirm.map(c=>({ key:c.label, label:c.label, check:c.on?'✓':'', textColor:c.on?'var(--text-body)':'var(--text-muted)', dot:`width:16px;height:16px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;background:${c.on?'var(--evergreen-600)':'var(--grey-300)'};` }));
     const filledCount = ALLF.filter(n=>v[n]).length;
 
     const hasVideo=!!v.videoUrl;
     const videoHost = /youtu/i.test(v.videoUrl||'') ? 'YouTube' : (/instagr/i.test(v.videoUrl||'') ? 'Instagram' : 'Video link');
 
-    const nearbyRows=(nearby||[]).map(n=>({ key:n.id, name:n.name, meta:[n.category,n.dist].filter(Boolean).join(' · '), manual:!!n.manual, onToggle:()=>this.toggleNearbyHide(n.id), toggleLabel:n.hidden?'Show':'Hide', rowStyle:`display:flex;align-items:center;gap:11px;padding:11px 0;border-top:1px solid var(--border);opacity:${n.hidden?'0.45':'1'};`, nameStyle:`font-size:13.5px;font-weight:600;color:var(--text-strong);${n.hidden?'text-decoration:line-through;':''}` }));
-    const hasNearby=(nearby||[]).length>0;
-    const reviewNearby=(nearby||[]).filter(n=>!n.hidden).map(n=>({ key:n.id, name:n.name, meta:[n.category,n.dist].filter(Boolean).join(' · '), manual:!!n.manual }));
+    const approvedList=(approved||[]);
+    const approvedCount=approvedList.length;
+    const poiRows=(suggested||[]).map(n=>({ key:n.id, name:n.name, meta:[n.category,n.dist].filter(Boolean).join(' \u00b7 '), onApprove:()=>this.approvePoi(n.id), onDismiss:()=>this.dismissPoi(n.id) }));
+    const approvedRows=approvedList.map(n=>({ key:n.id, name:n.name, meta:[n.category,n.dist].filter(Boolean).join(' \u00b7 '), manual:!!n.manual, onRemove:()=>this.removeApproved(n.id) }));
+    const reviewNearby=approvedList.map(n=>({ key:n.id, name:n.name, meta:[n.category,n.dist].filter(Boolean).join(' \u00b7 '), manual:!!n.manual }));
     const reviewHasNearby=reviewNearby.length>0;
+    const poiTabs=[['suggested','Suggested nearby places',I.sparkle],['approved','Approved ('+approvedCount+')',I.check],['manual','Add manually',I.plus]].map(t=>({ key:t[0], label:t[1], icon:t[2], onClick:()=>this.setPoiTab(t[0]), style:this.poiTabStyle(poiTab===t[0]) }));
     const pd=poiDraft||{};
-    const poiVals={ name:pd.name||'', cat:pd.cat||'', note:pd.note||'' };
-    const hPoi={ name:e=>this.setPoi('name',e.target.value), cat:e=>this.setPoi('cat',e.target.value), note:e=>this.setPoi('note',e.target.value) };
-    const poiCatOpts=[{value:'',label:'Category'},'School','Hospital / clinic','Transport','Market / shopping','Restaurant / cafe','Temple / landmark','Beach / river / coast','Other'];
+    const poiVals={ name:pd.name||'', cat:pd.cat||'', dist:pd.dist||'', unit:pd.unit||'km' };
+    const hPoi={ name:e=>this.setPoi('name',e.target.value), cat:e=>this.setPoi('cat',e.target.value), dist:e=>this.setPoi('dist',e.target.value), unit:e=>this.setPoi('unit',e.target.value) };
+    const poiDistRaw=(pd.dist||'').trim();
+    const poiDistBad = poiDistRaw!=='' && !(/^\d*\.?\d+$/.test(poiDistRaw) && parseFloat(poiDistRaw)>0);
+    const poiUnitOpts=['km','m'];
+    const poiDistStyle = 'flex:1;min-width:0;'+NUM+(poiDistBad?'border-color:var(--ochre-600);':'');
+    const poiCatOpts=[{value:'',label:'Select category'},'School','Hospital / clinic','Transport','Market / shopping','Restaurant / cafe','Temple / landmark','Beach / river / coast','Other'];
+    const poiLoading = poiFetch==='loading';
+    const poiRetrying = poiFetch==='retrying';
+    const poiErrorShown = poiFetch==='error' || poiRetrying;
+    const poiEmptyShown = poiFetch==='empty';
+    const poiReady = poiFetch==='ready' && (suggested||[]).length>0;
+    const poiAllReviewed = poiFetch==='ready' && (suggested||[]).length===0;
+    const poiRetryStyle = 'display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 16px;border-radius:8px;border:none;background:'+(poiRetrying?'var(--navy-700)':'var(--navy-800)')+';color:#fff;font-family:var(--font-sans);font-size:13px;font-weight:600;cursor:'+(poiRetrying?'default':'pointer')+';';
+    const poiAddDisabled = !((pd.name||'').trim()) || poiDistBad;
+    const poiAddStyle = 'height:42px;padding:0 20px;border-radius:8px;border:none;font-family:var(--font-sans);font-size:13.5px;font-weight:600;background:'+(poiAddDisabled?'var(--grey-200)':'var(--navy-800)')+';color:'+(poiAddDisabled?'var(--grey-400)':'#fff')+';cursor:'+(poiAddDisabled?'not-allowed':'pointer')+';';
+    const poiDemoBtns=[['unpinned','Pin not confirmed'],['loading','Loading'],['ready','Suggestions'],['error','Provider error'],['retrying','Retrying'],['empty','No results'],['approvedEmpty','Approved empty'],['approved','Approved list'],['manual','Add manually']].map(d=>({ key:d[0], label:d[1], onClick:()=>this.poiDemo(d[0]), style:'padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:var(--paper);font-family:var(--font-mono);font-size:10.5px;color:var(--text-muted);cursor:pointer;' }));
 
     const editMode = mode!=='review'; const reviewMode = mode==='review';
     const miss=[];
@@ -299,7 +359,8 @@ class CreateResidentialListing extends React.Component {
     if(!pinned) miss.push('Pin the location on the map');
     if((desc||'').length<20) miss.push('Add a short description');
     if(!priceNum) miss.push(isRent?'Add the monthly rent':'Add the total price');
-    if(!(isApt?v.carpet:(isHV?v.builtup:v.plotarea))) miss.push('Add the '+areaLabel.toLowerCase());
+    if(!reqAreaOk) miss.push(isPlot?'Add the plot area':'Add the built-up area');
+    if(!(approved||[]).length) miss.push('Approve at least one nearby place');
     const photoReviewLabel = photos>0 ? (photos+' photo'+(photos===1?'':'s')+' · cover selected') : 'No photos added';
     const mapPinnedText = pinned ? 'Location pinned on the map' : 'Location not pinned yet';
 
@@ -416,9 +477,20 @@ class CreateResidentialListing extends React.Component {
       derivedNote: perSqft ? ('Price per sq.ft '+perSqft+' · derived automatically') : 'Price per sq.ft is derived once you add price and area.',
       footerStatus: reviewMode ? (published?'Listing published':'Review your details, then publish') : (filledCount>3 ? (strengthLabel+' listing · '+strengthPct+'% complete') : 'Add price and property type to publish'),
       hasVideo, videoHost,
-      nearbyRows, hasNearby, reviewNearby, reviewHasNearby,
-      poiVals, hPoi, poiCatOpts,
-      addPoi:()=>this.addPoi(), movePin:()=>this.movePin(),
+      reviewNearby, reviewHasNearby,
+      carpetChips, builtupChips, plotAreaChips, carpetCustom, builtupCustom, plotCustom, areaRatioNote, areaRatioColor,
+      poiTabs, poiRows, approvedRows, approvedCount, approvedEmpty:approvedCount===0, approvedAny:approvedCount>0,
+      poiSuggestedTab: poiTab==='suggested', poiApprovedTab: poiTab==='approved', poiManualTab: poiTab==='manual',
+      poiLoading, poiRetrying, poiErrorShown, poiEmptyShown, poiReady, poiAllReviewed, poiJustAdded,
+      poiLoadingLabel: 'Finding nearby places around '+(resolved?resolved.publicLoc:'this location')+'\u2026',
+      poiSuggestedNote: 'From the map data provider \u2014 approve what buyers should see.',
+      poiRetryStyle, poiAddDisabled, poiAddStyle, poiDemoBtns,
+      poiLocNone: !resolved, poiLocResolved: !!resolved && !pinned,
+      poiRetry: ()=>this.fetchPoi(true), poiRecheck: ()=>this.fetchPoi(false),
+      poiGoManual: ()=>this.setPoiTab('manual'), poiGoSuggested: ()=>this.setPoiTab('suggested'),
+      draftCue: draftSaved && !!(locQuery||'').trim(), saveDraft: ()=>this.setState({ draftSaved:true }),
+      poiVals, hPoi, poiCatOpts, poiUnitOpts, poiDistBad, poiDistStyle,
+      addPoi:()=>this.addPoi(),
       editMode, reviewMode, published, notPublished:!published, reviewNotPublished: reviewMode && !published,
       pageTitle: reviewMode?'Review your listing':'Create a listing',
       pageSub: reviewMode?'Check everything looks right. You can jump back to any section before publishing.':'Add what buyers actually need. Optional details stay tucked away — fill only what you know, skip the rest.',
@@ -481,7 +553,10 @@ class CreateResidentialListing extends React.Component {
 
           {/* address search */}
           <div>
-            <span style={s(FLD)}>Find the property location</span>
+            <div style={s('display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:8px;')}>
+              <span style={s('font-size:13px;font-weight:600;color:var(--text-strong);')}>Locality / area</span>
+              {R.draftCue && <span style={s('display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--trust-verified-fg);background:var(--trust-verified-bg);padding:3px 9px;border-radius:7px;flex:none;')}><Ico inner={I.check} size={12} sw={3}/>Saved in draft</span>}
+            </div>
             <div className="cl-loc-search" style={s('display:flex;gap:10px;')}>
               <div style={s('flex:1;min-width:0;position:relative;')}>
                 <span style={s('position:absolute;left:13px;top:50%;transform:translateY(-50%);display:flex;color:var(--grey-400);pointer-events:none;')}><Ico inner={I.search} size={17}/></span>
@@ -489,6 +564,7 @@ class CreateResidentialListing extends React.Component {
               </div>
               <button type="button" onClick={R.findLocation} disabled={R.findDisabled} style={s(R.findBtnStyle)}>Find location</button>
             </div>
+            {R.draftCue && <span style={s('display:block;font-size:12px;color:var(--text-muted);margin-top:7px;')}>This location text is saved with your draft. The map pin is separate — confirm it in <strong style={s('color:var(--text-body);')}>Nearby Points of interest</strong>.</span>}
             <span style={s(HINT)}>Enter enough to place the map near the property — a locality, landmark, project or PIN code. You'll set the exact pin next.</span>
 
             {R.showGeoLink && (
@@ -566,14 +642,52 @@ class CreateResidentialListing extends React.Component {
       {/* 3. Property details */}
       <div style={s(CARD)}>
         {this.secHead('3', R.detailsTitle)}
-        <div style={s('margin-bottom:20px;')}>
-          <span style={s(FLD)}>{R.areaLabel}</span>
-          <div style={s('display:flex;gap:10px;')}>
-            <input type="text" inputMode="numeric" placeholder={R.areaPlaceholder} value={R.vv.areaPrimary} onChange={R.h.areaPrimary} style={s('flex:1;'+NUM)} />
-            <div style={s('width:118px;flex:none;')}><Select options={R.areaUnitOpts} value={R.vv.areaUnit} onChange={R.h.areaUnit} /></div>
+        {R.isResidence && (
+          <div style={s('display:flex;flex-direction:column;gap:22px;margin-bottom:22px;')}>
+            <div>
+          <div style={s('display:flex;align-items:baseline;gap:10px;margin-bottom:10px;')}>
+            <span style={s('font-size:13px;font-weight:600;color:var(--text-strong);')}>Carpet area</span>
+            <span style={s('font-size:12px;color:var(--text-muted);font-weight:500;')}>optional</span>
+            {R.carpetCustom && <span style={s('margin-left:auto;font-family:var(--font-mono);font-size:11.5px;color:var(--text-muted);')}>{R.carpetCustom}</span>}
           </div>
-          <span style={s(HINT)}>{R.areaHint}</span>
-        </div>
+              <div style={s(CHIPWRAP+'margin-bottom:12px;')}>{this.chipRow(R.carpetChips)}</div>
+              <div className="cl-area-row" style={s('display:flex;gap:10px;')}>
+                <input type="text" inputMode="numeric" placeholder="e.g. 1150" value={R.vv.carpet} onChange={R.h.carpet} style={s('flex:1;min-width:0;'+NUM)} />
+              <div style={s('width:118px;flex:none;')}><Select options={R.areaUnitOpts} value={R.vv.areaUnit} onChange={R.h.areaUnit} /></div>
+              </div>
+              <span style={s(HINT)}>Tap a common size or type the exact number. Buyers compare on carpet area.</span>
+            </div>
+            <div>
+          <div style={s('display:flex;align-items:baseline;gap:10px;margin-bottom:10px;')}>
+            <span style={s('font-size:13px;font-weight:600;color:var(--text-strong);')}>Built-up area <span style={s('color:var(--copper-500);')}>*</span></span>
+            
+            {R.builtupCustom && <span style={s('margin-left:auto;font-family:var(--font-mono);font-size:11.5px;color:var(--text-muted);')}>{R.builtupCustom}</span>}
+          </div>
+              <div style={s(CHIPWRAP+'margin-bottom:12px;')}>{this.chipRow(R.builtupChips)}</div>
+              <div className="cl-area-row" style={s('display:flex;gap:10px;')}>
+                <input type="text" inputMode="numeric" placeholder="e.g. 1400" value={R.vv.builtup} onChange={R.h.builtup} style={s('flex:1;min-width:0;'+NUM)} />
+              <div style={s('width:118px;flex:none;')}><Select options={R.areaUnitOpts} value={R.vv.areaUnit} onChange={R.h.areaUnit} /></div>
+              </div>
+              <span style={s(HINT)}>Required to submit this listing for review.</span>
+              {R.areaRatioNote && <span style={s('display:block;font-size:12px;margin-top:6px;color:'+R.areaRatioColor+';')}>{R.areaRatioNote}</span>}
+            </div>
+          </div>
+        )}
+        {R.isPlot && (
+          <div style={s('margin-bottom:22px;')}>
+          <div style={s('display:flex;align-items:baseline;gap:10px;margin-bottom:10px;')}>
+            <span style={s('font-size:13px;font-weight:600;color:var(--text-strong);')}>Plot area <span style={s('color:var(--copper-500);')}>*</span></span>
+            
+            {R.plotCustom && <span style={s('margin-left:auto;font-family:var(--font-mono);font-size:11.5px;color:var(--text-muted);')}>{R.plotCustom}</span>}
+          </div>
+            <div style={s(CHIPWRAP+'margin-bottom:12px;')}>{this.chipRow(R.plotAreaChips)}</div>
+            <div className="cl-area-row" style={s('display:flex;gap:10px;')}>
+              <input type="text" inputMode="numeric" placeholder="e.g. 2400" value={R.vv.plotarea} onChange={R.h.plotarea} style={s('flex:1;min-width:0;'+NUM)} />
+            <div style={s('width:118px;flex:none;')}><Select options={R.areaUnitOpts} value={R.vv.areaUnit} onChange={R.h.areaUnit} /></div>
+            </div>
+            <span style={s(HINT)}>Total land area for sale. Required to submit this listing for review.</span>
+          </div>
+        )}
 
         {R.isResidence && (
           <div style={s('display:flex;flex-direction:column;gap:20px;')}>
@@ -731,10 +845,7 @@ class CreateResidentialListing extends React.Component {
             {R.isResidence && (
               <div style={s('display:flex;flex-direction:column;gap:22px;')}>
                 {R.isApt && (
-                  <div style={s(ROW2)}>
-                    <div><span style={s(FLD)}>Built-up area (optional)</span><input type="text" inputMode="numeric" placeholder="sq.ft" value={R.vv.builtup} onChange={R.h.builtup} style={s(NUM)} /></div>
-                    <div><span style={s(FLD)}>Super built-up (optional)</span><input type="text" inputMode="numeric" placeholder="sq.ft" value={R.vv.superbuiltup} onChange={R.h.superbuiltup} style={s(NUM)} /></div>
-                  </div>
+                  <div style={s('width:50%;padding-right:8px;')}><span style={s(FLD)}>Super built-up area (optional)</span><input type="text" inputMode="numeric" placeholder="sq.ft" value={R.vv.superbuiltup} onChange={R.h.superbuiltup} style={s(NUM)} /></div>
                 )}
                 {R.isHV && (
                   <div style={s('width:50%;padding-right:8px;')}><span style={s(FLD)}>Plot area (optional)</span><input type="text" inputMode="numeric" placeholder="sq.ft" value={R.vv.plotarea} onChange={R.h.plotarea} style={s(NUM)} /></div>
@@ -795,9 +906,9 @@ class CreateResidentialListing extends React.Component {
         )}
       </div>
 
-      {/* 6. Photos, video & location */}
+      {/* 6. Photos & video */}
       <div style={s(CARD)}>
-        {this.secHead('6','Photos, video & location')}
+        {this.secHead('6','Photos & video')}
         <div style={s('display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;')}>
           <span style={s('font-size:13px;font-weight:600;color:var(--text-strong);')}>Photos <span style={s('color:var(--text-muted);font-weight:500;')}>· {R.photoCountLabel}</span></span>
           {R.hasPhotos && <span style={s('font-size:12px;color:var(--text-muted);')}>“Set cover” chooses the first photo buyers see</span>}
@@ -824,82 +935,211 @@ class CreateResidentialListing extends React.Component {
           <div style={s('margin-top:10px;display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--trust-verified-fg);background:var(--trust-verified-bg);padding:5px 11px;border-radius:8px;')}><Ico inner={I.play} fill="currentColor" stroke="none" size={13}/>Video added · {R.videoHost}</div>
         )}
 
-        <div style={s('height:1px;background:var(--border);margin:22px 0;')}></div>
+      </div>
 
-        <span style={s(FLDt)}>Map pin</span>
+      {/* 7. Nearby points of interest — confirmed pin + provider suggestions */}
+      <div style={s(CARD)}>
+        {this.secHead('7','Nearby Points of interest')}
+        <p style={s('margin:-12px 0 18px;font-size:13px;color:var(--text-muted);line-height:1.55;max-width:520px;')}>Add nearby amenities to show what makes this location great for buyers. Suggestions are calculated from the confirmed map pin.</p>
 
-        {R.pinDisabled && (
-          <div style={s('border:1.5px dashed var(--border-strong);border-radius:12px;padding:22px 20px;text-align:center;background:var(--canvas-100);')}>
-            <span style={s('width:34px;height:34px;border-radius:9px;background:var(--paper);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;margin:0 auto 10px;')}><Ico inner={I.pin} size={17} stroke="var(--grey-400)"/></span>
-            <p style={s('margin:0;font-size:13px;color:var(--text-muted);line-height:1.5;max-width:300px;margin-left:auto;margin-right:auto;')}>Add or confirm the address above to enable map pinning.</p>
-          </div>
-        )}
-
-        {R.pinEnabled && (
-          <div style={s('position:relative;height:184px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background-color:#E8EBE6;background-image:linear-gradient(rgba(27,42,69,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(27,42,69,0.06) 1px,transparent 1px);background-size:26px 26px;')}>
-            <div style={s('position:absolute;top:40%;left:0;right:0;height:14px;background:rgba(255,255,255,0.6);transform:rotate(-4deg);')}></div>
-            <div style={s('position:absolute;top:0;bottom:0;left:58%;width:11px;background:rgba(255,255,255,0.6);transform:rotate(3deg);')}></div>
-            <div style={s('position:absolute;top:50%;left:50%;transform:translate(-50%,-100%);opacity:0.4;')}><Ico inner={I.pin} stroke="var(--navy-700)" size={30}/></div>
-            <div style={s('position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:linear-gradient(180deg,rgba(246,245,242,0) 40%,rgba(246,245,242,0.7));')}>
-              <span style={s('font-size:12px;font-weight:600;color:var(--navy-800);background:rgba(255,255,255,0.92);padding:5px 12px;border-radius:8px;box-shadow:var(--shadow-xs);')}>Map centred near {R.resPublic}</span>
-              <button type="button" onClick={R.openPicker} style={s('display:inline-flex;align-items:center;gap:7px;height:40px;padding:0 18px;border-radius:8px;border:none;background:var(--navy-800);color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;box-shadow:var(--shadow-sm);')}><Ico inner={I.pin} size={15}/>Pin location on map</button>
+        {R.poiLocNone && (
+          <div style={s('border:1.5px dashed var(--border-strong);background:var(--canvas-100);border-radius:12px;padding:18px 20px;display:flex;gap:13px;align-items:flex-start;')}>
+            <span style={s('width:32px;height:32px;border-radius:9px;background:var(--paper);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex:none;')}><Ico inner={I.pin} size={16} stroke="var(--grey-400)"/></span>
+            <div style={s('min-width:0;')}>
+              <div style={s('font-size:13.5px;font-weight:700;color:var(--text-strong);margin-bottom:3px;')}>Pin not confirmed yet</div>
+              <p style={s('margin:0;font-size:12.5px;color:var(--text-muted);line-height:1.55;max-width:430px;')}>Nearby places are derived from the confirmed pin. Find the locality in <strong style={s('color:var(--text-body);')}>Where is it?</strong> above, then confirm the exact pin here.</p>
             </div>
           </div>
         )}
 
-        {R.pinConfirmed && (
-          <div>
-            <div style={s('position:relative;height:170px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background-color:#E8EBE6;background-image:linear-gradient(rgba(27,42,69,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(27,42,69,0.06) 1px,transparent 1px);background-size:26px 26px;')}>
-              <div style={s('position:absolute;top:40%;left:0;right:0;height:14px;background:rgba(255,255,255,0.6);transform:rotate(-4deg);')}></div>
-              <div style={s('position:absolute;top:0;bottom:0;left:58%;width:11px;background:rgba(255,255,255,0.6);transform:rotate(3deg);')}></div>
-              <div style={s('position:absolute;left:'+R.pinPos.x+'%;top:'+R.pinPos.y+'%;transform:translate(-50%,-100%);')}><Ico inner={I.pinFill} fill="var(--copper-500)" stroke="#fff" sw={1.5} size={34}/></div>
-            </div>
-            <div style={s('margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--trust-verified-bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;')}>
-              <div style={s('display:flex;align-items:center;gap:10px;min-width:0;')}>
-                <span style={s('width:28px;height:28px;border-radius:50%;background:var(--evergreen-600);display:flex;align-items:center;justify-content:center;flex:none;')}><Ico inner={I.check} stroke="#fff" sw={2.6} size={15}/></span>
-                <div style={s('min-width:0;')}><div style={s('font-size:13px;font-weight:700;color:var(--text-strong);')}>Map pin confirmed</div><div style={s('font-size:12px;color:var(--text-muted);')}>Near {R.resPublic}</div></div>
-              </div>
-              <button type="button" onClick={R.adjustPin} style={s('flex:none;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--navy-800);background:var(--paper);border:1px solid var(--border-strong);border-radius:8px;padding:7px 13px;cursor:pointer;')}><Ico inner={I.pin} size={13}/>Adjust pin</button>
+        {R.poiLocResolved && (
+          <div style={s('border:1px solid var(--border-strong);background:var(--canvas-100);border-radius:12px;padding:16px 18px;display:flex;gap:13px;align-items:flex-start;')}>
+            <span style={s('width:32px;height:32px;border-radius:9px;background:var(--navy-100);display:flex;align-items:center;justify-content:center;flex:none;')}><Ico inner={I.pin} size={16} stroke="var(--navy-800)"/></span>
+            <div style={s('flex:1;min-width:0;')}>
+              <div style={s('font-size:13.5px;font-weight:700;color:var(--text-strong);margin-bottom:3px;')}>Location resolved — {R.resPublic}</div>
+              <p style={s('margin:0 0 12px;font-size:12.5px;color:var(--text-muted);line-height:1.55;max-width:430px;')}>A resolved locality is not a confirmed pin. Place the pin on the property to calculate nearby places.</p>
+              <button type="button" onClick={R.openPicker} style={s('display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 17px;border-radius:8px;border:none;background:var(--navy-800);color:#fff;font-family:var(--font-sans);font-size:13.5px;font-weight:600;cursor:pointer;')}><Ico inner={I.pin} size={15}/>Pin location on map</button>
             </div>
           </div>
         )}
 
         {R.pinned && (
-          <div style={s('margin-top:18px;background:var(--canvas-100);border:1px solid var(--border);border-radius:12px;padding:16px 18px;')}>
-            <div style={s('display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;')}>
-              <span style={s('font-size:13px;font-weight:700;color:var(--text-strong);')}>Nearby places</span>
-              <button type="button" onClick={R.movePin} style={s('display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--navy-800);background:var(--paper);border:1px solid var(--border-strong);border-radius:7px;padding:5px 10px;cursor:pointer;')}><Ico inner={I.pin} size={13}/>Move pin</button>
-            </div>
-            <p style={s('margin:0 0 6px;font-size:12px;color:var(--text-muted);line-height:1.5;')}>Derived from the map after location is pinned. Move the pin if these nearby places look wrong. You can also add a local landmark if buyers commonly ask about it.</p>
-            <div>
-              {R.nearbyRows.map(n=>(
-                <div key={n.key} style={s(n.rowStyle)}>
-                  <span style={s('width:28px;height:28px;border-radius:8px;background:var(--navy-100);color:var(--navy-700);display:flex;align-items:center;justify-content:center;flex:none;')}><Ico inner={I.pin} size={15}/></span>
-                  <div style={s('flex:1;min-width:0;')}>
-                    <div style={s('display:flex;align-items:center;gap:7px;')}><span style={s(n.nameStyle)}>{n.name}</span>{n.manual && <span style={s('font-size:9.5px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;color:var(--ochre-600);background:var(--ochre-50);padding:1px 6px;border-radius:4px;')}>Broker-added</span>}</div>
-                    <div style={s('font-size:12px;color:var(--text-muted);font-family:var(--font-mono);margin-top:1px;')}>{n.meta}</div>
-                  </div>
-                  <button type="button" onClick={n.onToggle} style={s('font-size:12px;font-weight:600;color:var(--text-muted);background:transparent;border:none;cursor:pointer;flex:none;')}>{n.toggleLabel}</button>
+          <div style={s('border:1px solid rgba(31,122,92,0.3);background:var(--trust-verified-bg);border-radius:12px;padding:15px 17px;')}>
+            <div style={s('display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;')}>
+              <div style={s('display:flex;gap:11px;align-items:flex-start;min-width:0;')}>
+                <span style={s('width:30px;height:30px;border-radius:50%;background:var(--evergreen-600);display:flex;align-items:center;justify-content:center;flex:none;')}><Ico inner={I.pinFill} fill="#fff" stroke="var(--evergreen-600)" sw={1.6} size={17}/></span>
+                <div style={s('min-width:0;')}>
+                  <div style={s('font-size:14px;font-weight:700;color:var(--text-strong);')}>Pin confirmed — {R.resPublic}</div>
+                  <div style={s('font-size:12.5px;color:var(--text-body);margin-top:2px;')}>Nearby places will be shown for this location.</div>
                 </div>
-              ))}
-            </div>
-            <div style={s('border-top:1px solid var(--border);margin-top:6px;padding-top:14px;')}>
-              <span style={s('display:block;font-size:12px;font-weight:600;color:var(--text-strong);margin-bottom:9px;')}>Add a local landmark (optional)</span>
-              <div style={s('display:flex;gap:8px;flex-wrap:wrap;align-items:center;')}>
-                <input type="text" placeholder="Place name" value={R.poiVals.name} onChange={R.hPoi.name} style={s('flex:2;min-width:140px;height:38px;padding:0 12px;background:var(--paper);border:1px solid var(--border-strong);border-radius:8px;font-family:var(--font-sans);font-size:13px;color:var(--text-strong);')} />
-                <div style={s('flex:1.4;min-width:130px;')}><Select options={R.poiCatOpts} value={R.poiVals.cat} onChange={R.hPoi.cat} /></div>
-                <input type="text" placeholder="Distance / note" value={R.poiVals.note} onChange={R.hPoi.note} style={s('flex:1;min-width:110px;height:38px;padding:0 12px;background:var(--paper);border:1px solid var(--border-strong);border-radius:8px;font-family:var(--font-sans);font-size:13px;color:var(--text-strong);')} />
-                <Button variant="outline" size="sm" onClick={R.addPoi}>Add place</Button>
               </div>
-              <span style={s('display:block;font-size:11.5px;color:var(--text-muted);margin-top:9px;')}>Manually added places are shown as broker-added, not platform-verified.</span>
+              <button type="button" onClick={R.adjustPin} style={s('flex:none;display:inline-flex;align-items:center;gap:6px;font-family:var(--font-sans);font-size:12.5px;font-weight:600;color:var(--navy-800);background:var(--paper);border:1px solid var(--border-strong);border-radius:8px;padding:11px 15px;cursor:pointer;white-space:nowrap;')}><Ico inner={I.pin} size={13}/>Change location</button>
             </div>
+            <div style={s('margin-top:11px;padding-top:11px;border-top:1px solid rgba(31,122,92,0.18);display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-muted);')}><Ico inner={I.shield} size={13} stroke="var(--grey-500)"/>Buyers see only {R.resPublic} — the exact pin stays private.</div>
           </div>
         )}
+
+        {R.pinned && (
+          <React.Fragment>
+            <div className="cl-poi-modes" style={s('display:flex;gap:24px;border-bottom:1px solid var(--border);margin-top:18px;overflow-x:auto;')}>
+              {R.poiTabs.map(t=>(
+                <button key={t.key} type="button" onClick={t.onClick} style={s(t.style)}><Ico inner={t.icon} size={14} sw={t.key==='approved'?2.6:2}/>{t.label}</button>
+              ))}
+            </div>
+
+            {R.poiSuggestedTab && (
+              <div>
+                {R.poiLoading && (
+                  <div>
+                    <div style={s('display:flex;align-items:center;gap:10px;margin:16px 0 4px;')}>
+                      <span style={s('width:17px;height:17px;border:2.4px solid var(--navy-100);border-top-color:var(--navy-800);border-radius:50%;animation:spin .7s linear infinite;flex:none;')}></span>
+                      <span style={s('font-size:13px;color:var(--text-muted);')}>{R.poiLoadingLabel}</span>
+                    </div>
+                    {[0,1,2].map(i=>(
+                      <div key={i} style={s('display:flex;align-items:center;gap:11px;padding:13px 0;border-top:1px solid var(--border);')}>
+                        <span style={s('width:28px;height:28px;border-radius:8px;background:var(--canvas-200);flex:none;')}></span>
+                        <div style={s('flex:1;min-width:0;')}>
+                          <div style={s('height:10px;width:'+(46-i*7)+'%;border-radius:5px;background:var(--canvas-200);margin-bottom:8px;')}></div>
+                          <div style={s('height:8px;width:'+(26-i*4)+'%;border-radius:4px;background:var(--canvas-200);')}></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {R.poiErrorShown && (
+                  <div style={s('margin-top:16px;border:1px solid rgba(169,116,28,0.35);background:var(--ochre-50);border-radius:12px;padding:16px 18px;display:flex;gap:12px;align-items:flex-start;')}>
+                    <Ico inner={I.alert} stroke="var(--ochre-600)" size={18} style={{marginTop:'1px',flex:'none'}}/>
+                    <div style={s('flex:1;min-width:0;')}>
+                      <div style={s('font-size:13.5px;font-weight:700;color:var(--ochre-600);margin-bottom:3px;')}>Couldn't fetch nearby places right now</div>
+                      <p style={s('margin:0 0 13px;font-size:12.5px;color:var(--text-body);line-height:1.55;max-width:420px;')}>The map data provider may be temporarily unavailable. Your pin and the rest of this listing are unaffected.</p>
+                      <div style={s('display:flex;align-items:center;gap:14px;flex-wrap:wrap;')}>
+                        <button type="button" onClick={R.poiRetry} disabled={R.poiRetrying} style={s(R.poiRetryStyle)}>
+                          {R.poiRetrying && <span style={s('width:14px;height:14px;border:2.2px solid rgba(255,255,255,0.35);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;flex:none;')}></span>}
+                          {R.poiRetrying ? 'Retrying…' : 'Retry'}
+                        </button>
+                        <span style={s('font-size:12.5px;color:var(--text-muted);')}>You can still <button type="button" onClick={R.poiGoManual} style={s('font-family:var(--font-sans);font-size:12.5px;font-weight:600;color:var(--navy-800);background:transparent;border:none;padding:0;cursor:pointer;text-decoration:underline;')}>add a place manually</button>.</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {R.poiEmptyShown && (
+                  <div style={s('margin-top:16px;border:1.5px dashed var(--border-strong);background:var(--canvas-100);border-radius:12px;padding:22px 20px;text-align:center;')}>
+                    <span style={s('width:34px;height:34px;border-radius:9px;background:var(--paper);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;margin:0 auto 11px;')}><Ico inner={I.search} size={16} stroke="var(--grey-400)"/></span>
+                    <div style={s('font-size:13.5px;font-weight:700;color:var(--text-strong);margin-bottom:5px;')}>No nearby places were found around this location.</div>
+                    <p style={s('margin:0 auto 15px;font-size:12.5px;color:var(--text-muted);line-height:1.55;max-width:390px;')}>Common for new layouts and outskirt plots. Add the landmarks buyers ask about — a school, bus stop or temple.</p>
+                    <div style={s('display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;')}>
+                      <button type="button" onClick={R.poiGoManual} style={s('display:inline-flex;align-items:center;gap:7px;height:40px;padding:0 16px;border-radius:8px;border:1px solid var(--border-strong);background:var(--paper);color:var(--navy-800);font-family:var(--font-sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;')}><Ico inner={I.plus} size={14}/>Add a place manually</button>
+                      <button type="button" onClick={R.poiRecheck} style={s('font-family:var(--font-sans);font-size:12.5px;font-weight:600;color:var(--text-muted);background:transparent;border:none;cursor:pointer;padding:8px;')}>Check again</button>
+                    </div>
+                  </div>
+                )}
+
+                {R.poiReady && (
+                  <div>
+                    <div style={s('display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:15px 0 3px;')}>
+                      <span style={s('font-size:12px;color:var(--text-muted);')}>{R.poiSuggestedNote}</span>
+                      <button type="button" onClick={R.poiRecheck} style={s('font-family:var(--font-sans);font-size:12px;font-weight:600;color:var(--navy-800);background:transparent;border:none;cursor:pointer;flex:none;')}>Refresh</button>
+                    </div>
+                    {R.poiRows.map(n=>(
+                      <div key={n.key} className="cl-poi-row" style={s('display:flex;align-items:center;gap:11px;padding:12px 0;border-top:1px solid var(--border);')}>
+                        <span style={s('width:28px;height:28px;border-radius:8px;background:var(--navy-100);color:var(--navy-700);display:flex;align-items:center;justify-content:center;flex:none;')}><Ico inner={I.pin} size={15}/></span>
+                        <div style={s('flex:1;min-width:0;')}>
+                          <div style={s('font-size:13.5px;font-weight:600;color:var(--text-strong);')}>{n.name}</div>
+                          <div style={s('font-size:12px;color:var(--text-muted);font-family:var(--font-mono);margin-top:1px;')}>{n.meta}</div>
+                        </div>
+                        <div className="cl-poi-actions" style={s('display:flex;align-items:center;gap:8px;flex:none;')}>
+                          <button type="button" onClick={n.onApprove} style={s('display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 14px;border-radius:8px;border:none;background:var(--navy-800);color:#fff;font-family:var(--font-sans);font-size:12.5px;font-weight:600;cursor:pointer;')}><Ico inner={I.check} size={13} sw={2.6}/>Approve</button>
+                          <button type="button" onClick={n.onDismiss} style={s('height:38px;padding:0 13px;border-radius:8px;border:1px solid var(--border-strong);background:var(--paper);color:var(--text-muted);font-family:var(--font-sans);font-size:12.5px;font-weight:600;cursor:pointer;')}>Dismiss</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {R.poiAllReviewed && (
+                  <div style={s('margin-top:16px;background:var(--canvas-100);border:1px solid var(--border);border-radius:12px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;')}>
+                    <span style={s('font-size:12.5px;color:var(--text-muted);')}>All suggestions reviewed. Approved places are listed under <strong style={s('color:var(--text-body);')}>Approved ({R.approvedCount})</strong>.</span>
+                    <button type="button" onClick={R.poiRecheck} style={s('flex:none;font-family:var(--font-sans);font-size:12.5px;font-weight:600;color:var(--navy-800);background:var(--paper);border:1px solid var(--border-strong);border-radius:8px;padding:9px 14px;cursor:pointer;')}>Fetch again</button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {R.poiApprovedTab && (
+              <div>
+                {R.poiJustAdded && (
+                  <div style={s('margin-top:15px;display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:var(--trust-verified-fg);background:var(--trust-verified-bg);padding:7px 12px;border-radius:8px;')}><Ico inner={I.check} size={13} sw={2.6}/>{R.poiJustAdded} added</div>
+                )}
+                {R.approvedEmpty && (
+                  <div style={s('margin-top:16px;border:1.5px dashed var(--border-strong);background:var(--canvas-100);border-radius:12px;padding:22px 20px;text-align:center;')}>
+                    <div style={s('font-size:13.5px;font-weight:700;color:var(--text-strong);margin-bottom:5px;')}>No approved places yet</div>
+                    <p style={s('margin:0 auto 15px;font-size:12.5px;color:var(--text-muted);line-height:1.55;max-width:360px;')}>Only approved places are shown to buyers. Approve a suggestion or add one yourself.</p>
+                    <div style={s('display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;')}>
+                      <button type="button" onClick={R.poiGoSuggested} style={s('height:40px;padding:0 16px;border-radius:8px;border:1px solid var(--border-strong);background:var(--paper);color:var(--navy-800);font-family:var(--font-sans);font-size:13px;font-weight:600;cursor:pointer;')}>Review suggestions</button>
+                      <button type="button" onClick={R.poiGoManual} style={s('font-family:var(--font-sans);font-size:12.5px;font-weight:600;color:var(--text-muted);background:transparent;border:none;cursor:pointer;padding:8px;')}>Add manually</button>
+                    </div>
+                  </div>
+                )}
+                {R.approvedAny && (
+                  <div>
+                    <div style={s('font-size:12px;color:var(--text-muted);margin:15px 0 3px;')}>Shown to buyers on the listing, in this order.</div>
+                    {R.approvedRows.map(n=>(
+                      <div key={n.key} className="cl-poi-row" style={s('display:flex;align-items:center;gap:11px;padding:12px 0;border-top:1px solid var(--border);')}>
+                        <span style={s('width:28px;height:28px;border-radius:50%;background:var(--trust-verified-bg);display:flex;align-items:center;justify-content:center;flex:none;')}><Ico inner={I.check} size={14} sw={2.8} stroke="var(--evergreen-600)"/></span>
+                        <div style={s('flex:1;min-width:0;')}>
+                          <div style={s('display:flex;align-items:center;gap:7px;flex-wrap:wrap;')}>
+                            <span style={s('font-size:13.5px;font-weight:600;color:var(--text-strong);')}>{n.name}</span>
+                            {n.manual && <span style={s('font-size:9.5px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;color:var(--ochre-600);background:var(--ochre-50);padding:2px 6px;border-radius:4px;')}>Broker-added</span>}
+                          </div>
+                          <div style={s('font-size:12px;color:var(--text-muted);font-family:var(--font-mono);margin-top:1px;')}>{n.meta}</div>
+                        </div>
+                        <div className="cl-poi-actions" style={s('display:flex;align-items:center;gap:8px;flex:none;')}>
+                          <button type="button" onClick={n.onRemove} style={s('height:38px;padding:0 13px;border-radius:8px;border:1px solid var(--border-strong);background:var(--paper);color:var(--text-muted);font-family:var(--font-sans);font-size:12.5px;font-weight:600;cursor:pointer;')}>Remove</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {R.poiManualTab && (
+              <div style={s('margin-top:18px;max-width:520px;display:flex;flex-direction:column;gap:14px;')}>
+                <div>
+                  <span style={s(FLD)}>Name</span>
+                  <input type="text" placeholder="e.g. Sri Krishna Temple" value={R.poiVals.name} onChange={R.hPoi.name} style={s(TXT)} />
+                </div>
+                <div><span style={s(FLD)}>Category</span><Select options={R.poiCatOpts} value={R.poiVals.cat} onChange={R.hPoi.cat} /></div>
+                <div>
+                  <span style={s(FLD)}>Distance from property <span style={s('color:var(--text-muted);font-weight:500;')}>optional</span></span>
+                  <div className="cl-area-row" style={s('display:flex;gap:10px;')}>
+                    <input type="text" inputMode="decimal" placeholder="e.g. 1.3" value={R.poiVals.dist} onChange={R.hPoi.dist} style={s(R.poiDistStyle)} />
+                    <div style={s('width:96px;flex:none;')}><Select options={R.poiUnitOpts} value={R.poiVals.unit} onChange={R.hPoi.unit} /></div>
+                  </div>
+                  {R.poiDistBad
+                    ? <span style={s('display:block;margin-top:7px;font-size:12px;color:var(--ochre-600);')}>Enter a positive number, like 1.3 or 850.</span>
+                    : <span style={s(HINT)}>Add the approximate distance if you know it — you can leave this blank.</span>}
+                </div>
+                <div style={s('display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;')}>
+                  <span style={s('font-size:11.5px;color:var(--text-muted);line-height:1.5;max-width:290px;')}>Places you add are labelled broker-added, not platform-verified.</span>
+                  <button type="button" onClick={R.addPoi} disabled={R.poiAddDisabled} style={s(R.poiAddStyle)}>Add place</button>
+                </div>
+              </div>
+            )}
+          </React.Fragment>
+        )}
+
+        <div style={s('margin-top:22px;border-top:1px dashed var(--border-strong);padding-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;')}>
+          <span style={s('font-family:var(--font-mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--grey-400);margin-right:2px;')}>Prototype states</span>
+          {R.poiDemoBtns.map(b=>(<button key={b.key} type="button" onClick={b.onClick} style={s(b.style)}>{b.label}</button>))}
+        </div>
       </div>
 
-      {/* 7. Description + AI */}
+      {/* 8. Description + AI */}
       <div style={s(CARD)}>
-        {this.secHead('7','Description')}
+        {this.secHead('8','Description')}
         {R.aiIdle && (
           <div style={s('border:1.5px dashed var(--border-strong);border-radius:12px;padding:26px 24px;text-align:center;background:var(--canvas-100);')}>
             <div style={s('width:38px;height:38px;border-radius:10px;background:var(--accent-tint);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;')}><Ico inner={I.sparkle} stroke="var(--copper-500)" size={20}/></div>
@@ -1116,7 +1356,7 @@ class CreateResidentialListing extends React.Component {
                     <p style={s('margin:12px 0 0;font-size:11.5px;color:var(--text-muted);')}>Derived from the map. Broker-added places are shown as broker-added, not platform-verified.</p>
                   </React.Fragment>
                 )}
-                {R.reviewNoNearby && <p style={s('margin:0;font-size:13px;color:var(--text-muted);')}>Pin the location to show nearby schools, transport and essentials.</p>}
+                {R.reviewNoNearby && <p style={s('margin:0;font-size:13px;color:var(--text-muted);')}>Confirm the map pin and approve nearby places to show what's around this property.</p>}
               </div>
 
               {/* What's on this listing */}
@@ -1186,14 +1426,14 @@ class CreateResidentialListing extends React.Component {
         <div>
           {R.editMode && (
             <div style={s('display:flex;gap:12px;')}>
-              <Button variant="ghost">Save draft</Button>
+              <Button variant="ghost" onClick={R.saveDraft}>Save draft</Button>
               <Button variant="primary" onClick={R.goReview}>Review &amp; publish</Button>
             </div>
           )}
           {R.reviewNotPublished && (
             <div style={s('display:flex;gap:12px;')}>
               <Button variant="ghost" onClick={R.backToEdit}>Back to editing</Button>
-              <Button variant="outline">Save draft</Button>
+              <Button variant="outline" onClick={R.saveDraft}>Save draft</Button>
               <Button variant="accent" onClick={R.publish}>Publish listing</Button>
             </div>
           )}
