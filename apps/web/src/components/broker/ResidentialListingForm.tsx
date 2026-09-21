@@ -647,7 +647,16 @@ export function ResidentialListingForm({ initialPropertyType, initialListingPurp
           {/* Section 6b — Nearby places (issue #1718 — gated on addressConfirmed, honest derived/broker-added labels) */}
           {draft.listingId && (
             <Section number={7} title="Nearby places">
-              <InlineNearby listingId={draft.listingId} propertyType={form.propertyType} addressConfirmed={draft.addressConfirmed} />
+              <InlineNearby
+                listingId={draft.listingId}
+                propertyType={form.propertyType}
+                addressConfirmed={draft.addressConfirmed}
+                locationResolved={
+                  location.residentialLocationValue?.state.resolved != null ||
+                  location.residentialLocationValue?.state.localityResolved === true
+                }
+                onChangeLocation={location.residentialLocationValue?.clear}
+              />
             </Section>
           )}
 

@@ -11,7 +11,7 @@ import {
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-interface AreaChip {
+export interface AreaChip {
   label: string;
   value: number;
   unit: string;
@@ -31,7 +31,13 @@ export interface AreaFieldProps {
 
 // ─── Chip config per property type ──────────────────────────────────────────
 
-const CHIPS: Record<AreaPropertyType, AreaChip[]> = {
+/**
+ * Exported so other area inputs (e.g. CarpetAreaInput, #2642) can reuse the
+ * same preset chip sets without duplicating the table or swapping to
+ * AreaField wholesale (which hardcodes its own `required` styling, label
+ * defaults, and conversion line — see ResidentialFormPrimitives.tsx).
+ */
+export const AREA_CHIPS: Record<AreaPropertyType, AreaChip[]> = {
   land: [
     { label: '30\u00d740', value: 2.75, unit: 'cent' },
     { label: '5 cents', value: 5, unit: 'cent' },
@@ -234,7 +240,7 @@ export function AreaField({
     }
   }, [initialUnit]);
 
-  const chips = CHIPS[propertyType];
+  const chips = AREA_CHIPS[propertyType];
   const unitOptions = UNIT_OPTIONS[propertyType];
   const parsedValue = text.trim() !== '' ? parseFloat(text) : null;
   const validValue = parsedValue != null && !isNaN(parsedValue) && parsedValue > 0 ? parsedValue : null;

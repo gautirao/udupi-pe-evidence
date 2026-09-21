@@ -7,6 +7,7 @@ import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
 import com.example.realestate.security.WebMvcConfig;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
@@ -78,8 +79,8 @@ class ListingPoiControllerTest {
 
     @Test
     void getApproved_returnsOnlyApprovedPois() throws Exception {
-        PoiResponse poi1 = new PoiResponse("id-1", "District Hospital", "HOSPITAL", 150, 13.3415, 74.7430, false, true);
-        PoiResponse poi2 = new PoiResponse("id-2", "St. Mary's School", "SCHOOL", 300, 13.3420, 74.7440, false, true);
+        PoiResponse poi1 = new PoiResponse("id-1", "District Hospital", "HOSPITAL", 150, 13.3415, 74.7430, false, true, false);
+        PoiResponse poi2 = new PoiResponse("id-2", "St. Mary's School", "SCHOOL", 300, 13.3420, 74.7440, false, true, false);
         when(service.getApproved(LISTING_ID)).thenReturn(List.of(poi1, poi2));
 
         mockMvc.perform(get("/api/listings/{listingId}/pois", LISTING_ID).with(jwt()))
@@ -96,8 +97,8 @@ class ListingPoiControllerTest {
         // Service already returns correctly ordered results; controller just delegates.
         // Mock returns pinned(200m) first, then unpinned(50m) — verifying controller
         // passes through the service-ordered list unchanged.
-        PoiResponse unpinned = new PoiResponse("id-unpinned", "Nearby ATM",   "BANK",    50,  13.3411, 74.7422, false, true);
-        PoiResponse pinned   = new PoiResponse("id-pinned",   "Featured Park", "PARK",   200, 13.3430, 74.7450, true,  true);
+        PoiResponse unpinned = new PoiResponse("id-unpinned", "Nearby ATM",   "BANK",    50,  13.3411, 74.7422, false, true, false);
+        PoiResponse pinned   = new PoiResponse("id-pinned",   "Featured Park", "PARK",   200, 13.3430, 74.7450, true,  true, false);
         when(service.getApproved(LISTING_ID)).thenReturn(List.of(pinned, unpinned));
 
         mockMvc.perform(get("/api/listings/{listingId}/pois", LISTING_ID).with(jwt()))
@@ -207,6 +208,129 @@ class ListingPoiControllerTest {
      * listings (createdBy == null). This confirms the admin bypass path is not broken by the
      * null-owner guard added for non-admin callers.
      */
+    // ==================== #2642: manual POI distanceMeters persistence ====================
+
+    private static Listing ownedListing() {
+        Listing listing = new Listing();
+        listing.setId(LISTING_ID);
+        listing.setCreatedBy(DEALER_ID);
+        listing.setStatus("LIVE");
+        listing.setPropertyType("house");
+        return listing;
+    }
+
+    @Test
+    void addManual_withDistanceMeters_persistsOnEntity() throws Exception {
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
+                .thenReturn(ownedListing());
+
+        ArgumentCaptor<ListingPoi> captor = ArgumentCaptor.forClass(ListingPoi.class);
+        ListingPoi saved = new ListingPoi();
+        saved.setId(UUID.randomUUID());
+        saved.setListingId(LISTING_ID);
+        saved.setName("Test POI");
+        saved.setCategory("HOSPITAL");
+        saved.setDistanceMeters(1300);
+        saved.setApproved(true);
+        saved.setPinned(false);
+        when(service.save(captor.capture())).thenReturn(saved);
+
+        mockMvc.perform(post("/api/listings/{listingId}/pois/manual", LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Test POI","category":"HOSPITAL","distanceMeters":1300}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.distanceMeters").value(1300));
+
+        org.junit.jupiter.api.Assertions.assertEquals(1300, captor.getValue().getDistanceMeters());
+    }
+
+    @Test
+    void addManual_withSmallerDistanceMeters_persistsOnEntity() throws Exception {
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
+                .thenReturn(ownedListing());
+
+        ArgumentCaptor<ListingPoi> captor = ArgumentCaptor.forClass(ListingPoi.class);
+        ListingPoi saved = new ListingPoi();
+        saved.setId(UUID.randomUUID());
+        saved.setListingId(LISTING_ID);
+        saved.setName("Test POI");
+        saved.setCategory("SCHOOL");
+        saved.setDistanceMeters(850);
+        saved.setApproved(true);
+        saved.setPinned(false);
+        when(service.save(captor.capture())).thenReturn(saved);
+
+        mockMvc.perform(post("/api/listings/{listingId}/pois/manual", LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Test POI","category":"SCHOOL","distanceMeters":850}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.distanceMeters").value(850));
+
+        org.junit.jupiter.api.Assertions.assertEquals(850, captor.getValue().getDistanceMeters());
+    }
+
+    @Test
+    void addManual_withNullDistanceMeters_persistsNull() throws Exception {
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
+                .thenReturn(ownedListing());
+
+        ArgumentCaptor<ListingPoi> captor = ArgumentCaptor.forClass(ListingPoi.class);
+        ListingPoi saved = new ListingPoi();
+        saved.setId(UUID.randomUUID());
+        saved.setListingId(LISTING_ID);
+        saved.setName("Test POI");
+        saved.setCategory("HOSPITAL");
+        saved.setDistanceMeters(null);
+        saved.setApproved(true);
+        saved.setPinned(false);
+        when(service.save(captor.capture())).thenReturn(saved);
+
+        mockMvc.perform(post("/api/listings/{listingId}/pois/manual", LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Test POI","category":"HOSPITAL"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.distanceMeters").value(org.hamcrest.Matchers.nullValue()));
+
+        org.junit.jupiter.api.Assertions.assertNull(captor.getValue().getDistanceMeters());
+    }
+
+    @Test
+    void addManual_withZeroDistanceMeters_returns400() throws Exception {
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
+                .thenReturn(ownedListing());
+
+        mockMvc.perform(post("/api/listings/{listingId}/pois/manual", LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Test POI","category":"HOSPITAL","distanceMeters":0}
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void addManual_withNegativeDistanceMeters_returns400() throws Exception {
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
+                .thenReturn(ownedListing());
+
+        mockMvc.perform(post("/api/listings/{listingId}/pois/manual", LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Test POI","category":"HOSPITAL","distanceMeters":-50}
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
     @Test
     void getSuggestions_scrapedListing_adminCaller_returns200() throws Exception {
         // Listing has no coordinates — this bypasses overpassService calls so no additional stubs needed.

@@ -583,5 +583,52 @@
                 </plugins>
             </build>
         </profile>
+        <!--
+            Activate with `mvn -f apps/api/pom.xml -Plisting-poi-unique-constraint-it verify`.
+            Runs ListingPoiUniqueConstraintIT tagged @Tag("integration") via failsafe, bypassing
+            the surefire-level <excludedGroups>integration</excludedGroups>. Requires Docker
+            (Testcontainers with postgis/postgis:15-3.4-alpine). Verifies the V139 fix for the
+            pre-existing listing_pois_listing_osm_unique bug that blocked multiple manual POIs
+            per listing (issue #2642 user-approved extension).
+        -->
+        <profile>
+            <id>listing-poi-unique-constraint-it</id>
+            <build>
+                <plugins>
+                    <!-- Skip surefire entirely under this profile; only failsafe runs. -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <argLine>
+                                -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar
+                                -XX:+EnableDynamicAgentLoading
+                                -Dnet.bytebuddy.experimental=true
+                            </argLine>
+                            <!-- Narrowed include: ONLY ListingPoiUniqueConstraintIT. -->
+                            <includes>
+                                <include>**/ListingPoiUniqueConstraintIT.java</include>
+                            </includes>
+                            <groups>integration</groups>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 </project>

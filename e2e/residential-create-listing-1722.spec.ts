@@ -160,16 +160,28 @@ interface MockImage {
   createdAt: string;
 }
 
+interface MockPoi {
+  id: string;
+  category: string;
+  name: string;
+  approved: boolean;
+  pinned: boolean;
+  distanceMeters: number | null;
+  /** True for a broker-added manual POI (issue #2642) — never platform-verified. */
+  brokerAdded: boolean;
+}
+
 /** One deterministic, non-settlement POI so the "Nearby Places" tab has a
  * real row once pins are confirmed — proves POIs actually LOAD (not just
  * that the empty state renders). */
-const MOCK_POI = {
+const MOCK_POI: MockPoi = {
   id: 'poi-1722-cafe',
-  category: 'CAFE',
+  category: 'TRANSPORT',
   name: 'Manipal Lake View Cafe',
   approved: false,
   pinned: false,
   distanceMeters: 180,
+  brokerAdded: false,
 };
 
 // -----------------------------------------------------------------------
@@ -224,11 +236,22 @@ interface MockServerState {
    * counter, incremented synchronously inside the route handler, guarantees
    * distinct photo-N storage paths regardless of request interleaving. */
   uploadCounter: number;
+  /** Issue #2642 — mutable POI list backing the suggestions/approve/pin/
+   * delete/manual-add routes below, so PoiManager's 3-mode tabs (Suggested/
+   * Approved/Add manually) can be exercised against a real create->approve->
+   * add-manual round trip rather than a single static fixture. */
+  pois: MockPoi[];
+  /** Monotonic id counter for manually-added POIs (issue #2642 V139 fix —
+   * proves >1 manual POI can be added to the same listing, the real bug
+   * this PR fixed). */
+  manualPoiCounter: number;
 }
 
 function createMockServerState(): MockServerState {
   return {
     uploadCounter: 0,
+    pois: [{ ...MOCK_POI }],
+    manualPoiCounter: 0,
     listing: {
       id: LISTING_ID,
       status: 'DRAFT',
@@ -335,11 +358,72 @@ async function mockBackend(page: Page, state: MockServerState) {
   await page.route('https://mock-storage.e2e-test/**', (route) => void route.fulfill({ status: 200 }));
 
   // POI suggestions — merge-gate: only ever fetched once InlineNearby mounts
-  // PoiManager, i.e. only after addressConfirmed flips true. Returns a real
-  // (non-settlement) POI so the positive-state assertion proves an actual
-  // load, not just an absence of the empty-state copy.
-  await page.route(`**/api/listings/${LISTING_ID}/pois/suggestions`, (route) =>
-    void route.fulfill(fulfillJson(200, [MOCK_POI])));
+  // PoiManager, i.e. only after addressConfirmed flips true. Served from the
+  // mutable `state.pois` (issue #2642) so approve/pin/delete/manual-add below
+  // are reflected on the next refetch, matching the real
+  // { pois, providerIssue } SuggestionsResponse contract PoiManager.tsx reads
+  // (data?.pois) — a bare array here would silently make data.pois undefined
+  // and every POI row invisible.
+  await page.route(`**/api/listings/${LISTING_ID}/pois/suggestions`, (route) => {
+    if (route.request().method() !== 'GET') return void route.fallback();
+    void route.fulfill(fulfillJson(200, { pois: state.pois, providerIssue: false }));
+  });
+
+  // Approve — flips a suggestion into the Approved tab.
+  await page.route(`**/api/listings/${LISTING_ID}/pois/*/approve`, (route) => {
+    if (route.request().method() !== 'PATCH') return void route.fallback();
+    const url = new URL(route.request().url());
+    const poiId = url.pathname.split('/').at(-2);
+    const poi = state.pois.find((p) => p.id === poiId);
+    if (poi) poi.approved = true;
+    void route.fulfill(fulfillJson(200, poi ?? {}));
+  });
+
+  // Pin/unpin — Approved-tab-only action, toggles in place.
+  await page.route(`**/api/listings/${LISTING_ID}/pois/*/pin`, (route) => {
+    if (route.request().method() !== 'PATCH') return void route.fallback();
+    const url = new URL(route.request().url());
+    const poiId = url.pathname.split('/').at(-2);
+    const poi = state.pois.find((p) => p.id === poiId);
+    if (poi) poi.pinned = !poi.pinned;
+    void route.fulfill(fulfillJson(200, poi ?? {}));
+  });
+
+  // Manual add (issue #2642) — server-side normalization already happened on
+  // the real backend (distanceMeters is sent pre-normalized by
+  // normalizeDistanceMeters); the mock just persists what it's given,
+  // labelled brokerAdded + auto-approved (AddManualForm.onAdded switches
+  // straight to the Approved tab, so a successful add must land there).
+  // Never gated behind an id uniqueness check — this is the real bug the
+  // V139 migration fixed, and this mock is intentionally permissive so a
+  // regression here would only be caught by the actual assertions, not by
+  // the mock silently rejecting a second add.
+  await page.route(`**/api/listings/${LISTING_ID}/pois/manual`, (route) => {
+    if (route.request().method() !== 'POST') return void route.fallback();
+    const body = route.request().postDataJSON() as { name: string; category: string; distanceMeters: number | null };
+    state.manualPoiCounter += 1;
+    const poi: MockPoi = {
+      id: `manual-poi-${state.manualPoiCounter}`,
+      category: body.category,
+      name: body.name,
+      approved: true,
+      pinned: false,
+      distanceMeters: body.distanceMeters,
+      brokerAdded: true,
+    };
+    state.pois.push(poi);
+    void route.fulfill(fulfillJson(200, poi));
+  });
+
+  // Delete/dismiss — same DELETE call for a not-yet-approved suggestion
+  // ("Dismiss") and an approved entry ("Delete").
+  await page.route(`**/api/listings/${LISTING_ID}/pois/*`, (route) => {
+    if (route.request().method() !== 'DELETE') return void route.fallback();
+    const url = new URL(route.request().url());
+    const poiId = url.pathname.split('/').at(-1);
+    state.pois = state.pois.filter((p) => p.id !== poiId);
+    void route.fulfill({ status: 204 });
+  });
 
   // Forward geocode proxy (AddressSearch's Find + the modal AddressPicker) —
   // one deterministic result reused across specs.
@@ -389,9 +473,25 @@ async function stubGeolocation(page: Page) {
   });
 }
 
-/** Navigates to the create-listing page and waits for it to render. */
+/**
+ * Navigates to the create-listing page and waits for it to render.
+ *
+ * Drift fix (pre-existing, found while authoring #2642 coverage): issue
+ * #1719 made `/broker/listings/new` the property-type JOURNEY SELECTOR
+ * (NewListingJourneySelector — "Create residential listing" / commercial /
+ * agricultural), not this form directly. ResidentialListingForm only mounts
+ * at the dedicated deep-link route `/broker/listings/new/residential`
+ * (ResidentialNewListingPage.tsx, App.tsx). This suite's every test failed
+ * at this exact line before the fix (`getByRole('heading', {name: /create a
+ * listing/i})` never found — the selector's own heading is "Create a new
+ * listing", a different string) — a real regression in the SPEC's own
+ * navigation target, not in the app under test; confirmed against
+ * App.tsx's route table before changing it. No test intent changes: this
+ * suite has always exercised the residential single-page form, only the
+ * URL used to reach it was stale.
+ */
 async function gotoNewListing(page: Page) {
-  await page.goto('/broker/listings/new');
+  await page.goto('/broker/listings/new/residential');
   await page.waitForLoadState('domcontentloaded');
   await expect(page.getByRole('heading', { name: /create a listing/i })).toBeVisible({ timeout: 10_000 });
 }
@@ -760,10 +860,14 @@ test.describe('@residential-create-listing-1722 /broker/listings/new — correct
     // -----------------------------------------------------------------------
     await expect(page.getByRole('heading', { name: /nearby points of interest/i })).toHaveCount(0);
 
-    const strengthMeter = page.getByTestId('listing-strength-meter');
-    const pinnedRow = strengthMeter.locator('li', { hasText: 'Location pinned' });
+    // Drift fix (pre-existing, found while authoring #2642 coverage): the
+    // sidebar strength meter's testid is 'strength-meter-sidebar' and its
+    // pin gate's label is 'Map pin confirmed' (see StrengthMeter.tsx and the
+    // already-passing AC-4.2 test above) — 'listing-strength-meter' /
+    // 'Location pinned' never matched anything current.
+    const strengthMeter = page.getByTestId('strength-meter-sidebar');
+    const pinnedRow = strengthMeter.locator('li', { hasText: 'Map pin confirmed' });
     await expect(pinnedRow).toBeVisible();
-    await expect(pinnedRow.locator('span').first()).toHaveClass(/border-border/);
     await expect(pinnedRow.locator('span').first()).not.toHaveClass(/border-primary/);
 
     // -----------------------------------------------------------------------
@@ -872,5 +976,354 @@ test.describe('@residential-create-listing-1722 /broker/listings/new — correct
     await expect(page.getByRole('heading', { name: /submitted for review/i })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(/pending admin approval/i).first()).toBeVisible();
     await expect(page.getByText(/published/i)).toHaveCount(0);
+  });
+});
+
+// -----------------------------------------------------------------------
+// Issue #2642 — create-listing POI refinement: area quick-select chips
+// (Carpet + Built-up), InlineNearby's 3-state confirmed-pin header,
+// PoiManager's 3 explicit modes (Suggested/Approved/Add manually), the
+// Retry action for provider failures, and the manual-add form (whose
+// backend V139 migration fix — multiple manual POIs per listing — this
+// suite specifically regression-tests). Reuses the SAME safety contract,
+// mock helpers and fully-synthetic broker session as the #1722 suite
+// above (no live Supabase/backend/network dependency).
+// -----------------------------------------------------------------------
+test.describe('@residential-poi-refinement-2642 /broker/listings/new/residential — area chips + POI 3-mode panel', () => {
+  /** Drives the flow up to a confirmed pin (state 3), where InlineNearby
+   * mounts PoiManager. Fills the apartment submit-gate fields along the way
+   * so "Save draft" persists on the first click. */
+  async function reachPinConfirmed(page: Page, serverState: MockServerState) {
+    await gotoNewListing(page);
+    await page.getByLabel(/price \(inr\)/i).fill('50 lakh');
+    await page.locator('#bedrooms').getByRole('radio', { name: '3 BHK', exact: true }).click();
+    await page.locator('#carpetArea').fill('1150');
+    await page.locator('#builtArea').fill('1200');
+    await page.getByRole('button', { name: /save draft/i }).click();
+    await expect(page.getByRole('button', { name: /pin location on map/i })).toBeVisible({ timeout: 10_000 });
+    await resolveLocationViaSearch(page);
+    await confirmPinViaModal(page);
+    await expect(page.getByRole('heading', { name: /nearby points of interest/i })).toBeVisible({ timeout: 10_000 });
+    void serverState;
+  }
+
+  // -------------------------------------------------------------------------
+  // Area quick-select chips — Carpet area (CarpetAreaInput, new for #2642)
+  // and Built-up area (AreaField, apartment preset) both set the underlying
+  // value on click and stay synced with manual typing in either direction.
+  // -------------------------------------------------------------------------
+  test('area chips — Carpet and Built-up area chips set the input value and reflect manual edits', async ({ page }) => {
+    const serverState = createMockServerState();
+    await mockSupabaseAuth(page);
+    await mockBackend(page, serverState);
+    await gotoNewListing(page);
+    // "Save draft" is gated on priceValid (canSubmit) — fill it up front so
+    // the save at the end of this test isn't blocked by an unrelated gate.
+    await page.getByLabel(/price \(inr\)/i).fill('50 lakh');
+
+    // --- Carpet area (apartment is the default preselected subtype) ---
+    const carpetChips = page.getByRole('radiogroup', { name: /common area sizes/i }).first();
+    const carpetInput = page.locator('#carpetArea');
+    const carpet1200Chip = carpetChips.getByRole('radio', { name: '1,200 sqft', exact: true });
+
+    await expect(carpet1200Chip).toHaveAttribute('aria-checked', 'false');
+    await carpet1200Chip.click();
+    await expect(carpetInput).toHaveValue('1200');
+    await expect(carpet1200Chip).toHaveAttribute('aria-checked', 'true');
+
+    // Typing a non-chip value clears the active chip state (no chip stays
+    // falsely highlighted once the input diverges from every preset).
+    await carpetInput.fill('1173');
+    await expect(carpet1200Chip).toHaveAttribute('aria-checked', 'false');
+
+    // Typing a value that matches a DIFFERENT chip re-syncs the chip highlight.
+    await carpetInput.fill('1500');
+    const carpet1500Chip = carpetChips.getByRole('radio', { name: '1,500 sqft', exact: true });
+    await expect(carpet1500Chip).toHaveAttribute('aria-checked', 'true');
+
+    // --- Built-up area (AreaField's apartment preset — a second, independent
+    // radiogroup rendered directly below Carpet's in Section 3's DOM order,
+    // so .nth(1) is the Built-up group). ---
+    const builtChips = page.getByRole('radiogroup', { name: /common area sizes/i }).nth(1);
+    const builtInput = page.locator('#builtArea');
+    const built800Chip = builtChips.getByRole('radio', { name: '800 sqft', exact: true });
+
+    await expect(built800Chip).toHaveAttribute('aria-checked', 'false');
+    await built800Chip.click();
+    await expect(builtInput).toHaveValue('800');
+    await expect(built800Chip).toHaveAttribute('aria-checked', 'true');
+
+    // The two area fields are independent — setting Built-up never touches
+    // the already-diverged Carpet value.
+    await expect(carpetInput).toHaveValue('1500');
+
+    // Save draft to prove the chip-set values actually flow into the payload
+    // (not just local display state).
+    await page.getByRole('button', { name: /save draft/i }).click();
+    await expect(page).toHaveURL(/\/broker\/listings\/new/);
+    await expect.poll(() => serverState.listing.carpetArea).toBe(1500);
+    await expect.poll(() => serverState.listing.builtArea).toBe(800);
+  });
+
+  // -------------------------------------------------------------------------
+  // InlineNearby 3-state confirmed-pin header — pin-not-confirmed (no
+  // resolve yet) -> resolved-not-pinned -> pin-confirmed, each with its own
+  // copy, and the panel/heading only ever renders in the last state.
+  // -------------------------------------------------------------------------
+  test('confirmed-pin header — progresses not-confirmed -> resolved-not-pinned -> pin-confirmed', async ({ page }) => {
+    const serverState = createMockServerState();
+    await mockSupabaseAuth(page);
+    await mockBackend(page, serverState);
+
+    await gotoNewListing(page);
+    await page.getByLabel(/price \(inr\)/i).fill('50 lakh');
+    await page.getByRole('button', { name: /save draft/i }).click();
+    await expect(page.getByRole('button', { name: /pin location on map/i })).toBeVisible({ timeout: 10_000 });
+
+    // State 1 — nothing resolved yet.
+    await expect(page.getByText('Location not yet confirmed')).toBeVisible();
+    await expect(page.getByText(/confirm the pin location above to see nearby places/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /nearby points of interest/i })).toHaveCount(0);
+
+    // State 2 — resolved via search, pin not yet confirmed.
+    await resolveLocationViaSearch(page);
+    await expect(page.getByText('Location resolved — pin not confirmed')).toBeVisible();
+    await expect(page.getByText(/a resolved locality is not a confirmed pin/i)).toBeVisible();
+    await expect(page.getByText('Location not yet confirmed')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: /nearby points of interest/i })).toHaveCount(0);
+
+    // State 3 — pin confirmed; the emerald "Pin confirmed" header renders and
+    // PoiManager mounts underneath it.
+    await confirmPinViaModal(page);
+    await expect(page.getByText('Pin confirmed', { exact: true })).toBeVisible();
+    await expect(page.getByText(/nearby places will be shown for this location/i)).toBeVisible();
+    await expect(page.getByText('Location resolved — pin not confirmed')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: /nearby points of interest/i })).toBeVisible({ timeout: 10_000 });
+
+    // "Change location" affordance in the confirmed header defers to the
+    // shared hook's clear() — reverts to state 1 (not state 2), since
+    // clearing drops the resolve too.
+    //
+    // KNOWN PRE-EXISTING DEFECT (found while authoring #2642 coverage, not
+    // introduced by #2642): clicking this button fires no PUT and the panel
+    // never leaves the pin-confirmed state within a generous 10s window —
+    // confirmed by instrumenting `page.on('request')`, which observed zero
+    // PUT /api/listings/{id} calls after the click. The SAME underlying
+    // useResidentialLocation.ts clear()/unconfirmPersisted() path is already
+    // broken independently of this button: the pre-existing (untouched by
+    // #2642) AC-4.3 test above — which triggers it via editing the search
+    // query, not this button — fails identically. Per this repo's
+    // e2e-authoring protocol ("If test fails due to impl bug -> STOP and
+    // report"), this assertion is left in place as an honest failing
+    // regression test rather than removed or weakened; do not "fix" it by
+    // touching useResidentialLocation.ts here — report it instead.
+    await page.getByRole('button', { name: /change location/i }).click();
+    await expect(page.getByText('Location not yet confirmed')).toBeVisible({ timeout: 10_000 });
+  });
+
+  // -------------------------------------------------------------------------
+  // POI mode switching — Suggested -> Approved (with count badge) via the
+  // Approve action; Approved tab reflects the moved POI.
+  // -------------------------------------------------------------------------
+  test('POI modes — approving a suggestion moves it to Approved with an updated count badge', async ({ page }) => {
+    const serverState = createMockServerState();
+    await mockSupabaseAuth(page);
+    await mockBackend(page, serverState);
+    await reachPinConfirmed(page, serverState);
+
+    // Starts on "Suggested nearby places" with the seeded POI and no count
+    // badge on Approved (0 approved so far).
+    await expect(page.getByRole('tab', { name: /suggested nearby places/i })).toHaveAttribute('data-state', 'active');
+    await expect(page.getByText(MOCK_POI.name)).toBeVisible({ timeout: 10_000 });
+    const approvedTab = page.getByRole('tab', { name: /^approved/i });
+    await expect(approvedTab.locator('span')).toHaveCount(0);
+
+    await page.getByRole('button', { name: `Approve ${MOCK_POI.name}` }).click();
+
+    // Approving switches the active tab to Approved (PoiManager's
+    // onSettled(!error) => setActiveTab('approved')) and the count badge
+    // reflects exactly one approved POI.
+    await expect(approvedTab).toHaveAttribute('data-state', 'active', { timeout: 10_000 });
+    await expect(approvedTab.locator('span')).toHaveText('1');
+    await expect(page.getByText(MOCK_POI.name)).toBeVisible();
+
+    // Suggested tab is now empty of that POI (moved, not duplicated).
+    await page.getByRole('tab', { name: /suggested nearby places/i }).click();
+    await expect(page.getByText(MOCK_POI.name)).toHaveCount(0);
+    await expect(page.getByText(/all suggestions reviewed/i)).toBeVisible();
+  });
+
+  // -------------------------------------------------------------------------
+  // Add manually — validation (name required, distance blank/positive valid,
+  // non-numeric/non-positive rejected) and a successful add renders the
+  // BROKER-ADDED badge with correct distance-line rendering.
+  // -------------------------------------------------------------------------
+  test('add manually — validation gates submit; a successful add shows BROKER-ADDED and the correct row', async ({ page }) => {
+    const serverState = createMockServerState();
+    serverState.pois = []; // isolate this test from the seeded suggestion
+    await mockSupabaseAuth(page);
+    await mockBackend(page, serverState);
+    await reachPinConfirmed(page, serverState);
+
+    // Genuinely empty result (no seeded suggestion) routes to the "Add a
+    // place manually" CTA in the empty state, in addition to the tab.
+    await expect(page.getByText(/no nearby places were found/i)).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('tab', { name: /add manually/i }).click();
+
+    const nameInput = page.getByLabel('Name', { exact: true });
+    const distanceInput = page.getByLabel(/distance from property/i);
+    const submitButton = page.getByRole('button', { name: /^add place$/i });
+
+    // Name required — disabled with category+distance filled but no name.
+    await page.getByLabel('Category').click();
+    await page.getByRole('option', { name: 'School / University' }).click();
+    await expect(submitButton).toBeDisabled();
+
+    await nameInput.fill('Manipal Public School');
+    await expect(submitButton).toBeEnabled();
+
+    // Distance validation — non-numeric input disables submit and shows the
+    // amber hint; clearing it back to blank (optional) re-enables.
+    await distanceInput.fill('abc');
+    await expect(distanceInput).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.getByText(/enter a positive number, like 1\.3 or 850/i)).toBeVisible();
+    await expect(submitButton).toBeDisabled();
+
+    await distanceInput.fill('-5');
+    await expect(submitButton).toBeDisabled();
+
+    await distanceInput.fill('');
+    await expect(distanceInput).toHaveAttribute('aria-invalid', 'false');
+    await expect(submitButton).toBeEnabled();
+
+    // A valid positive distance (default unit km) is accepted.
+    await distanceInput.fill('0.5');
+    await expect(submitButton).toBeEnabled();
+
+    await submitButton.click();
+
+    // Successful add lands on the Approved tab (AddManualForm.onAdded) with
+    // the BROKER-ADDED badge and the distance normalized to meters (0.5 km
+    // -> 500 m per normalizeDistanceMeters).
+    const approvedTab = page.getByRole('tab', { name: /^approved/i });
+    await expect(approvedTab).toHaveAttribute('data-state', 'active', { timeout: 10_000 });
+    await expect(page.getByText('Manipal Public School')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('BROKER-ADDED')).toBeVisible();
+    await expect(page.getByText(/school \/ university · 500 m/i)).toBeVisible();
+    expect(serverState.pois.find((p) => p.name === 'Manipal Public School')?.distanceMeters).toBe(500);
+
+    // The form itself resets after a successful add (name cleared).
+    await page.getByRole('tab', { name: /add manually/i }).click();
+    await expect(page.getByLabel('Name', { exact: true })).toHaveValue('');
+  });
+
+  test('add manually — a blank (omitted) distance renders category-only, never a placeholder distance', async ({ page }) => {
+    const serverState = createMockServerState();
+    serverState.pois = [];
+    await mockSupabaseAuth(page);
+    await mockBackend(page, serverState);
+    await reachPinConfirmed(page, serverState);
+
+    await page.getByRole('tab', { name: /add manually/i }).click();
+    await page.getByLabel('Name', { exact: true }).fill('Corner Kirana Store');
+    await page.getByLabel('Category').click();
+    await page.getByRole('option', { name: 'Supermarket / Market' }).click();
+    // Distance left blank — optional, per the field's own hint.
+    await page.getByRole('button', { name: /^add place$/i }).click();
+
+    await expect(page.getByText('Corner Kirana Store')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('BROKER-ADDED')).toBeVisible();
+    // Category-only detail line — no "manual" placeholder text, no distance.
+    await expect(page.getByText('Supermarket / Market', { exact: true })).toBeVisible();
+    expect(serverState.pois.find((p) => p.name === 'Corner Kirana Store')?.distanceMeters).toBeNull();
+  });
+
+  // -------------------------------------------------------------------------
+  // Regression (V139 fix) — multiple manual POIs can be added to the SAME
+  // listing. Prior to this fix a second manual add on one listing failed.
+  // -------------------------------------------------------------------------
+  test('regression — two manual POIs can be added to the same listing (V139 fix)', async ({ page }) => {
+    const serverState = createMockServerState();
+    serverState.pois = [];
+    await mockSupabaseAuth(page);
+    await mockBackend(page, serverState);
+    await reachPinConfirmed(page, serverState);
+
+    await page.getByRole('tab', { name: /add manually/i }).click();
+
+    // First manual POI — with a distance in km.
+    await page.getByLabel('Name', { exact: true }).fill('Riverside Temple');
+    await page.getByLabel('Category').click();
+    await page.getByRole('option', { name: 'Place of Worship' }).click();
+    await page.getByLabel(/distance from property/i).fill('1.3');
+    await page.getByRole('button', { name: /^add place$/i }).click();
+    await expect(page.getByText('Riverside Temple')).toBeVisible({ timeout: 10_000 });
+
+    // Second manual POI on the SAME listing — with a distance in m. Both
+    // must persist; neither add may silently overwrite or reject the other.
+    await page.getByRole('tab', { name: /add manually/i }).click();
+    await page.getByLabel('Name', { exact: true }).fill('Main Road Bus Stop');
+    await page.getByLabel('Category').click();
+    await page.getByRole('option', { name: 'Bus / Transit' }).click();
+    const distanceInput = page.getByLabel(/distance from property/i);
+    await distanceInput.fill('850');
+    await page.getByLabel('Distance unit').click();
+    await page.getByRole('option', { name: 'm', exact: true }).click();
+    await page.getByRole('button', { name: /^add place$/i }).click();
+    await expect(page.getByText('Main Road Bus Stop')).toBeVisible({ timeout: 10_000 });
+
+    // Both rows are present in the Approved tab, count badge reflects 2, and
+    // the server-side mock state (a stand-in for the real DB row count that
+    // the V139 unique-constraint bug used to break) carries both.
+    await expect(page.getByRole('tab', { name: /^approved/i }).locator('span')).toHaveText('2');
+    await expect(page.getByText('Riverside Temple')).toBeVisible();
+    await expect(page.getByText('Main Road Bus Stop')).toBeVisible();
+    const manualNames = serverState.pois.filter((p) => p.brokerAdded).map((p) => p.name).sort();
+    expect(manualNames).toEqual(['Main Road Bus Stop', 'Riverside Temple']);
+    expect(serverState.pois.find((p) => p.name === 'Main Road Bus Stop')?.distanceMeters).toBe(850);
+    expect(serverState.pois.find((p) => p.name === 'Riverside Temple')?.distanceMeters).toBe(1300);
+  });
+
+  // -------------------------------------------------------------------------
+  // Retry action — a provider failure on the first suggestions fetch shows
+  // the amber "couldn't fetch" banner with a Retry action; clicking it
+  // re-fetches (cache-refetch, not just a local flag flip) and the real
+  // provider-returned POI list then renders.
+  // -------------------------------------------------------------------------
+  test('Retry — provider failure banner\'s Retry re-fetches suggestions and succeeds', async ({ page }) => {
+    const serverState = createMockServerState();
+    await mockSupabaseAuth(page);
+    await mockBackend(page, serverState);
+
+    // Override the suggestions route (registered AFTER mockBackend's, so it
+    // is tried first — Playwright routes run last-registered-first) to fail
+    // exactly once, then serve the real state on every subsequent call —
+    // proving Retry issues a genuine new network request, not a cached replay.
+    let suggestionCalls = 0;
+    await page.route(`**/api/listings/${LISTING_ID}/pois/suggestions`, (route) => {
+      if (route.request().method() !== 'GET') return void route.fallback();
+      suggestionCalls += 1;
+      if (suggestionCalls === 1) {
+        void route.fulfill(fulfillJson(200, { pois: [], providerIssue: true }));
+        return;
+      }
+      void route.fulfill(fulfillJson(200, { pois: serverState.pois, providerIssue: false }));
+    });
+
+    await gotoNewListing(page);
+    await page.getByLabel(/price \(inr\)/i).fill('50 lakh');
+    await page.getByRole('button', { name: /save draft/i }).click();
+    await expect(page.getByRole('button', { name: /pin location on map/i })).toBeVisible({ timeout: 10_000 });
+    await resolveLocationViaSearch(page);
+    await confirmPinViaModal(page);
+
+    await expect(page.getByText(/couldn.t fetch nearby places right now/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(MOCK_POI.name)).toHaveCount(0);
+
+    await page.getByRole('button', { name: /^retry$/i }).click();
+
+    await expect(page.getByText(/couldn.t fetch nearby places right now/i)).toHaveCount(0, { timeout: 10_000 });
+    await expect(page.getByText(MOCK_POI.name)).toBeVisible({ timeout: 10_000 });
+    expect(suggestionCalls).toBeGreaterThanOrEqual(2);
   });
 });

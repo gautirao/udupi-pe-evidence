@@ -44,3 +44,46 @@ describe('InlineNearby — AC4: gated on the persisted addressConfirmed flag', (
     );
   });
 });
+
+describe('InlineNearby — 3-state confirmed-pin header (issue #2642)', () => {
+  it('shows the "location resolved, pin not confirmed" message (not the generic placeholder) when locationResolved is true and addressConfirmed is false', () => {
+    render(
+      <InlineNearby listingId="listing-1" propertyType="apartment" addressConfirmed={false} locationResolved />,
+    );
+
+    expect(screen.getByText(/location resolved.{0,3}pin not confirmed/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^location not yet confirmed$/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('mock-poi-manager')).not.toBeInTheDocument();
+  });
+
+  it('still shows the generic "not yet confirmed" placeholder when locationResolved is omitted (default-safe for Commercial/Agricultural callers)', () => {
+    render(<InlineNearby listingId="listing-1" propertyType="apartment" addressConfirmed={false} />);
+
+    expect(screen.getByText(/^location not yet confirmed$/i)).toBeInTheDocument();
+  });
+
+  it('renders a "Pin confirmed" banner with a working "Change location" action once addressConfirmed is true and onChangeLocation is provided', () => {
+    const onChangeLocation = vi.fn();
+    render(
+      <InlineNearby
+        listingId="listing-1"
+        propertyType="apartment"
+        addressConfirmed
+        onChangeLocation={onChangeLocation}
+      />,
+    );
+
+    expect(screen.getByText('Pin confirmed')).toBeInTheDocument();
+    const changeButton = screen.getByRole('button', { name: 'Change location' });
+    changeButton.click();
+    expect(onChangeLocation).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('mock-poi-manager')).toBeInTheDocument();
+  });
+
+  it('omits the "Change location" action when onChangeLocation is not provided (default-safe for Commercial/Agricultural callers)', () => {
+    render(<InlineNearby listingId="listing-1" propertyType="apartment" addressConfirmed />);
+
+    expect(screen.getByText('Pin confirmed')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Change location' })).not.toBeInTheDocument();
+  });
+});

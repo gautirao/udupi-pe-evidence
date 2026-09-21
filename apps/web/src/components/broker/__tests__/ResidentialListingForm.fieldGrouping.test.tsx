@@ -175,24 +175,30 @@ describe('ResidentialListingForm — issue #1722 correction #3 (Property details
     expect(within(bedroomsGroup as HTMLElement).getByRole('radio', { name: '5+ BHK' })).toBeInTheDocument();
   });
 
-  it('renders carpet area as a plain input + unit dropdown, with no quick-pick preset chips', () => {
+  it('renders carpet area with quick-pick preset chips above a plain input + unit dropdown (issue #2642)', async () => {
+    // Issue #2642 REVERSES the #1722 correction #3 / #2040 "no chips for
+    // carpet area" decision: carpet area now gets the same apartment preset
+    // chips as Built-up area, reusing AreaField.AREA_CHIPS.apartment directly.
+    const user = userEvent.setup();
     renderForm('apartment');
     const carpetAreaInput = document.getElementById('carpetArea') as HTMLInputElement | null;
     expect(carpetAreaInput).not.toBeNull();
     expect(carpetAreaInput?.placeholder).toBe('e.g. 1150');
 
-    // Preset area chips (e.g. "600 sqft", "1,200 sqft") must NOT be present for
-    // carpet area specifically. Issue #2040 — scoped to carpet area's own
-    // field container (rather than a document-wide query) because builtArea
-    // (now core, see the AC10-corrected test above) is an AreaField with its
-    // OWN "Common area sizes" quick-pick chips using the identical sqft
-    // presets, and is legitimately present elsewhere in the DOM.
+    // Scoped to carpet area's own field container (rather than a
+    // document-wide query) because Built-up area is a sibling AreaField with
+    // its OWN "Common area sizes" quick-pick chips using the identical sqft
+    // presets, legitimately present elsewhere in the DOM.
     const carpetAreaContainer = carpetAreaInput?.closest('.space-y-2') as HTMLElement;
     expect(carpetAreaContainer).toBeTruthy();
-    expect(within(carpetAreaContainer).queryByRole('radiogroup', { name: /common area sizes/i })).not.toBeInTheDocument();
+    expect(within(carpetAreaContainer).getByRole('radiogroup', { name: /common area sizes/i })).toBeInTheDocument();
     for (const chipLabel of ['600 sqft', '800 sqft', '1,000 sqft', '1,200 sqft', '1,500 sqft', '2,000 sqft']) {
-      expect(within(carpetAreaContainer).queryByText(chipLabel)).not.toBeInTheDocument();
+      expect(within(carpetAreaContainer).getByText(chipLabel)).toBeInTheDocument();
     }
+
+    // Clicking a chip sets both value and unit, mirroring AreaField's own chip behaviour.
+    await user.click(within(carpetAreaContainer).getByRole('radio', { name: '1,200 sqft' }));
+    expect(carpetAreaInput?.value).toBe('1200');
   });
 
   it('renders Bathrooms/Balconies and Furnishing/Facing as 2-column pairs, with Facing placeholder "Select direction"', () => {

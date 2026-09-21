@@ -8,5 +8,6 @@ public record ManualPoiRequest(
         String name,
         String category,
         Double latitude,
-        Double longitude
+        Double longitude,
+        Integer distanceMeters
 ) {}

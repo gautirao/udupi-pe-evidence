@@ -3,6 +3,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AREA_CHIPS } from '@/components/broker/AreaField';
 
 /**
  * #2387 — page-health decomposition: small presentational primitives shared
@@ -76,15 +77,25 @@ interface CarpetAreaInputProps {
 }
 
 /**
- * Carpet area — plain input + unit dropdown, no quick-pick preset chips
- * (issue #1722 correction #3 — design parity with create-residential-listing.html
- * §3 "Property details"). Deliberately NOT AreaField (which always renders
- * preset chips) — AreaField is shared with other property types/flows
- * (commercial, land) that are out of scope for this fix, so it stays untouched.
+ * Carpet area — plain input + unit dropdown, plus quick-pick preset chips
+ * above the input (issue #2642 — reverses the #1722 correction #3 / #2040
+ * "no chips" decision; design parity with the merged create-residential-listing.html
+ * §3 "Property details" mock). Reuses AreaField's apartment chip presets
+ * (600–2000 sqft) and radiogroup markup directly rather than swapping to
+ * AreaField wholesale — AreaField hardcodes its own `required` styling, label
+ * defaults, and conversion line, and stays shared with other property
+ * types/flows (commercial, land) that are out of scope here.
  */
 export function CarpetAreaInput({ initialArea, initialUnit, onChange }: CarpetAreaInputProps) {
   const [text, setText] = useState(initialArea != null ? String(initialArea) : '');
   const [unit, setUnit] = useState(initialUnit);
+
+  const chips = AREA_CHIPS.apartment;
+  const parsedValue = text.trim() !== '' ? parseFloat(text) : null;
+  const validValue = parsedValue != null && !isNaN(parsedValue) && parsedValue > 0 ? parsedValue : null;
+  const activeChipIndex = chips.findIndex(
+    (chip) => validValue != null && chip.value === validValue && chip.unit === unit,
+  );
 
   const handleTextChange = (raw: string) => {
     setText(raw);
@@ -98,29 +109,55 @@ export function CarpetAreaInput({ initialArea, initialUnit, onChange }: CarpetAr
     onChange(num != null && !isNaN(num) && num > 0 ? num : null, newUnit);
   };
 
+  const handleChipClick = (chip: (typeof chips)[number]) => {
+    setText(String(chip.value));
+    setUnit(chip.unit);
+    onChange(chip.value, chip.unit);
+  };
+
   return (
     <Field id="carpetArea" label="Carpet area">
-      <div className="flex gap-2">
-        <Input
-          id="carpetArea"
-          type="number"
-          min="0"
-          step="any"
-          inputMode="decimal"
-          placeholder="e.g. 1150"
-          value={text}
-          onChange={(e) => handleTextChange(e.target.value)}
-          className="h-11 flex-1"
-        />
-        <Select value={unit} onValueChange={handleUnitChange}>
-          <SelectTrigger className="h-11 w-28" aria-label="Carpet area unit">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="sqft">Sq.ft</SelectItem>
-            <SelectItem value="sqm">Sq.m</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="space-y-3">
+        <div role="radiogroup" aria-label="Common area sizes" className="flex flex-wrap gap-2">
+          {chips.map((chip, idx) => (
+            <button
+              key={chip.label}
+              type="button"
+              role="radio"
+              aria-checked={idx === activeChipIndex}
+              className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                idx === activeChipIndex
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-input bg-background hover:bg-secondary/50 text-foreground'
+              }`}
+              onClick={() => handleChipClick(chip)}
+            >
+              {chip.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <Input
+            id="carpetArea"
+            type="number"
+            min="0"
+            step="any"
+            inputMode="decimal"
+            placeholder="e.g. 1150"
+            value={text}
+            onChange={(e) => handleTextChange(e.target.value)}
+            className="h-11 flex-1"
+          />
+          <Select value={unit} onValueChange={handleUnitChange}>
+            <SelectTrigger className="h-11 w-28" aria-label="Carpet area unit">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="sqft">Sq.ft</SelectItem>
+              <SelectItem value="sqm">Sq.m</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
     </Field>
   );

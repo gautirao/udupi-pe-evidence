@@ -220,13 +220,19 @@ public class ListingPoiController {
                     "longitude must be between -180 and 180");
         }
 
+        // Validate distance if provided: must be a positive integer (metres).
+        if (request.distanceMeters() != null && request.distanceMeters() <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "distanceMeters must be a positive integer");
+        }
+
         ListingPoi poi = new ListingPoi();
         poi.setListingId(listingId);
         poi.setName(request.name());
         poi.setCategory(category.name());
         poi.setLatitude(request.latitude());
         poi.setLongitude(request.longitude());
-        poi.setDistanceMeters(null);   // manual POIs have no auto-calculated distance
+        poi.setDistanceMeters(request.distanceMeters());
         poi.setSource("manual");
         poi.setApproved(true);
         poi.setPinned(false);

@@ -1,9 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
-import { searchNominatim, type NominatimResult } from '@/lib/geocode';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,12 +16,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Pin, Trash2, PinOff, MapPin, Loader2, Search, X, Building2, Route, Home } from 'lucide-react';
-import { Separator } from '@/components/ui/separator';
+import {
+  Pin,
+  Trash2,
+  PinOff,
+  MapPin,
+  Loader2,
+  Search,
+  Building2,
+  Route,
+  Home,
+  AlertTriangle,
+} from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   CATEGORY_LABELS,
-  CATEGORY_ICONS,
   SETTLEMENT_CATEGORIES,
   AMENITY_CATEGORY_ORDER,
   formatDistance,
@@ -37,6 +45,8 @@ interface PoiResponse {
   longitude: number | null;
   pinned: boolean;
   approved: boolean;
+  /** True for a broker-added manual POI (source === "manual") — never platform-verified. */
+  brokerAdded: boolean;
 }
 
 interface SuggestionsResponse {
@@ -52,31 +62,50 @@ interface PoiRowProps {
   poi: PoiResponse;
   showApprove?: boolean;
   onApprove?: (id: string) => void;
+  /** Suggested-mode rows don't offer pin/unpin — that's an Approved-list action (design §7). */
+  showPin?: boolean;
   onPin: (id: string) => void;
   onDelete: (id: string) => void;
   isPinPending: boolean;
   isDeletePending: boolean;
   isApprovePending?: boolean;
+  /** "Dismiss" for a not-yet-approved suggestion, "Delete" for an approved entry — same DELETE call either way. */
+  deleteVerb?: 'Delete' | 'Dismiss';
 }
 
 function PoiRow({
   poi,
   showApprove,
   onApprove,
+  showPin = true,
   onPin,
   onDelete,
   isPinPending,
   isDeletePending,
   isApprovePending,
+  deleteVerb = 'Delete',
 }: PoiRowProps) {
+  // Design §11.3 — a manual POI with no distance must render category-only,
+  // never a placeholder ("manual", "0 km", etc.). formatDistance(null) itself
+  // returns "manual" for other call-sites (Location Context) that always have
+  // a real distance, so the omission is handled here rather than there.
+  const detailLine =
+    poi.distanceMeters == null
+      ? (CATEGORY_LABELS[poi.category] ?? poi.category)
+      : `${CATEGORY_LABELS[poi.category] ?? poi.category} · ${formatDistance(poi.distanceMeters)}`;
+
   return (
     <div className="flex items-center gap-3 py-2 border-b last:border-b-0">
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{poi.name}</p>
-        <p className="text-xs text-muted-foreground">
-          {CATEGORY_LABELS[poi.category] ?? poi.category} &middot;{' '}
-          {formatDistance(poi.distanceMeters)}
-        </p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm font-medium truncate">{poi.name}</p>
+          {poi.brokerAdded && (
+            <Badge variant="secondary" className="shrink-0 text-[10px] tracking-wide">
+              BROKER-ADDED
+            </Badge>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">{detailLine}</p>
       </div>
       <div className="flex items-center gap-1 shrink-0">
         {showApprove && onApprove && (
@@ -90,25 +119,27 @@ function PoiRow({
             Approve
           </Button>
         )}
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={() => onPin(poi.id)}
-          disabled={isPinPending}
-          aria-label={poi.pinned ? `Unpin ${poi.name}` : `Pin ${poi.name}`}
-        >
-          {poi.pinned ? (
-            <Pin className="h-4 w-4 fill-current text-primary" />
-          ) : (
-            <PinOff className="h-4 w-4 text-muted-foreground" />
-          )}
-        </Button>
+        {showPin && (
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => onPin(poi.id)}
+            disabled={isPinPending}
+            aria-label={poi.pinned ? `Unpin ${poi.name}` : `Pin ${poi.name}`}
+          >
+            {poi.pinned ? (
+              <Pin className="h-4 w-4 fill-current text-primary" />
+            ) : (
+              <PinOff className="h-4 w-4 text-muted-foreground" />
+            )}
+          </Button>
+        )}
         <Button
           size="icon"
           variant="ghost"
           onClick={() => onDelete(poi.id)}
           disabled={isDeletePending}
-          aria-label={`Delete ${poi.name}`}
+          aria-label={`${deleteVerb} ${poi.name}`}
         >
           <Trash2 className="h-4 w-4 text-destructive" />
         </Button>
@@ -135,6 +166,53 @@ function SkeletonRows() {
   );
 }
 
+export type DistanceUnit = 'km' | 'm';
+
+/**
+ * Only `1.3`, `.5`, `850`, etc. — no negative sign, no exponents, no free
+ * text. Exported for direct unit testing (jsdom's Radix Select interaction
+ * makes DOM-level exercise of this unreliable — see PoiManager.test.tsx).
+ */
+export const DISTANCE_PATTERN = /^\d*\.?\d+$/;
+
+/**
+ * Scoped per listing (not a bare global key) so a broker editing multiple
+ * listings in one browser session doesn't have one listing's last-used unit
+ * leak into another's default (issue #2642 risk).
+ */
+export function distanceUnitStorageKey(listingId: string): string {
+  return `poi-manual-distance-unit:${listingId}`;
+}
+
+export function getStoredDistanceUnit(listingId: string): DistanceUnit {
+  try {
+    const stored = window.localStorage.getItem(distanceUnitStorageKey(listingId));
+    return stored === 'm' ? 'm' : 'km';
+  } catch {
+    // localStorage can throw (private browsing, disabled storage) — fall back silently.
+    return 'km';
+  }
+}
+
+export function storeDistanceUnit(listingId: string, unit: DistanceUnit): void {
+  try {
+    window.localStorage.setItem(distanceUnitStorageKey(listingId), unit);
+  } catch {
+    // Non-critical convenience — ignore write failures.
+  }
+}
+
+/** `1.3 km -> 1300`, `850 m -> 850`. Caller must have already validated `trimmed`. */
+export function normalizeDistanceMeters(trimmed: string, unit: DistanceUnit): number {
+  const value = parseFloat(trimmed);
+  return unit === 'km' ? Math.round(value * 1000) : Math.round(value);
+}
+
+/** `''` is valid (blank/omitted); otherwise must match {@link DISTANCE_PATTERN} and be `> 0`. */
+export function isDistanceInputValid(trimmed: string): boolean {
+  return trimmed === '' || (DISTANCE_PATTERN.test(trimmed) && parseFloat(trimmed) > 0);
+}
+
 interface AddManualFormProps {
   listingId: string;
   onAdded: () => void;
@@ -144,66 +222,18 @@ function AddManualForm({ listingId, onAdded }: AddManualFormProps) {
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
-  const [locationQuery, setLocationQuery] = useState('');
-  const [locationResults, setLocationResults] = useState<NominatimResult[]>([]);
-  const [locationSearching, setLocationSearching] = useState(false);
-  const [locationChip, setLocationChip] = useState<{ name: string; lat: number; lon: number } | null>(null);
-  const [showLocationResults, setShowLocationResults] = useState(false);
-  const locationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const locationWrapperRef = useRef<HTMLDivElement>(null);
+  const [distanceText, setDistanceText] = useState('');
+  const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>(() => getStoredDistanceUnit(listingId));
 
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (locationWrapperRef.current && !locationWrapperRef.current.contains(e.target as Node)) {
-        setShowLocationResults(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleLocationSearch = (value: string) => {
-    setLocationQuery(value);
-    setLocationChip(null);
-    if (locationDebounceRef.current) clearTimeout(locationDebounceRef.current);
-    if (!value.trim()) {
-      setLocationResults([]);
-      setShowLocationResults(false);
-      return;
-    }
-    locationDebounceRef.current = setTimeout(async () => {
-      setLocationSearching(true);
-      try {
-        const res = await searchNominatim(value);
-        setLocationResults(res);
-        setShowLocationResults(res.length > 0);
-      } catch {
-        setLocationResults([]);
-      } finally {
-        setLocationSearching(false);
-      }
-    }, 400);
-  };
-
-  const handleLocationSelect = (result: NominatimResult) => {
-    setLocationChip({ name: result.display_name, lat: result.lat, lon: result.lon });
-    setLocationQuery(result.display_name);
-    setShowLocationResults(false);
-  };
-
-  const handleLocationClear = () => {
-    setLocationChip(null);
-    setLocationQuery('');
-    setLocationResults([]);
-  };
+  const trimmedDistance = distanceText.trim();
+  const distanceValid = isDistanceInputValid(trimmedDistance);
 
   const addMutation = useMutation({
     mutationFn: () =>
       api.post(`/api/listings/${listingId}/pois/manual`, {
         name: name.trim(),
         category,
-        latitude: locationChip?.lat,
-        longitude: locationChip?.lon,
+        distanceMeters: trimmedDistance === '' ? null : normalizeDistanceMeters(trimmedDistance, distanceUnit),
       }),
     onSettled: () => {
       // Invalidates the dealer suggestions cache. The public POI cache
@@ -211,18 +241,19 @@ function AddManualForm({ listingId, onAdded }: AddManualFormProps) {
       queryClient.invalidateQueries({ queryKey: ['pois', 'suggestions', listingId] });
     },
     onSuccess: () => {
+      storeDistanceUnit(listingId, distanceUnit);
       setName('');
       setCategory('');
-      setLocationQuery('');
-      setLocationChip(null);
-      setLocationResults([]);
+      setDistanceText('');
       onAdded();
     },
   });
 
+  const canSubmit = name.trim() !== '' && category !== '' && distanceValid && !addMutation.isPending;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !category) return;
+    if (!canSubmit) return;
     addMutation.mutate();
   };
 
@@ -256,66 +287,39 @@ function AddManualForm({ listingId, onAdded }: AddManualFormProps) {
       </div>
 
       <div className="space-y-1">
-        <Label htmlFor="poi-location">Location (optional)</Label>
-        <div ref={locationWrapperRef}>
-          <div className="relative">
-            {locationChip ? (
-              /* Location chip */
-              <div className="flex items-center gap-2 rounded-md border bg-muted px-3 py-2 text-sm">
-                <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <span className="flex-1 truncate">{locationChip.name}</span>
-                <button
-                  type="button"
-                  onClick={handleLocationClear}
-                  aria-label="Clear location"
-                  className="shrink-0 rounded-sm hover:text-destructive"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ) : (
-              /* Search input */
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                {locationSearching && (
-                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
-                )}
-                <Input
-                  id="poi-location"
-                  placeholder="Search for a location…"
-                  value={locationQuery}
-                  onChange={(e) => handleLocationSearch(e.target.value)}
-                  onFocus={() => locationResults.length > 0 && setShowLocationResults(true)}
-                  className="pl-9 pr-9"
-                />
-              </div>
-            )}
-            {/* Dropdown results */}
-            {showLocationResults && locationResults.length > 0 && (
-              <ul className="absolute z-[1100] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
-                {locationResults.map((r, i) => (
-                  <li
-                    key={`${r.lat}-${r.lon}-${i}`}
-                    className="px-3 py-2 text-sm cursor-pointer hover:bg-accent truncate"
-                    onClick={() => handleLocationSelect(r)}
-                  >
-                    <MapPin className="inline-block h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-                    {r.display_name}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          {(locationQuery.length > 0 || locationChip !== null) && (
-            <button
-              type="button"
-              className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
-              onClick={handleLocationClear}
-            >
-              Add without location
-            </button>
-          )}
+        <Label htmlFor="poi-distance">
+          Distance from property <span className="font-normal text-muted-foreground">(optional)</span>
+        </Label>
+        <div className="flex gap-2">
+          <Input
+            id="poi-distance"
+            inputMode="decimal"
+            placeholder="e.g. 1.3"
+            value={distanceText}
+            onChange={(e) => setDistanceText(e.target.value)}
+            aria-invalid={!distanceValid}
+            aria-describedby="poi-distance-hint"
+            className={!distanceValid ? 'border-amber-500 focus-visible:ring-amber-500' : undefined}
+          />
+          <Select value={distanceUnit} onValueChange={(v) => setDistanceUnit(v as DistanceUnit)}>
+            <SelectTrigger className="w-20" aria-label="Distance unit">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="km">km</SelectItem>
+              <SelectItem value="m">m</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
+        {distanceValid ? (
+          <p id="poi-distance-hint" className="text-xs text-muted-foreground">
+            Add the approximate distance if you know it — you can leave this blank.
+          </p>
+        ) : (
+          <p id="poi-distance-hint" className="text-xs text-amber-600">
+            Enter a positive number, like 1.3 or 850.
+          </p>
+        )}
       </div>
 
       {addMutation.isError && (
@@ -324,13 +328,13 @@ function AddManualForm({ listingId, onAdded }: AddManualFormProps) {
         </Alert>
       )}
 
-      <Button
-        type="submit"
-        disabled={addMutation.isPending || !name.trim() || !category || locationSearching}
-        className="w-full"
-      >
-        {addMutation.isPending ? 'Adding…' : 'Add POI'}
+      <Button type="submit" disabled={!canSubmit} className="w-full">
+        {addMutation.isPending ? 'Adding…' : 'Add place'}
       </Button>
+
+      <p className="text-xs text-muted-foreground">
+        Places you add are labelled broker-added, not platform-verified.
+      </p>
     </form>
   );
 }
@@ -350,12 +354,14 @@ interface PoiManagerProps {
 export function PoiManager({ listingId, propertyType }: PoiManagerProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState('nearby');
+  const [activeTab, setActiveTab] = useState('suggested');
 
   const {
     data,
     isLoading,
     isError,
+    refetch,
+    isRefetching,
   } = useQuery({
     queryKey: ['pois', 'suggestions', listingId],
     queryFn: () => api.get<SuggestionsResponse>(`/api/listings/${listingId}/pois/suggestions`),
@@ -393,7 +399,7 @@ export function PoiManager({ listingId, propertyType }: PoiManagerProps) {
   });
 
   // Settlement POIs are auto-computed and non-curatable — exclude from curation tabs
-  const unapprovedPois = (pois ?? []).filter(
+  const suggestedPois = (pois ?? []).filter(
     (p) => !p.approved && !SETTLEMENT_CATEGORIES.has(p.category),
   );
   const approvedPois = (pois ?? [])
@@ -485,7 +491,7 @@ export function PoiManager({ listingId, propertyType }: PoiManagerProps) {
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-4">
-            <TabsTrigger value="nearby">Nearby Places</TabsTrigger>
+            <TabsTrigger value="suggested">Suggested nearby places</TabsTrigger>
             <TabsTrigger value="approved">
               Approved
               {approvedPois.length > 0 && (
@@ -494,40 +500,107 @@ export function PoiManager({ listingId, propertyType }: PoiManagerProps) {
                 </span>
               )}
             </TabsTrigger>
+            <TabsTrigger value="manual">Add manually</TabsTrigger>
           </TabsList>
 
-          {/* Nearby Places tab */}
-          <TabsContent value="nearby">
+          {/* Suggested tab — provider-derived, unapproved, non-settlement POIs. Approve/Dismiss only. */}
+          <TabsContent value="suggested">
             {isLoading && <SkeletonRows />}
             {isError && (
               <Alert variant="destructive">
                 <AlertDescription>
-                  Failed to load POI suggestions. Please refresh and try again.
+                  <p>Failed to load POI suggestions. Please refresh and try again.</p>
+                  <Button size="sm" variant="outline" className="mt-3" onClick={() => refetch()} disabled={isRefetching}>
+                    {isRefetching ? (
+                      <>
+                        <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Retrying…
+                      </>
+                    ) : (
+                      'Retry'
+                    )}
+                  </Button>
                 </AlertDescription>
               </Alert>
             )}
-            {!isLoading && !isError && unapprovedPois.length === 0 && providerIssue && (
-              <Alert variant="destructive">
+            {/* Provider failure — recoverable, NOT a confirmed empty result. Ochre, not destructive red. */}
+            {!isLoading && !isError && suggestedPois.length === 0 && providerIssue && (
+              <Alert className="border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-950 dark:text-amber-200">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <AlertTitle>Couldn&apos;t fetch nearby places right now</AlertTitle>
                 <AlertDescription>
-                  Couldn&apos;t fetch nearby places right now — the map data provider may be
-                  temporarily unavailable. This is not a confirmed empty result; try again shortly,
-                  or add places manually from the Approved tab.
+                  <p>
+                    The map data provider may be temporarily unavailable. Your pin and the rest of
+                    this listing are unaffected.
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isRefetching}>
+                      {isRefetching ? (
+                        <>
+                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Retrying…
+                        </>
+                      ) : (
+                        'Retry'
+                      )}
+                    </Button>
+                    <button
+                      type="button"
+                      className="text-sm underline-offset-2 hover:underline"
+                      onClick={() => setActiveTab('manual')}
+                    >
+                      You can still add a place manually.
+                    </button>
+                  </div>
                 </AlertDescription>
               </Alert>
             )}
-            {!isLoading && !isError && unapprovedPois.length === 0 && !providerIssue && (
-              <p className="text-sm text-muted-foreground py-4 text-center">
-                No nearby places found for this listing. You can add places manually from the
-                Approved tab.
-              </p>
+            {/* All suggestions reviewed — distinct from a genuinely empty result (design §7). */}
+            {!isLoading && !isError && suggestedPois.length === 0 && !providerIssue && approvedPois.length > 0 && (
+              <div className="rounded-lg border border-dashed py-8 text-center">
+                <p className="text-sm font-medium">All suggestions reviewed</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  You&apos;ve approved or dismissed every suggested place for this listing.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-3"
+                  onClick={() => refetch()}
+                  disabled={isRefetching}
+                >
+                  {isRefetching ? 'Checking…' : 'Check again'}
+                </Button>
+              </div>
             )}
-            {!isLoading && !isError && unapprovedPois.length > 0 && (
+            {/* Genuine empty — an invitation to add, not a failure. */}
+            {!isLoading && !isError && suggestedPois.length === 0 && !providerIssue && approvedPois.length === 0 && (
+              <div className="rounded-lg border border-dashed py-8 text-center">
+                <Search className="mx-auto h-6 w-6 text-muted-foreground" aria-hidden="true" />
+                <p className="mt-2 text-sm font-medium">
+                  No nearby places were found around this location.
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Common for new layouts and outskirt plots. Add the landmarks buyers ask about — a
+                  school, bus stop or temple.
+                </p>
+                <div className="mt-3 flex flex-wrap justify-center gap-3">
+                  <Button size="sm" onClick={() => setActiveTab('manual')}>
+                    Add a place manually
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isRefetching}>
+                    {isRefetching ? 'Checking…' : 'Check again'}
+                  </Button>
+                </div>
+              </div>
+            )}
+            {!isLoading && !isError && suggestedPois.length > 0 && (
               <div>
-                {unapprovedPois.map((poi) => (
+                {suggestedPois.map((poi) => (
                   <PoiRow
                     key={poi.id}
                     poi={poi}
                     showApprove={true}
+                    showPin={false}
+                    deleteVerb="Dismiss"
                     onApprove={(id) => approveMutation.mutate(id)}
                     onPin={(id) => pinMutation.mutate(id)}
                     onDelete={(id) => deleteMutation.mutate(id)}
@@ -540,7 +613,7 @@ export function PoiManager({ listingId, propertyType }: PoiManagerProps) {
             )}
           </TabsContent>
 
-          {/* Approved tab */}
+          {/* Approved tab — approved, non-settlement POIs. No manual form nested here (design §7). */}
           <TabsContent value="approved">
             {isLoading && <SkeletonRows />}
             {isError && (
@@ -551,9 +624,19 @@ export function PoiManager({ listingId, propertyType }: PoiManagerProps) {
               </Alert>
             )}
             {!isLoading && !isError && approvedPois.length === 0 && (
-              <p className="text-sm text-muted-foreground py-4 text-center">
-                No approved POIs yet. Approve suggestions to show them here.
-              </p>
+              <div className="py-4 text-center">
+                <p className="text-sm text-muted-foreground">
+                  No approved places yet. Approve a suggestion or add one manually.
+                </p>
+                <div className="mt-3 flex flex-wrap justify-center gap-3">
+                  <Button size="sm" variant="outline" onClick={() => setActiveTab('suggested')}>
+                    View suggestions
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setActiveTab('manual')}>
+                    Add manually
+                  </Button>
+                </div>
+              </div>
             )}
             {!isLoading && !isError && approvedPois.length > 0 && (
               <div>
@@ -569,9 +652,11 @@ export function PoiManager({ listingId, propertyType }: PoiManagerProps) {
                 ))}
               </div>
             )}
-            <Separator className="my-4" />
-            <p className="text-sm font-medium mb-3">Add manually</p>
-            <AddManualForm listingId={listingId} onAdded={() => {}} />
+          </TabsContent>
+
+          {/* Add manually tab — its own mode, not nested under Approved (design §7/§8). */}
+          <TabsContent value="manual">
+            <AddManualForm listingId={listingId} onAdded={() => setActiveTab('approved')} />
           </TabsContent>
         </Tabs>
 

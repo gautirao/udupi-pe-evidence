@@ -12,7 +12,8 @@ public record PoiResponse(
         Double latitude,
         Double longitude,
         boolean pinned,
-        boolean approved
+        boolean approved,
+        boolean brokerAdded
 ) {
     public static PoiResponse from(ListingPoi p) {
         return new PoiResponse(
@@ -23,7 +24,8 @@ public record PoiResponse(
                 p.getLatitude(),
                 p.getLongitude(),
                 Boolean.TRUE.equals(p.getPinned()),
-                Boolean.TRUE.equals(p.getApproved())
+                Boolean.TRUE.equals(p.getApproved()),
+                "manual".equals(p.getSource())
         );
     }
 }
