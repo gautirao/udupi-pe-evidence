@@ -10,7 +10,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ENV_FILE="$SCRIPT_DIR/.env"
+
+# shellcheck source=../../scripts/dev/lib/remote-db-safety.sh
+source "$REPO_ROOT/scripts/dev/lib/remote-db-safety.sh"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "ERROR: $ENV_FILE not found."
@@ -104,6 +108,15 @@ if [[ ${#MISSING[@]} -gt 0 ]]; then
 fi
 
 echo ">>> All required variables present."
+
+# Fail closed before starting anything if SUPABASE_DB_HOST is not a loopback
+# address (issue #2569) — see scripts/dev/lib/remote-db-safety.sh.
+if ! validate_localhost_only; then
+  exit 1
+fi
+
+print_backend_startup_banner
+
 echo ">>> Starting Spring Boot on port ${SERVER_PORT:-8085}..."
 echo ""
 

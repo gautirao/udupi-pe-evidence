@@ -287,6 +287,11 @@ export SPRING_DATASOURCE_HIKARI_DATA_SOURCE_PROPERTIES_SSLMODE=disable
 # embedded Flyway would otherwise re-validate against checksums that don't
 # match the CONCURRENTLY-stripped copy it migrated with, and fail startup.
 export SPRING_FLYWAY_ENABLED=false
+# #2569: background @Scheduled jobs (rollups, outbox pollers, retention jobs)
+# have no business running against this disposable, short-lived E2E fixture —
+# see SchedulingSuppressionConfig (issue #2114) for the mechanism this actually
+# wires into.
+export SPRING_TASK_SCHEDULING_ENABLED=false
 export SUPABASE_PROJECT_REF="$E2E_SUPABASE_PROJECT_REF"
 export LOCAL_DEV_STORAGE_ENABLED="${LOCAL_DEV_STORAGE_ENABLED:-true}"
 export AI_API_KEY="$E2E_AI_API_KEY"
