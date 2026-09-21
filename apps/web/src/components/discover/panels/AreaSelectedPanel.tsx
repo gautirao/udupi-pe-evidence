@@ -51,7 +51,16 @@ import { getPropertyTypeLabel } from '@/lib/propertyTypeConfig';
 
 // Quick filter options (hardcoded MVP). 'All' is a virtual chip that clears the
 // property-type selection — it is not a property_type value.
-const QUICK_PROPERTY_TYPES = ['apartment', 'villa', 'land'] as const;
+//
+// Issue #2605 — this chip's token is `residential_plot`, NOT the generic `land` stored type.
+// `land` and `residential_plot` are distinct, independently-allowlisted values in
+// `PropertyType.java` / `DiscoverFilterNormalizer.ALLOWED_PROPERTY_TYPES`; the buyer-facing
+// inventory this chip is meant to surface is stored as `residential_plot` (see V103), so
+// emitting `land` filtered to a canonical type with no matching rows and returned zero results
+// against inventory that exists. `resolvePrimaryAreaMeaning`/`isPlotOnlySelection`
+// (primaryAreaLabels.ts / bedroomApplicability.ts) already treat both tokens as PLOT, so this
+// change needed no change on that side.
+const QUICK_PROPERTY_TYPES = ['apartment', 'villa', 'residential_plot'] as const;
 const QUICK_BEDROOMS = [2, 3] as const;
 
 interface QuickBudgetBand {
@@ -168,7 +177,7 @@ const QUICK_AREA_PRESETS: readonly { testId: string; label: string; min: number 
 const PROPERTY_TYPE_LABELS: Record<string, string> = {
   apartment: 'Apartments',
   villa: 'Villas',
-  land: 'Plots',
+  residential_plot: 'Plots',
 };
 
 /**

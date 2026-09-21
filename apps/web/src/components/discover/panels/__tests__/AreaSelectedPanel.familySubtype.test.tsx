@@ -689,7 +689,10 @@ describe('AreaSelectedPanel — #2450 family / subtype filters', () => {
       // Positive control: the panel rendered, and rendered the commercial half.
       expect(screen.getByTestId('quick-subtype-row')).toBeInTheDocument();
 
-      for (const type of ['apartment', 'villa', 'land']) {
+      // Issue #2605 — the Plots chip's testid is `quick-chip-residential_plot`, not
+      // `quick-chip-land`; asserting the old, now-nonexistent testid would vacuously pass
+      // regardless of the mutual-exclusion logic under test.
+      for (const type of ['apartment', 'villa', 'residential_plot']) {
         expect(
           screen.queryByTestId(`quick-chip-${type}`),
           `the '${type}' chip must not be reachable while a Commercial subtype is held — ` +

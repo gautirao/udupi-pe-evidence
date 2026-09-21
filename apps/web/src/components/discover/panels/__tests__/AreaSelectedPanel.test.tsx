@@ -65,7 +65,20 @@ describe('AreaSelectedPanel', () => {
       renderPanel();
       expect(screen.getByTestId('quick-chip-apartment')).toBeInTheDocument();
       expect(screen.getByTestId('quick-chip-villa')).toBeInTheDocument();
-      expect(screen.getByTestId('quick-chip-land')).toBeInTheDocument();
+      expect(screen.getByTestId('quick-chip-residential_plot')).toBeInTheDocument();
+    });
+
+    // Issue #2605 regression — the Residential "Plots" chip must emit the `residential_plot`
+    // canonical type, not the generic `land` type. `land` and `residential_plot` are distinct,
+    // independently-allowlisted values on the backend (PropertyType.java); the buyer-facing
+    // Plots inventory is stored as `residential_plot`, so emitting `land` filtered to a type
+    // with no matching rows and silently returned zero results. This is mutation-proof: reverting
+    // the QUICK_PROPERTY_TYPES token back to 'land' makes this assertion fail.
+    it('emits residential_plot (not land) when the Plots chip is clicked', () => {
+      const onFiltersChange = vi.fn();
+      renderPanel({ onFiltersChange });
+      fireEvent.click(screen.getByTestId('quick-chip-residential_plot'));
+      expect(onFiltersChange).toHaveBeenCalledWith({ propertyTypes: ['residential_plot'] });
     });
 
     it('renders BHK chips', () => {

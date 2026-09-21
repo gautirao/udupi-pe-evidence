@@ -11,7 +11,7 @@ test.describe('@integration-ui Discover: Area-Selected Panel + Quick Filters', (
   test('displays quick filter chips for property types', async ({ page }) => {
     expect(await page.locator('[data-testid="quick-chip-apartment"]').isVisible()).toBeTruthy();
     expect(await page.locator('[data-testid="quick-chip-villa"]').isVisible()).toBeTruthy();
-    expect(await page.locator('[data-testid="quick-chip-land"]').isVisible()).toBeTruthy();
+    expect(await page.locator('[data-testid="quick-chip-residential_plot"]').isVisible()).toBeTruthy();
   });
 
   test('displays quick filter chips for BHK', async ({ page }) => {
