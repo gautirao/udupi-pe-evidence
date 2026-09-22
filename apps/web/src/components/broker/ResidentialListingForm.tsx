@@ -644,7 +644,16 @@ export function ResidentialListingForm({ initialPropertyType, initialListingPurp
             onVideoLinkDraftChange={form.setVideoLinkDraft}
           />
 
-          {/* Section 6b — Nearby places (issue #1718 — gated on addressConfirmed, honest derived/broker-added labels) */}
+          {/* Section 6b — Nearby places (issue #1718 — gated on addressConfirmed, honest derived/broker-added labels)
+              #2647 — `publicLoc` carries the COARSE locality only: `state.resolved.publicLoc` is what
+              useResidentialLocation already derived via deriveResolvedLocation, and `form.locality` is the value
+              that same publicLoc was persisted as (the only thing a locality-only reload can offer, since the
+              #2039 guard leaves `resolved` null there). Neither is `resolved.formatted` — the private geocoded
+              string never reaches this component.
+              `onOpenPicker` is gated on `resolved` exactly as MapPin.tsx:73 gates its own CTA
+              (`disabled={!resolved}`): with no resolved center there is no seed coordinate, so the CTA is omitted
+              rather than opening an unseeded map. Passing `openPicker` itself (not a new handler) is what makes
+              this the EXISTING picker — MapPin's <PinDialog> reads the same hook's `pickerOpen`. */}
           {draft.listingId && (
             <Section number={7} title="Nearby places">
               <InlineNearby
@@ -654,6 +663,14 @@ export function ResidentialListingForm({ initialPropertyType, initialListingPurp
                 locationResolved={
                   location.residentialLocationValue?.state.resolved != null ||
                   location.residentialLocationValue?.state.localityResolved === true
+                }
+                publicLoc={
+                  location.residentialLocationValue?.state.resolved?.publicLoc || form.locality
+                }
+                onOpenPicker={
+                  location.residentialLocationValue?.state.resolved != null
+                    ? location.residentialLocationValue.openPicker
+                    : undefined
                 }
                 onChangeLocation={location.residentialLocationValue?.clear}
               />

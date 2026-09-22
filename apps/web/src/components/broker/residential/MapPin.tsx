@@ -36,7 +36,12 @@ export function MapPin({ location }: MapPinProps) {
         <div className="flex items-center justify-between gap-3 rounded-md border border-green-200 bg-green-50 px-3 py-2">
           <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-green-700">
             <Check className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
-            <span className="truncate">Pin confirmed — {summary}</span>
+            {/* #2647 — testid added (no copy/behaviour change): InlineNearby's
+                Section 7 header now carries the same "Pin confirmed — {locality}"
+                wording, so E2E must address this Section 6 banner precisely. */}
+            <span className="truncate" data-testid="map-pin-status">
+              Pin confirmed — {summary}
+            </span>
           </div>
           <div className="flex shrink-0 gap-1">
             <Button
@@ -70,7 +75,18 @@ export function MapPin({ location }: MapPinProps) {
   return (
     <div className="space-y-2">
       <p className="text-[13px] font-semibold">Location</p>
-      <Button type="button" variant="outline" className="w-full" disabled={!resolved} onClick={openPicker}>
+      {/* #2647 — testid added (no behaviour change) because InlineNearby now
+          renders a SECOND button with this same accessible name in Section 7
+          (state b). Playwright's getByRole is strict-mode, so E2E specs must
+          address this Section 6 CTA precisely rather than by name alone. */}
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full"
+        data-testid="map-pin-open-picker"
+        disabled={!resolved}
+        onClick={openPicker}
+      >
         <MapPinIcon className="mr-2 h-4 w-4" aria-hidden="true" />
         Pin location on map
       </Button>

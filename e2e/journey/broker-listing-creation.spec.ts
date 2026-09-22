@@ -395,7 +395,7 @@ for (const subtype of SUBTYPES) {
     // addressConfirmed:true} via PUT /api/listings/{id}.
     // -------------------------------------------------------------------------
 
-    const pinButton = page.getByRole('button', { name: /pin location on map/i });
+    const pinButton = page.getByTestId('map-pin-open-picker');
     await expect(pinButton).toBeEnabled({ timeout: 10_000 });
     await pinButton.click();
 
@@ -417,7 +417,7 @@ for (const subtype of SUBTYPES) {
     await confirmPinButton.click({ timeout: 15_000 });
 
     await expect(pinDialog).toBeHidden({ timeout: 10_000 });
-    await expect(page.getByText(/pin confirmed —/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('map-pin-status')).toBeVisible({ timeout: 10_000 });
     const confirmResponse = await confirmResponsePromise;
     if (confirmResponse) {
       console.log(`[DL1:${subtype.key}] Address confirm PUT status: ${confirmResponse.status()}`);

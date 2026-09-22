@@ -485,10 +485,35 @@ export function CommercialListingForm({ initialPropertyType, initialListingPurpo
             onSaveDraft={() => draft.persistDraft()}
           />
 
-          {/* Section 6b — Nearby places (gated on addressConfirmed, honest derived/broker-added labels) */}
+          {/* Section 6b — Nearby places (gated on addressConfirmed, honest derived/broker-added labels)
+              #2647 (owner decision, PR #2654 comment 5773021097 — Option B): the same location/pin
+              fidelity Residential gets, wired through the SAME shared architecture. This flow already
+              owns a useResidentialLocation instance via useCommercialLocationOrchestration, so these
+              are the identical values ResidentialListingForm passes — no second location model and no
+              second picker. `publicLoc` is the COARSE locality only (`resolved.publicLoc`, else the
+              persisted `form.locality`); `resolved.formatted` and the pin lat/lng never reach
+              InlineNearby. `onOpenPicker` is gated on `resolved` exactly as MapPin.tsx gates its own
+              CTA (`disabled={!resolved}`) — with no resolved center there is no seed coordinate. */}
           {draft.listingId && (
             <Section number={7} title="Nearby places">
-              <InlineNearby listingId={draft.listingId} propertyType={form.propertyType} addressConfirmed={draft.addressConfirmed} />
+              <InlineNearby
+                listingId={draft.listingId}
+                propertyType={form.propertyType}
+                addressConfirmed={draft.addressConfirmed}
+                locationResolved={
+                  location.residentialLocationValue?.state.resolved != null ||
+                  location.residentialLocationValue?.state.localityResolved === true
+                }
+                publicLoc={
+                  location.residentialLocationValue?.state.resolved?.publicLoc || form.locality
+                }
+                onOpenPicker={
+                  location.residentialLocationValue?.state.resolved != null
+                    ? location.residentialLocationValue.openPicker
+                    : undefined
+                }
+                onChangeLocation={location.residentialLocationValue?.clear}
+              />
             </Section>
           )}
 

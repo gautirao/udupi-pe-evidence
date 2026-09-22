@@ -327,7 +327,7 @@ async function resolveLocationViaSearch(page: Page, query = 'Car Street') {
  * residential flow (MapPin.tsx is reused AS-IS). This is the ONLY path that
  * persists addressConfirmed:true. */
 async function confirmPinViaModal(page: Page) {
-  const pinButton = page.getByRole('button', { name: /pin location on map/i });
+  const pinButton = page.getByTestId('map-pin-open-picker');
   await expect(pinButton).toBeEnabled();
   await pinButton.click();
 
@@ -339,7 +339,7 @@ async function confirmPinViaModal(page: Page) {
   await confirmPinButton.click();
 
   await expect(pinDialog).toBeHidden({ timeout: 10_000 });
-  await expect(page.getByText(/pin confirmed —/i)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('map-pin-status')).toBeVisible({ timeout: 10_000 });
 }
 
 /** Uploads 3 photos and promotes the 3rd (tile-2) to cover via inline
@@ -513,10 +513,10 @@ test.describe('@commercial-create-listing-1684 /broker/listings/new — commerci
     // Save draft — mounts Section 6 (photos + map).
     await page.getByRole('button', { name: /save draft/i }).click();
     await expect(page).toHaveURL(/\/broker\/listings\/new/);
-    await expect(page.getByRole('button', { name: /pin location on map/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('map-pin-open-picker')).toBeVisible({ timeout: 10_000 });
 
     // Address search -> pin confirm (merge-gate mechanism reused AS-IS).
-    const pinButton = page.getByRole('button', { name: /pin location on map/i });
+    const pinButton = page.getByTestId('map-pin-open-picker');
     await expect(pinButton).toBeDisabled();
     await resolveLocationViaSearch(page);
     await expect(pinButton).toBeEnabled();
@@ -615,7 +615,7 @@ test.describe('@commercial-create-listing-1684 /broker/listings/new — commerci
 
     await page.getByRole('button', { name: /save draft/i }).click();
     await expect(page).toHaveURL(/\/broker\/listings\/new/);
-    await expect(page.getByRole('button', { name: /pin location on map/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('map-pin-open-picker')).toBeVisible({ timeout: 10_000 });
 
     await resolveLocationViaSearch(page);
     await confirmPinViaModal(page);

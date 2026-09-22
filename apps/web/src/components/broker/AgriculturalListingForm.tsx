@@ -311,10 +311,29 @@ export function AgriculturalListingForm({ onSwitchToGenericFlow, navigate }: Agr
             onContinue={() => draft.persistDraft()}
           />
 
-          {/* Section 6 — Nearby places (gated on addressConfirmed, honest derived/broker-added labels) */}
+          {/* Section 6 — Nearby places (gated on addressConfirmed, honest derived/broker-added labels)
+              #2647 (owner decision, PR #2654 comment 5773021097 — Option B): the same location/pin
+              fidelity Residential gets, wired through the SAME shared architecture. This flow already
+              owns a useResidentialLocation instance via useAgriculturalListingLocation, so these are
+              the identical values ResidentialListingForm passes — no second location model and no
+              second picker. `publicLoc` is the COARSE locality only; `resolved.formatted` and the pin
+              lat/lng never reach InlineNearby. `onOpenPicker` is gated on `resolved` exactly as
+              MapPin.tsx gates its own CTA (`disabled={!resolved}`). */}
           {draft.listingId && (
             <Section number={6} title="Nearby places">
-              <InlineNearby listingId={draft.listingId} propertyType={form.propertyType} addressConfirmed={draft.addressConfirmed} />
+              <InlineNearby
+                listingId={draft.listingId}
+                propertyType={form.propertyType}
+                addressConfirmed={draft.addressConfirmed}
+                locationResolved={
+                  residentialLocation.state.resolved != null || residentialLocation.state.localityResolved
+                }
+                publicLoc={residentialLocation.state.resolved?.publicLoc || form.locality}
+                onOpenPicker={
+                  residentialLocation.state.resolved != null ? residentialLocation.openPicker : undefined
+                }
+                onChangeLocation={residentialLocation.clear}
+              />
             </Section>
           )}
 

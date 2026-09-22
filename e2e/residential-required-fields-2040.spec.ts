@@ -335,7 +335,10 @@ async function completeRemainingGates(page: Page) {
   ]);
   await expect(page.getByText(/3\/5 photos/i)).toBeVisible({ timeout: 10_000 });
 
-  const pinButton = page.getByRole('button', { name: /pin location on map/i });
+  // #2647 — addressed by testid: InlineNearby (Section 7) now renders a second
+  // button with this same accessible name once a locality resolves, and
+  // getByRole is strict-mode. This locator is Section 6's MapPin CTA.
+  const pinButton = page.getByTestId('map-pin-open-picker');
   await expect(pinButton).toBeEnabled({ timeout: 10_000 });
   await pinButton.click();
 
@@ -345,7 +348,7 @@ async function completeRemainingGates(page: Page) {
   await expect(confirmPinButton).toBeVisible({ timeout: 10_000 });
   await confirmPinButton.click();
   await expect(pinDialog).toBeHidden({ timeout: 10_000 });
-  await expect(page.getByText(/pin confirmed —/i)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('map-pin-status')).toBeVisible({ timeout: 10_000 });
 }
 
 test.describe('@residential-required-fields-2040 apartment builtArea — always-visible + blocked-Review focus', () => {

@@ -9,6 +9,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 const mockPoiManager = vi.hoisted(() => vi.fn());
 
@@ -85,5 +86,105 @@ describe('InlineNearby — 3-state confirmed-pin header (issue #2642)', () => {
 
     expect(screen.getByText('Pin confirmed')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Change location' })).not.toBeInTheDocument();
+  });
+});
+
+describe('InlineNearby — full mock parity for states (b)/(c) (issue #2647)', () => {
+  it('state (b): suffixes the resolved locality onto the header instead of the generic copy', () => {
+    render(
+      <InlineNearby
+        listingId="listing-1"
+        propertyType="apartment"
+        addressConfirmed={false}
+        locationResolved
+        publicLoc="Manipal"
+      />,
+    );
+
+    expect(screen.getByText('Location resolved — Manipal')).toBeInTheDocument();
+    // Discrimination: the pre-#2647 generic string must be GONE, not merely
+    // accompanied by the locality — otherwise this passes on a component that
+    // renders both.
+    expect(screen.queryByText('Location resolved — pin not confirmed')).not.toBeInTheDocument();
+  });
+
+  it('state (b): renders the "Pin location on map" CTA and delegates the click to onOpenPicker (never its own picker)', async () => {
+    const user = userEvent.setup();
+    const onOpenPicker = vi.fn();
+    render(
+      <InlineNearby
+        listingId="listing-1"
+        propertyType="apartment"
+        addressConfirmed={false}
+        locationResolved
+        publicLoc="Manipal"
+        onOpenPicker={onOpenPicker}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /pin location on map/i }));
+
+    expect(onOpenPicker).toHaveBeenCalledTimes(1);
+    // InlineNearby itself never mounts a picker/dialog — the handler is the
+    // only thing it contributes (see InlineNearby.pickerWiring.test.tsx for
+    // the proof that the handler raises MapPin's EXISTING dialog).
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('state (b): omits the CTA when onOpenPicker is absent, and keeps the generic copy when publicLoc is absent (Commercial/Agricultural unchanged)', () => {
+    render(
+      <InlineNearby listingId="listing-1" propertyType="apartment" addressConfirmed={false} locationResolved />,
+    );
+
+    expect(screen.getByText('Location resolved — pin not confirmed')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /pin location on map/i })).not.toBeInTheDocument();
+  });
+
+  it('state (b): a whitespace-only publicLoc falls back to the generic copy rather than rendering a dangling em dash', () => {
+    render(
+      <InlineNearby
+        listingId="listing-1"
+        propertyType="apartment"
+        addressConfirmed={false}
+        locationResolved
+        publicLoc="   "
+      />,
+    );
+
+    expect(screen.getByText('Location resolved — pin not confirmed')).toBeInTheDocument();
+  });
+
+  it('state (c): renders "Pin confirmed — {publicLoc}" and still mounts PoiManager', () => {
+    render(
+      <InlineNearby listingId="listing-1" propertyType="apartment" addressConfirmed publicLoc="Manipal" />,
+    );
+
+    expect(screen.getByText('Pin confirmed — Manipal')).toBeInTheDocument();
+    expect(screen.queryByText(/^Pin confirmed$/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('mock-poi-manager')).toBeInTheDocument();
+  });
+
+  it('state (c): falls back to plain "Pin confirmed" when publicLoc is absent (Commercial/Agricultural unchanged)', () => {
+    render(<InlineNearby listingId="listing-1" propertyType="apartment" addressConfirmed />);
+
+    expect(screen.getByText('Pin confirmed')).toBeInTheDocument();
+  });
+
+  it('never renders a private formatted address or coordinates — it can only render the coarse publicLoc it is handed', () => {
+    const PRIVATE = 'Plot 14, 2nd Cross, Manipal, Udupi District, Karnataka 576104, India';
+    render(
+      <InlineNearby
+        listingId="listing-1"
+        propertyType="apartment"
+        addressConfirmed={false}
+        locationResolved
+        publicLoc="Manipal, Udupi"
+        onOpenPicker={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Location resolved — Manipal, Udupi')).toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(PRIVATE.slice(0, 20), 'i'))).not.toBeInTheDocument();
+    expect(screen.queryByText(/13\.34|74\.74/)).not.toBeInTheDocument();
   });
 });

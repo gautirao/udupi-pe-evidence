@@ -503,7 +503,7 @@ async function persistMinimalDraft(page: Page) {
   await page.getByLabel(/price \(inr\)/i).fill('50 lakh');
   await page.getByRole('button', { name: /save draft/i }).click();
   await expect(page).toHaveURL(/\/broker\/listings\/new/);
-  await expect(page.getByRole('button', { name: /pin location on map/i })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('map-pin-open-picker')).toBeVisible({ timeout: 10_000 });
 }
 
 /** AC1/#2 regression — Find -> debounced/explicit search -> "Use" -> resolved
@@ -525,7 +525,7 @@ async function resolveLocationViaSearch(page: Page, query = 'Manipal') {
  * is the ONLY path that persists {latitude, longitude, addressConfirmed:true}
  * via PUT /api/listings/{id} — reaches state 3 (pin confirmed). */
 async function confirmPinViaModal(page: Page) {
-  const pinButton = page.getByRole('button', { name: /pin location on map/i });
+  const pinButton = page.getByTestId('map-pin-open-picker');
   await expect(pinButton).toBeEnabled();
   await pinButton.click();
 
@@ -537,7 +537,7 @@ async function confirmPinViaModal(page: Page) {
   await confirmPinButton.click();
 
   await expect(pinDialog).toBeHidden({ timeout: 10_000 });
-  await expect(page.getByText(/pin confirmed —/i)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('map-pin-status')).toBeVisible({ timeout: 10_000 });
 }
 
 test.describe('@residential-create-listing-1722 /broker/listings/new — correction #4 location flow', () => {
@@ -555,7 +555,7 @@ test.describe('@residential-create-listing-1722 /broker/listings/new — correct
     await gotoNewListing(page);
     await persistMinimalDraft(page);
 
-    const pinButton = page.getByRole('button', { name: /pin location on map/i });
+    const pinButton = page.getByTestId('map-pin-open-picker');
 
     // Negative state — before ANY resolve, Section 6's CTA is disabled and
     // says why.
@@ -677,7 +677,7 @@ test.describe('@residential-create-listing-1722 /broker/listings/new — correct
     const searchInput = page.getByPlaceholder(/search for a location/i);
     await searchInput.fill(FORWARD_RESULT.display_name + ' extra');
 
-    const pinButton = page.getByRole('button', { name: /pin location on map/i });
+    const pinButton = page.getByTestId('map-pin-open-picker');
     await expect(pinButton).toBeDisabled({ timeout: 10_000 });
     await expect(page.getByRole('heading', { name: /nearby points of interest/i })).toHaveCount(0, { timeout: 10_000 });
     await expect(pinConfirmedRow.locator('span').first()).not.toHaveClass(/border-primary/);
@@ -771,7 +771,7 @@ test.describe('@residential-create-listing-1722 /broker/listings/new — correct
     await resolveLocationViaSearch(page);
 
     // Open the modal and Cancel WITHOUT confirming.
-    const pinButton = page.getByRole('button', { name: /pin location on map/i });
+    const pinButton = page.getByTestId('map-pin-open-picker');
     await pinButton.click();
     const pinDialog = page.getByRole('dialog', { name: /pin the exact location/i });
     await expect(pinDialog).toBeVisible({ timeout: 10_000 });
@@ -781,7 +781,7 @@ test.describe('@residential-create-listing-1722 /broker/listings/new — correct
 
     // No confirm happened — CTA still says "Pin location on map" (not
     // "Pin confirmed"), and no PUT with addressConfirmed:true was sent.
-    await expect(page.getByRole('button', { name: /pin location on map/i })).toBeVisible();
+    await expect(page.getByTestId('map-pin-open-picker')).toBeVisible();
     await expect(page.getByText(/pin confirmed —/i)).toHaveCount(0);
     expect(serverState.listing.addressConfirmed).toBe(false);
 
@@ -800,7 +800,7 @@ test.describe('@residential-create-listing-1722 /broker/listings/new — correct
     await reopenedDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(reopenedDialog).toBeHidden({ timeout: 10_000 });
     // Cancelling the re-open doesn't unconfirm the already-persisted pin.
-    await expect(page.getByText(/pin confirmed —/i)).toBeVisible();
+    await expect(page.getByTestId('map-pin-status')).toBeVisible();
   });
 
   // -------------------------------------------------------------------------
@@ -842,7 +842,7 @@ test.describe('@residential-create-listing-1722 /broker/listings/new — correct
     // AC3 — "Pin location on map" is DISABLED until a starting location is
     // resolved (state 1: nothing confirmed yet).
     // -----------------------------------------------------------------------
-    const pinButton = page.getByRole('button', { name: /pin location on map/i });
+    const pinButton = page.getByTestId('map-pin-open-picker');
     await expect(pinButton).toBeDisabled();
 
     // -----------------------------------------------------------------------
@@ -1000,7 +1000,7 @@ test.describe('@residential-poi-refinement-2642 /broker/listings/new/residential
     await page.locator('#carpetArea').fill('1150');
     await page.locator('#builtArea').fill('1200');
     await page.getByRole('button', { name: /save draft/i }).click();
-    await expect(page.getByRole('button', { name: /pin location on map/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('map-pin-open-picker')).toBeVisible({ timeout: 10_000 });
     await resolveLocationViaSearch(page);
     await confirmPinViaModal(page);
     await expect(page.getByRole('heading', { name: /nearby points of interest/i })).toBeVisible({ timeout: 10_000 });
@@ -1078,7 +1078,7 @@ test.describe('@residential-poi-refinement-2642 /broker/listings/new/residential
     await gotoNewListing(page);
     await page.getByLabel(/price \(inr\)/i).fill('50 lakh');
     await page.getByRole('button', { name: /save draft/i }).click();
-    await expect(page.getByRole('button', { name: /pin location on map/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('map-pin-open-picker')).toBeVisible({ timeout: 10_000 });
 
     // State 1 — nothing resolved yet.
     await expect(page.getByText('Location not yet confirmed')).toBeVisible();
@@ -1087,17 +1087,26 @@ test.describe('@residential-poi-refinement-2642 /broker/listings/new/residential
 
     // State 2 — resolved via search, pin not yet confirmed.
     await resolveLocationViaSearch(page);
-    await expect(page.getByText('Location resolved — pin not confirmed')).toBeVisible();
+    // #2647 — the state-(b) header is now suffixed with the COARSE locality
+    // ("Manipal, Udupi" = suburb + city from FORWARD_RESULT via
+    // derivePublicLoc), never the full display_name, and carries its own
+    // "Pin location on map" CTA. Asserted on InlineNearby's own status testid
+    // because MapPin (Section 6) renders identically-worded text.
+    const nearbyStatus = page.getByTestId('inline-nearby-status');
+    await expect(nearbyStatus).toHaveText('Location resolved — Manipal, Udupi');
+    await expect(nearbyStatus).not.toContainText('MIT Road');
+    await expect(nearbyStatus).not.toContainText('576104');
+    await expect(page.getByTestId('inline-nearby-open-picker')).toBeVisible();
     await expect(page.getByText(/a resolved locality is not a confirmed pin/i)).toBeVisible();
     await expect(page.getByText('Location not yet confirmed')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: /nearby points of interest/i })).toHaveCount(0);
 
-    // State 3 — pin confirmed; the emerald "Pin confirmed" header renders and
-    // PoiManager mounts underneath it.
+    // State 3 — pin confirmed; the emerald "Pin confirmed — {locality}" header
+    // renders and PoiManager mounts underneath it.
     await confirmPinViaModal(page);
-    await expect(page.getByText('Pin confirmed', { exact: true })).toBeVisible();
+    await expect(nearbyStatus).toHaveText('Pin confirmed — Manipal, Udupi');
     await expect(page.getByText(/nearby places will be shown for this location/i)).toBeVisible();
-    await expect(page.getByText('Location resolved — pin not confirmed')).toHaveCount(0);
+    await expect(page.getByTestId('inline-nearby-open-picker')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: /nearby points of interest/i })).toBeVisible({ timeout: 10_000 });
 
     // "Change location" affordance in the confirmed header defers to the
@@ -1313,7 +1322,7 @@ test.describe('@residential-poi-refinement-2642 /broker/listings/new/residential
     await gotoNewListing(page);
     await page.getByLabel(/price \(inr\)/i).fill('50 lakh');
     await page.getByRole('button', { name: /save draft/i }).click();
-    await expect(page.getByRole('button', { name: /pin location on map/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('map-pin-open-picker')).toBeVisible({ timeout: 10_000 });
     await resolveLocationViaSearch(page);
     await confirmPinViaModal(page);
 
