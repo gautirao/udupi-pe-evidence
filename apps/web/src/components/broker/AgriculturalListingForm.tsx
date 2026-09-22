@@ -3,6 +3,7 @@ import { CheckCircle2 } from 'lucide-react';
 import type { NavigateFunction } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { InlineNearby } from '@/components/broker/residential/InlineNearby';
+import { MapPin } from '@/components/broker/residential/MapPin';
 import { AgriculturalDescriptionAssistant } from '@/components/broker/agricultural/AgriculturalDescriptionAssistant';
 import { computeListingStrength } from '@/components/broker/ListingStrengthMeter';
 import { computeAgriPriceBreakdown } from '@/components/broker/agricultural/priceMath';
@@ -303,24 +304,38 @@ export function AgriculturalListingForm({ onSwitchToGenericFlow, navigate }: Agr
             onFencingDoneChange={form.setFencingDone}
           />
 
+          {/* #2655 — photos only, pin-location moved to the Location & Nearby Places section. */}
           <AgriculturalPhotosLocationSection
             listingId={draft.listingId}
-            residentialLocation={residentialLocation}
             canSubmit={canSubmit}
             isCreatePending={draft.createListing.isPending}
             onContinue={() => draft.persistDraft()}
           />
 
-          {/* Section 6 — Nearby places (gated on addressConfirmed, honest derived/broker-added labels)
+          {/* Section 6 — Location & Nearby Places (issue #2655 — recomposition: pin-location relocated
+              here from Section 5, single authoritative useResidentialLocation instance (via
+              useAgriculturalListingLocation) reused verbatim, same <MapPin>/<PinDialog> as before — no
+              second picker or location model introduced). Nearby-place behaviour is unchanged (gated on
+              addressConfirmed, honest derived/broker-added labels).
               #2647 (owner decision, PR #2654 comment 5773021097 — Option B): the same location/pin
               fidelity Residential gets, wired through the SAME shared architecture. This flow already
               owns a useResidentialLocation instance via useAgriculturalListingLocation, so these are
               the identical values ResidentialListingForm passes — no second location model and no
               second picker. `publicLoc` is the COARSE locality only; `resolved.formatted` and the pin
-              lat/lng never reach InlineNearby. `onOpenPicker` is gated on `resolved` exactly as
-              MapPin.tsx gates its own CTA (`disabled={!resolved}`). */}
+              lat/lng never reach InlineNearby.
+              #2655 review fix — `onOpenPicker` is now DELIBERATELY OMITTED. #2647 wired it so InlineNearby's
+              own CTA (rendered when locationResolved && onOpenPicker && !addressConfirmed) could reach
+              Section 5's picker BEFORE it lived next to InlineNearby. Now that <MapPin> is co-located in this
+              same section, MapPin's own "Pin location on map" button (immediately above) is the single
+              picker-action owner; passing onOpenPicker here would render a second, redundant control with the
+              identical accessible name. InlineNearby still renders its locality/status copy via
+              `locationResolved`/`publicLoc` — only the duplicate action button is dropped. */}
           {draft.listingId && (
-            <Section number={6} title="Nearby places">
+            <Section number={6} title="Location & Nearby Places">
+              <MapPin location={residentialLocation} />
+              <p className="text-xs text-muted-foreground">
+                The pin marks the location only — it is not a legal or survey boundary.
+              </p>
               <InlineNearby
                 listingId={draft.listingId}
                 propertyType={form.propertyType}
@@ -329,9 +344,6 @@ export function AgriculturalListingForm({ onSwitchToGenericFlow, navigate }: Agr
                   residentialLocation.state.resolved != null || residentialLocation.state.localityResolved
                 }
                 publicLoc={residentialLocation.state.resolved?.publicLoc || form.locality}
-                onOpenPicker={
-                  residentialLocation.state.resolved != null ? residentialLocation.openPicker : undefined
-                }
                 onChangeLocation={residentialLocation.clear}
               />
             </Section>

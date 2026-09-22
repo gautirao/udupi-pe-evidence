@@ -142,8 +142,8 @@ beforeEach(() => {
   mockSubmitMutate.mockReset();
 });
 
-describe('CommercialListingForm — InlineNearby wiring (#2647 Option B)', () => {
-  it('passes the COARSE publicLoc and an onOpenPicker callback once a locality resolves', async () => {
+describe('CommercialListingForm — InlineNearby wiring (#2647 Option B, updated by #2655)', () => {
+  it('passes the COARSE publicLoc once a locality resolves, and WITHHOLDS onOpenPicker (co-located MapPin is now the sole picker-action owner)', async () => {
     mockCreateSucceeds(false);
     const user = userEvent.setup();
     render(
@@ -161,14 +161,18 @@ describe('CommercialListingForm — InlineNearby wiring (#2647 Option B)', () =>
     const props = lastProps();
     expect(props.publicLoc).toBe(PUBLIC_LOC);
     expect(props.locationResolved).toBe(true);
-    expect(typeof props.onOpenPicker).toBe('function');
+    // #2655 review fix — MapPin now renders in the SAME "Location & Nearby
+    // Places" section as InlineNearby, so InlineNearby's own #2647 preview
+    // CTA (same accessible name as MapPin's) is deliberately no longer
+    // wired here; passing it would duplicate the picker-open action.
+    expect(props.onOpenPicker).toBeUndefined();
     expect(typeof props.onChangeLocation).toBe('function');
     // PRIVACY: the private geocoded string must never cross this boundary.
     expect(props.publicLoc).not.toBe(PRIVATE_FORMATTED);
     expect(String(props.publicLoc)).not.toMatch(/Karnataka|India|13\.34|74\.74/);
   });
 
-  it('withholds onOpenPicker while nothing is resolved (no seed coordinate to open the picker on)', async () => {
+  it('withholds onOpenPicker while nothing is resolved too (no seed coordinate to open the picker on)', async () => {
     mockCreateSucceeds(false);
     const user = userEvent.setup();
     render(
@@ -188,8 +192,8 @@ describe('CommercialListingForm — InlineNearby wiring (#2647 Option B)', () =>
   });
 });
 
-describe('AgriculturalListingForm — InlineNearby wiring (#2647 Option B)', () => {
-  it('passes the COARSE publicLoc and an onOpenPicker callback once a locality resolves', async () => {
+describe('AgriculturalListingForm — InlineNearby wiring (#2647 Option B, updated by #2655)', () => {
+  it('passes the COARSE publicLoc once a locality resolves, and WITHHOLDS onOpenPicker (co-located MapPin is now the sole picker-action owner)', async () => {
     mockCreateSucceeds(false);
     const user = userEvent.setup();
     render(
@@ -207,13 +211,14 @@ describe('AgriculturalListingForm — InlineNearby wiring (#2647 Option B)', () 
     const props = lastProps();
     expect(props.publicLoc).toBe(PUBLIC_LOC);
     expect(props.locationResolved).toBe(true);
-    expect(typeof props.onOpenPicker).toBe('function');
+    // #2655 review fix — see the Commercial describe block above.
+    expect(props.onOpenPicker).toBeUndefined();
     expect(typeof props.onChangeLocation).toBe('function');
     expect(props.publicLoc).not.toBe(PRIVATE_FORMATTED);
     expect(String(props.publicLoc)).not.toMatch(/Karnataka|India|13\.34|74\.74/);
   });
 
-  it('withholds onOpenPicker while nothing is resolved (no seed coordinate to open the picker on)', async () => {
+  it('withholds onOpenPicker while nothing is resolved too (no seed coordinate to open the picker on)', async () => {
     mockCreateSucceeds(false);
     const user = userEvent.setup();
     render(

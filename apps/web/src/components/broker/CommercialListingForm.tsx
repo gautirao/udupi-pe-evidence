@@ -3,6 +3,7 @@ import { Loader2, CheckCircle2 } from 'lucide-react';
 import type { NavigateFunction } from 'react-router-dom';
 import { CommercialDescriptionAssistant } from '@/components/broker/commercial/CommercialDescriptionAssistant';
 import { InlineNearby } from '@/components/broker/residential/InlineNearby';
+import { MapPin } from '@/components/broker/residential/MapPin';
 import { computeListingStrength as computeFormCompleteness } from '@/components/broker/ListingStrengthMeter';
 import { Button } from '@/components/ui/button';
 import { intOrUndef } from '@/lib/listing-utils';
@@ -477,25 +478,36 @@ export function CommercialListingForm({ initialPropertyType, initialListingPurpo
             onCommercialAvailabilityChange={form.setCommercialAvailability}
           />
 
+          {/* #2655 — photos only, pin-location moved to Section 7. */}
           <CommercialPhotosLocationSection
             listingId={draft.listingId}
-            residentialLocationValue={location.residentialLocationValue}
             canSubmit={canSubmit}
             isCreatePending={draft.createListing.isPending}
             onSaveDraft={() => draft.persistDraft()}
           />
 
-          {/* Section 6b — Nearby places (gated on addressConfirmed, honest derived/broker-added labels)
+          {/* Section 7 — Location & Nearby Places (issue #2655 — recomposition: pin-location relocated
+              here from Section 6, single authoritative useResidentialLocation instance (via
+              useCommercialLocationOrchestration) reused verbatim, same <MapPin>/<PinDialog> as before —
+              no second picker or location model introduced). Nearby-place behaviour is unchanged (gated
+              on addressConfirmed, honest derived/broker-added labels).
               #2647 (owner decision, PR #2654 comment 5773021097 — Option B): the same location/pin
               fidelity Residential gets, wired through the SAME shared architecture. This flow already
               owns a useResidentialLocation instance via useCommercialLocationOrchestration, so these
               are the identical values ResidentialListingForm passes — no second location model and no
               second picker. `publicLoc` is the COARSE locality only (`resolved.publicLoc`, else the
               persisted `form.locality`); `resolved.formatted` and the pin lat/lng never reach
-              InlineNearby. `onOpenPicker` is gated on `resolved` exactly as MapPin.tsx gates its own
-              CTA (`disabled={!resolved}`) — with no resolved center there is no seed coordinate. */}
+              InlineNearby.
+              #2655 review fix — `onOpenPicker` is now DELIBERATELY OMITTED. #2647 wired it so InlineNearby's
+              own CTA (rendered when locationResolved && onOpenPicker && !addressConfirmed) could reach
+              Section 6's picker BEFORE it lived next to InlineNearby. Now that <MapPin> is co-located in this
+              same section, MapPin's own "Pin location on map" button (immediately above) is the single
+              picker-action owner; passing onOpenPicker here would render a second, redundant control with the
+              identical accessible name. InlineNearby still renders its locality/status copy via
+              `locationResolved`/`publicLoc` — only the duplicate action button is dropped. */}
           {draft.listingId && (
-            <Section number={7} title="Nearby places">
+            <Section number={7} title="Location & Nearby Places">
+              {location.residentialLocationValue && <MapPin location={location.residentialLocationValue} />}
               <InlineNearby
                 listingId={draft.listingId}
                 propertyType={form.propertyType}
@@ -506,11 +518,6 @@ export function CommercialListingForm({ initialPropertyType, initialListingPurpo
                 }
                 publicLoc={
                   location.residentialLocationValue?.state.resolved?.publicLoc || form.locality
-                }
-                onOpenPicker={
-                  location.residentialLocationValue?.state.resolved != null
-                    ? location.residentialLocationValue.openPicker
-                    : undefined
                 }
                 onChangeLocation={location.residentialLocationValue?.clear}
               />

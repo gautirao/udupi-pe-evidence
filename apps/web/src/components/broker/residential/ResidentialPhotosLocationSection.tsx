@@ -2,13 +2,10 @@ import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { InlinePhotos } from './InlinePhotos';
-import { MapPin } from './MapPin';
-import type { UseResidentialLocationResult } from './useResidentialLocation';
 import { Field, Section } from './ResidentialFormPrimitives';
 
 interface ResidentialPhotosLocationSectionProps {
   listingId: string | null;
-  residentialLocationValue: UseResidentialLocationResult | null;
   canSubmit: boolean;
   isCreatePending: boolean;
   onContinue: () => void;
@@ -16,20 +13,21 @@ interface ResidentialPhotosLocationSectionProps {
   onVideoLinkDraftChange: (value: string) => void;
 }
 
-/** #2387 — Section 6: Photos & location (issue #1718 — inline, real system, no navigation). Verbatim extraction, no behaviour change. */
-export function ResidentialPhotosLocationSection({ listingId, residentialLocationValue, canSubmit, isCreatePending, onContinue, videoLinkDraft, onVideoLinkDraftChange }: ResidentialPhotosLocationSectionProps) {
+/**
+ * #2387 — Section 6: Photos & location (issue #1718 — inline, real system, no navigation).
+ * #2655 — pin-location moved out to Section 7 ("Location & Nearby Places"); this section is
+ * photos-only now. Component/file name kept for minimal diff — only the rendered title and
+ * props changed.
+ */
+export function ResidentialPhotosLocationSection({ listingId, canSubmit, isCreatePending, onContinue, videoLinkDraft, onVideoLinkDraftChange }: ResidentialPhotosLocationSectionProps) {
   return (
-    <Section number={6} title="Photos & location">
+    <Section number={6} title="Photos">
       {listingId ? (
-        <>
-          <InlinePhotos listingId={listingId} />
-          <div className="h-px bg-border" />
-          {residentialLocationValue && <MapPin location={residentialLocationValue} />}
-        </>
+        <InlinePhotos listingId={listingId} />
       ) : (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed p-8 text-center">
           <p className="text-sm text-muted-foreground">
-            Save your details to add photos and pin the location.
+            Save your details to add photos.
           </p>
           <Button type="button" variant="outline" onClick={onContinue} disabled={!canSubmit || isCreatePending}>
             {isCreatePending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
