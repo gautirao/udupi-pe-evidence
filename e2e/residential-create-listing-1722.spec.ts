@@ -315,12 +315,23 @@ async function mockBackend(page: Page, state: MockServerState) {
       return;
     }
     if (route.request().method() === 'POST') {
-      const body = route.request().postDataJSON() as { storagePath: string; url: string };
+      // Registration mirrors the real contract (ListingImageRegistrar.java):
+      // the client (useListingImages.ts uploadImage) POSTs ONLY
+      // `{ storagePath }` — it never sends a `url` — and the backend derives
+      // `url` server-side from storagePath via storageService.getPublicUrl().
+      // A prior version of this mock read a nonexistent `body.url`, which was
+      // always `undefined`; JSON.stringify then dropped the field entirely,
+      // so every mock image round-tripped with url: undefined, `<img
+      // src={undefined}>` rendered with NO src attribute, and
+      // getAttribute('src') read back `null` — the exact #2646 failure
+      // (`expect(tile2SrcBeforePromotion).toBeTruthy()` received null).
+      const body = route.request().postDataJSON() as { storagePath: string };
+      const url = `https://mock-storage.e2e-test/served/${body.storagePath}`;
       state.images.push({
         id: `img-${state.images.length + 1}`,
         listingId: LISTING_ID,
         storagePath: body.storagePath,
-        url: body.url,
+        url,
         position: state.images.length,
         createdAt: new Date().toISOString(),
       });
