@@ -19,6 +19,11 @@ import {
 } from '@/features/discover/state/polygonDraftPhase';
 import type { PolygonRejection } from '@/features/discover/state/polygonRejection';
 import { validatePolygonScope } from '@/features/discover/state/validatePolygonScope';
+import {
+  mergeUrlFiltersIntoLocal,
+  projectUrlFilters,
+  urlFilterSignature,
+} from '@/features/discover/selectors/urlFiltersProjection';
 
 export interface UseDiscoverPageStateParams {
   urlState: DiscoverUrlState;
@@ -195,36 +200,13 @@ export function useDiscoverPageState({
   urlActions,
   isAuthenticated,
 }: UseDiscoverPageStateParams): UseDiscoverPageStateResult {
-  const [filters, setFilters] = useState<PropertyFilters>(() => {
-    const f = urlState.filters;
-    return {
-      propertyTypes: f.propertyTypes as PropertyFilters['propertyTypes'],
-      // Issue #2431 — seeded from the URL on cold-load so a shared
-      // ?type=commercial&subtype=SHOP link opens with the Shop box already ticked. The URL
-      // domain has already allowlisted these values, so the cast cannot widen the union.
-      commercialSubtypes: f.commercialSubtypes as PropertyFilters['commercialSubtypes'],
-      bedrooms: f.bedrooms,
-      priceMin: f.priceMin,
-      priceMax: f.priceMax,
-      // Issue #2459 — seeded from the URL on cold-load, so a shared ?areaMinSqft=1200 link opens
-      // with the bound already applied rather than showing unfiltered results next to a URL that
-      // claims otherwise. Half of AC7; the other half is the write-back in handleFiltersChange.
-      areaMinSqft: f.areaMinSqft,
-      areaMaxSqft: f.areaMaxSqft,
-      sellerTypes: f.sellerTypes,
-      // Issue #1132 — boardFilters/categoryFilters must be seeded from URL on cold-load
-      // so ActiveContextChips renders board/category chips when the page opens with
-      // ?board= or ?category= params already in the URL.
-      boardFilters: f.boardFilters,
-      categoryFilters: f.categoryFilters,
-      backOnMarket: f.backOnMarket,
-      newToMarket: f.newToMarket,
-      reraRegistered: f.reraRegistered,
-      readyToMove: f.readyToMove,
-      dateFrom: f.dateFrom ? new Date(f.dateFrom) : undefined,
-      dateTo: f.dateTo ? new Date(f.dateTo) : undefined,
-    };
-  });
+  // Issue #2528 — the field-by-field projection moved to
+  // selectors/urlFiltersProjection.ts and is now SHARED with
+  // useDiscoverPageContext's `urlDiscoverFilters`, which had derived the same
+  // list independently. Cold-load seeding is unchanged; what changed is that the
+  // seed is no longer the only time the URL is read — see the POP sync below.
+  const urlProjectedFilters = projectUrlFilters(urlState.filters);
+  const [filters, setFilters] = useState<PropertyFilters>(() => urlProjectedFilters);
   const [selectedArea, setSelectedArea] = useState<AreaPoint | null>(null);
   const [panToArea, setPanToArea] = useState<AreaPoint | null>(null);
   const [page, setPage] = useState(0);
@@ -305,6 +287,41 @@ export function useDiscoverPageState({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see trigger-key note above
   }, [urlCity]);
+
+  // Issue #2528 — sync the visible filter state with the URL on browser Back/Forward.
+  //
+  // This is the filter-set counterpart of the `city` / `viewport.zoom` / `areaKey` /
+  // `resultScope` syncs that already bracket it. Without it, `filters` was seeded at
+  // mount and never re-read, so after a history traversal the URL said one thing
+  // while BOTH the visible controls and the listings/markers request predicate
+  // (`useDiscoverMapDataController` feeds this same object to `useDiscoverMapData`)
+  // still said another.
+  //
+  // ONE-WAY, not a binding. The URL is the single owner of the axes it can express;
+  // the reverse direction happens only on an explicit user commit via
+  // `handleFiltersChange`. `mergeUrlFiltersIntoLocal` returns `prev` unchanged when
+  // the URL-owned axes already agree, so the user-commit round trip (local write ->
+  // debounced URL write -> this effect) settles on the first pass rather than
+  // ping-ponging between two owners.
+  //
+  // Local-only axes are deliberately untouched: `schoolLat`/`schoolLon`/
+  // `schoolRadiusKm` (owned by the school journey), `polygon` (a derived projection
+  // of the committed ResultScope, maintained by its own effect below), and
+  // `localities` (legacy, only ever cleared).
+  //
+  // Trigger key: the VALUE signature of the URL-owned axes, not `urlState.filters`'
+  // identity — the URL domain re-parses `type=`/`beds=`/`seller=` into brand-new
+  // arrays every render, so keying on identity would re-fire forever.
+  //
+  // NOT a draft clobber: while a live edit is in flight the 300 ms `setFiltersLive`
+  // debounce means the URL has not moved yet, so the signature is unchanged and this
+  // effect does not run. When the write lands, the URL matches local state and the
+  // merge is a no-op.
+  const urlFiltersKey = urlFilterSignature(urlProjectedFilters);
+  useEffect(() => {
+    setFilters((prev) => mergeUrlFiltersIntoLocal(prev, urlProjectedFilters));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see trigger-key note above
+  }, [urlFiltersKey]);
 
   // Sync mapZoom with URL viewport.zoom when it changes (e.g., after initial hydration).
   // This handles the case where viewport hasn't hydrated by mount time, so mapZoom defaults

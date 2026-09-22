@@ -10,6 +10,7 @@ import {
   useDiscoverViewport,
 } from '@/features/discover/context/useDiscoverContext';
 import { computeDiscoverLayer, toLayerInput } from '@/features/discover/selectors/mapLayerCategory';
+import { projectUrlFilters } from '@/features/discover/selectors/urlFiltersProjection';
 import type { DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 
@@ -96,42 +97,21 @@ export function useDiscoverPageContext() {
   // Mirrors the nav.filters → PropertyFilters mapping in useDiscoverPageState's useState
   // initializer. dateFrom/dateTo are ISO strings in URL state; PropertyFilters expects Date.
   // schoolLat/schoolLon/polygon are NOT included: group-results is not a school or polygon state.
-  const urlDiscoverFilters: PropertyFilters = useMemo(() => {
-    const f = nav.filters;
-    return {
-      propertyTypes: f.propertyTypes as PropertyFilters['propertyTypes'],
-      // Issue #2531 — the projection that made every downstream subtype fix inert.
-      // `urlDiscoverFilters` is what BOTH anon adapter call sites
-      // (useDiscoverResultsController, useDiscoverBoundedBrowseController) hand to
-      // `buildCityListingsQueryParams`, and what the authenticated group-results
-      // listings/markers queries serialise via `buildDiscoverSearchParams`. Every one of
-      // those forwards `commercialSubtypes` faithfully — but the field never ARRIVED,
-      // because this explicit key list omitted it. A forwarding fix downstream of a
-      // projection that drops the axis is a no-op, which is why the call-site enumeration
-      // alone did not surface this: it is a drop point, not a call site.
-      commercialSubtypes: f.commercialSubtypes as PropertyFilters['commercialSubtypes'],
-      bedrooms: f.bedrooms,
-      priceMin: f.priceMin,
-      priceMax: f.priceMax,
-      // Issue #2459 — carried so the group-results query runs the SAME area predicate the URL
-      // expresses. Omitting it here would give group results a different membership from the
-      // cards on a deep link that carries an area bound.
-      areaMinSqft: f.areaMinSqft,
-      areaMaxSqft: f.areaMaxSqft,
-      sellerTypes: f.sellerTypes,
-      boardFilters: f.boardFilters,
-      categoryFilters: f.categoryFilters,
-      backOnMarket: f.backOnMarket,
-      newToMarket: f.newToMarket,
-      reraRegistered: f.reraRegistered,
-      readyToMove: f.readyToMove,
-      dateFrom: f.dateFrom ? new Date(f.dateFrom) : undefined,
-      dateTo: f.dateTo ? new Date(f.dateTo) : undefined,
-    };
+  // Issue #2528 — the field list this memo used to spell out is now the SHARED
+  // `projectUrlFilters`, which `useDiscoverPageState` also reads. The two had been
+  // written out separately, and #2531 is what that costs: `commercialSubtypes` was
+  // added to one copy and omitted from the other, so the axis reached the controls
+  // and never reached the anon query. A single function makes that class of drift
+  // unexpressible — adding an axis in "one place" is now adding it in both.
+  //
+  // The memo and its explicit scalar dep list are kept: the projection allocates a
+  // new object (and new `Date`s) on every call, and several downstream query keys
+  // are built from this object, so re-deriving it per render would rekey them.
+  const urlDiscoverFilters: PropertyFilters = useMemo(() => projectUrlFilters(nav.filters),
   // nav.filters object identity changes on every URL change — use the individual
   // scalar fields as deps so React can skip re-derivation when nothing changed.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
+  [
     nav.filters.propertyTypes,
     // Issue #2531 — without this dep the memo would not recompute on a subtype change,
     // so the axis would reach the projection but the controllers would keep the
@@ -152,6 +132,7 @@ export function useDiscoverPageContext() {
     nav.filters.dateFrom,
     nav.filters.dateTo,
   ]);
+
 
   return {
     navigate,
