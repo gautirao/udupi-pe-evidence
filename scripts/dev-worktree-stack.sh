@@ -26,9 +26,16 @@
 
 set -euo pipefail
 
-MAIN_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Where THIS script file lives. Correct for loading the libraries next to it —
+# and correct for NOTHING ELSE. This script is tracked, so a copy of it exists
+# in every worktree checkout; its location says nothing about which checkout is
+# the shared one. MAIN_REPO is resolved from git metadata further down (#2551).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./dev/lib/port-ownership.sh
-source "$MAIN_REPO/scripts/dev/lib/port-ownership.sh"
+source "$SCRIPT_DIR/dev/lib/port-ownership.sh"
+# shellcheck source=./dev/lib/repo-resolution.sh
+source "$SCRIPT_DIR/dev/lib/repo-resolution.sh"
+MAIN_REPO=""
 WORKTREE=""; FE_PORT=""; BE_PORT=""; SKIP_BACKEND=false; KEEP_LOGS=false
 
 die() { printf '\n\033[31mFAIL\033[0m  %s\n' "$*" >&2; exit 1; }
@@ -64,7 +71,14 @@ done
 
 [[ -n "$WORKTREE" && -n "$FE_PORT" && -n "$BE_PORT" ]] || { usage; die "missing required argument"; }
 [[ "$FE_PORT" =~ ^[0-9]+$ && "$BE_PORT" =~ ^[0-9]+$ ]] || die "ports must be numeric"
-WORKTREE="$(cd "$WORKTREE" 2>/dev/null && pwd)" || die "worktree path does not exist"
+# `pwd -P`, not `pwd`: resolve_main_repo() returns a physical path, and on macOS
+# /var is a symlink to /private/var. A logical path here would make the SAME
+# directory compare unequal to the resolved main repo, so the "this worktree IS
+# the main checkout" guard in link_env() would silently never fire. Both sides
+# must be physical for that comparison to mean anything. It also makes the cwd
+# comparison in port_holder_belongs_to_worktree() line up with the physical cwd
+# that lsof reports.
+WORKTREE="$(cd "$WORKTREE" 2>/dev/null && pwd -P)" || die "worktree path does not exist"
 
 FE_ORIGIN="http://localhost:${FE_PORT}"
 BE_ORIGIN="http://localhost:${BE_PORT}"
@@ -105,6 +119,25 @@ HEAD_SHA="$(git -C "$WORKTREE" rev-parse --short HEAD)"
 ok "$WORKTREE"
 ok "branch $BRANCH @ $HEAD_SHA"
 
+# Which checkout holds the SHARED env files? Ask git, not the filesystem. This
+# script is tracked and therefore present in every worktree, so deriving the
+# main repo from ${BASH_SOURCE[0]} made `<worktree>/scripts/dev-worktree-stack.sh`
+# resolve MAIN_REPO to the worktree itself and report the shared env files as
+# "not present in main repo" while they sat in the primary checkout (#2551).
+# Resolve from the TARGET worktree so both invocations below are equivalent:
+#   <main-repo>/scripts/dev-worktree-stack.sh --worktree <worktree> ...
+#   <worktree>/scripts/dev-worktree-stack.sh  --worktree <worktree> ...
+MAIN_REPO="$(resolve_main_repo "$WORKTREE")" || die "cannot establish the main repository for
+      $WORKTREE
+      from git metadata (see the error above). Refusing to continue: without
+      knowing which checkout is shared, this script cannot tell 'the main repo
+      does not have .env' from 'I looked in the wrong place'."
+if [[ "$MAIN_REPO" == "$WORKTREE" ]]; then
+  ok "main repo $MAIN_REPO (this IS the main checkout — nothing to link)"
+else
+  ok "main repo $MAIN_REPO (shared checkout, resolved from git metadata)"
+fi
+
 # node_modules must be a REAL directory. A symlinked node_modules makes Vite
 # serve static assets through /@fs, which 403s — and an over-broad E2E auth
 # assertion then reports it as an authentication regression.
@@ -143,7 +176,15 @@ done
 step "Environment files"
 link_env() {
   local rel="$1" src="$MAIN_REPO/$1" dst="$WORKTREE/$1"
-  [[ -e "$src" ]] || { printf '  --  %s not present in main repo, skipping\n' "$rel"; return 0; }
+  # Running the stack for the main checkout itself: source and destination are
+  # the same file. Never link a file to itself.
+  if [[ "$src" == "$dst" ]]; then
+    ok "$rel — target IS the main checkout, nothing to link"
+    return 0
+  fi
+  # Name the checkout that was searched. "not present in main repo" without a
+  # path is exactly the message that hid #2551 for as long as it did.
+  [[ -e "$src" ]] || { printf '  --  %s not present in %s, skipping\n' "$rel" "$MAIN_REPO"; return 0; }
   if [[ -L "$dst" ]]; then ok "$rel already linked"; return 0; fi
   [[ -e "$dst" ]] && { ok "$rel exists in worktree (left untouched)"; return 0; }
   if git -C "$WORKTREE" check-ignore -q "$rel"; then
@@ -191,7 +232,10 @@ ok ".env.e2e.local written — this worktree's ports now survive into a fresh sh
 # ── 5. backend ───────────────────────────────────────────────────────────────
 if ! $SKIP_BACKEND; then
   step "Backend"
-  [[ -x "$MAIN_REPO/apps/api/run-local.sh" ]] || die "apps/api/run-local.sh not found or not executable"
+  # Check the file that is actually EXECUTED (the worktree's), not the main
+  # repo's copy. Before #2551 these were the same path only by accident of how
+  # MAIN_REPO was derived; the check and the run must name one file.
+  [[ -f "$WORKTREE/apps/api/run-local.sh" ]] || die "$WORKTREE/apps/api/run-local.sh not found"
   ( cd "$WORKTREE" && bash "$WORKTREE/apps/api/run-local.sh" >"$BE_LOG" 2>&1 ) &
   BE_PID=$!
   printf '  ..  starting (log: %s)\n' "$BE_LOG"
