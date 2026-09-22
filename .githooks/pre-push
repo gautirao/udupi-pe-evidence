@@ -2,13 +2,23 @@
 # Git pre-push hook — E2E gate.
 #
 # How it works:
-#   1. If only doc files changed → skip E2E entirely.
-#   2. Otherwise → run the smoke E2E suite.
+#   1. If only doc files changed → skip E2E entirely (SKIPPED).
+#   2. Otherwise → run the smoke E2E suite (PASSED/FAILED).
+#   3. Any changed e2e/ file the smoke run's default project will not
+#      actually collect (a canonical-harness spec, or a spec outside the
+#      smoke allowlist) is reported as an explicit SKIPPED line — never
+#      silently folded into a green "e2e passed" banner (#2592).
 #
-# See .claude/E2E_GATE.md for the full design rationale.
+# See .claude/E2E_GATE.md for the full design rationale and
+# scripts/dev/lib/pre-push-classify.sh for the classification logic itself
+# (kept in a separate, unit-tested library — see
+# scripts/dev/tests/pre-push-classify.test.sh).
 set -e
 
-DOC_PATTERN='^(docs/|README|CLAUDE|\.githooks/|\.claude/|e2e/|\.github/|scripts/|.*\.md$)'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=../scripts/dev/lib/pre-push-classify.sh
+source "$REPO_ROOT/scripts/dev/lib/pre-push-classify.sh"
 
 while read -r local_ref local_sha remote_ref remote_sha; do
   # Branch deletion — nothing to check
@@ -29,16 +39,32 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   fi
 
   # Filter to code-only files
-  code_changes=$(echo "$changed" | grep -Ev "$DOC_PATTERN" | grep -v '^$' || true)
+  code_changes=$(echo "$changed" | filter_code_changes)
 
   if [ -z "$code_changes" ]; then
-    echo "[pre-push] Doc-only changes — skipping e2e."
+    echo "[pre-push] SKIPPED — doc-only changes, no e2e run needed."
     exit 0
   fi
 
   echo "[pre-push] Code changes detected:"
   echo "$code_changes" | sed 's/^/  /'
   echo ""
+
+  # #2592: name any changed e2e/ file the smoke run below will NOT actually
+  # collect, before running anything, so a later "e2e passed" banner can
+  # never be mistaken for coverage of these files.
+  uncovered_e2e=$(echo "$code_changes" | classify_e2e_coverage)
+  if [ -n "$uncovered_e2e" ]; then
+    echo "[pre-push] SKIPPED — the following changed e2e file(s) are not collected by the"
+    echo "  'smoke' project this gate runs by default:"
+    echo "$uncovered_e2e" | sed 's/^/    /'
+    echo "  Run the matching suite manually before pushing, e.g.:"
+    echo "    npm run test:e2e:canonical   (for e2e/canonical/**)"
+    echo "    npm run test:e2e:journey     (for e2e/journey/**)"
+    echo "    npx playwright test --project=full <file>   (any other project)"
+    echo ""
+  fi
+
   echo "━━━ pre-push: running e2e tests ━━━"
   # Ports are resolved per-worktree by scripts/run-e2e-local.sh itself
   # (.env.e2e.local when this worktree has explicit assigned ports, else
