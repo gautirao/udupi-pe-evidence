@@ -111,24 +111,47 @@ class CommercialImportPromotion2575IT {
     private void stageCandidate(int batchId, String sourceId, String propertyType,
                                 String subtype, String purpose, Long price, Long rent,
                                 String outcome, String rejectReason) {
+        stageCandidate(batchId, sourceId, propertyType, subtype, purpose, price, rent,
+                outcome, rejectReason, "NUMERIC");
+    }
+
+    /**
+     * #2606 — same fixture shape, plus an explicit {@code price_status}. Used both for a
+     * {@code NUMERIC} row with an overridden status (unused today, kept symmetric with the
+     * POR helper below) and, via {@link #stageOnRequestCandidate}, for Price-on-Request rows.
+     */
+    private void stageCandidate(int batchId, String sourceId, String propertyType,
+                                String subtype, String purpose, Long price, Long rent,
+                                String outcome, String rejectReason, String priceStatus) {
         jdbc.update("""
                 INSERT INTO public.commercial_import_candidate (
                     batch_id, source_platform, source_listing_id, source_url,
                     source_property_type, source_transaction_type,
                     city, locality, area_key, area_label, latitude, longitude,
                     property_family, property_type, commercial_subtype, listing_purpose,
-                    price, price_paise, monthly_rent, total_floors,
+                    price, price_paise, monthly_rent, price_status, total_floors,
                     title, outcome, reject_reason)
                 VALUES (?, '99acres', ?, 'https://example.invalid/l/' || ?,
                     'synthetic', ?, 'Udupi', 'Manipal', 'IN|KA|Udupi|Manipal', 'Manipal',
-                    13.35, 74.79, 'COMMERCIAL', ?, ?, ?, ?, ?, ?, 3,
+                    13.35, 74.79, 'COMMERCIAL', ?, ?, ?, ?, ?, ?, ?, 3,
                     'IT fixture ' || ?, ?, ?)
                 """,
                 batchId, sourceId, sourceId,
                 "sale".equals(purpose) ? "Sale" : "Rent",
                 propertyType, subtype, purpose,
-                price, price == null ? null : price * 100, rent,
+                price, price == null ? null : price * 100, rent, priceStatus,
                 sourceId, outcome, rejectReason);
+    }
+
+    /**
+     * #2606 — a housing.com-shaped Price-on-Request candidate: no price on any axis, staged
+     * with {@code price_status='ON_REQUEST'}. Mirrors the real 11 reprocessed #2575/#2606 rows
+     * (COMMERCIAL_BUILDING, SALE, price=None, displayPrice='Price on Request') at the field
+     * granularity this table stores.
+     */
+    private void stageOnRequestCandidate(int batchId, String sourceId, String propertyType, String subtype) {
+        stageCandidate(batchId, sourceId, propertyType, subtype, "sale", null, null,
+                "STAGED", null, "ON_REQUEST");
     }
 
     private long count(String sql) {
@@ -356,6 +379,150 @@ class CommercialImportPromotion2575IT {
                 """);
         assertThat(sale.get("price")).isNotNull();
         assertThat(sale.get("monthly_rent")).as("a sale row carries no monthly rent").isNull();
+    }
+
+    // ── #2606: Price on Request ─────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("#2606: a Price-on-Request candidate promotes with price_status=ON_REQUEST and "
+            + "price/price_paise/monthly_rent all NULL — never a sentinel")
+    void priceOnRequestPromotesWithNullPriceAndOnRequestStatus() throws Exception {
+        Integer batchId = jdbc.queryForObject(
+                "SELECT id FROM public.commercial_import_batch ORDER BY id DESC LIMIT 1", Integer.class);
+        stageOnRequestCandidate(batchId, "IT-POR-1", "commercial_building", null);
+
+        runSqlFileInOneTransaction("promote.sql");
+
+        Map<String, Object> row = jdbc.queryForMap("""
+                SELECT price, price_paise, monthly_rent, price_status
+                FROM property_listings WHERE id = (md5('99acres:IT-POR-1'))::uuid
+                """);
+        assertThat(row.get("price_status")).isEqualTo("ON_REQUEST");
+        assertThat(row.get("price")).as("no sentinel sale price").isNull();
+        assertThat(row.get("price_paise")).as("no sentinel paise band").isNull();
+        assertThat(row.get("monthly_rent")).as("no sentinel rent either").isNull();
+    }
+
+    @Test
+    @DisplayName("#2606: a NUMERIC candidate keeps price_status=NUMERIC through promotion")
+    void numericCandidateKeepsNumericPriceStatus() throws Exception {
+        runSqlFileInOneTransaction("promote.sql");
+
+        assertThat(jdbc.queryForObject("""
+                SELECT price_status FROM property_listings WHERE id = (md5('99acres:IT-SHOP-1'))::uuid
+                """, String.class)).isEqualTo("NUMERIC");
+    }
+
+    @Test
+    @DisplayName("#2606: priceMin/priceMax numeric filtering excludes ON_REQUEST listings by "
+            + "ordinary SQL NULL semantics — never misclassified as a ₹0 listing")
+    void priceFilterExcludesOnRequestListings() throws Exception {
+        Integer batchId = jdbc.queryForObject(
+                "SELECT id FROM public.commercial_import_batch ORDER BY id DESC LIMIT 1", Integer.class);
+        stageOnRequestCandidate(batchId, "IT-POR-FILTER-1", "commercial_building", null);
+        runSqlFileInOneTransaction("promote.sql");
+
+        // Mirrors DiscoverListingPredicateBuilder's price-range clause exactly:
+        // "AND pl.price_paise >= ?" / "AND pl.price_paise <= ?".
+        long inZeroToHugeRange = count("""
+                SELECT count(*) FROM property_listings
+                WHERE id = (md5('99acres:IT-POR-FILTER-1'))::uuid
+                  AND price_paise >= 0 AND price_paise <= 999999999999
+                """);
+        assertThat(inZeroToHugeRange)
+                .as("an ON_REQUEST listing's NULL price_paise fails every numeric range predicate, "
+                    + "including a [0, huge] range that would wrongly include a fabricated ₹0")
+                .isZero();
+
+        // Un-filtered, the same row IS visible — proving the exclusion above comes from the price
+        // predicate, not from the row being absent for some unrelated reason.
+        long unfiltered = count("""
+                SELECT count(*) FROM property_listings WHERE id = (md5('99acres:IT-POR-FILTER-1'))::uuid
+                """);
+        assertThat(unfiltered).as("CONTROL: the row exists and is promoted").isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("#2606: reprocessing the 11 deferred Price-on-Request rows is idempotent — "
+            + "pre-existing NUMERIC listings are untouched, exactly 11 ON_REQUEST listings are "
+            + "added once, and a second run adds zero duplicates")
+    void elevenPriceOnRequestRowsReprocessIdempotently() throws Exception {
+        Integer batchId = jdbc.queryForObject(
+                "SELECT id FROM public.commercial_import_batch ORDER BY id DESC LIMIT 1", Integer.class);
+
+        // Baseline: promote the @BeforeEach fixture first, exactly as a prior import run would
+        // have already happened before #2606 reprocessing.
+        runSqlFileInOneTransaction("promote.sql");
+        long baselineCount = count(
+                "SELECT count(*) FROM property_listings WHERE parsed_data->>'importIssue'='2575'");
+        assertThat(baselineCount).as("six STAGED fixture rows promote first, as the pre-existing state")
+                .isEqualTo(6);
+
+        // The 11 deferred housing.com Price-on-Request rows, reprocessed under #2606. Real source
+        // ids from the #2575/#2606 reject report (all Bengaluru COMMERCIAL_BUILDING SALE rows).
+        List<String> porSourceIds = List.of(
+                "226048", "306386", "307211", "308173", "313368",
+                "311158", "320144", "320131", "322822", "326643", "311080");
+        for (String sourceId : porSourceIds) {
+            stageOnRequestCandidate(batchId, sourceId, "commercial_building", null);
+        }
+
+        // ── Run 1: promote the 11 new ON_REQUEST rows alongside the untouched baseline. ────────
+        runSqlFileInOneTransaction("promote.sql");
+
+        long afterFirstRun = count(
+                "SELECT count(*) FROM property_listings WHERE parsed_data->>'importIssue'='2575'");
+        assertThat(afterFirstRun)
+                .as("existing %d + 11 new Price-on-Request rows = %d", baselineCount, baselineCount + 11)
+                .isEqualTo(baselineCount + 11);
+
+        long newOnRequestCount = count("""
+                SELECT count(*) FROM property_listings
+                WHERE parsed_data->>'importIssue'='2575' AND price_status = 'ON_REQUEST'
+                """);
+        assertThat(newOnRequestCount).as("exactly 11 new Price-on-Request listings").isEqualTo(11);
+
+        long baselineStillNumeric = count("""
+                SELECT count(*) FROM property_listings
+                WHERE parsed_data->>'importIssue'='2575' AND price_status = 'NUMERIC'
+                """);
+        assertThat(baselineStillNumeric)
+                .as("the pre-existing baseline rows are untouched and remain NUMERIC")
+                .isEqualTo(baselineCount);
+
+        // Every ON_REQUEST row genuinely carries no price — the count above is not hiding a
+        // sentinel value that happened to also be counted as ON_REQUEST.
+        long onRequestWithAnyPrice = count("""
+                SELECT count(*) FROM property_listings
+                WHERE parsed_data->>'importIssue'='2575' AND price_status = 'ON_REQUEST'
+                  AND (price IS NOT NULL OR price_paise IS NOT NULL OR monthly_rent IS NOT NULL)
+                """);
+        assertThat(onRequestWithAnyPrice).as("no ON_REQUEST row carries a stray price value").isZero();
+
+        // ── Run 2: re-arm the 11 rows as STAGED (the realistic shape of a re-import presenting the
+        // same 11 source rows again) and promote again — this exercises the
+        // (source_platform, source_listing_id) identity constraint for real, not merely asserts it.
+        jdbc.update("""
+                UPDATE commercial_import_candidate SET outcome='STAGED'
+                WHERE source_listing_id = ANY(?) AND outcome='PROMOTED'
+                """, (Object) porSourceIds.toArray(new String[0]));
+        runSqlFileInOneTransaction("promote.sql");
+
+        long afterSecondRun = count(
+                "SELECT count(*) FROM property_listings WHERE parsed_data->>'importIssue'='2575'");
+        assertThat(afterSecondRun)
+                .as("second promotion of the same 11 rows must add ZERO new rows — an UPDATE of the "
+                    + "same identity, never a duplicate")
+                .isEqualTo(afterFirstRun);
+
+        long distinctPorIds = count("""
+                SELECT count(DISTINCT id) FROM property_listings
+                WHERE parsed_data->>'importIssue'='2575' AND price_status = 'ON_REQUEST'
+                """);
+        assertThat(distinctPorIds)
+                .as("still exactly 11 DISTINCT Price-on-Request listing ids — zero duplicates of the "
+                    + "old (or the new) records")
+                .isEqualTo(11);
     }
 
     @Test

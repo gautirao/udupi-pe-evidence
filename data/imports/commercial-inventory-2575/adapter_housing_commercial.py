@@ -290,26 +290,39 @@ def build_candidate(record):
         return None, reject(record, "wrong_geography", f"({lat}, {lon}) outside India")
 
     price = record.get("price")
-    if (
+    is_price_on_request = (
         price is None
         or record.get("isPriceOnRequest") is True
         or record.get("priceOnRequest") is True
         or str(record.get("displayPrice", "")).strip().lower() == "price on request"
         or str(record.get("priceDisplay", "")).strip().lower() == "price on request"
-    ):
-        # Durable ruling: Price-on-Request / missing price listings rejected with reason PRICE_ON_REQUEST_UNSUPPORTED
-        return None, reject(record, "PRICE_ON_REQUEST_UNSUPPORTED", "Price on request listings are unsupported in commercial staging")
+    )
 
-    try:
-        price_val = int(price)
-    except (ValueError, TypeError):
-        return None, reject(record, "PRICE_ON_REQUEST_UNSUPPORTED", f"invalid price value {price!r}")
-
-    # Money: rent money must never occupy the sale columns (chk_cic_purpose_money).
-    if purpose == "rent":
-        money = {"price": None, "price_paise": None, "monthly_rent": price_val}
+    # #2606: Price on Request is a SUPPORTED, explicit state — staged with price_status
+    # 'ON_REQUEST' and price/price_paise/monthly_rent left NULL (chk_cic_price_status_on_request,
+    # chk_cic_purpose_money). Deliberately NOT collapsed into a rejection or a sentinel price:
+    # see the V140 migration comment for why a fabricated number is worse than an explicit
+    # status. This supersedes the #2575 durable ruling that rejected these rows with
+    # PRICE_ON_REQUEST_UNSUPPORTED — that ruling is reversed by #2606, not silently dropped.
+    if is_price_on_request:
+        price_val = None
+        money = {"price": None, "price_paise": None, "monthly_rent": None}
+        price_status = "ON_REQUEST"
     else:
-        money = {"price": price_val, "price_paise": price_val * 100, "monthly_rent": None}
+        try:
+            price_val = int(price)
+        except (ValueError, TypeError):
+            # A genuinely malformed price value, not a Price-on-Request signal — stays a
+            # reject. This is a different failure mode than #2606 supports: the source gave a
+            # price and it could not be parsed, versus the source explicitly declining to price.
+            return None, reject(record, "invalid_price_value", f"invalid price value {price!r}")
+
+        # Money: rent money must never occupy the sale columns (chk_cic_purpose_money).
+        if purpose == "rent":
+            money = {"price": None, "price_paise": None, "monthly_rent": price_val}
+        else:
+            money = {"price": price_val, "price_paise": price_val * 100, "monthly_rent": None}
+        price_status = "NUMERIC"
 
     # Area: a Plot Area measurement is land area and must not be emitted as built-up.
     area_value, area_unit, area_type = (
@@ -343,6 +356,7 @@ def build_candidate(record):
         "property_type": property_type,
         "commercial_subtype": commercial_subtype,
         "listing_purpose": purpose,
+        "price_status": price_status,
         **money,
         "built_area": built_area,
         "built_area_unit": built_unit,

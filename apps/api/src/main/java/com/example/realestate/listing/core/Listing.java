@@ -71,6 +71,18 @@ public class Listing {
     @Column(name = "price_unit")
     private String priceUnit = "INR";
 
+    /**
+     * #2606 — explicit price semantics: {@code NUMERIC} (default; {@link #price}/
+     * {@link #pricePaise} carry a real asking price) or {@code ON_REQUEST} (the source
+     * explicitly declined to state a price; {@link #price}/{@link #pricePaise} are null by
+     * {@code chk_listing_price_status_on_request}). Never infer Price on Request from a null
+     * price alone — a {@code NUMERIC} row can also carry a null price for unrelated legacy
+     * reasons. Read this column, not {@code pricePaise == null}, to know whether a listing is
+     * Price on Request.
+     */
+    @Column(name = "price_status", nullable = false, length = 20)
+    private String priceStatus = "NUMERIC";
+
     @Column(name = "land_area")
     private BigDecimal landArea;
 
@@ -730,6 +742,14 @@ public class Listing {
 
     public void setPriceUnit(String priceUnit) {
         this.priceUnit = priceUnit;
+    }
+
+    public String getPriceStatus() {
+        return priceStatus;
+    }
+
+    public void setPriceStatus(String priceStatus) {
+        this.priceStatus = priceStatus;
     }
 
     public BigDecimal getLandArea() {

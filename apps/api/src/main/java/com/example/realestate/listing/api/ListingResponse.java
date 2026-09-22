@@ -203,7 +203,19 @@ public record ListingResponse(
          * detail path (mirrors {@link #amenities}/{@link #suitableUses}); list/batch endpoints
          * always set this to an empty list (AC10 — deliberate N+1 guard, not an oversight).
          */
-        List<String> crops
+        List<String> crops,
+        /**
+         * #2606 — {@code NUMERIC} (default) or {@code ON_REQUEST}. APPENDED LAST, mirroring
+         * {@code DiscoverListingResponse}'s convention for late-added fields: every earlier
+         * field keeps its position for any positional-record consumer.
+         *
+         * <p>{@code ON_REQUEST} means the source explicitly declined to state a price;
+         * {@link #price}/{@link #pricePaise} are null by the database CHECK, never a sentinel.
+         * Consumers must read this field, not a null price, to know whether a listing is Price
+         * on Request — a {@code NUMERIC} listing can also carry a null price for unrelated
+         * legacy reasons.
+         */
+        String priceStatus
 ) {
     /** Raw regex for Karnataka RERA registration number format (e.g. PRM/KA/2023/0042). */
     public static final String RERA_REGEXP = "^[A-Z]{3}/[A-Z]{2}/\\d{4}/\\d{4}$";

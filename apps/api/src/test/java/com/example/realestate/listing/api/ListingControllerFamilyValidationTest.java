@@ -143,7 +143,8 @@ class ListingControllerFamilyValidationTest {
                     null, null, null, null, null, null,
                     null, null, null, null, null, null,
                     null, null, null,
-                    List.of(), List.of(), List.of());
+                    List.of(), List.of(), List.of(),
+                    l.getPriceStatus());
         });
     }
 

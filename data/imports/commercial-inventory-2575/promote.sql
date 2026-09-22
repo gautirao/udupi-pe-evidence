@@ -117,7 +117,7 @@ INSERT INTO public.property_listings (
     is_valid, is_duplicate,
     area_key, area_label, locality, title,
     latitude, longitude,
-    price, price_paise, monthly_rent,
+    price, price_paise, monthly_rent, price_status,
     built_area, built_area_unit, land_area, land_area_unit,
     listing_purpose,
     floor_number, total_floors, washrooms,
@@ -142,6 +142,10 @@ SELECT
     c.area_key, c.area_label, c.locality, c.title,
     c.latitude, c.longitude,
     c.price, c.price_paise, c.monthly_rent,
+    -- #2606: NULL staged price_status predates #2606 (e.g. a 99acres candidate row) and is
+    -- treated as NUMERIC — the pre-#2606 default every such row already satisfies (a real
+    -- price or a legacy null for unrelated reasons, never an explicit Price-on-Request claim).
+    coalesce(c.price_status, 'NUMERIC'),
     c.built_area, c.built_area_unit, c.land_area, c.land_area_unit,
     c.listing_purpose,
     c.floor_number, c.total_floors, c.washrooms,
@@ -188,6 +192,7 @@ ON CONFLICT (id) DO UPDATE SET
     price                        = EXCLUDED.price,
     price_paise                  = EXCLUDED.price_paise,
     monthly_rent                 = EXCLUDED.monthly_rent,
+    price_status                 = EXCLUDED.price_status,
     built_area                   = EXCLUDED.built_area,
     built_area_unit              = EXCLUDED.built_area_unit,
     land_area                    = EXCLUDED.land_area,

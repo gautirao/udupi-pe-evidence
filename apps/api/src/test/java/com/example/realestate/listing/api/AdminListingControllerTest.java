@@ -151,7 +151,8 @@ class AdminListingControllerTest {
                     l.getExpectedRentalYieldPct(), l.getCurrentMonthlyIncomePaise(),
                     l.getLeaseTermMonths(), l.getLeaseEscalationPct(),
                     l.getCommercialFurnishingStatus(), l.getCommercialAvailability(), l.getCommercialAreaUnit(),
-                    java.util.List.of(), java.util.List.of(), java.util.List.of());
+                    java.util.List.of(), java.util.List.of(), java.util.List.of(),
+                    l.getPriceStatus());
         });
         // #1794 Phase 1: GET /stale maps a batch via toResponseList — delegate to the
         // already-stubbed single-item toResponse so list-endpoint assertions keep working.

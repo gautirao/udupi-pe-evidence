@@ -463,6 +463,7 @@ public class ListingResponseMapper {
                 l.getExpectedRentalYieldPct(), l.getCurrentMonthlyIncomePaise(),
                 l.getLeaseTermMonths(), l.getLeaseEscalationPct(),
                 l.getCommercialFurnishingStatus(), l.getCommercialAvailability(), l.getCommercialAreaUnit(),
-                suitableUses, utilities, crops);
+                suitableUses, utilities, crops,
+                l.getPriceStatus());
     }
 }
