@@ -153,22 +153,12 @@ WORKTREE_SLUG="$(basename "$WORKTREE_ROOT" | tr -c 'a-zA-Z0-9' '-')"
 E2E_DB_CONTAINER_NAME="pg-e2e-${WORKTREE_SLUG}-$$"
 E2E_DB_PASSWORD="${E2E_DB_PASSWORD:-e2e_local_only}"
 
-# Probe forward from a worktree-derived base port so concurrent worktrees
-# rarely collide, and never reuse a port something else already holds.
-find_free_port() {
-  local port="$1" tries=0
-  while [ -n "$(port_holder_pid "$port")" ]; do
-    port=$((port + 1))
-    tries=$((tries + 1))
-    if [ "$tries" -ge 50 ]; then
-      echo "ERROR: could not find a free port for the local E2E DB fixture near $1." >&2
-      exit 1
-    fi
-  done
-  echo "$port"
-}
+# find_free_port() (worktree-derived base port so concurrent worktrees rarely
+# collide, never reusing a port something else already holds) now lives in
+# scripts/dev/lib/port-ownership.sh (#2568), shared with
+# scripts/dev/local-fixture-backend.sh instead of being duplicated here.
 E2E_DB_PORT_BASE=$(( (BACKEND_PORT * 7) % 20000 + 20000 ))
-E2E_DB_PORT="$(find_free_port "$E2E_DB_PORT_BASE")"
+E2E_DB_PORT="$(find_free_port "$E2E_DB_PORT_BASE")" || exit 1
 
 echo "[e2e] Starting ephemeral local Postgres/PostGIS fixture ($E2E_DB_CONTAINER_NAME on port $E2E_DB_PORT)..."
 # #2446: E2E_FIXTURE_PROFILE (unset = default legacy-Udupi fixture; `udupi-canonical`

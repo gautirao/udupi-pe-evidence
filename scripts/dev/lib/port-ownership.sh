@@ -78,6 +78,30 @@ terminate_service() {
   done
 }
 
+# Probe forward from a base port for one this machine has nobody listening on
+# yet, so concurrent invocations (different worktrees, different lanes, or two
+# runs in the same worktree) rarely collide, and this never reuses a port
+# something else already holds. Extracted from scripts/run-e2e-local.sh's
+# original per-invocation fixture-port probe (#2422 follow-up) so
+# scripts/dev/local-fixture-backend.sh (#2568) can reuse the identical logic
+# instead of duplicating it.
+#
+# $1 = base port to start probing from. Prints the first free port found on
+# stdout. Exits 1 (after printing an error to stderr) if none of the next 50
+# ports are free.
+find_free_port() {
+  local port="$1" tries=0
+  while [ -n "$(port_holder_pid "$port")" ]; do
+    port=$((port + 1))
+    tries=$((tries + 1))
+    if [ "$tries" -ge 50 ]; then
+      echo "ERROR: could not find a free port near $1 (checked 50 ports)." >&2
+      return 1
+    fi
+  done
+  echo "$port"
+}
+
 # Verify specified ports are free. Returns 0 if all free, 1 if any port is still bound.
 verify_ports_released() {
   local leaked=0

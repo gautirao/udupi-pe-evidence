@@ -18,8 +18,19 @@
 #   bash scripts/dev/seed-navigation-hierarchy-fixture.sh
 #
 # Optional overrides (same defaults as scripts/dev/local-fixture-backend.sh):
-#   PG_TEST_PORT       Host port for the local fixture (default: 5434)
-#   PG_TEST_PASSWORD   Postgres superuser password for the fixture (default: fixture_test_only)
+#   PG_TEST_CONTAINER_NAME  Fixture container name (default: pg-test-fixture)
+#   PG_TEST_PORT            Host port for the local fixture (default: 5434)
+#   PG_TEST_PASSWORD        Postgres superuser password for the fixture (default: fixture_test_only)
+#
+# #2568: scripts/dev/local-fixture-backend.sh now defaults to a PER-INVOCATION
+# container name/port instead of the "pg-test-fixture"/5434 singleton (it
+# prints the exact values it picked at startup — "Effective fixture config:
+# PG_TEST_CONTAINER_NAME=... PG_TEST_PORT=..."). To seed THAT fixture, pass the
+# same two values through, e.g.:
+#   PG_TEST_CONTAINER_NAME=pg-fixture-myrepo-12345 PG_TEST_PORT=5435 \
+#     bash scripts/dev/seed-navigation-hierarchy-fixture.sh
+# With no override, this script's default ("pg-test-fixture"/5434) is
+# unchanged from before #2568.
 
 set -euo pipefail
 
@@ -28,6 +39,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 SEED_FILE="${REPO_ROOT}/scripts/db/fixtures/navigation-hierarchy-fixture-seed.sql"
 LISTINGS_SEED_FILE="${REPO_ROOT}/scripts/db/fixtures/navigation-hierarchy-fixture-listings-seed.sql"
 
+PG_TEST_CONTAINER_NAME="${PG_TEST_CONTAINER_NAME:-pg-test-fixture}"
 PG_TEST_PORT="${PG_TEST_PORT:-5434}"
 PG_TEST_PASSWORD="${PG_TEST_PASSWORD:-fixture_test_only}"
 
@@ -57,9 +69,9 @@ fi
 
 echo ">>> Running safety gate..."
 
-CONTAINER_ID="$(docker ps --filter name=pg-test-fixture --filter status=running -q || true)"
+CONTAINER_ID="$(docker ps --filter "name=${PG_TEST_CONTAINER_NAME}" --filter status=running -q || true)"
 if [[ -z "$CONTAINER_ID" ]]; then
-  echo "ERROR: safety gate: fixture container 'pg-test-fixture' not running. Start it first via" >&2
+  echo "ERROR: safety gate: fixture container '${PG_TEST_CONTAINER_NAME}' not running. Start it first via" >&2
   echo "       scripts/db/restore-test-fixture.sh or scripts/dev/local-fixture-backend.sh." >&2
   exit 1
 fi

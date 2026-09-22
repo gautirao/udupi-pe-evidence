@@ -95,14 +95,17 @@ location). Steps, in order:
    `scripts/db/restore-test-fixture.sh` all exist.
 2. **Restore the fixture** — calls `scripts/db/restore-test-fixture.sh`
    verbatim (no second migration/fixture implementation). That script
-   drops and recreates a disposable `pg-test-fixture` Docker
-   Postgres/PostGIS container, applies every Flyway migration, and loads
-   the synthetic E2E seed data.
+   drops and recreates a disposable, **per-invocation** Docker
+   Postgres/PostGIS container (see [Per-invocation fixture](#4a-per-invocation-fixture-2568)
+   below — no shared, machine-wide singleton), applies every Flyway
+   migration, and loads the synthetic E2E seed data.
 3. **Safety gate (fail-closed)** — before any DB write or auth call,
    asserts: the target host is hardcoded to `localhost` (no code path can
    redirect it to a remote host — this is a structural property of the
-   script, not a runtime check), the `pg-test-fixture` container is
-   running, and the fixture Postgres is reachable via `psql SELECT 1`. Any
+   script, not a runtime check), THIS invocation's own fixture container
+   (by its own generated/overridden name — never a hardcoded
+   `pg-test-fixture` lookup) is running, and the fixture Postgres is
+   reachable via `psql SELECT 1` on THIS invocation's own port. Any
    failure aborts with a non-zero exit before touching the database or
    logging in.
 4. **Hosted Supabase Auth login** — logs in as `ADMIN_EMAIL`/`ADMIN_PASSWORD`
@@ -127,11 +130,55 @@ Spring Boot then runs in the foreground on the default port, same as with
 `run-local.sh` — but every query goes to the disposable local fixture
 instead of the remote database.
 
+## 4a. Per-invocation fixture (#2568)
+
+`local-fixture-backend.sh` no longer defaults to a shared, machine-wide
+`pg-test-fixture` container on port `5434`. Every invocation that doesn't
+explicitly override `PG_TEST_CONTAINER_NAME` / `PG_TEST_PORT` now gets its
+own uniquely-named container (`pg-fixture-<worktree-slug>-<pid>`) on its own
+probed-free port (starting from `5434` and moving up). This is what lets
+multiple concurrent invocations — different worktrees, different overnight
+lanes, or two runs in the same worktree — coexist safely: before this,
+`restore-test-fixture.sh`'s unconditional `docker rm -f` of the shared
+container name meant a second invocation would silently destroy the first
+invocation's fixture mid-run.
+
+The script prints the exact values it picked at startup:
+
+```
+>>> Effective fixture config: PG_TEST_CONTAINER_NAME=pg-fixture-myrepo-12345 PG_TEST_PORT=5434 (password masked)
+>>> This fixture is exclusively owned by this invocation (PID 12345). It will NOT be torn down
+    automatically (Step G below execs into the backend and stays foreground) — remove it
+    yourself when you are done: docker rm -f pg-fixture-myrepo-12345
+```
+
+Nothing tears the container down automatically (unchanged from before this
+fix — the script `exec`s into the backend and stays in the foreground, so no
+`EXIT` trap survives to do it). Remove it yourself with the `docker rm -f`
+command the script prints, or let a later invocation's own idempotent
+`restore-test-fixture.sh` re-run replace its **own** container (never
+another invocation's).
+
+To seed the navigation-hierarchy fixture (`scripts/dev/seed-navigation-hierarchy-fixture.sh`)
+into a fixture started this way, pass the same `PG_TEST_CONTAINER_NAME` /
+`PG_TEST_PORT` values through:
+
+```bash
+PG_TEST_CONTAINER_NAME=pg-fixture-myrepo-12345 PG_TEST_PORT=5434 \
+  bash scripts/dev/seed-navigation-hierarchy-fixture.sh
+```
+
+`PG_TEST_CONTAINER_NAME` / `PG_TEST_PORT` remain fully overridable exactly as
+before (e.g. `PG_TEST_CONTAINER_NAME=pg-test-fixture-2454 PG_TEST_PORT=5437`,
+the manual-per-issue convention several past lanes' PR evidence already
+used) — only the *fallback* when the caller leaves them unset changed.
+
 ## 5. Custom port
 
 `scripts/db/restore-test-fixture.sh` defaults to host port `5434` for the
-fixture container; `local-fixture-backend.sh` follows the same
-`PG_TEST_PORT` convention:
+fixture container; `local-fixture-backend.sh` probes forward from that same
+default when `PG_TEST_PORT` is not set (see [4a](#4a-per-invocation-fixture-2568)
+above). To pin a specific port yourself:
 
 ```bash
 PG_TEST_PORT=5435 ./scripts/dev/local-fixture-backend.sh
@@ -220,21 +267,26 @@ backend workflow you started determines what data those specs will see.
 
 ## 10. Cleanup / restart behaviour
 
-`scripts/db/restore-test-fixture.sh` always **drops and recreates** the
-`pg-test-fixture` container on every run — it is not incremental. That
-means it's safe to re-run `./scripts/dev/local-fixture-backend.sh` any time
-you want a clean slate; the whole workflow (fixture restore → safety gate
-→ login → seed → Spring Boot start) was verified end-to-end to be
-idempotent — re-running it does not create duplicate seed rows (the
+`scripts/db/restore-test-fixture.sh` always **drops and recreates** its
+target container on every run — it is not incremental. Since #2568 that
+target is this invocation's own per-invocation container (see
+[4a](#4a-per-invocation-fixture-2568)), not a shared singleton, so re-running
+`./scripts/dev/local-fixture-backend.sh` only ever drops/recreates a
+container from an earlier run of the *same* invocation slug — never another
+concurrent invocation's fixture. The whole workflow (fixture restore →
+safety gate → login → seed → Spring Boot start) was verified end-to-end to
+be idempotent — re-running it does not create duplicate seed rows (the
 `auth.users`/`user_roles` inserts are `ON CONFLICT DO NOTHING`).
 
 To stop the backend: `Ctrl-C` the foregrounded Spring Boot process in
 Terminal 1.
 
-For a full manual cleanup of the fixture container:
+For a full manual cleanup of the fixture container, use the exact name the
+script printed at startup (`>>> Effective fixture config:
+PG_TEST_CONTAINER_NAME=...`):
 
 ```bash
-docker rm -f pg-test-fixture
+docker rm -f <the PG_TEST_CONTAINER_NAME the script printed>
 ```
 
 ## 11. Returning to normal remote-Supabase development

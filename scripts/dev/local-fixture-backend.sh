@@ -196,12 +196,40 @@ if [[ "$AUTH_MODE" == "option2" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Step B — Effective fixture config
+# Step B — Effective fixture config (#2568: per-invocation isolation)
+#
+# DEFAULT is now a fixture unique to THIS invocation — never a shared,
+# machine-wide singleton. Before this fix, two concurrent
+# local-fixture-backend.sh runs (e.g. two overnight lanes, or two worktrees on
+# the same machine) both fell through to the SAME container name
+# ("pg-test-fixture") and the SAME port (5434). Step C below hands that name
+# to restore-test-fixture.sh, which unconditionally `docker rm -f`s whatever
+# already holds it before recreating — so the second invocation to reach
+# Step C would silently destroy the first invocation's fixture mid-run.
+#
+# PG_TEST_CONTAINER_NAME / PG_TEST_PORT remain fully overridable — existing
+# manual per-issue invocations (e.g. PG_TEST_CONTAINER_NAME=pg-test-fixture-2454
+# PG_TEST_PORT=5437, as used in several past lanes' PR evidence) still work
+# exactly as before. Only the fallback when the caller leaves them unset
+# changes: this script now generates its own unique values instead of
+# resolving to the old machine-wide defaults.
 # ---------------------------------------------------------------------------
 
-PG_TEST_PORT="${PG_TEST_PORT:-5434}"
+WORKTREE_SLUG="$(basename "$REPO_ROOT" | tr -c 'a-zA-Z0-9' '-')"
+PG_TEST_CONTAINER_NAME="${PG_TEST_CONTAINER_NAME:-pg-fixture-${WORKTREE_SLUG}-$$}"
 PG_TEST_PASSWORD="${PG_TEST_PASSWORD:-fixture_test_only}"
-export PG_TEST_PORT PG_TEST_PASSWORD
+
+if [[ -n "${PG_TEST_PORT:-}" ]]; then
+  # Caller explicitly chose a port — honour it verbatim, exactly as before.
+  :
+else
+  # No caller override: probe forward from the historical default (5434) for
+  # a port nobody is listening on yet, so a second concurrent invocation
+  # lands on 5435/5436/... instead of colliding with the first.
+  PG_TEST_PORT="$(find_free_port 5434)" || exit 1
+fi
+
+export PG_TEST_PORT PG_TEST_PASSWORD PG_TEST_CONTAINER_NAME
 
 TARGET_SERVER_PORT="${SERVER_PORT:-8085}"
 HOLDING_PID="$(port_holder_pid "$TARGET_SERVER_PORT")"
@@ -211,7 +239,10 @@ if [[ -n "$HOLDING_PID" ]]; then
   exit 1
 fi
 
-echo ">>> Effective fixture config: PG_TEST_PORT=${PG_TEST_PORT} (password masked)"
+echo ">>> Effective fixture config: PG_TEST_CONTAINER_NAME=${PG_TEST_CONTAINER_NAME} PG_TEST_PORT=${PG_TEST_PORT} (password masked)"
+echo ">>> This fixture is exclusively owned by this invocation (PID $$). It will NOT be torn down"
+echo "    automatically (Step G below execs into the backend and stays foreground) — remove it"
+echo "    yourself when you are done: docker rm -f ${PG_TEST_CONTAINER_NAME}"
 
 # ---------------------------------------------------------------------------
 # Step C — Restore the fixture (reused verbatim; suppress only the final
@@ -235,20 +266,27 @@ echo ">>> Running safety gate..."
 # D1: host is fixed to localhost in this script's own logic below — there is
 # no variable anywhere in this file that could redirect it to a remote host.
 
-# D2: fixture container must be running.
-CONTAINER_ID="$(docker ps --filter name=pg-test-fixture --filter status=running -q || true)"
+# D2: THIS invocation's own fixture container specifically must be running —
+# never a hardcoded "pg-test-fixture" lookup, which would (a) false-pass by
+# matching some OTHER invocation's differently-ported container that happens
+# to still be named "pg-test-fixture" or share that substring, and (b)
+# false-fail when this invocation was correctly given a unique
+# PG_TEST_CONTAINER_NAME but a stale/absent literal "pg-test-fixture" isn't
+# running. Same filter shape scripts/run-e2e-local.sh already uses for its
+# own per-invocation container (#2422 follow-up).
+CONTAINER_ID="$(docker ps --filter "name=${PG_TEST_CONTAINER_NAME}" --filter status=running -q || true)"
 if [[ -z "$CONTAINER_ID" ]]; then
-  echo "ERROR: safety gate: fixture container not running — did restore-test-fixture.sh fail silently?" >&2
+  echo "ERROR: safety gate: fixture container '${PG_TEST_CONTAINER_NAME}' not running — did restore-test-fixture.sh fail silently?" >&2
   exit 1
 fi
 
-# D3: local fixture Postgres must be reachable.
+# D3: local fixture Postgres must be reachable — on THIS invocation's own port.
 if ! PGPASSWORD="$PG_TEST_PASSWORD" psql -h localhost -p "$PG_TEST_PORT" -U postgres -d postgres -c 'SELECT 1' &>/dev/null; then
   echo "ERROR: safety gate: unable to reach local fixture Postgres at localhost:${PG_TEST_PORT}." >&2
   exit 1
 fi
 
-echo ">>> Safety gate passed (local fixture confirmed running and reachable on localhost:${PG_TEST_PORT})."
+echo ">>> Safety gate passed (container '${PG_TEST_CONTAINER_NAME}' confirmed running and reachable on localhost:${PG_TEST_PORT})."
 
 # ---------------------------------------------------------------------------
 # Step E — Hosted Supabase Auth login (only after the safety gate passes)
