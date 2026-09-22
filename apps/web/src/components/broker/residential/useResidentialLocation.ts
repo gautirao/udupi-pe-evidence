@@ -298,6 +298,19 @@ export function useResidentialLocation({
       (state.resolved != null || state.pinConfirmed || state.localityResolved) && value !== state.query;
 
     if (isRealEdit) {
+      // Issue #2645 — must NOT gate on the `addressConfirmed` PROP alone.
+      // That prop is server state (useGetListing), which only updates once
+      // useUpdateListing's post-confirm invalidateQueries triggers a
+      // refetch AND that refetch resolves — an async gap, not a same-tick
+      // update. confirmPin's own onSuccess sets local `state.pinConfirmed`
+      // true immediately, in the same tick as the PUT's success, so it's
+      // the reliable signal that a persisted pin exists even while the prop
+      // is still catching up. OR-ing the two together covers both a
+      // pre-existing confirmed draft (prop true; pinConfirmed may not be
+      // set locally on a fresh mount before hydration) and an in-session
+      // confirm still inside the refetch window (pinConfirmed true, prop
+      // still false) — without ever firing when neither was ever true.
+      const wasPersistedConfirmed = addressConfirmed || state.pinConfirmed;
       setState({
         query: value,
         status: value.trim() === '' ? 'empty' : 'typed',
@@ -309,7 +322,7 @@ export function useResidentialLocation({
         localityResolved: false,
       });
       onPublicLoc('');
-      if (addressConfirmed) unconfirmPersisted();
+      if (wasPersistedConfirmed) unconfirmPersisted();
       return;
     }
 
@@ -323,8 +336,12 @@ export function useResidentialLocation({
 
   // "Change" — same reset as query-edit invalidation, triggered explicitly.
   const clear = () => {
+    // Issue #2645 — same race-window fix as editQuery above: OR in the
+    // local pinConfirmed signal so a Change clicked inside the post-confirm
+    // refetch gap still unconfirms server-side.
+    const wasPersistedConfirmed = addressConfirmed || state.pinConfirmed;
     onPublicLoc('');
-    if (addressConfirmed) unconfirmPersisted();
+    if (wasPersistedConfirmed) unconfirmPersisted();
     setState(INITIAL_STATE);
     setGeoError(null);
   };

@@ -190,6 +190,88 @@ describe('useResidentialLocation — query-edit invalidation', () => {
     expect(onPublicLoc).toHaveBeenCalledWith('');
     expect(mockUpdateMutate).toHaveBeenCalledWith({ addressConfirmed: false });
   });
+
+  it('a resolved-but-never-pinned location produces no pointless unconfirm PUT on edit', async () => {
+    mockSearchNominatim.mockResolvedValue([MANIPAL_RESULT]);
+    const user = userEvent.setup();
+    renderHarness();
+
+    await user.type(screen.getByLabelText(/search for a location/i), 'Manipal');
+    await waitFor(() => expect(screen.getByText(/Manipal, Udupi District/i)).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /^use$/i }));
+    expect(screen.getByText(/location confirmed — Manipal, Udupi District/i)).toBeInTheDocument();
+
+    // Editing the query is a real edit (resolved != null) and resets local
+    // state, but no pin was ever confirmed server-side — nothing to unconfirm.
+    await user.type(screen.getByLabelText(/search for a location/i), 'x');
+
+    expect(mockUpdateMutate).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------
+  // Issue #2645 — race window: confirmPin's PUT succeeds and the local
+  // `pinConfirmed` flips true immediately (confirmPin's onSuccess), but the
+  // `addressConfirmed` PROP is server state (useGetListing) that only
+  // updates once useUpdateListing's onSuccess invalidateQueries triggers a
+  // refetch AND that refetch resolves — an async gap, not a same-tick
+  // update. If Change/edit-query happens inside that gap, the OLD code's
+  // `if (addressConfirmed)` guard reads the still-stale `false` prop and
+  // silently skips unconfirmPersisted(), leaving the server's
+  // addressConfirmed:true stuck even though the local UI has already reset.
+  // ---------------------------------------------------------------------
+  it('race window — confirmPin succeeded locally but the addressConfirmed prop has not yet caught up: editing the query still unconfirms exactly once', async () => {
+    mockSearchNominatim.mockResolvedValue([MANIPAL_RESULT]);
+    mockUpdateMutate.mockImplementation((_payload, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    // Mounted with addressConfirmed: false throughout — deliberately NEVER
+    // rerendered with addressConfirmed: true, simulating the window before
+    // the listing-query refetch has propagated the new server state back
+    // into props.
+    renderHarness({ addressConfirmed: false, initialLatitude: null, initialLongitude: null, initialLocality: '' });
+
+    await user.type(screen.getByLabelText(/search for a location/i), 'Manipal');
+    await waitFor(() => expect(screen.getByText(/Manipal, Udupi District/i)).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /^use$/i }));
+    await user.click(screen.getByRole('button', { name: /pin location on map/i }));
+    await user.click(screen.getByTestId('mock-address-picker-confirm'));
+
+    // confirmPin's PUT fired and succeeded — local pinConfirmed is true,
+    // the banner shows it — but the addressConfirmed PROP is still false.
+    expect(screen.getByText(/pin confirmed — Manipal, Udupi/i)).toBeInTheDocument();
+    expect(mockUpdateMutate).toHaveBeenCalledTimes(1);
+    mockUpdateMutate.mockClear();
+
+    // Edit the query inside the race window.
+    await user.type(screen.getByLabelText(/search for a location/i), 'x');
+
+    // Exactly one unconfirm PUT — not zero (the bug), not more than one
+    // (no duplicate/loop).
+    expect(mockUpdateMutate).toHaveBeenCalledTimes(1);
+    expect(mockUpdateMutate).toHaveBeenCalledWith({ addressConfirmed: false });
+    expect(screen.queryByText(/pin confirmed/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /pin location on map/i })).toBeDisabled();
+  });
+
+  it('race window — "Change" during the same gap also unconfirms exactly once', async () => {
+    mockSearchNominatim.mockResolvedValue([MANIPAL_RESULT]);
+    mockUpdateMutate.mockImplementation((_payload, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    renderHarness({ addressConfirmed: false, initialLatitude: null, initialLongitude: null, initialLocality: '' });
+
+    await user.type(screen.getByLabelText(/search for a location/i), 'Manipal');
+    await waitFor(() => expect(screen.getByText(/Manipal, Udupi District/i)).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /^use$/i }));
+    await user.click(screen.getByRole('button', { name: /pin location on map/i }));
+    await user.click(screen.getByTestId('mock-address-picker-confirm'));
+
+    expect(screen.getByText(/pin confirmed — Manipal, Udupi/i)).toBeInTheDocument();
+    mockUpdateMutate.mockClear();
+
+    await user.click(screen.getAllByRole('button', { name: /^change$/i })[0]);
+
+    expect(mockUpdateMutate).toHaveBeenCalledTimes(1);
+    expect(mockUpdateMutate).toHaveBeenCalledWith({ addressConfirmed: false });
+  });
 });
 
 describe('useResidentialLocation — not-found threshold (AC-4.4)', () => {
