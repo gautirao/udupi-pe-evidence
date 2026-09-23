@@ -243,14 +243,29 @@ public class ListingIngestionService {
      * overwrites {@code areaKey} with the canonical key (areaLabel is left as the human-readable
      * geocode-derived display value). On UNRESOLVED, keeps the geocoded areaKey, emits a
      * structured WARN, and increments {@link #areaUnresolvedCounter}. Never throws — a city that
-     * cannot be resolved to an id cannot be scoped for ALIAS lookup, so resolution is skipped and
-     * the listing is stamped UNRESOLVED (same terminal state as an exhausted PROVIDER_ID/
-     * CANONICAL_KEY/ALIAS search) rather than silently defaulting to the entity's RESOLVED default
-     * — the geocoded area_key is still kept as-is.
+     * cannot be resolved to an id cannot be scoped for ALIAS lookup, so the city-scoped
+     * PROVIDER_ID/CANONICAL_KEY/ALIAS search ({@link AreaResolutionService#resolve}) is skipped.
+     *
+     * <p>#2271 (mirrors #2268's {@code ListingAreaResolutionService} fix): before giving up on a
+     * null cityId, try {@link AreaResolutionService#resolveByAliasAnyCity} — a city-less ALIAS
+     * lookup keyed only on the raw {@code locality} text. This rescues localities with a curated
+     * {@code area_alias} row whose geocoded city name has no matching {@code cities.slug} row
+     * (e.g. Manipal, a town-level place geocoded under a name that isn't an app-city slug). Only
+     * when that also misses or is ambiguous does resolution fall through to UNRESOLVED (same
+     * terminal state as an exhausted PROVIDER_ID/CANONICAL_KEY/ALIAS search) rather than silently
+     * defaulting to the entity's RESOLVED default — the geocoded area_key is still kept as-is.
      */
     private void applyAreaResolution(Listing listing, GeocodingService.GeoResult geoResult, String locality) {
         Integer cityId = resolveCityId(geoResult);
         if (cityId == null) {
+            AreaResolution aliasRescue = areaResolutionService.resolveByAliasAnyCity(locality);
+            if (aliasRescue.isResolved()) {
+                listing.setAreaKey(aliasRescue.canonicalAreaKey());
+                listing.setAreaResolutionStatus("RESOLVED");
+                listing.setAreaResolutionMethod(aliasRescue.method().name());
+                return;
+            }
+
             listing.setAreaResolutionStatus("UNRESOLVED");
             listing.setAreaResolutionMethod(null);
             areaUnresolvedCounter.increment();

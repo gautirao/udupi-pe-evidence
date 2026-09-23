@@ -79,6 +79,7 @@ class ListingIngestionAreaResolutionIT {
     private ListingIngestionService listingIngestionService;
     private SimpleMeterRegistry meterRegistry;
     private int udupiCityId;
+    private int bangaloreCityId;
 
     @BeforeEach
     void setUp() {
@@ -94,6 +95,7 @@ class ListingIngestionAreaResolutionIT {
                 qualityRecomputeService, areaResolutionService, jdbcTemplate, meterRegistry);
 
         udupiCityId = jdbcTemplate.queryForObject("SELECT id FROM cities WHERE slug = 'udupi'", Integer.class);
+        bangaloreCityId = jdbcTemplate.queryForObject("SELECT id FROM cities WHERE slug = 'bangalore'", Integer.class);
     }
 
     private double areaUnresolvedCounterCount() {
@@ -210,5 +212,75 @@ class ListingIngestionAreaResolutionIT {
         Listing reloaded = listingRepository.findById(listing.getId()).orElseThrow();
         assertThat(reloaded.getAreaResolutionStatus()).isEqualTo("UNRESOLVED");
         assertThat(reloaded.getAreaResolutionMethod()).isNull();
+    }
+
+    @Test
+    @DisplayName("#2271: Manipal (town-vs-app-city mismatch) has NO matching cities row, but the "
+            + "city-less ALIAS rescue resolves it to its canonical area — mirrors #2268's "
+            + "ListingAreaResolutionService (broker path) fix for the ingestion path")
+    void createFrom_manipalNoCityMatch_rescuedByAliasAnyCity() {
+        double counterBefore = areaUnresolvedCounterCount();
+
+        RawPost post = persistRawPost("2BHK flat for rent in Manipal near KMC");
+        // Geocoded city name has no matching cities.slug row (same B3 shape as the test above),
+        // but the locality text itself ("Manipal") has a curated area_alias row seeded by
+        // migration — the alias rescue must resolve it WITHOUT needing a cityId at all.
+        when(geocodingPort.geocode("Manipal")).thenReturn(new GeocodingService.GeoResult(
+                13.35, 74.79, "Manipal, Manipal City That Does Not Exist, Karnataka, India",
+                "India", "Karnataka", "Manipal City That Does Not Exist", "Manipal", null));
+
+        Listing listing = listingIngestionService.createFrom(post, makeResult("Manipal"), "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.getAreaKey()).isEqualTo("IN|KA|Udupi|Manipal");
+        assertThat(listing.getAreaResolutionStatus()).isEqualTo("RESOLVED");
+        assertThat(listing.getAreaResolutionMethod()).isEqualTo("ALIAS");
+        assertThat(areaUnresolvedCounterCount())
+                .as("alias rescue resolves the listing — the UNRESOLVED counter must NOT increment")
+                .isEqualTo(counterBefore);
+
+        // Re-read from the DB to prove the RESOLVED stamp was actually persisted.
+        Listing reloaded = listingRepository.findById(listing.getId()).orElseThrow();
+        assertThat(reloaded.getAreaKey()).isEqualTo("IN|KA|Udupi|Manipal");
+        assertThat(reloaded.getAreaResolutionStatus()).isEqualTo("RESOLVED");
+        assertThat(reloaded.getAreaResolutionMethod()).isEqualTo("ALIAS");
+    }
+
+    @Test
+    @DisplayName("#2271: ambiguous city-less ALIAS match (same normalised alias registered for 2+ "
+            + "DISTINCT cities) still fails closed to UNRESOLVED — the rescue never guesses which "
+            + "city's area to use")
+    void createFrom_ambiguousAliasAnyCity_staysFailClosedUnresolved() {
+        double counterBefore = areaUnresolvedCounterCount();
+
+        // Same alias text ("Gandhi Nagar", per V115's own example) registered for two DIFFERENT
+        // cities, pointing at two DIFFERENT canonical areas — genuine ambiguity, not a miss.
+        // resolveByAliasAnyCity's own AreaResolutionServiceIT coverage
+        // (resolveByAliasAnyCity_sameAliasDifferentCities_failsClosedToUnresolved) proves the
+        // service-level contract; this asserts the ingestion caller preserves it end-to-end.
+        jdbcTemplate.update("""
+                INSERT INTO area_alias (city_id, area_key, alias, alias_normalised, source)
+                VALUES (?, ?, 'Gandhi Nagar', 'gandhi nagar', 'it-fixture')
+                """, udupiCityId, "IN|KA|Udupi|Manipal");
+        jdbcTemplate.update("""
+                INSERT INTO area_alias (city_id, area_key, alias, alias_normalised, source)
+                VALUES (?, ?, 'Gandhi Nagar', 'gandhi nagar', 'it-fixture')
+                """, bangaloreCityId, "IN|KA|Bengaluru|Indiranagar");
+
+        // Geocoded city name has no matching cities.slug row, so cityId is null and resolution
+        // reaches the #2271 rescue branch — which must then see the alias match 2 distinct
+        // cities and fail closed, exactly like the direct resolveByAliasAnyCity("Gandhi Nagar")
+        // call already proven ambiguous at the service level.
+        RawPost post = persistRawPost("House in Gandhi Nagar, exact city unclear from post text");
+        when(geocodingPort.geocode("Gandhi Nagar")).thenReturn(new GeocodingService.GeoResult(
+                13.35, 74.79, "Gandhi Nagar, Nowhereland City, Nowhereland, Nowhereland",
+                "Nowhereland", "Nowhereland", "Nowhereland City", "Gandhi Nagar", null));
+
+        Listing listing = listingIngestionService.createFrom(post, makeResult("Gandhi Nagar"), "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.getAreaResolutionStatus()).isEqualTo("UNRESOLVED");
+        assertThat(listing.getAreaResolutionMethod()).isNull();
+        assertThat(areaUnresolvedCounterCount()).isEqualTo(counterBefore + 1.0);
     }
 }
