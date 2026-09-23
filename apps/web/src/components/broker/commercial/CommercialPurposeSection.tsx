@@ -6,15 +6,22 @@ import { COMMERCIAL_SUBTYPE_OPTIONS } from '@/lib/listing-constants';
 import { Field, Section } from './CommercialFormPrimitives';
 import type { CommercialPropertyType, ExplicitSubtype, CommercialPurpose } from './commercialListingTypes';
 
+/**
+ * #2505 — `lease` is not a persistable listing purpose: chk_listing_purpose
+ * (V32__add_commercial_and_rent_columns.sql:5) permits only ('sale', 'rent'),
+ * and #2458's approved contract records that as by design (no separate
+ * `lease` transaction type; "Rent / Lease" is presentation-only). The control
+ * therefore offers only the two persistable values — "For Rent / Lease"
+ * persists as `rent`.
+ */
 const PURPOSE_OPTIONS: readonly { value: CommercialPurpose; label: string }[] = [
   { value: 'sale', label: 'For Sale' },
-  { value: 'rent', label: 'For Rent' },
-  { value: 'lease', label: 'For Lease' },
+  { value: 'rent', label: 'For Rent / Lease' },
 ];
 
 const SUBTYPE_CHOICE_OPTIONS = COMMERCIAL_SUBTYPE_OPTIONS.filter((o) => o.value === 'SHOP' || o.value === 'OFFICE');
 
-/** Local 3-way Sale/Rent/Lease segmented control — see CommercialListingForm's class doc for why ListingPurposeToggle isn't reused here. */
+/** Local 2-way Sale/Rent-or-Lease segmented control — see CommercialListingForm's class doc for why ListingPurposeToggle isn't reused here. */
 function CommercialPurposeToggle({ value, onChange }: { value: CommercialPurpose; onChange: (v: CommercialPurpose) => void }) {
   return (
     <div role="group" aria-label="Listing purpose" className="inline-flex rounded-lg bg-muted p-1">

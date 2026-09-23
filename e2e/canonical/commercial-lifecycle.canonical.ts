@@ -90,18 +90,18 @@
  * If that decision is reversed, the change is local to the one helper.
  *
  * ═══════════════════════════════════════════════════════════════════════
- * RENT, NOT LEASE (decision D1, PR #2503)
+ * RENT, NOT LEASE (decision D1, PR #2503; control fixed by #2505)
  * ═══════════════════════════════════════════════════════════════════════
  * #2434's brief asked for listingPurpose=LEASE. `lease` is not persistable:
  * chk_listing_purpose (V32:5) permits only ('sale','rent') and no migration
  * widens it, and #2458's approved contract records that as by design. The
  * fixture therefore uses RENT.
  *
- * The broker form nonetheless OFFERS "For Lease"
- * (CommercialPurposeSection.tsx:9-13) — a selectable control over a value
- * the schema rejects. That is filed as issue #2505 and is NOT covered here.
- * Left as a visible gap rather than deleted, so it is not mistaken for
- * coverage.
+ * The broker form USED TO also offer a separate, unpersistable "For Lease"
+ * button (CommercialPurposeSection.tsx pre-#2505) — a selectable control
+ * over a value the schema rejects. #2505 removed that third option; the
+ * control now offers only "For Sale" and "For Rent / Lease", the latter
+ * persisting as `rent`. C3 below clicks that merged button.
  *
  * ═══════════════════════════════════════════════════════════════════════
  * SCOPE — which matrix rows are NOT this issue's
@@ -346,8 +346,10 @@ async function createSubmittedCommercialRentListing(
   await expect(page.getByRole('option', { name: 'Office' })).toBeVisible();
   await page.getByRole('option', { name: subtype.optionLabel, exact: true }).click();
 
-  // C3 — purpose. RENT, not LEASE (see decision D1 above).
-  await page.getByRole('button', { name: 'For Rent', exact: true }).click();
+  // C3 — purpose. RENT, not LEASE (see decision D1 above); the button is
+  // labelled "For Rent / Lease" since #2505 merged the unpersistable third
+  // option into this one.
+  await page.getByRole('button', { name: 'For Rent / Lease', exact: true }).click();
 
   // #monthlyRent is gated on isRentOrLease && fieldVisible('monthlyRent')
   // (CommercialTermsSection.tsx:63-66), so its appearance is itself proof

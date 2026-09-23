@@ -32,8 +32,11 @@
  * visibility tree, business-meaningful assertions only):
  *   1. Field-visibility gating — switching property type/subtype/purpose
  *      flips Section 3/4 fields per src/lib/listingFieldConfig.ts EXACTLY
- *      (SHOP vs OFFICE vs BUILDING vs WAREHOUSE vs LAND; SALE vs LEASE).
- *   2. SHOP + LEASE full flow — subtype selection -> address search -> map
+ *      (SHOP vs OFFICE vs BUILDING vs WAREHOUSE vs LAND; SALE vs RENT/LEASE).
+ *      #2505 removed the separate, unpersistable "For Lease" purpose option
+ *      (chk_listing_purpose permits only sale/rent) — the control now offers
+ *      "For Sale" and "For Rent / Lease", the latter persisting as `rent`.
+ *   2. SHOP + RENT full flow — subtype selection -> address search -> map
  *      pin -> utilities/suitable-uses multi-select -> 3-photo upload + cover
  *      reorder -> buyer preview reflects monthly rent -> review -> submit ->
  *      PENDING_REVIEW.
@@ -463,7 +466,7 @@ test.describe('@commercial-create-listing-1684 /broker/listings/new — commerci
   // RENT/LEASE show monthly rent + lease term/escalation instead. Both are
   // mutually exclusive per isListingFieldVisible's purpose switch.
   // -------------------------------------------------------------------------
-  test('purpose gating — SALE shows price/yield, LEASE shows rent/lease-term (mutually exclusive)', async ({ page }) => {
+  test('purpose gating — SALE shows price/yield, RENT/LEASE shows rent/lease-term (mutually exclusive)', async ({ page }) => {
     const listingId = 'e2e-commercial-1684-purpose';
     const serverState = createMockServerState(listingId, 'commercial_building');
     await mockSupabaseAuth(page);
@@ -477,8 +480,9 @@ test.describe('@commercial-create-listing-1684 /broker/listings/new — commerci
     await expect(page.locator('#monthlyRent')).toHaveCount(0);
     await expect(page.locator('#leaseTermMonths')).toHaveCount(0);
 
-    // Switch to Lease.
-    await page.getByRole('button', { name: 'For Lease', exact: true }).click();
+    // Switch to Rent / Lease. #2505 — this is the only non-Sale option; it
+    // persists as `rent` (chk_listing_purpose permits only sale/rent).
+    await page.getByRole('button', { name: 'For Rent / Lease', exact: true }).click();
     await expect(page.locator('#monthlyRent')).toBeVisible();
     await expect(page.locator('#leaseTermMonths')).toBeVisible();
     await expect(page.locator('#leaseEscalationPct')).toBeVisible();
@@ -487,9 +491,28 @@ test.describe('@commercial-create-listing-1684 /broker/listings/new — commerci
   });
 
   // -------------------------------------------------------------------------
-  // SHOP + LEASE — full cross-layer flow.
+  // #2505 — the purpose control no longer offers a separate, unpersistable
+  // "For Lease" option (chk_listing_purpose permits only sale/rent). A
+  // broker cannot select a listing purpose the system cannot store.
   // -------------------------------------------------------------------------
-  test('SHOP + LEASE — subtype select, address+pin, utilities/suitable-uses, cover photo, buyer preview, submit -> PENDING_REVIEW', async ({ page }) => {
+  test('purpose control offers only Sale and Rent / Lease — no separate unpersistable Lease option', async ({ page }) => {
+    const listingId = 'e2e-commercial-1684-purpose-vocab';
+    const serverState = createMockServerState(listingId, 'commercial_building');
+    await mockSupabaseAuth(page);
+    await mockBackend(page, listingId, serverState);
+
+    await gotoCommercialForm(page, 'Commercial Building');
+
+    const purposeGroup = page.getByRole('group', { name: 'Listing purpose' });
+    await expect(purposeGroup.getByRole('button', { name: 'For Sale', exact: true })).toBeVisible();
+    await expect(purposeGroup.getByRole('button', { name: 'For Rent / Lease', exact: true })).toBeVisible();
+    await expect(purposeGroup.getByRole('button', { name: 'For Lease', exact: true })).toHaveCount(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // SHOP + RENT — full cross-layer flow.
+  // -------------------------------------------------------------------------
+  test('SHOP + RENT — subtype select, address+pin, utilities/suitable-uses, cover photo, buyer preview, submit -> PENDING_REVIEW', async ({ page }) => {
     const listingId = 'e2e-commercial-1684-shop-lease';
     const serverState = createMockServerState(listingId, 'commercial');
     await mockSupabaseAuth(page);
@@ -501,8 +524,9 @@ test.describe('@commercial-create-listing-1684 /broker/listings/new — commerci
     await page.getByLabel(/is this a shop or an office/i).click();
     await page.getByRole('option', { name: 'Shop', exact: true }).click();
 
-    // Purpose — Lease.
-    await page.getByRole('button', { name: 'For Lease', exact: true }).click();
+    // Purpose — Rent / Lease. #2505 — persists as `rent`, the only
+    // non-Sale, non-`lease` persistable value.
+    await page.getByRole('button', { name: 'For Rent / Lease', exact: true }).click();
 
     // Title (Section 2).
     await page.locator('#title').fill('500 sqft Shop on Car Street');
@@ -544,7 +568,7 @@ test.describe('@commercial-create-listing-1684 /broker/listings/new — commerci
     const coverSrc = await uploadThreePhotosAndPromoteCover(page);
 
     // Buyer preview — reflects the real cover photo, confirmed pin, and the
-    // MONTHLY RENT (not a sale price) since purpose is lease.
+    // MONTHLY RENT (not a sale price) since purpose is rent.
     const buyerPreview = page.getByTestId('buyer-preview-card');
     await expect(buyerPreview).toBeVisible({ timeout: 10_000 });
     await expect(buyerPreview.getByTestId('buyer-preview-cover-image')).toHaveAttribute('src', coverSrc, { timeout: 10_000 });
@@ -567,7 +591,7 @@ test.describe('@commercial-create-listing-1684 /broker/listings/new — commerci
     const reviewPreview = page.getByTestId('commercial-review-preview');
     await expect(reviewPreview).toBeVisible();
     await expect(reviewPreview.getByText('Shop', { exact: true })).toBeVisible();
-    await expect(reviewPreview.getByText('For lease', { exact: true })).toBeVisible();
+    await expect(reviewPreview.getByText('For rent', { exact: true })).toBeVisible();
     await expect(page.getByText(/verified broker/i)).toHaveCount(0);
 
     // Submit -> PENDING_REVIEW.
