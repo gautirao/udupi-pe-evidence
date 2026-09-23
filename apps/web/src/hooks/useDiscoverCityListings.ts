@@ -83,24 +83,26 @@ export interface DiscoverCityListingItem {
    * the same name on `DiscoverListingItem` for what absence means and why it must never
    * be guessed at.
    *
-   * ⚠️ **The three feeds do NOT carry the same fields.** This shape is filled from three
-   * different backends:
+   * As of #2516, all THREE feeds that fill this shape carry both the subtype and the
+   * allowlisted fact columns, through the same reader:
    *
    *   - `/api/discover/listings` → `DiscoverListingResponse` (remapped by
    *     `discoverListingToCityListing`) — carries the subtype AND the facts. Feeds
    *     `authViewportListings` (#2015) and `polygonListings` (#2461).
    *   - `/api/discover/cities/{city}/listings` → `AreaListingCard` — carries the
-   *     **SUBTYPE** (#2433) **and** the allowlisted **FACT** columns (#2516). Both feeds
-   *     project the same set through the same reader,
-   *     `CommercialFactAuthority.readFrom`, so one listing cannot render differently
-   *     depending on which panel it is reached from. Feeds `areaListings`, the default
-   *     AREA journey. (#2509 covers the query direction.)
-   *   - `/school-radius-listings` → `PublicSchoolRadiusListingCard` — carries neither.
-   *     Feeds `schoolListings`.
+   *     **SUBTYPE** (#2433) **and** the allowlisted **FACT** columns (#2516, PR #2586).
+   *     Feeds `areaListings`, the default AREA journey. (#2509 covers the query
+   *     direction.)
+   *   - `/school-radius-listings` → `PublicSchoolRadiusListingCard` — was the one feed
+   *     that structurally carried NEITHER; now carries both (#2516, this fix). Feeds
+   *     `schoolListings`.
    *
-   * So the school feed is the ONLY one where absence means "this endpoint cannot carry it"
-   * rather than "the data does not have it". Consumers must not render the legacy-generic
-   * branch on the strength of absence alone.
+   * All three project the same allowlist through the same reader,
+   * `CommercialFactAuthority.readFrom`, so one listing cannot render differently
+   * depending on which panel or journey it is reached from — which was the whole point
+   * of #2516. Absence on any feed now means "the data does not have it", never "this
+   * endpoint cannot carry it"; consumers must not render the legacy-generic branch on
+   * the strength of absence alone regardless of feed.
    *
    * `PropertyCard.tsx` states this same contract at its suppression site. The two must not
    * drift apart: a reader who finds them disagreeing will re-derive the suppression rule
@@ -109,19 +111,17 @@ export interface DiscoverCityListingItem {
   commercialSubtype?: string | null;
   /**
    * Issue #2433 — allowlisted Commercial facts for the card summary. Same three-feed
-   * caveat as `commercialSubtype` above.
+   * caveat as `commercialSubtype` above — all three now carry it (#2516).
    *
-   * BOTH the authenticated feed and the anon city-listings feed populate it, as of #2516.
-   * They read it through the same `CommercialFactAuthority.readFrom`, which is what stops
-   * the two from reporting different facts for the same listing.
+   * ALL THREE feeds populate it, as of #2516. They read it through the same
+   * `CommercialFactAuthority.readFrom`, which is what stops any of them from reporting
+   * different facts for the same listing.
    *
    * An earlier revision worded this as a pending dependency — "#2516 is projecting the
    * facts, so treat that half as changing rather than settled". That framing was correct
    * while the work was in flight and became wrong the moment it landed: the same drift the
    * paragraph above warns about, arriving through the fix rather than the original. State
    * the feed-set as it is at this commit.
-   *
-   * `/school-radius-listings` remains the one feed that structurally cannot carry it.
    */
   commercialFacts?: DiscoverCommercialFactsDto | null;
 }

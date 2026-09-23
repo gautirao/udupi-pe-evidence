@@ -393,7 +393,9 @@ class CityAreaListingsIT {
                 "READY",
                 14,
                 false,
-                java.time.OffsetDateTime.now()
+                java.time.OffsetDateTime.now(),
+                null,   // commercialSubtype — #2516, not relevant to this price-projection test
+                null    // commercialFacts
         );
         PublicSchoolRadiusListingsPage page = new PublicSchoolRadiusListingsPage(
                 List.of(card), 0, 20, false);

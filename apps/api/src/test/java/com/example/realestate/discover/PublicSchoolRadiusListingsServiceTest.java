@@ -56,7 +56,9 @@ class PublicSchoolRadiusListingsServiceTest {
                 null, null, 100.0, "sq m", 3,
                 13.3, 74.7, "https://example.com/img.jpg",
                 "sale", "READY", 5, false,
-                OffsetDateTime.now()
+                OffsetDateTime.now(),
+                null,   // commercialSubtype — #2516, not relevant to these pagination-only stubs
+                null    // commercialFacts
         );
     }
 
@@ -280,6 +282,9 @@ class PublicSchoolRadiusListingsServiceTest {
                     when(rs.getTimestamp("created_at")).thenReturn(now);
                     when(rs.getTimestamp("first_published_at")).thenReturn(now);
                     when(rs.getTimestamp("back_to_market_at")).thenReturn(null);
+                    // #2516 — read unconditionally for the isCommercial/subtype check; this row
+                    // is Residential ("apartment") so no subtype was ever recorded.
+                    when(rs.getString("commercial_subtype")).thenReturn(null);
                     return List.of(mapper.mapRow(rs, 0));
                 });
 
@@ -304,6 +309,9 @@ class PublicSchoolRadiusListingsServiceTest {
         assertThat(card.possessionStatus()).isEqualTo("READY");
         assertThat(card.backOnMarket()).isFalse();
         assertThat(card.createdAt()).isNotNull();
+        // #2516 (control) — Residential row acquires neither field.
+        assertThat(card.commercialSubtype()).isNull();
+        assertThat(card.commercialFacts()).isNull();
     }
 
     // ── #1726: exact lat/lng from DB must be coarsened before leaving the server ──
@@ -343,6 +351,8 @@ class PublicSchoolRadiusListingsServiceTest {
                     when(rs.getTimestamp("created_at")).thenReturn(now);
                     when(rs.getTimestamp("first_published_at")).thenReturn(now);
                     when(rs.getTimestamp("back_to_market_at")).thenReturn(null);
+                    // #2516 — read unconditionally; this row is Residential ("house").
+                    when(rs.getString("commercial_subtype")).thenReturn(null);
                     return List.of(mapper.mapRow(rs, 0));
                 });
 

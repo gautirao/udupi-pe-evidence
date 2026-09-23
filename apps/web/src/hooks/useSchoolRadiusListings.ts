@@ -1,6 +1,7 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import type { DiscoverCommercialFactsDto } from '@/hooks/useDiscoverListings';
 
 /**
  * Issue #1261 — anonymous school-radius listings.
@@ -11,10 +12,12 @@ import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
  * MULTIPLE area boundaries (server-side ST_DWithin), giving anonymous users the
  * cross-area result the auth path already gets — without exposing auth-only fields.
  *
- * The response carries exactly 20 anon-safe fields (see PublicSchoolRadiusListingCard).
- * Fields excluded server-side (trustTier, reraNumber, reraValid, sellerType, status,
- * updatedAt, lastUpdatedAt, firstPublishedAt) are NEVER serialized — the UI must not
- * render or rely on them.
+ * The response carries the 20 originally-approved anon-safe fields (see
+ * PublicSchoolRadiusListingCard) plus, as of #2516, the allowlisted Commercial
+ * `commercialSubtype`/`commercialFacts` pair already carried by the City/Area feed's
+ * `AreaListingCard` (#2433/#2586). Fields excluded server-side (trustTier, reraNumber,
+ * reraValid, sellerType, status, updatedAt, lastUpdatedAt, firstPublishedAt) are NEVER
+ * serialized — the UI must not render or rely on them.
  *
  * Issue #1616: the `pricePaise` field on this endpoint was RENAMED to `priceBand` (a
  * coarse band string, e.g. "₹50L–1Cr"). This endpoint is anon-only; there is no authed
@@ -42,6 +45,18 @@ export interface PublicSchoolRadiusListingCard {
   daysOnMarket?: number | null;
   backOnMarket?: boolean | null;
   createdAt?: string | null;
+  /**
+   * Issue #2516 — `SHOP` or `OFFICE` when declared; absent otherwise. Until this field
+   * shipped, this endpoint was the one Discover feed that structurally could not carry a
+   * commercial subtype at all (see `DiscoverCityListingItem`'s three-feed caveat in
+   * `useDiscoverCityListings.ts`, which this closes). Canonicalised UPPER-case server-side.
+   */
+  commercialSubtype?: string | null;
+  /**
+   * Issue #2516 — allowlisted Commercial facts for the card summary, read through the
+   * SAME `CommercialFactAuthority.readFrom` the other two Discover feeds use.
+   */
+  commercialFacts?: DiscoverCommercialFactsDto | null;
 }
 
 /**
@@ -96,11 +111,16 @@ export type SchoolRadiusListingItem = DiscoverCityListingItem & {
  *   longitude    → lon AND longitude
  *   priceBand    → priceBand (carried as-is; pricePaise is not present on this endpoint)
  *
- * Optional fields not present in the 20-field contract (bathrooms, totalFloors,
- * parkingCount, furnishingStatus, trustTier) are left undefined — PropertyCard
- * tolerates their absence, and trustTier undefined means the trust badge simply
- * does not render (AC6). daysOnMarket/backOnMarket/possessionStatus ARE in the
- * contract and are carried for client-side filter parity.
+ * Optional fields not present in the contract (bathrooms, totalFloors, parkingCount,
+ * furnishingStatus, trustTier) are left undefined — PropertyCard tolerates their
+ * absence, and trustTier undefined means the trust badge simply does not render (AC6).
+ * daysOnMarket/backOnMarket/possessionStatus ARE in the contract and are carried for
+ * client-side filter parity. commercialSubtype/commercialFacts (#2516) are carried
+ * through verbatim so `PropertyCard`'s existing, feed-agnostic
+ * `resolveBuyerCommercialSubtype` + `buildCommercialSummary` pipeline renders the
+ * Commercial summary for a school-radius row exactly as it already does for the other
+ * two Discover feeds — no PropertyCard change needed; the guard there was already
+ * generic over the row's data, not hardcoded per feed.
  *
  * Issue #1616: pricePaise was renamed to priceBand on this endpoint. The mapping now
  * carries priceBand into DiscoverCityListingItem.priceBand (no pricePaise mapping).
@@ -131,6 +151,9 @@ export function mapSchoolRadiusCard(
     backOnMarket: c.backOnMarket ?? null,
     possessionStatus: c.possessionStatus ?? null,
     areaKey: c.areaKey ?? null,
+    // #2516 — carried through verbatim; see the function doc above.
+    commercialSubtype: c.commercialSubtype ?? null,
+    commercialFacts: c.commercialFacts ?? null,
   };
 }
 

@@ -88,7 +88,9 @@ class PublicSchoolRadiusListingsControllerTest {
                 "READY",
                 5,
                 false,
-                OffsetDateTime.now()
+                OffsetDateTime.now(),
+                null,   // commercialSubtype — #2516, not relevant to this Residential sample
+                null    // commercialFacts
         );
     }
 

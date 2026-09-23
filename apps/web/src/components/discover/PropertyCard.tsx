@@ -250,33 +250,31 @@ export function PropertyCard({
   // buildCommercialSummary has a legacy-generic branch that would render area-only.
   //
   // That branch asserts something about the DATA — "this row's Shop-vs-Office was
-  // never recorded". This shape is filled from three different backends, and they
-  // do NOT carry the same fields:
+  // never recorded". This shape is filled from three different backends:
   //
   //   /api/discover/listings                -> DiscoverListingResponse        identity + facts
   //   /api/discover/cities/{city}/listings  -> AreaListingCard                identity + facts
-  //   /school-radius-listings               -> PublicSchoolRadiusListingCard  neither
+  //   /school-radius-listings               -> PublicSchoolRadiusListingCard  identity + facts
   //
-  // The AREA feed carries identity (`commercialSubtype`, #2433) AND the allowlisted
-  // FACT columns (#2516). Both feeds project the same set through the same reader,
-  // so one listing cannot render differently depending on which panel it is reached
-  // from — which was the whole point of #2516.
+  // As of #2516, ALL THREE carry identity (`commercialSubtype`, #2431/#2433) AND the
+  // allowlisted FACT columns. All three project the same set through the same reader,
+  // `CommercialFactAuthority.readFrom`, so one listing cannot render differently
+  // depending on which panel or journey it is reached from — which was the whole point
+  // of #2516.
   //
-  // An earlier revision of these lines said the area feed carried "identity ONLY"
-  // and "still lacks the allowlisted FACT columns, which are #2516's scope". #2516
-  // has shipped, so both are now false and are corrected here rather than left to
-  // misdirect the next reader.
+  // An earlier revision of these lines said the school feed "remains the only one that
+  // cannot express a subtype" and that the guard here "can relax ... once the school
+  // feed carries the field". #2516 closed exactly that gap (PublicSchoolRadiusListingCard
+  // now carries both), and no relaxation was needed to make use of it: this guard was
+  // already generic over `listing.propertyType`/`listing.commercialSubtype`, not
+  // hardcoded per feed, so a school-radius Commercial row now resolves and renders the
+  // summary through this same code path without any change here.
   //
-  // So AREA is not an "absent subtype" feed at all — do not group it with
-  // the school feed, which remains the only one that cannot express a subtype and
-  // therefore the only one where absence means "this endpoint cannot carry it"
-  // rather than "the data does not have it". Rendering the legacy branch on absence
-  // alone would state a falsehood about a listing whose subtype IS recorded.
-  //
-  // BUILDING / WAREHOUSE / LAND resolve from `propertyType` alone and so are safe
-  // on every feed. Only `property_type='commercial'` is ambiguous, and that is
-  // exactly the case being suppressed. The guard can relax to include the
-  // legacy-generic branch honestly once the school feed carries the field.
+  // The suppression itself is still correct and still needed: `commercialSubtype` can be
+  // genuinely absent on a legacy `property_type='commercial'` row on ANY feed (Shop-vs-
+  // Office never recorded), and rendering the legacy-generic branch in that case would
+  // state a falsehood about the data. BUILDING / WAREHOUSE / LAND resolve from
+  // `propertyType` alone and so are unaffected either way.
   const commercialSummaryFacts = buyerCommercialSubtype
     ? buildCommercialSummary(buyerCommercialSubtype, listing.propertyType, {
         builtArea: listing.builtArea,
