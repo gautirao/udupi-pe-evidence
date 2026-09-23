@@ -1,6 +1,7 @@
 package com.example.realestate.exception;
 
 import com.example.realestate.area.AreaNotFoundException;
+import com.example.realestate.discover.citylaunch.CityBootstrapConflictException;
 import com.example.realestate.discover.citylaunch.CityPreparationConflictException;
 import com.example.realestate.discover.citylaunch.CityPrerequisiteGenerationException;
 import com.example.realestate.discover.citylaunch.GeographyValidationException;
@@ -104,6 +105,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         log.warn("City preparation conflict: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(Map.of("error", "PREPARATION_IN_PROGRESS"));
+    }
+
+    // ===== CityBootstrapConflictException → 409 =====
+
+    @ExceptionHandler(CityBootstrapConflictException.class)
+    public ResponseEntity<Map<String, String>> handleCityBootstrapConflict(CityBootstrapConflictException ex) {
+        log.warn("City bootstrap conflict: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", "BOOTSTRAP_IN_PROGRESS"));
     }
 
     // ===== GeographyValidationException → 422 =====

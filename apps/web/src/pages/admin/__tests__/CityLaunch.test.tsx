@@ -455,3 +455,108 @@ describe('CityLaunch', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/admin/city-launch/6/preview/22');
   });
 });
+
+// ─── "Launch a new city" panel — #2676 Slice A ─────────────────────────────────
+describe('LaunchNewCityPanel', () => {
+  it('typing a name and starting launch shows Resolving, then the created-city message', async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path.startsWith('/api/admin/city-launch/bootstrap/')) {
+        return Promise.resolve({
+          jobId: 100,
+          requestedName: 'Mysore',
+          status: 'CITY_CREATED',
+          resolvedCityId: 99,
+          candidates: null,
+          failureCode: null,
+          failureReason: null,
+        });
+      }
+      return Promise.resolve(CITIES);
+    });
+    mockPost.mockResolvedValue({
+      jobId: 100,
+      requestedName: 'Mysore',
+      status: 'RESOLVING',
+      resolvedCityId: null,
+      candidates: null,
+      failureCode: null,
+      failureReason: null,
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Udupi')).toBeInTheDocument());
+    await user.type(screen.getByLabelText(/city name/i), 'Mysore');
+    await user.click(screen.getByRole('button', { name: /start launch/i }));
+
+    expect(mockPost).toHaveBeenCalledWith('/api/admin/city-launch/bootstrap', { name: 'Mysore' });
+    await waitFor(() => expect(screen.getByText(/is now a canonical city/i)).toBeInTheDocument());
+    expect(screen.getByText(/id 99/)).toBeInTheDocument();
+
+    // The banner claims "it will appear below" — that must be true at the moment it renders,
+    // not only after a further manual "Done" click. Regression coverage for the bug caught by
+    // independent visual verification: the city-list GET must fire again automatically as soon
+    // as the job reaches CITY_CREATED, with NO click on "Done" in this test.
+    await waitFor(() => {
+      const citiesListCalls = mockGet.mock.calls.filter(
+        (call) => call[0] === '/api/admin/city-launch/cities',
+      );
+      expect(citiesListCalls.length).toBeGreaterThan(1);
+    });
+  });
+
+  it('multiple candidates require the operator to choose before a city is created', async () => {
+    const jobResponses: Record<string, unknown> = {
+      awaiting: {
+        jobId: 200,
+        requestedName: 'Springfield',
+        status: 'DISAMBIGUATION_REQUIRED',
+        resolvedCityId: null,
+        candidates: [
+          { displayName: 'Springfield, Illinois, USA', countryCode: 'us', placeType: 'city', lat: 39.78, lon: -89.65, minLat: null, minLon: null, maxLat: null, maxLon: null },
+          { displayName: 'Springfield, Massachusetts, USA', countryCode: 'us', placeType: 'city', lat: 42.10, lon: -72.59, minLat: null, minLon: null, maxLat: null, maxLon: null },
+        ],
+        failureCode: null,
+        failureReason: null,
+      },
+      done: {
+        jobId: 200,
+        requestedName: 'Springfield',
+        status: 'CITY_CREATED',
+        resolvedCityId: 201,
+        candidates: null,
+        failureCode: null,
+        failureReason: null,
+      },
+    };
+    mockGet.mockImplementation((path: string) => {
+      if (path.startsWith('/api/admin/city-launch/bootstrap/')) {
+        return Promise.resolve(jobResponses.awaiting);
+      }
+      return Promise.resolve(CITIES);
+    });
+    mockPost.mockImplementation((path: string) => {
+      if (path.endsWith('/confirm')) {
+        return Promise.resolve(jobResponses.done);
+      }
+      return Promise.resolve(jobResponses.awaiting);
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Udupi')).toBeInTheDocument());
+    await user.type(screen.getByLabelText(/city name/i), 'Springfield');
+    await user.click(screen.getByRole('button', { name: /start launch/i }));
+
+    await waitFor(() => expect(screen.getByText('Springfield, Illinois, USA')).toBeInTheDocument());
+    expect(screen.getByText('Springfield, Massachusetts, USA')).toBeInTheDocument();
+    // Never silently choose the wrong city: Confirm is disabled until one is picked.
+    expect(screen.getByRole('button', { name: /confirm city/i })).toBeDisabled();
+
+    await user.click(screen.getByLabelText('Springfield, Massachusetts, USA'));
+    await user.click(screen.getByRole('button', { name: /confirm city/i }));
+
+    expect(mockPost).toHaveBeenCalledWith('/api/admin/city-launch/bootstrap/200/confirm', { candidateIndex: 1 });
+    await waitFor(() => expect(screen.getByText(/is now a canonical city/i)).toBeInTheDocument());
+  });
+});

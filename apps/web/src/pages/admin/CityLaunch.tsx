@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
@@ -14,12 +17,16 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { AlertCircle, Building2, Loader2, MapPinned } from 'lucide-react';
+import { AlertCircle, Building2, Loader2, MapPinned, Sparkles } from 'lucide-react';
 import {
   useCityLaunchList,
   useCityLaunchProgress,
   usePrepareCity,
   getPrepareCityErrorDetails,
+  useStartCityBootstrap,
+  useCityBootstrapJob,
+  useConfirmCityBootstrap,
+  type BootstrapJobStatus,
   type CityLaunchStatusDto,
   type PrepareErrorBody,
 } from '@/hooks/useCityLaunch';
@@ -65,6 +72,8 @@ export default function CityLaunch() {
             Live cities are managed from Dashboard. Pick one below to begin the launch wizard.
           </p>
         </div>
+
+        <LaunchNewCityPanel onCityCreated={() => refetch()} />
 
         {isLoading && (
           <Card>
@@ -134,6 +143,170 @@ export default function CityLaunch() {
         )}
       </div>
     </AppLayout>
+  );
+}
+
+/**
+ * "Launch a new city" (#2676 Slice A) — type a name, Start launch, and either land straight
+ * on the created city or be asked to disambiguate. Deliberately shows ONLY the states this
+ * slice actually implements (resolving / disambiguation-required / created / failed) — the
+ * fuller staged progress (importing boundary, discovering areas, generating regions...) from
+ * the issue's mock is Slice B/C's job once those stages exist; a placeholder for unshipped
+ * work would misreport what actually ran.
+ */
+function LaunchNewCityPanel({ onCityCreated }: { onCityCreated: () => void }) {
+  const [name, setName] = useState('');
+  const [jobId, setJobId] = useState<number | null>(null);
+  const [selectedCandidateIndex, setSelectedCandidateIndex] = useState<number | null>(null);
+  // Last fetched status, tracked outside react-query so polling can be driven by a plain
+  // boolean rather than a `refetchInterval` callback closing over query-internal state.
+  const [lastKnownStatus, setLastKnownStatus] = useState<BootstrapJobStatus | null>(null);
+
+  const startBootstrap = useStartCityBootstrap();
+  const stopPolling = lastKnownStatus !== null && lastKnownStatus !== 'RESOLVING';
+  const { data: polledJob } = useCityBootstrapJob(jobId, jobId !== null, stopPolling);
+  const confirmBootstrap = useConfirmCityBootstrap(jobId);
+  // Fall back to the admission response while the first GET is still in flight, so the
+  // "Resolving…" state shows immediately instead of a one-frame flicker back to the input.
+  const job = polledJob ?? (jobId !== null ? startBootstrap.data : undefined);
+
+  useEffect(() => {
+    if (polledJob) {
+      setLastKnownStatus(polledJob.status);
+    }
+  }, [polledJob]);
+
+  // Refresh the city list the MOMENT this job reaches CITY_CREATED — not deferred to the
+  // "Done" button. The success banner claims "it will appear below"; that claim must be true
+  // at the instant it's shown, not only after a further manual click (#2676 Slice A, caught by
+  // independent visual verification: the table in the CITY_CREATED screenshot still showed the
+  // old 4-city list because this invalidation was previously gated behind onClick={handleDone}).
+  useEffect(() => {
+    if (polledJob?.status === 'CITY_CREATED') {
+      onCityCreated();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onCityCreated is a stable prop callback (CityLaunch's refetch); re-running this on identity churn would re-fire the refetch every render.
+  }, [polledJob?.status, polledJob?.jobId]);
+
+  function handleStart() {
+    if (!name.trim()) {
+      return;
+    }
+    startBootstrap.mutate(name, {
+      onSuccess: (started) => {
+        setJobId(started.jobId);
+        setSelectedCandidateIndex(null);
+        setLastKnownStatus(started.status);
+      },
+    });
+  }
+
+  function handleConfirm() {
+    if (selectedCandidateIndex === null) {
+      return;
+    }
+    confirmBootstrap.mutate(selectedCandidateIndex);
+  }
+
+  function handleStartOver() {
+    setJobId(null);
+    setName('');
+    setSelectedCandidateIndex(null);
+    setLastKnownStatus(null);
+  }
+
+  return (
+    <Card className="mb-6" data-testid="launch-new-city-panel">
+      <CardContent className="pt-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-primary" />
+          <h2 className="text-lg font-semibold">Launch a new city</h2>
+        </div>
+
+        {job === undefined && (
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Input
+              placeholder="e.g. Mysore"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleStart()}
+              disabled={startBootstrap.isPending}
+              className="max-w-sm"
+              aria-label="City name"
+            />
+            <Button onClick={handleStart} disabled={startBootstrap.isPending || !name.trim()}>
+              {startBootstrap.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Start launch
+            </Button>
+          </div>
+        )}
+
+        {job?.status === 'RESOLVING' && (
+          <div className="flex items-center gap-2 text-muted-foreground" aria-live="polite">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Resolving "{job.requestedName}"…
+          </div>
+        )}
+
+        {job?.status === 'DISAMBIGUATION_REQUIRED' && job.candidates && (
+          <div className="space-y-3" aria-live="polite">
+            <p className="text-sm">
+              More than one place matches "{job.requestedName}". Choose the correct one:
+            </p>
+            <RadioGroup
+              value={selectedCandidateIndex?.toString() ?? ''}
+              onValueChange={(v) => setSelectedCandidateIndex(Number(v))}
+            >
+              {job.candidates.map((candidate, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <RadioGroupItem value={index.toString()} id={`candidate-${index}`} />
+                  <Label htmlFor={`candidate-${index}`}>{candidate.displayName}</Label>
+                </div>
+              ))}
+            </RadioGroup>
+            <div className="flex gap-2">
+              <Button
+                onClick={handleConfirm}
+                disabled={selectedCandidateIndex === null || confirmBootstrap.isPending}
+              >
+                {confirmBootstrap.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Confirm city
+              </Button>
+              <Button variant="outline" onClick={handleStartOver}>
+                Start over
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {job?.status === 'CITY_CREATED' && (
+          <div className="flex items-center justify-between gap-3" aria-live="polite">
+            <p className="text-sm text-emerald-700 dark:text-emerald-400">
+              "{job.requestedName}" is now a canonical city (id {job.resolvedCityId}). It will appear
+              below — use "Prepare city" to continue.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleStartOver}
+            >
+              Done
+            </Button>
+          </div>
+        )}
+
+        {job?.status === 'FAILED' && (
+          <div className="space-y-2" role="alert" aria-live="assertive">
+            <p className="text-sm text-destructive">
+              Could not launch "{job.requestedName}": {job.failureReason ?? job.failureCode}
+            </p>
+            <Button variant="outline" size="sm" onClick={handleStartOver}>
+              Try again
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

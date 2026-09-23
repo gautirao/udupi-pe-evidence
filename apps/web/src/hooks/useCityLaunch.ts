@@ -287,6 +287,110 @@ export function usePrepareCity() {
   });
 }
 
+// ── City bootstrap ("type a city name, Start launch") — #2676 Slice A ───────────────────────
+//
+// This is a SEPARATE job/progress model from the CityLaunchProgressDto above (see
+// AdminCityLaunchBootstrapController's javadoc for why): it owns only resolving a name to a
+// city, disambiguating if needed, and idempotently creating the `cities` row. Once a job
+// reaches CITY_CREATED, the EXISTING usePrepareCity/useCityLaunchProgress hooks above take
+// over unchanged for that cityId — Slice A's UI hands off rather than reimplementing progress.
+
+export interface GeocodeCandidateDto {
+  displayName: string;
+  countryCode: string | null;
+  placeType: string | null;
+  lat: number;
+  lon: number;
+  minLat: number | null;
+  minLon: number | null;
+  maxLat: number | null;
+  maxLon: number | null;
+}
+
+export type BootstrapJobStatus = 'RESOLVING' | 'DISAMBIGUATION_REQUIRED' | 'CITY_CREATED' | 'FAILED';
+
+export interface CityBootstrapJobDto {
+  jobId: number;
+  requestedName: string;
+  status: BootstrapJobStatus;
+  resolvedCityId: number | null;
+  candidates: GeocodeCandidateDto[] | null;
+  failureCode: string | null;
+  failureReason: string | null;
+}
+
+function cityBootstrapJobQueryKey(jobId: number) {
+  return ['admin', 'city-launch', 'bootstrap', jobId] as const;
+}
+
+/** POST /api/admin/city-launch/bootstrap — starts resolving a typed city name. */
+export function useStartCityBootstrap() {
+  const { toast } = useToast();
+
+  return useMutation<CityBootstrapJobDto, ApiError, string>({
+    mutationFn: (name) => api.post<CityBootstrapJobDto>('/api/admin/city-launch/bootstrap', { name }),
+    onError: (err) => {
+      if (err instanceof ApiError && err.status === 409) {
+        toast({
+          title: 'Launch already in progress',
+          description: 'A launch is already resolving this city name.',
+        });
+        return;
+      }
+      toast({
+        title: 'Failed to start city launch',
+        description: err.message,
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
+/**
+ * GET /api/admin/city-launch/bootstrap/{jobId} — polls a bootstrap job's status while it is
+ * still RESOLVING. The caller (LaunchNewCityPanel) tracks whether the LAST fetched status was
+ * terminal/awaiting-input and passes that back as `stopPolling` — driving the interval from
+ * outside the query rather than from a `refetchInterval` callback closing over `query.state`.
+ *
+ * `refetchIntervalInBackground: true` because manual browser verification (#2676 Slice A)
+ * caught a real gap: react-query pauses `refetchInterval` by default once
+ * `document.visibilityState !== 'visible'` (the admin switches tabs while a resolution — a
+ * brief, few-second, actively-awaited action — is in flight), which would otherwise leave the
+ * UI stuck showing "Resolving…" until the tab regains focus even though the job itself long
+ * since finished server-side.
+ */
+export function useCityBootstrapJob(jobId: number | null, enabled: boolean, stopPolling: boolean) {
+  return useQuery<CityBootstrapJobDto, ApiError>({
+    queryKey: jobId != null ? cityBootstrapJobQueryKey(jobId) : (['admin', 'city-launch', 'bootstrap', 'none'] as const),
+    queryFn: () => api.get<CityBootstrapJobDto>(`/api/admin/city-launch/bootstrap/${jobId}`),
+    enabled: enabled && jobId != null,
+    refetchInterval: stopPolling ? false : 1500,
+    refetchIntervalInBackground: true,
+  });
+}
+
+/** POST /api/admin/city-launch/bootstrap/{jobId}/confirm — operator's disambiguation choice. */
+export function useConfirmCityBootstrap(jobId: number | null) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation<CityBootstrapJobDto, ApiError, number>({
+    mutationFn: (candidateIndex) =>
+      api.post<CityBootstrapJobDto>(`/api/admin/city-launch/bootstrap/${jobId}/confirm`, { candidateIndex }),
+    onSuccess: (data) => {
+      if (jobId != null) {
+        queryClient.setQueryData(cityBootstrapJobQueryKey(jobId), data);
+      }
+    },
+    onError: (err) => {
+      toast({
+        title: 'Failed to confirm city',
+        description: err.message,
+        variant: 'destructive',
+      });
+    },
+  });
+}
 
 /**
  * GET /api/admin/city-launch/cities/{cityId}/prepare — fetches the in-flight
