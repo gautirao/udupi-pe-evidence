@@ -701,6 +701,7 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     canonicalNodeFitCount,
     bottomOcclusionPx: mobilePresentationController.bottomOcclusionPx,
     previewOcclusionPx: mobilePresentationController.previewOcclusionPx,
+    cameraIntent: mapDataController.cameraIntent,
   });
 
   // The ONE gate this hook owns: an unsupported city has no surfaces to

@@ -311,7 +311,23 @@ export function useDiscoverMapDataController({
   const lastAreaSetCameraSignature = useRef<string | null>(null);
 
   useEffect(() => {
-    if (committedAreaSetKeys.length <= 1) return;
+    if (committedAreaSetKeys.length <= 1) {
+      // Issue #2494 — clear the marker whenever the committed scope leaves
+      // N>1 AREA_SET territory (e.g. "Search this area" commits a VIEWPORT
+      // scope over it). Without this, Returning to a signature already
+      // visited earlier in the SAME session (e.g. AREA_SET(X,Y) -> VIEWPORT
+      // -> Return to AREA_SET(X,Y)) recommits the IDENTICAL signature this
+      // ref already recorded, so the guard below would treat the Return as a
+      // no-op re-render of the same occurrence and skip publishing entirely
+      // — a second, independent way this effect could silently no-op on
+      // Return, on top of the deliverOnRemount gap fixed below. Clearing on
+      // every exit from N>1 state means the guard only ever suppresses a
+      // genuine re-render of the SAME still-active commit (its original,
+      // narrower purpose — e.g. `discoverAreasData` changing identity), never
+      // a fresh commit event that happens to reuse an earlier signature.
+      lastAreaSetCameraSignature.current = null;
+      return;
+    }
     if (committedAreaSetSignature === lastAreaSetCameraSignature.current) return;
     const target = computeAreaSetCameraTarget(
       committedAreaSetKeys,
@@ -319,7 +335,19 @@ export function useDiscoverMapDataController({
     );
     if (!target) return;
     lastAreaSetCameraSignature.current = committedAreaSetSignature;
-    mapData.publishRecenterCameraIntent(target.bounds, target.center, 'overview');
+    // `deliverOnRemount` (issue #2494 mobile follow-up) — mirrors the N=1
+    // Return-restore effect below (issue #2480). On mobile this effect can
+    // also run while no map is mounted: Discover is panel-first there, and
+    // "Return to <areas>" for a previously-committed N>1 AREA_SET is reachable
+    // only from List view (map unmounted). Without this flag the publish here
+    // was silently absorbed by PropertyMap.tsx's adopt-on-mount guard on the
+    // next Map open instead of being delivered — the camera stayed wherever it
+    // was before the remount. See useDiscoverMapData.ts's
+    // pendingRemountCameraIntentSeqRef doc for the delivery contract this
+    // reuses unchanged.
+    mapData.publishRecenterCameraIntent(target.bounds, target.center, 'overview', {
+      deliverOnRemount: true,
+    });
     // committedAreaSetKeys is derived fresh from committedAreaSetSignature
     // every render; only the signature (plus the data needed to resolve it)
     // should gate this effect.

@@ -1054,4 +1054,178 @@ describe('useDiscoverMapDataController — Issue #2480 (Return-to-scope camera r
     expect((result.current.cameraIntent?.seq ?? 0) - seqAfterFirstPublish).toBe(0);
     expect(mockRestoreRequest).toBeNull();
   });
+
+  // Issue #2494 (mobile) — the N>1 ambient union-fit effect (above, in the
+  // controller) now also marks its publish for delivery on remount, mirroring
+  // the N=1 restore effect. Without this, "Return to <areas>" for a
+  // previously-committed N>1 AREA_SET — reachable only from List view on
+  // mobile, where the map is unmounted — landed its camera publish nowhere:
+  // PropertyMap.tsx's adopt-on-mount guard silently absorbed it on the next
+  // Map open instead of delivering it. AreaSelectedPanel.tsx's Return handler
+  // has no restore-request path of its own for N>1 (only N=1 does — see the
+  // #2480 describe block above), so this ambient effect is the ONLY producer
+  // for an N>1 commit, whether reached via Return or an ordinary multi-area
+  // commit (e.g. AreaSetChips' "Search these areas") — both land here as the
+  // same committedAreaSetSignature transition.
+  it('N>1 mobile deliver-on-remount (#2494): a multi-area AREA_SET commit marks the camera intent for delivery on the next mobile Map remount, publishing exactly once', async () => {
+    setupAreasMock([AREA_X, AREA_Y]);
+
+    const initialNav = makeNav({
+      journey: 'area-first',
+      resultScope: { active: null, previous: null },
+    });
+    const { result, rerender } = renderController(initialNav);
+
+    await waitFor(() => {
+      expect(result.current.discoverAreasData?.areas.length).toBe(2);
+    });
+    const seqBefore = result.current.cameraIntent?.seq ?? 0;
+
+    const committedNav = makeNav({
+      journey: 'area-first',
+      resultScope: {
+        active: { kind: 'AREA_SET', areaKeys: [AREA_X.areaKey, AREA_Y.areaKey] },
+        previous: null,
+      },
+    });
+    rerender(committedNav);
+
+    await waitFor(() => {
+      expect(result.current.cameraIntent?.framing).toBe('overview');
+    });
+
+    // Exactly one publish — same seq-delta discipline as every other test in
+    // this suite (a double-fire would advance seq by 2 even if bounds/center
+    // happen to coincide).
+    expect((result.current.cameraIntent?.seq ?? 0) - seqBefore).toBe(1);
+    // Pinned to the exact published seq, not merely non-null: the marker
+    // only works because it identifies THIS intent.
+    expect(result.current.pendingRemountCameraIntentSeqRef.current).toBe(
+      result.current.cameraIntent?.seq,
+    );
+  });
+
+  // Issue #2494 — the exact reported repro sequence: AREA_SET(N>1) is
+  // committed once (arming lastAreaSetCameraSignature to that signature),
+  // then the user leaves it (e.g. via "Search this area" committing a
+  // VIEWPORT scope over it) and Returns to the SAME N>1 signature. Before
+  // this fix, `lastAreaSetCameraSignature.current` was never cleared on
+  // leaving N>1 state, so this second commit — despite being a genuine new
+  // commit EVENT — matched the ref's stale value and the effect's own guard
+  // (`committedAreaSetSignature === lastAreaSetCameraSignature.current`)
+  // returned before ever reaching `publishRecenterCameraIntent`. This is a
+  // SEPARATE gap from the deliverOnRemount fix above: even with
+  // deliverOnRemount always set, a re-visit like this would still publish
+  // NOTHING at all, on desktop or mobile alike.
+  it('N>1 re-visit (#2494): returning to an N>1 AREA_SET signature already committed earlier in the session re-fires the camera fit', async () => {
+    setupAreasMock([AREA_X, AREA_Y]);
+
+    const initialNav = makeNav({
+      journey: 'area-first',
+      resultScope: { active: null, previous: null },
+    });
+    const { result, rerender } = renderController(initialNav);
+
+    await waitFor(() => {
+      expect(result.current.discoverAreasData?.areas.length).toBe(2);
+    });
+
+    // First commit of the N>1 signature — the ambient effect fires and
+    // records it on lastAreaSetCameraSignature.
+    const firstCommitNav = makeNav({
+      journey: 'area-first',
+      resultScope: {
+        active: { kind: 'AREA_SET', areaKeys: [AREA_X.areaKey, AREA_Y.areaKey] },
+        previous: null,
+      },
+    });
+    rerender(firstCommitNav);
+    await waitFor(() => {
+      expect(result.current.cameraIntent?.framing).toBe('overview');
+    });
+    const seqAfterFirstCommit = result.current.cameraIntent?.seq ?? 0;
+    expect(seqAfterFirstCommit).toBeGreaterThan(0);
+
+    // Leave N>1 territory — mirrors "Search this area" committing a VIEWPORT
+    // scope whose `previous` is the AREA_SET (the VIEWPORT bounds/previous
+    // fields don't matter to this controller's own N>1 effect, only that
+    // `resultScope.active.kind` is no longer 'AREA_SET').
+    const viewportNav = makeNav({
+      journey: 'area-first',
+      resultScope: {
+        active: { kind: 'VIEWPORT', bounds: VIEWPORT_BOUNDS },
+        previous: { kind: 'AREA_SET', areaKeys: [AREA_X.areaKey, AREA_Y.areaKey] },
+      },
+    });
+    rerender(viewportNav);
+    await waitFor(() => {
+      expect((result.current.cameraIntent?.seq ?? 0)).toBe(seqAfterFirstCommit);
+    });
+
+    // Return: recommits the IDENTICAL N>1 signature. This must fire again —
+    // a double-fire-prevention guard meant for same-occurrence re-renders
+    // must never suppress a genuinely new commit event.
+    rerender(firstCommitNav);
+
+    await waitFor(() => {
+      expect((result.current.cameraIntent?.seq ?? 0) - seqAfterFirstCommit).toBe(1);
+    });
+    expect(result.current.pendingRemountCameraIntentSeqRef.current).toBe(
+      result.current.cameraIntent?.seq,
+    );
+  });
+
+  // Issue #2496's named coverage gap — "a mutation that arms deliverOnRemount
+  // on EVERY publish (not just the intended opt-in call sites) currently
+  // passes the full existing suite 33/33". The N=1 no-regression test above
+  // (line 874) already discriminates the ordinary selectArea() flow; this
+  // test discriminates the OTHER two producers that share this controller's
+  // publishRecenterCameraIntent call but must NOT be marked: the user-
+  // triggered "Fit all"/"focus one" AreaSetCameraActions (registered into
+  // DiscoverShellContext below) are only reachable from on-map controls, so
+  // — unlike the N>1 ambient commit effect just above — the map is always
+  // already mounted when they fire, and marking them would leave a stale
+  // marker to be wrongly re-delivered on a LATER, unrelated remount.
+  it('over-arming guard (#2496): the user-triggered Fit-all/focus-one AreaSetCameraActions do not arm deliverOnRemount', async () => {
+    setupAreasMock([AREA_X, AREA_Y]);
+
+    const committedNav = makeNav({
+      journey: 'area-first',
+      resultScope: {
+        active: { kind: 'AREA_SET', areaKeys: [AREA_X.areaKey, AREA_Y.areaKey] },
+        previous: null,
+      },
+    });
+    const { result } = renderController(committedNav);
+
+    await waitFor(() => {
+      expect(result.current.cameraIntent?.framing).toBe('overview');
+    });
+    // The commit itself already armed the marker (per the #2494 test above)
+    // — clear it so this test isolates ONLY the two actions below.
+    result.current.pendingRemountCameraIntentSeqRef.current = null;
+
+    expect(mockRegisterAreaSetCameraActions).toHaveBeenCalled();
+    const actions = mockRegisterAreaSetCameraActions.mock.calls.at(-1)?.[0] as
+      | { fitAreaSet: () => void; focusAreaSetMember: (areaKey: string) => void }
+      | undefined;
+
+    const seqBeforeFit = result.current.cameraIntent?.seq ?? 0;
+    act(() => {
+      actions?.fitAreaSet();
+    });
+    await waitFor(() => {
+      expect((result.current.cameraIntent?.seq ?? 0) - seqBeforeFit).toBe(1);
+    });
+    expect(result.current.pendingRemountCameraIntentSeqRef.current).toBeNull();
+
+    const seqBeforeFocus = result.current.cameraIntent?.seq ?? 0;
+    act(() => {
+      actions?.focusAreaSetMember(AREA_X.areaKey);
+    });
+    await waitFor(() => {
+      expect((result.current.cameraIntent?.seq ?? 0) - seqBeforeFocus).toBe(1);
+    });
+    expect(result.current.pendingRemountCameraIntentSeqRef.current).toBeNull();
+  });
 });

@@ -2499,16 +2499,43 @@ function MapController({
       suppressArmedAtRef.current = Date.now();
     }
 
-    // Issue #1882 (Track A PR2 Slice S4; corrected in the camera-padding
-    // rework) — cameraIntent.padding is optional (responsive fitBounds
-    // padding — see computeCameraPadding in useDiscoverMapData.ts), a
-    // Leaflet-native [horizontalPx, verticalPx] tuple (matches L.point(x, y)
-    // / fitBounds({ padding: [x, y] })). Defaults to the pre-#1882 symmetric
-    // [40, 40] when absent so every pre-existing CameraIntent
-    // producer/literal keeps behaving exactly as before.
-    const [paddingX, paddingY] = cameraIntent.padding ?? [40, 40];
+    // Issue #2494 (mobile, PropertyMap follow-up) — the DELIVERY call site
+    // only; every seq/marker decision above (isUndelivered, lastHandledSeqRef,
+    // pendingRemountCameraIntentSeqRef) has already run by this point and is
+    // unaffected by the SHAPE of anything below (see the two ref writes
+    // further down for the one narrow, deliberate exception — re-arming the
+    // SAME marker this code just read, never changing the decision itself).
+    // Mirrors AreaPanner's OWN #2143 fix (`panToArea` effect, above in this
+    // file) for the IDENTICAL mobile List<->Map remount pitfall, documented
+    // there verbatim: "Leaflet's DEFAULT animated fitBounds/flyTo silently
+    // fails to complete on a just-attached container — map.getCenter()/
+    // getZoom() showed ZERO change even seconds after the call, although
+    // map.getSize() and the bbox/options passed in were all correct." That
+    // effect's fix, reused here with one narrowing (code-review, cycle 2):
+    // `animate: false` applies ONLY on the recovery delivery below (the
+    // resize-retry path — i.e. exactly the case that previously failed),
+    // never on the ordinary already-sized path, which keeps today's animated
+    // feel unchanged. Belt-and-braces: if this effect's ONE delivery
+    // opportunity fires while the container is still genuinely 0x0, defer to
+    // the next real Leaflet `resize` event rather than applying a degenerate
+    // fit against it.
+    const isMapSized = (): boolean => {
+      if (typeof map.getSize !== 'function') return true;
+      const size = map.getSize();
+      return size.x > 0 && size.y > 0;
+    };
 
-    if (cameraIntent.framing === 'overview') {
+    const applyCameraIntent = (intent: CameraIntent, isRecoveryDelivery: boolean) => {
+      // Issue #1882 (Track A PR2 Slice S4; corrected in the camera-padding
+      // rework) — intent.padding is optional (responsive fitBounds padding —
+      // see computeCameraPadding in useDiscoverMapData.ts), a Leaflet-native
+      // [horizontalPx, verticalPx] tuple (matches L.point(x, y) / fitBounds({
+      // padding: [x, y] })). Defaults to the pre-#1882 symmetric [40, 40]
+      // when absent so every pre-existing CameraIntent producer/literal keeps
+      // behaving exactly as before.
+      const [paddingX, paddingY] = intent.padding ?? [40, 40];
+
+    if (intent.framing === 'overview') {
       // Macro-region / group pin — same framing the removed AreaMarkerLayer
       // code used to apply: fitBounds capped at the area-overview zoom band,
       // or flyTo(center, AREA_LAYER_MAX_ZOOM).
@@ -2542,9 +2569,9 @@ function MapController({
 
       if (isClusterDrillIntent) {
         const currentZoom = map.getZoom();
-        const center = cameraIntent.bounds
-          ? L.latLngBounds(cameraIntent.bounds).getCenter()
-          : L.latLng(cameraIntent.center[0], cameraIntent.center[1]);
+        const center = intent.bounds
+          ? L.latLngBounds(intent.bounds).getCenter()
+          : L.latLng(intent.center[0], intent.center[1]);
         if (currentZoom >= overviewMaxZoom) {
           // Already at the ceiling — there is no room left to drill in
           // further. Explicit no-op (recenter only, no zoom change) rather
@@ -2554,8 +2581,8 @@ function MapController({
           // close.
           map.panTo(center);
         } else {
-          const rawZoom = cameraIntent.bounds
-            ? map.getBoundsZoom(cameraIntent.bounds, false, L.point(paddingX, paddingY))
+          const rawZoom = intent.bounds
+            ? map.getBoundsZoom(intent.bounds, false, L.point(paddingX, paddingY))
             : overviewMaxZoom;
           // Issue #1943 (Stage-B fix-cycle — code-reviewer HIGH finding).
           // Two properties are both required here, and they are in tension:
@@ -2614,12 +2641,23 @@ function MapController({
               : Math.min(overviewMaxZoom, currentZoom + 1);
           map.setView(center, targetZoom, { animate: true });
         }
-      } else if (cameraIntent.bounds) {
-        map.fitBounds(cameraIntent.bounds, { padding: [paddingX, paddingY], maxZoom: overviewMaxZoom });
+      } else if (intent.bounds) {
+        // Issue #2494 (code-review, cycle 2) — `animate: false` ONLY on the
+        // recovery delivery (the resize-retry path below, i.e. exactly the
+        // case proven to previously fail — see this function's own doc
+        // comment above). The ordinary already-sized path keeps today's
+        // animated fitBounds unchanged, byte-identical to pre-fix.
+        if (isRecoveryDelivery) {
+          map.fitBounds(intent.bounds, { padding: [paddingX, paddingY], maxZoom: overviewMaxZoom, animate: false });
+        } else {
+          map.fitBounds(intent.bounds, { padding: [paddingX, paddingY], maxZoom: overviewMaxZoom });
+        }
+      } else if (isRecoveryDelivery) {
+        map.flyTo(intent.center, overviewMaxZoom, { animate: false });
       } else {
-        map.flyTo(cameraIntent.center, overviewMaxZoom);
+        map.flyTo(intent.center, overviewMaxZoom);
       }
-    } else if (cameraIntent.framing === 'cluster') {
+    } else if (intent.framing === 'cluster') {
       // Issue #1762 — listing-cluster tap fit-to-members. Mirrors the 'leaf'
       // branch's bounds->zoom computation (same getBoundsZoom + responsive
       // padding), with the ceiling CLUSTER_DISABLE_AT_ZOOM (16, where
@@ -2662,8 +2700,8 @@ function MapController({
       // rather than mandate a zoom-out — whether a cluster tap should ever
       // zoom the camera OUT remains a separate, deliberately-deferred
       // product/backlog decision.
-      if (cameraIntent.bounds) {
-        const rawZoom = map.getBoundsZoom(cameraIntent.bounds, false, L.point(paddingX, paddingY));
+      if (intent.bounds) {
+        const rawZoom = map.getBoundsZoom(intent.bounds, false, L.point(paddingX, paddingY));
         const currentZoom = map.getZoom();
         const cappedRawZoom = Math.min(CLUSTER_DISABLE_AT_ZOOM, rawZoom);
         if (cappedRawZoom < currentZoom) {
@@ -2673,27 +2711,80 @@ function MapController({
           return;
         }
         const targetZoom = cappedRawZoom;
-        const center = L.latLngBounds(cameraIntent.bounds).getCenter();
-        map.setView(center, targetZoom, { animate: true });
-      } else {
+        const center = L.latLngBounds(intent.bounds).getCenter();
+        // Issue #2494 (code-review, cycle 2) — `animate: false` ONLY on the
+        // recovery delivery (see this function's own doc comment above);
+        // the ordinary path keeps its pre-existing explicit `animate: true`.
+        map.setView(center, targetZoom, { animate: !isRecoveryDelivery });
+      } else if (isRecoveryDelivery) {
         // Degenerate/missing bounds fallback (resolveCameraFraming already
         // guards against a zero-area box) — still guarantee forward progress.
-        map.flyTo(cameraIntent.center, Math.min(CLUSTER_DISABLE_AT_ZOOM, map.getZoom() + 1));
+        map.flyTo(intent.center, Math.min(CLUSTER_DISABLE_AT_ZOOM, map.getZoom() + 1), { animate: false });
+      } else {
+        map.flyTo(intent.center, Math.min(CLUSTER_DISABLE_AT_ZOOM, map.getZoom() + 1));
       }
     } else {
       // Real-area ("leaf") pin — land directly in the [13,16] listing-marker
       // zoom band. This REPLACES the removed map.once('zoomend', ...) → 13
       // correction: instead of fitting then correcting after the animation
       // settles, the target zoom is computed and clamped up-front.
-      if (cameraIntent.bounds) {
-        const rawZoom = map.getBoundsZoom(cameraIntent.bounds, false, L.point(paddingX, paddingY));
+      if (intent.bounds) {
+        const rawZoom = map.getBoundsZoom(intent.bounds, false, L.point(paddingX, paddingY));
         const clampedZoom = Math.min(LEAF_FIT_MAX_ZOOM, Math.max(LEAF_FIT_MIN_ZOOM, rawZoom));
-        const center = L.latLngBounds(cameraIntent.bounds).getCenter();
-        map.setView(center, clampedZoom, { animate: true });
+        const center = L.latLngBounds(intent.bounds).getCenter();
+        // Issue #2494 (code-review, cycle 2) — `animate: false` ONLY on the
+        // recovery delivery (see this function's own doc comment above):
+        // this is the exact branch the #2480 N=1 Return-restore path
+        // (deliverOnRemount) delivers through, and the ordinary path keeps
+        // its pre-existing explicit `animate: true`.
+        map.setView(center, clampedZoom, { animate: !isRecoveryDelivery });
+      } else if (isRecoveryDelivery) {
+        map.flyTo(intent.center, LEAF_FIT_MIN_ZOOM, { animate: false });
       } else {
-        map.flyTo(cameraIntent.center, LEAF_FIT_MIN_ZOOM);
+        map.flyTo(intent.center, LEAF_FIT_MIN_ZOOM);
       }
     }
+    };
+
+    if (isMapSized()) {
+      applyCameraIntent(cameraIntent, false);
+      return;
+    }
+
+    // Container not ready — do NOT drop the fit. Retry once on the next real
+    // Leaflet resize (mirrors AreaPanner's identical fallback above).
+    //
+    // Issue #2494 (code-review HIGH, cycle 2) — re-arm `pendingRemount
+    // CameraIntentSeqRef` to THIS seq the instant we commit to the retry
+    // path. The seq/marker gating above already read-then-reset this exact
+    // marker (or advanced lastHandledSeqRef) before reaching this point, so
+    // without this line the intent is already "consumed" from the upstream
+    // gating's perspective — if the component unmounts again (mobile List
+    // toggle) before this listener ever fires, the fit is lost forever: the
+    // NEXT mount's own isUndelivered check would find the marker null/
+    // mismatched and silently adopt, never re-delivering it. Re-arming it
+    // here means a later remount's adopt/deliver check sees this seq as
+    // still-undelivered again and retries the whole isMapSized()/resize
+    // path fresh. Cleared back to null the moment `handleResize` actually
+    // fires and delivers — never in the cleanup below, which runs on EVERY
+    // re-render (including a resize-unrelated one), not only on genuine
+    // supersession; the marker must survive exactly until a strictly newer
+    // seq's own effect run overwrites it (same "overwrite, not accumulate"
+    // discipline `publishRecenterCameraIntent` already documents) or a real
+    // resize finally delivers it.
+    if (pendingRemountCameraIntentSeqRef) {
+      pendingRemountCameraIntentSeqRef.current = seq;
+    }
+    const handleResize = () => {
+      if (!isMapSized()) return;
+      map.off('resize', handleResize);
+      if (pendingRemountCameraIntentSeqRef) {
+        pendingRemountCameraIntentSeqRef.current = null;
+      }
+      applyCameraIntent(cameraIntent, true);
+    };
+    map.on('resize', handleResize);
+    return () => map.off('resize', handleResize);
   }, [cameraIntent, map]);
 
   useEffect(() => {

@@ -3,6 +3,7 @@ import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
+import type { CameraIntent } from '@/hooks/useDiscoverMapData';
 
 export interface UseDiscoverDebugBridgeParams {
   areaListings: DiscoverCityListingItem[];
@@ -19,6 +20,16 @@ export interface UseDiscoverDebugBridgeParams {
   canonicalNodeFitCount: number;
   bottomOcclusionPx: number;
   previewOcclusionPx: number;
+  /**
+   * Issue #2494 (E2E oracle follow-up) — the last-published camera intent
+   * (from useDiscoverMapDataController), exposed so an E2E spec can assert
+   * the ACTUAL resolved camera target/seq instead of the URL's lat/lon,
+   * which is a separate, independently-debounced write path (ViewportWatcher
+   * -> reportViewport) proven unreliable immediately after a mobile
+   * List<->Map remount (see issue tracking that gap). This is read-only
+   * exposure of state this hook's caller already has — no new subscription.
+   */
+  cameraIntent: CameraIntent | null;
 }
 
 /**
@@ -58,6 +69,7 @@ export function useDiscoverDebugBridge({
   canonicalNodeFitCount,
   bottomOcclusionPx,
   previewOcclusionPx,
+  cameraIntent,
 }: UseDiscoverDebugBridgeParams) {
   // Debug: expose areaListings and related data to window.__debug for Playwright tests.
   // Issue #1824 Slice S7 — schoolMarkerFocusTick sourced from the camera
@@ -115,9 +127,17 @@ export function useDiscoverDebugBridge({
         // to prove the canonical-node bbox refit does NOT double-fire on a
         // Back transition that already has a persisted viewport to restore.
         canonicalNodeFitCount,
+        // Issue #2494 (E2E oracle follow-up) — the ACTUAL last-delivered
+        // camera target, straight from useDiscoverMapDataController's own
+        // cameraIntent state. `cameraSeq` lets an E2E spec confirm it is
+        // observing a FRESH publish (the same seq-based freshness discipline
+        // `canonicalNodeFitCount`/`schoolMarkerFocusTick` already use above),
+        // not a stale leftover from a previous mount.
+        cameraCenter: cameraIntent ? { lat: cameraIntent.center[0], lon: cameraIntent.center[1] } : null,
+        cameraSeq: cameraIntent?.seq ?? null,
       },
     };
-  }, [areaListings, areaMarkerListings, markerListings, effectiveSelectedArea, legacySelectedArea, mapZoom, city, selectedSchool, schoolMarkerFocusTick, areaRestoreTick, cityRestoreTick, canonicalNodeFitCount]);
+  }, [areaListings, areaMarkerListings, markerListings, effectiveSelectedArea, legacySelectedArea, mapZoom, city, selectedSchool, schoolMarkerFocusTick, areaRestoreTick, cityRestoreTick, canonicalNodeFitCount, cameraIntent]);
 
   // E2E observability only (Playwright contract, matches the existing
   // canonicalNodeFitCount/schoolCenter convention on this same debug object)
