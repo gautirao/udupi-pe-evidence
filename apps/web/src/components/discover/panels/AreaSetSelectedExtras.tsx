@@ -521,7 +521,9 @@ export function AreaSetTwoTileRow({
           onAddSchool ? 'hover:border-plum/50' : 'cursor-not-allowed opacity-60',
         )}
       >
-        <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-plum text-plum-foreground">
+        {/* Issue #2604 — `rounded-md` = 8px, NOT `rounded-lg` (10px); see the outer
+            tile button above for the token derivation (`--radius: 0.625rem`). */}
+        <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md bg-plum text-plum-foreground">
           <GraduationCap className="h-4 w-4" aria-hidden="true" />
         </span>
         <span className="min-w-0 flex-1">
@@ -556,7 +558,8 @@ export function AreaSetTwoTileRow({
         // `rounded-md` = 8px here — see the schools tile above for the token derivation.
         className="flex items-center gap-[9px] rounded-md border border-border bg-card px-[11px] py-[9px] text-left transition-colors hover:border-copper/40"
       >
-        <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
+        {/* Issue #2604 — `rounded-md` = 8px here, same token derivation as the schools tile. */}
+        <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
           <MapPin className="h-4 w-4" aria-hidden="true" />
         </span>
         <span className="min-w-0 flex-1">
