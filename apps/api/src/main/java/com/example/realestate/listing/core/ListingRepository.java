@@ -33,11 +33,24 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
 
     boolean existsByRawPostId(UUID rawPostId);
 
-    boolean existsByDedupeHash(String dedupeHash);
+    /**
+     * #2519: dedupe existence/count lookups are scoped to ACTIVE rows only — archivedAt IS NULL
+     * AND status &lt;&gt; 'REJECTED'. An ARCHIVED (soft-deleted) or REJECTED (broker can edit and
+     * resubmit) row is inactive/historical and must never block a legitimate repost of the same
+     * hash from reaching LIVE. See {@link ListingStatus} for the full lifecycle.
+     */
+    @Query("SELECT CASE WHEN COUNT(l) > 0 THEN true ELSE false END FROM Listing l "
+            + "WHERE l.dedupeHash = :dedupeHash AND l.archivedAt IS NULL AND l.status <> 'REJECTED'")
+    boolean existsActiveByDedupeHash(@Param("dedupeHash") String dedupeHash);
 
-    long countByDedupeHash(String dedupeHash);
+    @Query("SELECT COUNT(l) FROM Listing l "
+            + "WHERE l.dedupeHash = :dedupeHash AND l.archivedAt IS NULL AND l.status <> 'REJECTED'")
+    long countActiveByDedupeHash(@Param("dedupeHash") String dedupeHash);
 
-    long countByDedupeHashAndIdNot(String dedupeHash, UUID id);
+    @Query("SELECT COUNT(l) FROM Listing l "
+            + "WHERE l.dedupeHash = :dedupeHash AND l.id <> :id "
+            + "AND l.archivedAt IS NULL AND l.status <> 'REJECTED'")
+    long countActiveByDedupeHashAndIdNot(@Param("dedupeHash") String dedupeHash, @Param("id") UUID id);
 
     Optional<Listing> findByListingNumber(Integer listingNumber);
 

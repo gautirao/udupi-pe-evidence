@@ -118,7 +118,7 @@ class ListingCrudServiceTest {
             Listing l = inv.getArgument(0);
             l.setDedupeHash("somehash");
             return null;
-        }).when(listingDeduplicationService).computeAndSetDedupeHash(any(), any(), any(), any());
+        }).when(listingDeduplicationService).computeAndSetDedupeHash(any(Listing.class));
 
         Listing draft = crudService.createDraft(userId, "land", "Plot", "Manipal",
                 new BigDecimal("5000000"), "Nice plot");
@@ -406,7 +406,7 @@ class ListingCrudServiceTest {
             Listing l = inv.getArgument(0);
             l.setDedupeHash("new-hash-after-price-change");
             return null;
-        }).when(listingDeduplicationService).computeAndSetDedupeHash(any(), any(), any(), any());
+        }).when(listingDeduplicationService).computeAndSetDedupeHash(any(Listing.class));
 
         Listing result = crudService.updateListing(
                 listingId, userId, false,

@@ -414,6 +414,16 @@ public class ListingResponseMapper {
         String trustTier = publicProjection ? null : l.getTrustTier();
         String trustBadge = publicProjection ? TrustBadge.publicBadge(l.getTrustTier()) : null;
 
+        // #2519 code review follow-up: isDuplicate/repostCount are internal moderation-visibility
+        // signals (mirrors rejectionReason two lines below in build(Listing,...,boolean,boolean))
+        // — never expose them to public callers. A duplicate LIVE listing is normally filtered out
+        // of every public LIST query, but a public DETAIL lookup by direct id (e.g.
+        // PublicListingController's findByIdWithActiveCity path) does not apply that filter, so
+        // without this gate a signed-in non-owner caller could still see these fields via
+        // toPublicResponse for a listing they looked up directly.
+        boolean isDuplicate = publicProjection ? false : l.isDuplicate();
+        int repostCount = publicProjection ? 0 : l.getRepostCount();
+
         return new ListingResponse(
                 l.getId(), l.getListingNumber(), l.getDisplayId(),
                 l.getStatus(), l.getPropertyType(), l.getTitle(),
@@ -464,6 +474,7 @@ public class ListingResponseMapper {
                 l.getLeaseTermMonths(), l.getLeaseEscalationPct(),
                 l.getCommercialFurnishingStatus(), l.getCommercialAvailability(), l.getCommercialAreaUnit(),
                 suitableUses, utilities, crops,
-                l.getPriceStatus());
+                l.getPriceStatus(),
+                isDuplicate, repostCount);
     }
 }

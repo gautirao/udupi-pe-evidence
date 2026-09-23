@@ -176,7 +176,7 @@ class PublicListingControllerTest {
                     l.getLeaseTermMonths(), l.getLeaseEscalationPct(),
                     l.getCommercialFurnishingStatus(), l.getCommercialAvailability(), l.getCommercialAreaUnit(),
                     java.util.List.of(), java.util.List.of(), java.util.List.of(),
-                    l.getPriceStatus());
+                    l.getPriceStatus(), l.isDuplicate(), l.getRepostCount());
         });
 
         // Teaser mapper — single listing (15 agri fields null for non-agri fixtures in setUp).

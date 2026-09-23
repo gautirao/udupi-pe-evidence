@@ -171,7 +171,7 @@ class ListingControllerTest {
                     l.getLeaseTermMonths(), l.getLeaseEscalationPct(),
                     l.getCommercialFurnishingStatus(), l.getCommercialAvailability(), l.getCommercialAreaUnit(),
                     java.util.List.of(), java.util.List.of(), java.util.List.of(),
-                    l.getPriceStatus());
+                    l.getPriceStatus(), l.isDuplicate(), l.getRepostCount());
         });
         // Batch variant: delegate each listing through the single-listing stub.
         when(listingResponseMapper.toResponseList(any())).thenAnswer(inv -> {

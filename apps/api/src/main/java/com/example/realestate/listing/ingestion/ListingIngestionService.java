@@ -174,9 +174,9 @@ public class ListingIngestionService {
                 result.description(), result.locality(), result.price());
         listing.setDedupeHash(dedupeHash);
 
-        if (dedupeHash != null && listingRepository.existsByDedupeHash(dedupeHash)) {
+        if (dedupeHash != null && listingRepository.existsActiveByDedupeHash(dedupeHash)) {
             listing.setDuplicate(true);
-            long priorCount = listingRepository.countByDedupeHash(dedupeHash);
+            long priorCount = listingRepository.countActiveByDedupeHash(dedupeHash);
             listing.setRepostCount((int) priorCount);
             log.info("Duplicate detected: hash={} repostCount={} description={} locality={} price={}",
                     dedupeHash, priorCount, result.description(), result.locality(), result.price());

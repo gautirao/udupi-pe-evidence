@@ -169,7 +169,7 @@ class ListingControllerAgriValidationTest {
                     l.getLeaseTermMonths(), l.getLeaseEscalationPct(),
                     l.getCommercialFurnishingStatus(), l.getCommercialAvailability(), l.getCommercialAreaUnit(),
                     List.of(), List.of(), List.of(),
-                    l.getPriceStatus());
+                    l.getPriceStatus(), l.isDuplicate(), l.getRepostCount());
         });
     }
 

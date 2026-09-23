@@ -215,7 +215,26 @@ public record ListingResponse(
          * on Request — a {@code NUMERIC} listing can also carry a null price for unrelated
          * legacy reasons.
          */
-        String priceStatus
+        String priceStatus,
+        /**
+         * #2519 — read-only visibility into dedupe suppression. APPENDED LAST, mirroring
+         * {@link #priceStatus}'s convention for late-added fields: every earlier field keeps its
+         * position for any positional-record consumer.
+         *
+         * <p>{@code true} when this listing's dedupe hash currently matches an ACTIVE
+         * (non-archived, non-rejected) prior listing — see {@code
+         * ListingDeduplicationService#checkAndMarkDuplicate}. A LIVE listing with {@code
+         * isDuplicate=true} is suppressed from every public/Discover read path (it is filtered
+         * out, never deleted), which is otherwise invisible to the broker/admin without this
+         * field.
+         */
+        boolean isDuplicate,
+        /**
+         * #2519 — read-only visibility into dedupe suppression (mirrors {@link #isDuplicate}).
+         * Number of other ACTIVE listings sharing this listing's dedupe hash at the time it was
+         * last flagged. {@code 0} when {@link #isDuplicate} is {@code false}.
+         */
+        int repostCount
 ) {
     /** Raw regex for Karnataka RERA registration number format (e.g. PRM/KA/2023/0042). */
     public static final String RERA_REGEXP = "^[A-Z]{3}/[A-Z]{2}/\\d{4}/\\d{4}$";

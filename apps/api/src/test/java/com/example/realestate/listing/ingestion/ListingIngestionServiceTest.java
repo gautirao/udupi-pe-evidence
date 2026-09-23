@@ -421,8 +421,8 @@ class ListingIngestionServiceTest {
         when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
         when(listingDeduplicationService.computeDedupeHash(any(), any(), any())).thenReturn("somehash");
         // Simulate existing listing with same hash
-        when(listingRepository.existsByDedupeHash("somehash")).thenReturn(true);
-        when(listingRepository.countByDedupeHash("somehash")).thenReturn(1L);
+        when(listingRepository.existsActiveByDedupeHash("somehash")).thenReturn(true);
+        when(listingRepository.countActiveByDedupeHash("somehash")).thenReturn(1L);
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         Listing listing = listingIngestionService.createFrom(post, result, "test-model");
@@ -443,7 +443,7 @@ class ListingIngestionServiceTest {
 
         when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
         when(listingDeduplicationService.computeDedupeHash(any(), any(), any())).thenReturn("uniquehash");
-        when(listingRepository.existsByDedupeHash("uniquehash")).thenReturn(false);
+        when(listingRepository.existsActiveByDedupeHash("uniquehash")).thenReturn(false);
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         Listing listing = listingIngestionService.createFrom(post, result, "test-model");
@@ -884,8 +884,8 @@ class ListingIngestionServiceTest {
 
         when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
         when(listingDeduplicationService.computeDedupeHash(any(), any(), any())).thenReturn("reposthash");
-        when(listingRepository.existsByDedupeHash("reposthash")).thenReturn(true);
-        when(listingRepository.countByDedupeHash("reposthash")).thenReturn(1L);
+        when(listingRepository.existsActiveByDedupeHash("reposthash")).thenReturn(true);
+        when(listingRepository.countActiveByDedupeHash("reposthash")).thenReturn(1L);
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         Listing listing = listingIngestionService.createFrom(post, result, "test-model");
@@ -906,8 +906,8 @@ class ListingIngestionServiceTest {
 
         when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
         when(listingDeduplicationService.computeDedupeHash(any(), any(), any())).thenReturn("thirdreposthash");
-        when(listingRepository.existsByDedupeHash("thirdreposthash")).thenReturn(true);
-        when(listingRepository.countByDedupeHash("thirdreposthash")).thenReturn(2L);
+        when(listingRepository.existsActiveByDedupeHash("thirdreposthash")).thenReturn(true);
+        when(listingRepository.countActiveByDedupeHash("thirdreposthash")).thenReturn(2L);
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         Listing listing = listingIngestionService.createFrom(post, result, "test-model");
@@ -947,8 +947,8 @@ class ListingIngestionServiceTest {
 
         when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
         when(listingDeduplicationService.computeDedupeHash(any(), any(), any())).thenReturn("repeatedhash");
-        when(listingRepository.existsByDedupeHash("repeatedhash")).thenReturn(true);
-        when(listingRepository.countByDedupeHash("repeatedhash")).thenReturn(3L);
+        when(listingRepository.existsActiveByDedupeHash("repeatedhash")).thenReturn(true);
+        when(listingRepository.countActiveByDedupeHash("repeatedhash")).thenReturn(3L);
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         Listing listing = listingIngestionService.createFrom(post, result, "test-model");
@@ -977,7 +977,7 @@ class ListingIngestionServiceTest {
     }
 
     @Test
-    void createFrom_firstOccurrence_doesNotCallCountByDedupeHash() {
+    void createFrom_firstOccurrence_doesNotCallCountActiveByDedupeHash() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
                 true, PropertyType.LAND, new BigDecimal("3000000"),
@@ -992,7 +992,44 @@ class ListingIngestionServiceTest {
 
         assertThat(listing).isNotNull();
         assertThat(listing.getRepostCount()).isEqualTo(0);
-        verify(listingRepository, never()).countByDedupeHash(any());
+        verify(listingRepository, never()).countActiveByDedupeHash(any());
+    }
+
+    // --- Code review follow-up (#2519 blocker 1): listingPurpose defaults to "sale" everywhere,
+    // so the dedupe null-guard must not include it in the emptiness check, or two content-less
+    // ingested listings would collapse onto the same constant hash and the second would be
+    // falsely flagged a duplicate. Uses a REAL ListingDeduplicationService (not the class-level
+    // mock) so this exercises the actual production hash-computation code. ---
+
+    @Test
+    void createFrom_twoContentLessListings_neitherFlaggedDuplicate_hashStaysNull() {
+        ListingDeduplicationService realDeduplicationService =
+                new ListingDeduplicationService(listingRepository);
+        ListingIngestionService serviceWithRealDedup = new ListingIngestionService(
+                listingRepository, rawPostRepository, geocodingPort,
+                new ObjectMapper(), applicationEventPublisher, realDeduplicationService,
+                qualityRecomputeService, areaResolutionService, jdbcOperations, new SimpleMeterRegistry());
+
+        RawPost post1 = makePost();
+        RawPost post2 = makePost();
+        // All three hash-relevant fields (description, locality, price) null — propertyType and
+        // confidenceScore are set only to pass the earlier discard gates.
+        ClassificationResult contentLessResult = new ClassificationResult(
+                true, PropertyType.LAND, null, null, null, null, null,
+                null, null, null, null, null, 75
+        );
+
+        when(listingRepository.existsByRawPostId(any())).thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing first = serviceWithRealDedup.createFrom(post1, contentLessResult, "test-model");
+        Listing second = serviceWithRealDedup.createFrom(post2, contentLessResult, "test-model");
+
+        assertThat(first.getDedupeHash()).as("content-less listing must not get a hash").isNull();
+        assertThat(second.getDedupeHash()).as("content-less listing must not get a hash").isNull();
+        assertThat(second.isDuplicate())
+                .as("a null hash must never flag a listing as duplicate").isFalse();
+        verify(listingRepository, never()).existsActiveByDedupeHash(any());
     }
 
     @Test
@@ -1006,8 +1043,8 @@ class ListingIngestionServiceTest {
 
         when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
         when(listingDeduplicationService.computeDedupeHash(any(), any(), any())).thenReturn("heavilyhash");
-        when(listingRepository.existsByDedupeHash("heavilyhash")).thenReturn(true);
-        when(listingRepository.countByDedupeHash("heavilyhash")).thenReturn(99L);
+        when(listingRepository.existsActiveByDedupeHash("heavilyhash")).thenReturn(true);
+        when(listingRepository.countActiveByDedupeHash("heavilyhash")).thenReturn(99L);
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         Listing listing = listingIngestionService.createFrom(post, result, "test-model");

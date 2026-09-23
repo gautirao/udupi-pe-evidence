@@ -221,6 +221,106 @@ class ListingResponseMapperTest {
         assertThat(response.locality()).isEqualTo("Manipal");
     }
 
+    // ==================== #2519: isDuplicate/repostCount visibility ====================
+
+    @Test
+    void toResponse_isDuplicateAndRepostCount_propagatedFromEntity() {
+        Listing l = buildListing("LIVE");
+        l.setDuplicate(true);
+        l.setRepostCount(2);
+
+        ListingResponse response = mapper.toResponse(l);
+
+        assertThat(response.isDuplicate()).isTrue();
+        assertThat(response.repostCount()).isEqualTo(2);
+    }
+
+    @Test
+    void toResponse_notDuplicate_falseAndZero() {
+        Listing l = buildListing("LIVE");
+        l.setDuplicate(false);
+        l.setRepostCount(0);
+
+        ListingResponse response = mapper.toResponse(l);
+
+        assertThat(response.isDuplicate()).isFalse();
+        assertThat(response.repostCount()).isZero();
+    }
+
+    @Test
+    void toResponseList_batchPath_alsoPropagatesIsDuplicateAndRepostCount() {
+        // AC3: the admin moderation queue (pending-review) and broker "my listings" both go
+        // through toResponseList — the batch path must carry isDuplicate/repostCount too, not
+        // just the single-listing toResponse path.
+        Listing duplicateListing = buildListing("LIVE");
+        duplicateListing.setDuplicate(true);
+        duplicateListing.setRepostCount(3);
+        Listing normalListing = buildListing("PENDING_REVIEW");
+
+        when(listingImageRepository.findByListingIdInOrderByListingIdAscPositionAsc(anyList()))
+                .thenReturn(List.of());
+
+        List<ListingResponse> responses = mapper.toResponseList(List.of(duplicateListing, normalListing));
+
+        ListingResponse dupResponse = responses.stream()
+                .filter(r -> r.id().equals(duplicateListing.getId())).findFirst().orElseThrow();
+        assertThat(dupResponse.isDuplicate()).isTrue();
+        assertThat(dupResponse.repostCount()).isEqualTo(3);
+
+        ListingResponse normalResponse = responses.stream()
+                .filter(r -> r.id().equals(normalListing.getId())).findFirst().orElseThrow();
+        assertThat(normalResponse.isDuplicate()).isFalse();
+        assertThat(normalResponse.repostCount()).isZero();
+    }
+
+    @Test
+    void toPublicResponse_isDuplicateMasked() {
+        // Code review follow-up: isDuplicate/repostCount are internal moderation-visibility
+        // signals (mirrors rejectionReason's masking on this same public path). A duplicate LIVE
+        // listing is normally filtered out of every public LIST query, but a public DETAIL lookup
+        // by direct id does NOT apply that filter — so without masking here, a signed-in
+        // non-owner caller could still observe these fields via toPublicResponse for a listing
+        // they looked up directly.
+        Listing l = buildListing("LIVE");
+        l.setDuplicate(true);
+        l.setRepostCount(1);
+
+        ListingResponse response = mapper.toPublicResponse(l, true);
+
+        assertThat(response.isDuplicate()).as("isDuplicate must be masked on the public path").isFalse();
+        assertThat(response.repostCount()).as("repostCount must be masked on the public path").isZero();
+    }
+
+    @Test
+    void toPublicResponseList_isDuplicateMasked_batchPath() {
+        Listing l = buildListing("LIVE");
+        l.setDuplicate(true);
+        l.setRepostCount(5);
+
+        when(listingImageRepository.findByListingIdInOrderByListingIdAscPositionAsc(anyList()))
+                .thenReturn(List.of());
+
+        List<ListingResponse> responses = mapper.toPublicResponseList(List.of(l));
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).isDuplicate()).as("batch public path must also mask").isFalse();
+        assertThat(responses.get(0).repostCount()).as("batch public path must also mask").isZero();
+    }
+
+    @Test
+    void toResponse_internalPath_isDuplicateNeverMasked() {
+        // Control: the internal (broker/admin) path must NOT be affected by the public masking
+        // gate above — this is the whole point of AC3.
+        Listing l = buildListing("LIVE");
+        l.setDuplicate(true);
+        l.setRepostCount(4);
+
+        ListingResponse response = mapper.toResponse(l);
+
+        assertThat(response.isDuplicate()).isTrue();
+        assertThat(response.repostCount()).isEqualTo(4);
+    }
+
     // ==================== reraValid: valid RERA number ====================
 
     @Test

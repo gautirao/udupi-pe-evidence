@@ -402,8 +402,10 @@ public class ListingCrudService {
             AreaNormalizer.normalize(listing);
         }
 
-        // Compute dedupe hash and check for duplicates
-        listingDeduplicationService.computeAndSetDedupeHash(listing, description, locality, price);
+        // Compute dedupe hash and check for duplicates. listingPurpose/price/monthlyRent are
+        // already set on the entity above (#2519 — the hash now folds in listingPurpose and
+        // reads monthlyRent for rent/lease listings).
+        listingDeduplicationService.computeAndSetDedupeHash(listing);
         listingDeduplicationService.checkAndMarkDuplicate(listing);
 
         OffsetDateTime now = OffsetDateTime.now();
@@ -1264,10 +1266,13 @@ public class ListingCrudService {
             listing.setListingFamily(null);
         }
 
-        // Recompute dedupe hash if any hash-relevant field changed
-        if (description != null || locality != null || price != null) {
-            listingDeduplicationService.computeAndSetDedupeHash(
-                    listing, listing.getDescription(), listing.getLocality(), listing.getPrice());
+        // Recompute dedupe hash if any hash-relevant field changed. #2519: widened to also fire
+        // on a listingPurpose/monthlyRent-only edit (e.g. a rent-only listing whose rent changed
+        // but whose price/description/locality did not) — previously such an edit never
+        // recomputed the hash at all.
+        if (description != null || locality != null || price != null
+                || listingPurpose != null || monthlyRent != null) {
+            listingDeduplicationService.computeAndSetDedupeHash(listing);
             listingDeduplicationService.checkAndMarkDuplicateExcludingSelf(listing);
         }
 
