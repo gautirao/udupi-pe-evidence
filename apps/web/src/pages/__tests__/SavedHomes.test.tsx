@@ -59,6 +59,61 @@ const CARD_B: SavedListingCard = {
   available: false,
 };
 
+// Issue #2449 — null-title cards must fall back to the canonical buyer-facing
+// property-type label (via @/lib/propertyTypeConfig), never a raw enum token.
+const CARD_NULL_TITLE_COMMERCIAL_BUILDING: SavedListingCard = {
+  id: 's3',
+  listingId: 'l3',
+  propertyType: 'commercial_building',
+  listingPurpose: 'sale',
+  available: true,
+};
+
+const CARD_NULL_TITLE_COMMERCIAL_LAND: SavedListingCard = {
+  id: 's4',
+  listingId: 'l4',
+  propertyType: 'commercial_land',
+  listingPurpose: 'sale',
+  available: true,
+};
+
+const CARD_NULL_TITLE_RESIDENTIAL_PLOT: SavedListingCard = {
+  id: 's5',
+  listingId: 'l5',
+  propertyType: 'residential_plot',
+  listingPurpose: 'sale',
+  available: true,
+};
+
+// Purpose-label cards omit `locality` — the second line falls back to the
+// purpose label only when locality is absent (`card.locality || purposeLabel(...)`).
+const CARD_LEASE_NO_LOCALITY: SavedListingCard = {
+  id: 's6',
+  listingId: 'l6',
+  title: 'Warehouse Space',
+  propertyType: 'warehouse',
+  listingPurpose: 'lease',
+  available: true,
+};
+
+const CARD_RENT_NO_LOCALITY: SavedListingCard = {
+  id: 's7',
+  listingId: 'l7',
+  title: 'Rented Flat',
+  propertyType: 'apartment',
+  listingPurpose: 'rent',
+  available: true,
+};
+
+const CARD_SALE_NO_LOCALITY: SavedListingCard = {
+  id: 's8',
+  listingId: 'l8',
+  title: 'Sale Flat',
+  propertyType: 'apartment',
+  listingPurpose: 'sale',
+  available: true,
+};
+
 describe('SavedHomes', () => {
   beforeEach(() => {
     mockUseSavedListings.mockReset();
@@ -139,5 +194,93 @@ describe('SavedHomes', () => {
       expect(screen.getAllByTestId('saved-listing-card')).toHaveLength(1);
     });
     expect(screen.queryByText('Green View Apartment')).not.toBeInTheDocument();
+  });
+
+  // Issue #2449 — SavedHomes must reuse the canonical buyer-facing label
+  // authorities (@/lib/propertyTypeConfig) instead of its own private
+  // capitalize()/purposeLabel() copies, which rendered raw enum tokens
+  // (e.g. "Commercial_building") and a stale purpose label missing "lease".
+  describe('canonical label reuse (#2449)', () => {
+    it('renders a human property-type label, not a raw enum, for a null-title commercial_building', () => {
+      mockUseSavedListings.mockReturnValue({
+        data: [CARD_NULL_TITLE_COMMERCIAL_BUILDING],
+        isLoading: false,
+        isError: false,
+        refetch: mockRefetch,
+      });
+      renderPage();
+
+      expect(screen.getByText('Commercial Building')).toBeInTheDocument();
+      expect(screen.queryByText('Commercial_building')).not.toBeInTheDocument();
+    });
+
+    it('renders a human property-type label for a null-title commercial_land', () => {
+      mockUseSavedListings.mockReturnValue({
+        data: [CARD_NULL_TITLE_COMMERCIAL_LAND],
+        isLoading: false,
+        isError: false,
+        refetch: mockRefetch,
+      });
+      renderPage();
+
+      expect(screen.getByText('Commercial Land')).toBeInTheDocument();
+    });
+
+    it('renders a human property-type label for a null-title residential_plot', () => {
+      mockUseSavedListings.mockReturnValue({
+        data: [CARD_NULL_TITLE_RESIDENTIAL_PLOT],
+        isLoading: false,
+        isError: false,
+        refetch: mockRefetch,
+      });
+      renderPage();
+
+      expect(screen.getByText('Residential Plot')).toBeInTheDocument();
+    });
+
+    it('renders "For Lease" for a lease listing (not stale "Lease")', () => {
+      mockUseSavedListings.mockReturnValue({
+        data: [CARD_LEASE_NO_LOCALITY],
+        isLoading: false,
+        isError: false,
+        refetch: mockRefetch,
+      });
+      renderPage();
+
+      expect(screen.getByText('For Lease')).toBeInTheDocument();
+      expect(screen.queryByText('Lease')).not.toBeInTheDocument();
+    });
+
+    it('leaves sale/rent purpose labels unchanged', () => {
+      mockUseSavedListings.mockReturnValue({
+        data: [CARD_RENT_NO_LOCALITY, CARD_SALE_NO_LOCALITY],
+        isLoading: false,
+        isError: false,
+        refetch: mockRefetch,
+      });
+      renderPage();
+
+      expect(screen.getByText('For Rent')).toBeInTheDocument();
+      expect(screen.getByText('For Sale')).toBeInTheDocument();
+    });
+
+    it('an existing listing title still wins over the property-type fallback label', () => {
+      const titled: SavedListingCard = {
+        ...CARD_NULL_TITLE_COMMERCIAL_BUILDING,
+        id: 's9',
+        listingId: 'l9',
+        title: 'Prime Commercial Building on MG Road',
+      };
+      mockUseSavedListings.mockReturnValue({
+        data: [titled],
+        isLoading: false,
+        isError: false,
+        refetch: mockRefetch,
+      });
+      renderPage();
+
+      expect(screen.getByText('Prime Commercial Building on MG Road')).toBeInTheDocument();
+      expect(screen.queryByText('Commercial Building')).not.toBeInTheDocument();
+    });
   });
 });

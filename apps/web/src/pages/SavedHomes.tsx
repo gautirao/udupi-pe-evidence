@@ -5,17 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useSavedListings, useUnsaveListing } from '@/hooks/useSavedListings';
 import { formatPrice, formatArea } from '@/lib/formatters';
-
-function capitalize(s: string | null | undefined): string {
-  if (!s) return '';
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-function purposeLabel(p: string | null | undefined): string {
-  if (p === 'sale') return 'For Sale';
-  if (p === 'rent') return 'For Rent';
-  return capitalize(p ?? '');
-}
+import { getPropertyTypeLabel, getListingPurposeLabel } from '@/lib/propertyTypeConfig';
 
 /**
  * "Saved homes" page (#1566) — lists the current user's saved listings with a
@@ -98,7 +88,7 @@ export default function SavedHomes() {
                       to={`/listing/${card.listingId}`}
                       className="font-medium truncate hover:underline"
                     >
-                      {card.title || (card.propertyType ? capitalize(card.propertyType) : 'Property')}
+                      {card.title || getPropertyTypeLabel(card.propertyType)}
                     </Link>
                     {!card.available && (
                       <span
@@ -110,7 +100,7 @@ export default function SavedHomes() {
                     )}
                   </div>
                   <p className="mt-1 truncate text-sm text-muted-foreground">
-                    {card.locality || purposeLabel(card.listingPurpose)}
+                    {card.locality || getListingPurposeLabel(card.listingPurpose)}
                     {card.builtArea != null && ` · ${formatArea(card.builtArea, card.builtAreaUnit)}`}
                   </p>
                   {card.pricePaise != null && (

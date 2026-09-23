@@ -298,6 +298,27 @@ export function getPropertyTypePluralLabel(type: string | null | undefined): str
   return getPropertyTypeVisual(resolveTypeKey(type)).pluralLabel;
 }
 
+/**
+ * Issue #2449 — THE buyer-facing listing-purpose label authority, moved here
+ * (from PropertyCard.tsx, where it started as a private helper) so pages that
+ * need it — SavedHomes.tsx included — don't have to either re-implement it or
+ * pull in PropertyCard's own hook/component dependency chain to reuse it.
+ *
+ * @param purpose the listing's `listing_purpose` (e.g. "sale", "rent", "lease")
+ */
+export function getListingPurposeLabel(purpose: string | null | undefined): string {
+  if (purpose === 'sale') return 'For Sale';
+  if (purpose === 'rent') return 'For Rent';
+  // Issue #2051 (R15) — lease now renders a monthly price alongside rent; without
+  // an explicit case it fell through to capitalize('lease') === 'Lease', a subtly
+  // inconsistent label next to a rent-shaped price. Given its own label (distinct
+  // from 'For Rent') to match the existing sale/lease/rent distinction established
+  // at CommercialReviewPreview.tsx:155 ("Sale terms" / "Lease terms" / "Rent terms").
+  if (purpose === 'lease') return 'For Lease';
+  if (!purpose) return '';
+  return purpose.charAt(0).toUpperCase() + purpose.slice(1);
+}
+
 // ── Issue #2458 — canonical buyer subtype identity ───────────────────────────
 
 /**

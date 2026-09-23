@@ -13,6 +13,7 @@ import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
 import {
   getPropertyTypeVisual,
   getPropertyTypeLabel,
+  getListingPurposeLabel,
   resolveBuyerCommercialSubtype,
 } from '@/lib/propertyTypeConfig';
 import { buildCommercialSummary } from '@/lib/commercialSummary';
@@ -50,18 +51,6 @@ interface PreviewListingDetail {
 export function capitalize(s: string | null | undefined): string {
   if (!s) return '';
   return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-export function purposeLabel(p: string | null | undefined): string {
-  if (p === 'sale') return 'For Sale';
-  if (p === 'rent') return 'For Rent';
-  // Issue #2051 (R15) — lease now renders a monthly price alongside rent; without
-  // an explicit case it fell through to capitalize('lease') === 'Lease', a subtly
-  // inconsistent label next to a rent-shaped price. Given its own label (distinct
-  // from 'For Rent') to match the existing sale/lease/rent distinction established
-  // at CommercialReviewPreview.tsx:155 ("Sale terms" / "Lease terms" / "Rent terms").
-  if (p === 'lease') return 'For Lease';
-  return capitalize(p ?? '');
 }
 
 /**
@@ -233,10 +222,10 @@ export function PropertyCard({
   const typeLabel = listing.propertyType ? getPropertyTypeLabel(listing.propertyType) : null;
 
   const fallbackTitle = typeLabel
-    ? `${typeLabel} ${purposeLabel(listing.listingPurpose)}`
-    : purposeLabel(listing.listingPurpose) || 'Property';
+    ? `${typeLabel} ${getListingPurposeLabel(listing.listingPurpose)}`
+    : getListingPurposeLabel(listing.listingPurpose) || 'Property';
 
-  const purpose = listing.listingPurpose ? purposeLabel(listing.listingPurpose) : null;
+  const purpose = listing.listingPurpose ? getListingPurposeLabel(listing.listingPurpose) : null;
   const locationText = buildLocationText(listing.locality, areaLabel);
 
   // Issue #2433 — the Commercial result-card summary.
