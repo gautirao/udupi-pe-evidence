@@ -168,6 +168,68 @@ class CityLaunchPreparationServiceIT {
         throw lastError;
     }
 
+    // =========================================================================================
+    // #2675 — the REAL migration-seeded Kundapur, not a synthetic fixture city.
+    // =========================================================================================
+
+    @Test
+    @DisplayName("#2675: the real V71-seeded Kundapur advances past the MISSING_POLICY prerequisite "
+            + "gate and materializes city_regions — and removing its V142 policy row restores the "
+            + "exact production failure, proving the policy row is what unblocks it")
+    void issue2675_realKundapur_advancesPastMissingPolicy_andRegressesWithoutTheV142Row() {
+        Integer kundapurId = jdbc.queryForObject(
+                "SELECT id FROM public.cities WHERE slug = 'kundapur'", Integer.class);
+        assertThat(kundapurId).as("V71 seeds kundapur").isNotNull();
+
+        Map<String, Object> policy = jdbc.queryForMap(
+                "SELECT region_model, central_radius_km FROM public.city_region_policy WHERE city_id = ?",
+                kundapurId);
+        assertThat(policy.get("region_model")).isEqualTo("CENTRAL_CARDINAL_4");
+
+        try {
+            // ── BEFORE arm: delete the V142 row and reproduce the production failure exactly ──
+            jdbc.update("DELETE FROM public.city_region_policy WHERE city_id = ?", kundapurId);
+
+            assertThatThrownBy(() -> preparationService.prepare(kundapurId, ADMIN_ID))
+                    .as("without a policy row, prepare() fails at the prerequisite gate — the state "
+                            + "Retry/Rerun cannot repair, because retrying re-runs this same check")
+                    .isInstanceOf(CityPrerequisiteGenerationException.class)
+                    .satisfies(ex -> assertThat(((CityPrerequisiteGenerationException) ex).reason())
+                            .isEqualTo("MISSING_POLICY"));
+
+            assertThat(revisionRepository.findByCityId(kundapurId))
+                    .as("the failure is up front: no revision is created at all")
+                    .isEmpty();
+
+            // ── AFTER arm: restore exactly what V142 seeds, and re-run the same call ──────────
+            jdbc.update("INSERT INTO public.city_region_policy (city_id, region_model, central_radius_km) "
+                    + "VALUES (?, 'CENTRAL_CARDINAL_4', 4)", kundapurId);
+
+            PrepareResponse response = preparationService.prepare(kundapurId, ADMIN_ID);
+            assertThat(response.revisionId())
+                    .as("prepare() now gets past the policy gate and admits a revision")
+                    .isNotNull();
+
+            // The policy row's actual purpose: canonical-geometry region materialization.
+            List<Map<String, Object>> regions = jdbc.queryForList(
+                    "SELECT region_key FROM public.city_regions WHERE city_id = ? ORDER BY display_order",
+                    kundapurId);
+            assertThat(regions)
+                    .as("city_regions materialized for Kundapur — the 'City has zero city_regions rows' "
+                            + "geography failure recorded against every prior Kundapur revision is gone")
+                    .isNotEmpty();
+        } finally {
+            // Restore the migration-seeded state for any later test in this class.
+            jdbc.update("DELETE FROM public.city_launch_revision WHERE city_id = ?", kundapurId);
+            jdbc.update("DELETE FROM public.city_region_memberships WHERE city_id = ?", kundapurId);
+            jdbc.update("DELETE FROM public.city_regions WHERE city_id = ?", kundapurId);
+            jdbc.update("DELETE FROM public.regional_area_classifications WHERE city_key = 'kundapur'");
+            jdbc.update("DELETE FROM public.city_region_policy WHERE city_id = ?", kundapurId);
+            jdbc.update("INSERT INTO public.city_region_policy (city_id, region_model, central_radius_km) "
+                    + "VALUES (?, ?, ?)", kundapurId, policy.get("region_model"), policy.get("central_radius_km"));
+        }
+    }
+
     // ── Fixture helpers ─────────────────────────────────────────────────────────────────────
 
     private int seedCity(String slug) {
