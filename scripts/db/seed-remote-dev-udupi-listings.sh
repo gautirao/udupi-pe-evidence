@@ -106,6 +106,49 @@ if ! command -v psql &>/dev/null; then
   exit 1
 fi
 
+# ---------------------------------------------------------------------------
+# 2b. Fail-closed import-owner identity precondition (issue #2307).
+#
+# import.sql's profiles/property_listings rows hardcode
+# testdealer@example.com's auth.users.id. If that identity is absent (or
+# present under a different id) on the target project, applying import.sql
+# would either fail deep inside psql on profiles_user_id_fkey with no
+# actionable context, or silently attach every imported listing to the
+# wrong account. Verify it first and abort here, before touching psql, with
+# a clear message instead.
+#
+# IMPORT_OWNER_SUPABASE_PROJECT_REF/_URL are FORCE-DERIVED from PG_USER
+# (already validated above against EXPECTED_DEV_PG_USER) -- deliberately NOT
+# a "${VAR:-default}" pattern, so neither can be independently overridden by
+# a value already present in the caller's environment (#2307 code review
+# cycle 2, HIGH-1). Before this fix, an operator (or a misconfigured CI env)
+# with either var pre-set could cause the identity check to verify against
+# project X while the write below lands on project Y -- passing the guard
+# while checking nothing relevant to where the data actually goes. Deriving
+# both, unconditionally, from the SAME PG_USER that pins psql's own target
+# makes that divergence structurally impossible, matching the "cannot be
+# bypassed via env override" guarantee the PG_USER check itself already
+# gives 2a above. IMPORT_OWNER_SUPABASE_SERVICE_ROLE_KEY has no default and
+# is NOT touched here -- it must still be supplied ephemerally by the caller
+# (see scripts/dev/provision-import-owner-identity.sh's header for the
+# secret-handling contract); if it is missing, that script itself fails
+# closed with an actionable message.
+#
+# Placed BEFORE `export PGPASSWORD` below (#2307 code review cycle 2,
+# MEDIUM finding): PG_PASSWORD already holds the resolved DB password as a
+# local shell variable at this point, but it is not yet exported into the
+# environment and no DB connection has been attempted -- this guard runs
+# before either of those, not after, so a failure here never puts the real
+# DB credential into the environment for the failing run.
+# ---------------------------------------------------------------------------
+IMPORT_OWNER_SUPABASE_PROJECT_REF="${PG_USER#postgres.}"
+IMPORT_OWNER_SUPABASE_URL="https://${IMPORT_OWNER_SUPABASE_PROJECT_REF}.supabase.co"
+export IMPORT_OWNER_SUPABASE_PROJECT_REF IMPORT_OWNER_SUPABASE_URL
+if ! "${SCRIPT_DIR}/../dev/provision-import-owner-identity.sh"; then
+  echo "ERROR: import-owner identity precondition failed (see above) -- refusing to apply ${IMPORT_FILE}." >&2
+  exit 1
+fi
+
 export PGPASSWORD="${PG_PASSWORD}"
 
 # ---------------------------------------------------------------------------

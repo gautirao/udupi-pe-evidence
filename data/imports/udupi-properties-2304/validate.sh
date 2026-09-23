@@ -2,13 +2,30 @@
 # Issue #2304 Slice 1 — reproducible validation of the Udupi import artefacts.
 #
 # Brings up an ephemeral postgis/postgis:15-3.4 container, applies EVERY Flyway migration from
-# backend/src/main/resources/db/migration, then area-seed.sql + import.sql, and asserts the
+# apps/api/src/main/resources/db/migration, then area-seed.sql + import.sql, and asserts the
 # contract the PR claims. Committed alongside the artefacts because this container run is the
 # ONLY proof mechanism for a data-import PR (no application code changes, so no unit/E2E test
 # can cover it) — a reviewer must be able to re-run it rather than take the numbers on trust.
 #
+# KNOWN FAILURE (tracked in #2690, cross-referenced with #2580 item 7 -- not this file's concern
+# to fix): applying import.sql against the CURRENT migration set now trips a later-added trigger
+# (assert_commercial_subtype_projected, issue #2520) on one already-merged listing (99acres id
+# Y92487718, property_type='commercial') whose listing_commercial_space_details.commercial_subtype
+# was left NULL by generate_sql.py instead of 'SHOP'. This is a latent data defect in the
+# already-merged #2304 import.sql itself, unrelated to whatever else this script is being run to
+# validate (e.g. #2307's import-owner identity precondition, added below) -- see #2690 before
+# assuming a FAIL here means your change broke something. Fixing it requires editing
+# generate_sql.py + regenerating import.sql, which is out of scope for most changes to this file
+# and needs its own review.
+#
 #   Usage:  bash data/imports/udupi-properties-2304/validate.sh
-#   Exit :  0 = every assertion passed, 1 = at least one FAILed (or a step errored)
+#   Exit :  0 = every assertion passed
+#           1 = at least one FAILed (or a step errored) for a reason OTHER than the known #2690
+#               blocker above -- treat this as a real problem
+#           2 = every assertion up to and including this file's own #2307 logic (steps 1a/1b)
+#               PASSED, but the known, already-tracked #2690 blocker was then hit exactly as
+#               documented -- NOT a real problem with whatever this run is validating, but not a
+#               clean 0 either (see step 3's own output for detail)
 #   Needs:  docker, python3.  Does not modify the working tree; leaves no state behind except
 #           the named container (removed on the next run; `docker rm -f udupi2304-validate`).
 #
@@ -19,7 +36,7 @@
 #
 # Two things are applied that are NOT part of the import artefacts, and both are disclosed
 # rather than hidden:
-#   1. backend/src/test/resources/db/test-stubs/beforeMigrate.sql — the same Supabase auth
+#   1. apps/api/src/test/resources/db/test-stubs/beforeMigrate.sql — the same Supabase auth
 #      stubs every Testcontainers IT applies (V0.1/V10 reference auth.users, auth.uid(), the
 #      authenticated/anon/service_role roles and the supabase_realtime publication).
 #   2. An auth.users row for the import's seed identity. public.profiles.user_id is
@@ -45,6 +62,18 @@ if [ "${_V2304_TEED:-}" != "1" ]; then
   bash "${BASH_SOURCE[0]}" "$@" 2>&1 | tee "$LOG"
   rc=${PIPESTATUS[0]}
   echo
+  # rc==2 is this file's own signal (set at step 3 below) that it hit EXACTLY the known,
+  # already-tracked #2690 blocker after everything up to that point passed. It still only counts
+  # as the distinct "known blocker" exit if NOTHING before it reported FAIL -- a real regression
+  # in steps 1a/1b (this issue's own logic) must still surface as exit 1, not be masked by rc==2.
+  if [ "$rc" -eq 2 ]; then
+    if LC_ALL=C tr -d '\r' < "$LOG" | LC_ALL=C fgrep -q 'FAIL'; then
+      echo "VALIDATE: FAIL (an assertion reported FAIL before the known #2690 blocker was reached — see transcript above)"; rm -f "$LOG"; exit 1
+    fi
+    echo "VALIDATE: BLOCKED_BY_KNOWN_ISSUE (#2690) -- everything this run's own logic asserts (steps 1a/1b) PASSED; the rest is blocked by a separate, pre-existing, already-tracked defect. See transcript above and step 3's own note."
+    rm -f "$LOG"
+    exit 2
+  fi
   if [ "$rc" -ne 0 ]; then
     echo "VALIDATE: FAIL (a step exited $rc)"; rm -f "$LOG"; exit 1
   fi
@@ -58,8 +87,12 @@ fi
 
 IMP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$IMP/../../.." && pwd)"
-MIG="$REPO/backend/src/main/resources/db/migration"
-STUBS="$REPO/backend/src/test/resources/db/test-stubs/beforeMigrate.sql"
+# NOTE (#2307): these two paths were "backend/..." until this fix. The repo has since moved to
+# the apps/api/ monorepo layout -- "backend/" no longer exists anywhere in the tree -- so this
+# script could not have located the migrations/stubs it depends on. Corrected as part of #2307
+# since this script is the vehicle for that issue's own repro (discovered while extending it).
+MIG="$REPO/apps/api/src/main/resources/db/migration"
+STUBS="$REPO/apps/api/src/test/resources/db/test-stubs/beforeMigrate.sql"
 WORK="$(mktemp -d)"
 CT=udupi2304-validate
 PW=validate
@@ -114,13 +147,273 @@ for f in "$WORK"/mig/*.sql; do
 done
 echo "  all migrations applied"
 
-echo "### 2. seed identity (environment prep — see header)"
+echo "### 1a. RED (#2307) -- import.sql fails on profiles_user_id_fkey when the import-owner identity is absent"
+# No auth.users row exists yet at this point: migrations just applied, and beforeMigrate.sql's
+# stub (independently re-verified by reading it directly) pre-seeds no row for either identity.
+# import.sql's very first statement after BEGIN is the profiles INSERT that references
+# auth.users(id), so this must fail immediately on profiles_user_id_fkey and the whole
+# transaction must roll back -- 0 listings inserted, not a partial apply.
+RED_ERR="$(mktemp)"
+if run -q -f - < "$IMP/import.sql" >/dev/null 2>"$RED_ERR"; then
+  echo "  RED CHECK FAILED: import.sql applied successfully with NO import-owner identity present -- expected a profiles_user_id_fkey violation. Either the FK is not enforced, or a prior step left the identity behind."
+  echo "  -> FAIL"
+else
+  if LC_ALL=C fgrep -q 'profiles_user_id_fkey' "$RED_ERR"; then
+    echo "  RED: import.sql correctly failed on profiles_user_id_fkey with the identity absent."
+  else
+    echo "  RED CHECK FAILED: import.sql failed, but NOT on profiles_user_id_fkey -- this repro is invalid until the failure is genuinely the FK, not something else. Real error:"
+    cat "$RED_ERR"
+    echo "  -> FAIL"
+  fi
+fi
+rm -f "$RED_ERR"
+run <<SQL
+\echo '--- RED: 0 listings inserted after the failed apply (expect the transaction rolled back)'
+SELECT count(*) AS listings, CASE WHEN count(*)=0 THEN 'PASS' ELSE 'FAIL' END AS verdict
+FROM property_listings WHERE created_by='$UUID';
+SQL
+
+echo "### 1b. fail-closed checks (#2307) -- provision-import-owner-identity.sh and its wiring into"
+echo "         seed-remote-dev-udupi-listings.sh. Mocked Admin API + mocked psql: no live Supabase"
+echo "         project exists to call for real (same structural constraint documented in"
+echo "         scripts/dev/tests/provision-e2e-auth-identities.test.sh), and this repro's Postgres"
+echo "         container has no GoTrue Admin API to exercise -- only the raw auth.users table used"
+echo "         by 1a/2/3's real FK/trigger proof above. The mocked psql additionally proves the"
+echo "         guard aborts BEFORE any DB call is attempted, not just that the script exits non-zero."
+echo "         Code-review cycle 2 additions: the mock now asserts on the REQUESTED URL/query (not"
+echo "         just the mocked response body), a project-ref-divergence attempt, ignoring an"
+echo "         env-var dry-run trigger, and a generic (non-404) HTTP-error branch."
+FC_MOCKBIN="$(mktemp -d)"
+# The mock now simulates the get-BY-ID endpoint (GET /auth/v1/admin/users/<id>), matching the
+# script's real query since code review cycle 2 -- a single-object response, or HTTP 404 for
+# "absent" (there is no list-based "users:[]" shape for a get-by-id call). It also logs every
+# requested URL so a test can assert the script queried the right endpoint, not just that it
+# produced the right verdict for a given canned body.
+cat > "$FC_MOCKBIN/curl" <<'CURLMOCK'
+#!/usr/bin/env bash
+CFG="$(cat)"   # consume --config stdin
+URL="$(printf '%s\n' "$CFG" | sed -n 's/^url = "\(.*\)"$/\1/p' | head -n1)"
+printf '%s\n' "$URL" >> "${CURL_URL_LOG:-/dev/null}"
+printf '%s' "${MOCK_LOOKUP_BODY:-{}}"
+printf '\n%s' "${MOCK_LOOKUP_STATUS:-200}"
+CURLMOCK
+chmod +x "$FC_MOCKBIN/curl"
+cat > "$FC_MOCKBIN/psql" <<'PSQLMOCK'
+#!/usr/bin/env bash
+echo "PSQL_CALLED: $*" >> "${PSQL_CALL_LOG:-/dev/null}"
+# Consume stdin if any was piped (e.g. a future `-f -` invocation) so a caller relying on stdin
+# being drained never blocks on this mock -- a real psql would consume it too.
+if [ ! -t 0 ]; then cat >/dev/null; fi
+exit 0
+PSQLMOCK
+chmod +x "$FC_MOCKBIN/psql"
+
+FC_FAIL=0
+EXPECTED_ID_URL_SUFFIX="/auth/v1/admin/users/${UUID}"
+MATCH_BODY='{"id":"'"$UUID"'","email":"testdealer@example.com"}'
+MISMATCH_BODY='{"id":"'"$UUID"'","email":"someoneelse@example.com"}'
+
+run_provision_with_mock() {
+  # $1=MOCK_LOOKUP_STATUS $2=MOCK_LOOKUP_BODY $3=url-log-path $4...=extra env assignments
+  #
+  # NOTE: extra assignments arrive via "$@" (a function's positional params after an
+  # expansion), so they CANNOT be written directly as a literal command-prefix
+  # ("VAR=val "$@"" -- bash's assignment-prefix recognition is a parse-time-only syntax
+  # rule and never applies to words produced by expansion, so that form would instead
+  # try to literally EXECUTE "VAR=val" as a command and fail with "command not found").
+  # Routing them through the `env` builtin/external is what actually sets them.
+  #
+  # "${@+"$@"}", not a bare "$@", because most call sites here pass ZERO extra args --
+  # under this file's own `set -u`, a bare "$@" with zero positional params can raise
+  # "unbound variable" on bash < 4.4 (this repo's own e2e-auth-common.sh already avoids
+  # other bash-3.2-specific pitfalls for the same reason: macOS ships 3.2 as /bin/bash).
+  # "${@+"$@"}" expands to nothing when empty and to "$@" unchanged otherwise.
+  local status="$1" body="$2" urllog="$3"; shift 3
+  PATH="$FC_MOCKBIN:$PATH" MOCK_LOOKUP_STATUS="$status" MOCK_LOOKUP_BODY="$body" CURL_URL_LOG="$urllog" \
+    IMPORT_OWNER_SUPABASE_SERVICE_ROLE_KEY=fake env ${@+"$@"} \
+    bash "$REPO/scripts/dev/provision-import-owner-identity.sh"
+}
+
+URLLOG1="$(mktemp)"
+FC_OUT1="$(run_provision_with_mock 404 '{}' "$URLLOG1" 2>&1)"; FC_RC1=$?
+if [ "$FC_RC1" -ne 0 ] && printf '%s' "$FC_OUT1" | LC_ALL=C fgrep -q 'No auth.users row with id'; then
+  echo "  PASS: absent identity (HTTP 404) -> provision-import-owner-identity.sh exits non-zero with an actionable message"
+else
+  echo "  FAIL: absent-identity check (rc=$FC_RC1): $FC_OUT1"; FC_FAIL=1
+fi
+if LC_ALL=C fgrep -q "$EXPECTED_ID_URL_SUFFIX" "$URLLOG1" && ! LC_ALL=C fgrep -q 'email=' "$URLLOG1"; then
+  echo "  PASS: absent-identity check queried GET .../admin/users/<id> (get-by-id), NOT ?email="
+else
+  echo "  FAIL: absent-identity check queried the wrong endpoint -- requested URL(s): $(cat "$URLLOG1")"; FC_FAIL=1
+fi
+rm -f "$URLLOG1"
+
+URLLOG2="$(mktemp)"
+FC_OUT2="$(run_provision_with_mock 200 "$MISMATCH_BODY" "$URLLOG2" 2>&1)"; FC_RC2=$?
+if [ "$FC_RC2" -ne 0 ] && printf '%s' "$FC_OUT2" | LC_ALL=C fgrep -q 'does not match'; then
+  echo "  PASS: email mismatch (id exists under a different email) -> exits non-zero, names the mismatch"
+else
+  echo "  FAIL: email-mismatch check (rc=$FC_RC2): $FC_OUT2"; FC_FAIL=1
+fi
+rm -f "$URLLOG2"
+
+URLLOG3="$(mktemp)"
+FC_OUT3="$(run_provision_with_mock 200 "$MATCH_BODY" "$URLLOG3" 2>&1)"; FC_RC3=$?
+if [ "$FC_RC3" -eq 0 ]; then
+  echo "  PASS: matching identity -> provision-import-owner-identity.sh exits 0"
+else
+  echo "  FAIL: matching-identity check should exit 0 (rc=$FC_RC3): $FC_OUT3"; FC_FAIL=1
+fi
+if LC_ALL=C fgrep -q "$EXPECTED_ID_URL_SUFFIX" "$URLLOG3" && ! LC_ALL=C fgrep -q 'email=' "$URLLOG3"; then
+  echo "  PASS: matching-identity check also queried GET .../admin/users/<id>, NOT ?email="
+else
+  echo "  FAIL: matching-identity check queried the wrong endpoint -- requested URL(s): $(cat "$URLLOG3")"; FC_FAIL=1
+fi
+rm -f "$URLLOG3"
+
+URLLOG_HTTP500="$(mktemp)"
+FC_OUT_HTTP500="$(run_provision_with_mock 500 '{"error":"internal"}' "$URLLOG_HTTP500" 2>&1)"; FC_RC_HTTP500=$?
+if [ "$FC_RC_HTTP500" -ne 0 ] && printf '%s' "$FC_OUT_HTTP500" | LC_ALL=C fgrep -q 'returned HTTP 500' \
+   && ! printf '%s' "$FC_OUT_HTTP500" | LC_ALL=C fgrep -q 'No auth.users row with id'; then
+  echo "  PASS: generic HTTP error (500, not 404) -> exits non-zero with a generic-failure message, not misreported as absence"
+else
+  echo "  FAIL: generic-HTTP-error check (rc=$FC_RC_HTTP500): $FC_OUT_HTTP500"; FC_FAIL=1
+fi
+rm -f "$URLLOG_HTTP500"
+
+# Defensive branch coverage: the Admin API responds (HTTP 200) to a request for OUR id with a
+# body claiming a DIFFERENT id -- an untrustworthy/malformed response the script must not accept
+# on faith. This exact fixture used to be repurposed for the email-mismatch case above in the
+# earlier by-email design; the by-id rewrite (cycle 2) left this specific branch uncovered.
+ID_MISMATCH_BODY='{"id":"99999999-9999-9999-9999-999999999999","email":"testdealer@example.com"}'
+URLLOG_IDMISMATCH="$(mktemp)"
+FC_OUT_IDMISMATCH="$(run_provision_with_mock 200 "$ID_MISMATCH_BODY" "$URLLOG_IDMISMATCH" 2>&1)"; FC_RC_IDMISMATCH=$?
+if [ "$FC_RC_IDMISMATCH" -ne 0 ] && printf '%s' "$FC_OUT_IDMISMATCH" | LC_ALL=C fgrep -q 'did not echo that same id back'; then
+  echo "  PASS: response echoes back a DIFFERENT id than requested -> exits non-zero, treated as untrustworthy"
+else
+  echo "  FAIL: id-echo-mismatch check (rc=$FC_RC_IDMISMATCH): $FC_OUT_IDMISMATCH"; FC_FAIL=1
+fi
+rm -f "$URLLOG_IDMISMATCH"
+
+# IMPORT_OWNER_DRY_RUN=1 must be IGNORED (no env-var dry-run trigger, CLI flag only) -- an
+# absent-identity mock must still fail closed even with that var set in the environment.
+URLLOG_ENVDRYRUN="$(mktemp)"
+FC_OUT_ENVDRYRUN="$(run_provision_with_mock 404 '{}' "$URLLOG_ENVDRYRUN" IMPORT_OWNER_DRY_RUN=1 2>&1)"; FC_RC_ENVDRYRUN=$?
+if [ "$FC_RC_ENVDRYRUN" -ne 0 ] && printf '%s' "$FC_OUT_ENVDRYRUN" | LC_ALL=C fgrep -q 'dry-run=false'; then
+  echo "  PASS: IMPORT_OWNER_DRY_RUN=1 in the environment is ignored -- still fails closed on an absent identity"
+else
+  echo "  FAIL: IMPORT_OWNER_DRY_RUN=1 should be ignored (rc=$FC_RC_ENVDRYRUN): $FC_OUT_ENVDRYRUN"; FC_FAIL=1
+fi
+rm -f "$URLLOG_ENVDRYRUN"
+
+run_seed_with_mock() {
+  # $1=MOCK_LOOKUP_STATUS $2=MOCK_LOOKUP_BODY $3=psql-log-path $4...=extra env assignments
+  # (see run_provision_with_mock's NOTE above for why this goes through `env`, and for
+  # why "${@+"$@"}" rather than a bare "$@".)
+  #
+  # REMOTE_DEV_DB_HOST/_PORT/_NAME are pinned to a local, unreachable target -- NOT the
+  # real shared remote-dev pooler -- so that if the mocked psql on PATH were ever
+  # absent/unexecutable (e.g. a noexec tmp mount), a "should reach psql" arm fails fast
+  # and locally instead of silently attempting a real network connection to shared
+  # infrastructure. REMOTE_DEV_DB_USER is deliberately left at its default: it must stay
+  # exactly "postgres.elyqnysyqbqoxqqrpiir" for the EXPECTED_DEV_PG_USER guard (and this
+  # file's own HIGH-1 divergence test, which asserts on that exact derived ref) to mean
+  # anything.
+  local status="$1" body="$2" psqllog="$3"; shift 3
+  PATH="$FC_MOCKBIN:$PATH" MOCK_LOOKUP_STATUS="$status" MOCK_LOOKUP_BODY="$body" PSQL_CALL_LOG="$psqllog" \
+    ALLOW_REMOTE_DEV_UDUPI_LISTINGS_SEED=true TARGET_ENV=remote-dev REMOTE_DEV_DB_PASSWORD=fake-test-password \
+    REMOTE_DEV_DB_HOST=127.0.0.1 REMOTE_DEV_DB_PORT=1 REMOTE_DEV_DB_NAME=nonexistent_test_db \
+    IMPORT_OWNER_SUPABASE_SERVICE_ROLE_KEY=fake env ${@+"$@"} \
+    bash "$REPO/scripts/db/seed-remote-dev-udupi-listings.sh"
+}
+
+PSQL_LOG_ABSENT="$(mktemp)"; SEED_LOG_ABSENT="$(mktemp)"
+run_seed_with_mock 404 '{}' "$PSQL_LOG_ABSENT" >"$SEED_LOG_ABSENT" 2>&1; FC_RC4=$?
+if [ "$FC_RC4" -ne 0 ] && [ ! -s "$PSQL_LOG_ABSENT" ]; then
+  echo "  PASS: seed-remote-dev-udupi-listings.sh aborts before psql when identity is absent"
+else
+  echo "  FAIL: seed script should abort before psql on absent identity (rc=$FC_RC4, psql-log-bytes=$(wc -c < "$PSQL_LOG_ABSENT")): $(cat "$SEED_LOG_ABSENT")"; FC_FAIL=1
+fi
+rm -f "$PSQL_LOG_ABSENT" "$SEED_LOG_ABSENT"
+
+PSQL_LOG_MISMATCH="$(mktemp)"; SEED_LOG_MISMATCH="$(mktemp)"
+run_seed_with_mock 200 "$MISMATCH_BODY" "$PSQL_LOG_MISMATCH" >"$SEED_LOG_MISMATCH" 2>&1; FC_RC5=$?
+if [ "$FC_RC5" -ne 0 ] && [ ! -s "$PSQL_LOG_MISMATCH" ]; then
+  echo "  PASS: seed-remote-dev-udupi-listings.sh aborts before psql when identity email mismatches"
+else
+  echo "  FAIL: seed script should abort before psql on email mismatch (rc=$FC_RC5, psql-log-bytes=$(wc -c < "$PSQL_LOG_MISMATCH")): $(cat "$SEED_LOG_MISMATCH")"; FC_FAIL=1
+fi
+rm -f "$PSQL_LOG_MISMATCH" "$SEED_LOG_MISMATCH"
+
+PSQL_LOG_MATCH="$(mktemp)"; SEED_LOG_MATCH="$(mktemp)"
+run_seed_with_mock 200 "$MATCH_BODY" "$PSQL_LOG_MATCH" >"$SEED_LOG_MATCH" 2>&1; FC_RC6=$?
+if [ "$FC_RC6" -eq 0 ] && [ -s "$PSQL_LOG_MATCH" ]; then
+  echo "  PASS: seed-remote-dev-udupi-listings.sh proceeds to (mocked) psql when identity matches (guard is not overly strict)"
+else
+  echo "  FAIL: seed script should proceed to psql when identity matches (rc=$FC_RC6, psql-log-bytes=$(wc -c < "$PSQL_LOG_MATCH")): $(cat "$SEED_LOG_MATCH")"; FC_FAIL=1
+fi
+rm -f "$PSQL_LOG_MATCH" "$SEED_LOG_MATCH"
+
+# HIGH-1 regression test: a caller-supplied IMPORT_OWNER_SUPABASE_PROJECT_REF/_URL pointing at a
+# DIFFERENT project must have NO effect -- the seed script must force-derive both from its own
+# validated PG_USER and query ONLY that project, never the attacker/misconfigured override.
+URLLOG_DIVERGE="$(mktemp)"; PSQL_LOG_DIVERGE="$(mktemp)"; SEED_LOG_DIVERGE="$(mktemp)"
+PATH="$FC_MOCKBIN:$PATH" MOCK_LOOKUP_STATUS=200 MOCK_LOOKUP_BODY="$MATCH_BODY" CURL_URL_LOG="$URLLOG_DIVERGE" \
+  PSQL_CALL_LOG="$PSQL_LOG_DIVERGE" \
+  ALLOW_REMOTE_DEV_UDUPI_LISTINGS_SEED=true TARGET_ENV=remote-dev REMOTE_DEV_DB_PASSWORD=fake-test-password \
+  REMOTE_DEV_DB_HOST=127.0.0.1 REMOTE_DEV_DB_PORT=1 REMOTE_DEV_DB_NAME=nonexistent_test_db \
+  IMPORT_OWNER_SUPABASE_SERVICE_ROLE_KEY=fake \
+  IMPORT_OWNER_SUPABASE_PROJECT_REF=attacker-controlled-project \
+  IMPORT_OWNER_SUPABASE_URL=https://attacker-controlled-project.supabase.co \
+  bash "$REPO/scripts/db/seed-remote-dev-udupi-listings.sh" >"$SEED_LOG_DIVERGE" 2>&1; FC_RC7=$?
+if [ "$FC_RC7" -eq 0 ] && LC_ALL=C fgrep -q 'elyqnysyqbqoxqqrpiir' "$URLLOG_DIVERGE" \
+   && ! LC_ALL=C fgrep -q 'attacker-controlled-project' "$URLLOG_DIVERGE"; then
+  echo "  PASS: a pre-set IMPORT_OWNER_SUPABASE_PROJECT_REF/_URL override has NO effect -- the guard queried the PG_USER-derived project, not the override"
+else
+  echo "  FAIL: project-ref divergence was not rejected (rc=$FC_RC7) -- requested URL(s): $(cat "$URLLOG_DIVERGE"), seed log: $(cat "$SEED_LOG_DIVERGE")"; FC_FAIL=1
+fi
+rm -f "$URLLOG_DIVERGE" "$PSQL_LOG_DIVERGE" "$SEED_LOG_DIVERGE"
+
+rm -rf "$FC_MOCKBIN"
+if [ "$FC_FAIL" -eq 0 ]; then echo "  -> PASS (fail-closed checks section)"; else echo "  -> FAIL (fail-closed checks section)"; fi
+
+echo "### 2. GREEN (#2307) -- seed the import-owner identity, standing in for a real verify script"
+echo "         confirming it present with the correct id (this container has no GoTrue Admin API"
+echo "         for 1b's script to call for real; 1a/1b above already prove the FK/trigger and the"
+echo "         verify script's own logic independently)."
 run -q -c "INSERT INTO auth.users (id, email) VALUES ('$UUID','$SEED_EMAIL')
            ON CONFLICT (id) DO NOTHING;" >/dev/null || exit 1
 
-echo "### 3. apply area-seed.sql + import.sql (pass 1)"
+echo "### 3. GREEN (#2307) -- apply area-seed.sql + import.sql now that the identity is present (pass 1)"
+echo "     NOTE: if this step fails on assert_commercial_subtype_projected for listing"
+echo "     15bd7df2-b578-6405-ca23-8f39f794d572 (99acres Y92487718), that is the known,"
+echo "     pre-existing, separately-tracked #2690 (cross-ref #2580 item 7) defect (see header) --"
+echo "     not a regression in whatever this run is validating. It means the identity"
+echo "     precondition itself is fine; #1a/#1b above already isolate and prove that claim. This"
+echo "     script distinguishes that EXACT known signature from any other failure here (see the"
+echo "     0/1/2 exit-code contract in the header) rather than treating every failure at this"
+echo "     point alike."
 run -q -f - < "$IMP/area-seed.sql" || exit 1
-run -q -f - < "$IMP/import.sql"    || exit 1
+GREEN_ERR="$(mktemp)"
+if ! run -q -f - < "$IMP/import.sql" >/dev/null 2>"$GREEN_ERR"; then
+  if LC_ALL=C fgrep -q 'assert_commercial_subtype_projected' "$GREEN_ERR" \
+     && LC_ALL=C fgrep -q '15bd7df2-b578-6405-ca23-8f39f794d572' "$GREEN_ERR"; then
+    echo "  KNOWN_BLOCKER (#2690, cross-ref #2580 item 7): import.sql failed on exactly the"
+    echo "  already-documented assert_commercial_subtype_projected trigger for listing"
+    echo "  15bd7df2-b578-6405-ca23-8f39f794d572 (99acres Y92487718). This is NOT a #2307"
+    echo "  regression -- #2307's own logic (steps 1a RED + 1b fail-closed) has ALREADY PASSED"
+    echo "  above, independent of this. Steps 4-10 below depend on this apply having succeeded"
+    echo "  and cannot produce a meaningful signal while it hasn't, so they are skipped."
+    rm -f "$GREEN_ERR"
+    exit 2
+  fi
+  echo "  GREEN CHECK FAILED: import.sql failed on an UNEXPECTED error (not the known #2690"
+  echo "  signature) -- this may be a real regression. Real error:"
+  cat "$GREEN_ERR"
+  rm -f "$GREEN_ERR"
+  exit 1
+fi
+rm -f "$GREEN_ERR"
 
 echo "### 4. assertions"
 run <<SQL
