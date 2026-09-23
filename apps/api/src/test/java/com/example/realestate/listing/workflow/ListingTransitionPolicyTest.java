@@ -630,6 +630,35 @@ class ListingTransitionPolicyTest {
                             .anySatisfy(e -> assertThat(e.get("field")).isEqualTo("floor_mode")));
         }
 
+        // #2515 — Commercial rental Submit enabled without security deposit.
+        // validateFields() gates monthlyRent/securityDepositMonths on
+        // "rent".equals(listingPurpose) only (not "lease"); these two tests
+        // prove the real production validator (not a mock) both accepts a
+        // complete commercial rent listing and rejects one missing the
+        // deposit.
+        @Test
+        @DisplayName("complete commercial rent listing (monthlyRent + securityDepositMonths) passes completeness")
+        void completeCommercialRentListing_doesNotThrow() {
+            Listing listing = completeCommercialRentListing(UUID.randomUUID());
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(3L);
+
+            assertThatCode(() -> policy.guardCompleteness(listing))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("commercial rent missing securityDepositMonths -> security_deposit_months completeness error")
+        void commercialRentMissingSecurityDeposit_throwsValidationException() {
+            Listing listing = completeCommercialRentListing(UUID.randomUUID());
+            listing.setSecurityDepositMonths(null);
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(3L);
+
+            assertThatThrownBy(() -> policy.guardCompleteness(listing))
+                    .isInstanceOf(ListingValidationException.class)
+                    .satisfies(ex -> assertThat(((ListingValidationException) ex).getErrors())
+                            .anySatisfy(e -> assertThat(e.get("field")).isEqualTo("security_deposit_months")));
+        }
+
         private Listing completeCommercialListing(UUID listingId) {
             Listing l = new Listing();
             l.setId(listingId);
@@ -653,6 +682,26 @@ class ListingTransitionPolicyTest {
             l.setBuiltArea(new BigDecimal("2000"));
             l.setBuiltAreaUnit("sqft");
             l.setFloorMode("MULTIPLE_FLOORS");
+            return l;
+        }
+
+        // #2515 — listingPurpose="rent" routes validateFields() into its
+        // isRental branch, which requires monthlyRent > 0 and
+        // securityDepositMonths != null INSTEAD of price. price is
+        // deliberately left unset here to prove it is not required for a
+        // rent submission.
+        private Listing completeCommercialRentListing(UUID listingId) {
+            Listing l = new Listing();
+            l.setId(listingId);
+            l.setPropertyType("commercial");
+            l.setListingPurpose("rent");
+            l.setMonthlyRent(25000L);
+            l.setSecurityDepositMonths(2);
+            l.setLocality("Udupi");
+            l.setAddressConfirmed(true);
+            l.setBuiltArea(new BigDecimal("500"));
+            l.setBuiltAreaUnit("sqft");
+            l.setFloorChoice("FIRST_FLOOR");
             return l;
         }
     }

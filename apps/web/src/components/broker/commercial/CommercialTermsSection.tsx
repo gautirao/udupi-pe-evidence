@@ -71,7 +71,10 @@ export function CommercialTermsSection(props: CommercialTermsSectionProps) {
         </div>
       )}
       {isRentOrLease && fieldVisible('securityDepositMonths') && (
-        <Field id="securityDepositMonths" label="Security deposit (months)">
+        <Field
+          id="securityDepositMonths"
+          label={props.listingPurpose === 'rent' ? 'Security deposit (months) *' : 'Security deposit (months)'}
+        >
           <Input id="securityDepositMonths" type="number" min="0" max="24" className="h-11 font-mono" value={props.securityDepositMonths} onChange={(e) => props.onSecurityDepositMonthsChange(e.target.value)} />
         </Field>
       )}

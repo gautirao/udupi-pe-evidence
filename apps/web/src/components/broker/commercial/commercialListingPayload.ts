@@ -162,7 +162,18 @@ export function computeCommercialChecklist(inputs: CommercialChecklistInputs): L
 export interface CommercialStrengthResultInputs {
   subtypeResolved: boolean;
   isRentOrLease: boolean;
+  /**
+   * #2515 — true only when listingPurpose === 'rent'. Deliberately NARROWER
+   * than isRentOrLease: ListingTransitionPolicy.validateFields() gates
+   * monthlyRent/securityDepositMonths on `"rent".equals(purpose)` only —
+   * 'lease' falls into the else branch and requires price instead (a
+   * separate, pre-existing backend behaviour out of scope for #2515). Using
+   * isRentOrLease here would incorrectly force the deposit requirement onto
+   * lease listings, stricter than the backend.
+   */
+  isRent: boolean;
   priceValid: boolean;
+  securityDepositMonths: string;
   locality: string;
   imageCount: number;
   locationResolved: boolean;
@@ -187,6 +198,10 @@ export interface CommercialStrengthResultInputs {
  * warehouse/commercial_land cases. See listingFieldConfig.ts's
  * commercialSubtype switch for why floorChoice/floorMode are the real
  * persisted fields here.
+ *
+ * #2515 — adds a securityDepositMonths gate, present only when
+ * inputs.isRent, mirroring the backend's null-check-only semantics (a value
+ * of "0" is valid — the backend never requires > 0, only non-null).
  */
 export function computeCommercialStrengthResult(inputs: CommercialStrengthResultInputs): ListingStrengthResult {
   const priceOk = inputs.priceValid;
@@ -226,6 +241,10 @@ export function computeCommercialStrengthResult(inputs: CommercialStrengthResult
   ];
   if (inputs.subtypeResolved) {
     gates.push({ key: 'typeSpecific', label: typeSpecificLabel, met: typeSpecificOk });
+  }
+  if (inputs.isRent) {
+    const depositOk = intOrUndef(inputs.securityDepositMonths) !== undefined;
+    gates.push({ key: 'securityDeposit', label: 'Add the security deposit (months)', met: depositOk });
   }
   const metCount = gates.filter((g) => g.met).length;
 

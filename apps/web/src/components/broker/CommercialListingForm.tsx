@@ -192,7 +192,9 @@ export function CommercialListingForm({ initialPropertyType, initialListingPurpo
   const strengthResult = computeCommercialStrengthResult({
     subtypeResolved,
     isRentOrLease,
+    isRent: form.listingPurpose === 'rent',
     priceValid,
+    securityDepositMonths: form.securityDepositMonths,
     locality: form.locality,
     imageCount: draft.imageCount,
     locationResolved: location.residentialLocationValue?.state.resolved != null,
