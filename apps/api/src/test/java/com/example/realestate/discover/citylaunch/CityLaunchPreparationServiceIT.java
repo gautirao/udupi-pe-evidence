@@ -174,9 +174,9 @@ class CityLaunchPreparationServiceIT {
 
     @Test
     @DisplayName("#2675: the real V71-seeded Kundapur advances past the MISSING_POLICY prerequisite "
-            + "gate and materializes city_regions — and removing its V142 policy row restores the "
+            + "gate and materializes city_regions — and removing its V144 policy row restores the "
             + "exact production failure, proving the policy row is what unblocks it")
-    void issue2675_realKundapur_advancesPastMissingPolicy_andRegressesWithoutTheV142Row() {
+    void issue2675_realKundapur_advancesPastMissingPolicy_andRegressesWithoutTheV144Row() {
         Integer kundapurId = jdbc.queryForObject(
                 "SELECT id FROM public.cities WHERE slug = 'kundapur'", Integer.class);
         assertThat(kundapurId).as("V71 seeds kundapur").isNotNull();
@@ -187,7 +187,7 @@ class CityLaunchPreparationServiceIT {
         assertThat(policy.get("region_model")).isEqualTo("CENTRAL_CARDINAL_4");
 
         try {
-            // ── BEFORE arm: delete the V142 row and reproduce the production failure exactly ──
+            // ── BEFORE arm: delete the V144 row and reproduce the production failure exactly ──
             jdbc.update("DELETE FROM public.city_region_policy WHERE city_id = ?", kundapurId);
 
             assertThatThrownBy(() -> preparationService.prepare(kundapurId, ADMIN_ID))
@@ -201,7 +201,7 @@ class CityLaunchPreparationServiceIT {
                     .as("the failure is up front: no revision is created at all")
                     .isEmpty();
 
-            // ── AFTER arm: restore exactly what V142 seeds, and re-run the same call ──────────
+            // ── AFTER arm: restore exactly what V144 seeds, and re-run the same call ──────────
             jdbc.update("INSERT INTO public.city_region_policy (city_id, region_model, central_radius_km) "
                     + "VALUES (?, 'CENTRAL_CARDINAL_4', 4)", kundapurId);
 

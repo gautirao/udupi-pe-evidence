@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
  * Regression guard for #2675: <b>every active city must have exactly one valid
  * {@code city_region_policy} row.</b>
  *
- * <p>Before V142 this invariant was violated by two of the four cities V71 seeds as
+ * <p>Before V144 this invariant was violated by two of the four cities V71 seeds as
  * {@code is_active = true} (mangalore, kundapur), which made Admin City Launch's
  * prerequisite self-materialisation (#2163) fail permanently with
  * {@link RegionOnboardingBlockedException.Reason#MISSING_POLICY} — a state Retry/Rerun
@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
  * <p>{@link #everyActiveCityHasExactlyOneValidPolicyRow()} is the guard proper: it is
  * schema-driven, not a list of city names, so adding a fifth active city in a future
  * migration without a policy row fails this test rather than failing silently in the
- * Admin UI. Run against current {@code main} minus V142 it fails, naming mangalore and
+ * Admin UI. Run against current {@code main} minus V144 it fails, naming mangalore and
  * kundapur.
  *
  * <p>Mirrors {@link V113CityRegionGeometryMigrationIT}'s Testcontainers + raw-script-rerun
@@ -108,9 +108,9 @@ class CityRegionPolicyCoverageIT {
     }
 
     @Test
-    @DisplayName("V142 seeds mangalore and kundapur as CENTRAL_CARDINAL_4 / 4km with a NULL "
+    @DisplayName("V144 seeds mangalore and kundapur as CENTRAL_CARDINAL_4 / 4km with a NULL "
             + "fingerprint, and leaves the pre-existing bangalore/udupi rows untouched")
-    void v142SeedsTheTwoMissingCitiesAndTouchesNoOther() {
+    void v144SeedsTheTwoMissingCitiesAndTouchesNoOther() {
         for (String slug : new String[] {"mangalore", "kundapur"}) {
             Map<String, Object> row = jdbcTemplate.queryForMap("""
                     SELECT p.region_model, p.central_radius_km, p.policy_fingerprint
@@ -126,7 +126,7 @@ class CityRegionPolicyCoverageIT {
                     .isNull();
         }
 
-        // V142 must not have rewritten what V113 seeded.
+        // V144 must not have rewritten what V113 seeded.
         Map<String, Object> udupi = jdbcTemplate.queryForMap(
                 "SELECT p.region_model, p.central_radius_km FROM public.city_region_policy p "
                         + "JOIN public.cities c ON c.id = p.city_id WHERE c.slug = 'udupi'");
@@ -141,9 +141,9 @@ class CityRegionPolicyCoverageIT {
     }
 
     @Test
-    @DisplayName("re-executing the V142 script against an already-migrated container is a no-op "
+    @DisplayName("re-executing the V144 script against an already-migrated container is a no-op "
             + "(ON CONFLICT DO NOTHING) — no duplicate rows, no value drift, no exception")
-    void v142IsIdempotentOnRerun() throws Exception {
+    void v144IsIdempotentOnRerun() throws Exception {
         Integer rowsBefore = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM public.city_region_policy", Integer.class);
         List<Map<String, Object>> before = jdbcTemplate.queryForList(
@@ -151,7 +151,7 @@ class CityRegionPolicyCoverageIT {
 
         String script;
         try (var in = new ClassPathResource(
-                "db/migration/V142__seed_mangalore_kundapur_region_policy.sql").getInputStream()) {
+                "db/migration/V144__seed_mangalore_kundapur_region_policy.sql").getInputStream()) {
             script = new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }
 

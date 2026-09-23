@@ -1,4 +1,4 @@
--- V142: seed the missing city_region_policy rows for Mangalore and Kundapur (#2675).
+-- V144: seed the missing city_region_policy rows for Mangalore and Kundapur (#2675).
 --
 -- DEFECT
 -- V71 seeds four ACTIVE cities (bangalore, mangalore, udupi, kundapur). V113 seeds
