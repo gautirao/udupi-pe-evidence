@@ -32,6 +32,18 @@ import org.springframework.stereotype.Service;
  *   <li>then, and only then, email the owner. Transport failure is recorded on the batch and never
  *       retried or re-delivered here (the in-app notification is the guaranteed channel).</li>
  * </ol>
+ *
+ * <p>#2482 — that sequence is split across two <em>callable</em> phases so the caller can close its
+ * transaction (and release the run's advisory lock) between them:
+ * <ul>
+ *   <li>{@link #evaluate} — steps 1-4. Database only; performs no outbound I/O and never blocks on
+ *       a network peer. Safe to run inside the job's advisory-locked transaction;</li>
+ *   <li>{@link #deliver} — step 5, the blocking HTTP send. <strong>Must be called with no
+ *       transaction open and no advisory lock held.</strong> It takes a {@link PendingEmail}
+ *       value, not the entity, so it cannot depend on a persistence context that has since closed.</li>
+ * </ul>
+ * {@link #evaluateAndDeliver} composes the two for single-search callers; the split changes
+ * <em>when</em> the send happens relative to the caller's transaction, never what it does.
  */
 @Service
 public class SavedSearchAlertDeliveryService {
@@ -71,10 +83,46 @@ public class SavedSearchAlertDeliveryService {
         static final Outcome SKIPPED = new Outcome(0, false, Optional.empty());
     }
 
-    public Outcome evaluateAndDeliver(SavedSearch savedSearch, OffsetDateTime now) {
+    /**
+     * #2482: everything {@link #deliver} needs, captured from the entity during {@link #evaluate}
+     * while it is still in scope. Carrying values rather than the {@link SavedSearch} is what makes
+     * the send safe to run after the caller's transaction (and persistence context) has closed.
+     *
+     * <p>Deliberately NOT carrying the email address: consent and the address are both re-read at
+     * send time (#2481), so a snapshot taken here could not go stale into an unwanted send.
+     */
+    public record PendingEmail(
+            UUID savedSearchId,
+            UUID userId,
+            UUID batchId,
+            String label,
+            String scopeSummary,
+            String filtersSummary,
+            int matchCount,
+            String restoreUrl) {
+    }
+
+    /**
+     * #2482: the result of the DB-only phase — the {@link Outcome} the caller reports, plus the
+     * send (if any) it must perform once it has committed and released its lock.
+     */
+    public record Claim(Outcome outcome, Optional<PendingEmail> pendingEmail) {
+        static Claim of(Outcome outcome) {
+            return new Claim(outcome, Optional.empty());
+        }
+    }
+
+    /**
+     * Steps 1-4: match and commit bookkeeping. Database only — no outbound I/O, so this is safe to
+     * call inside the job's advisory-locked transaction.
+     *
+     * <p>Failure semantics are unchanged: a matcher/bookkeeping failure marks {@code alert_status
+     * = ERROR} and rethrows, so the caller can isolate it per search.
+     */
+    public Claim evaluate(SavedSearch savedSearch, OffsetDateTime now) {
         if (savedSearch.getStatus() != SavedSearchStatus.ACTIVE
                 || savedSearch.getAlertFrequency() == AlertFrequency.OFF) {
-            return Outcome.SKIPPED;
+            return Claim.of(Outcome.SKIPPED);
         }
         OffsetDateTime expectedWatermark = savedSearch.getAlertWatermark();
         UUID expectedWatermarkListingId = savedSearch.getAlertWatermarkListingId();
@@ -85,7 +133,7 @@ public class SavedSearchAlertDeliveryService {
         try {
             matches = matcher.findNewMatches(savedSearch, cursorAt, expectedWatermarkListingId, maxMatchesPerRun);
             if (matches.isEmpty()) {
-                return new Outcome(0, false, Optional.empty());
+                return Claim.of(new Outcome(0, false, Optional.empty()));
             }
             batch = bookkeeper.record(savedSearch, expectedWatermark, expectedWatermarkListingId, matches, now);
         } catch (RuntimeException e) {
@@ -94,36 +142,70 @@ public class SavedSearchAlertDeliveryService {
             throw e;
         }
         if (batch.isEmpty()) {
-            return new Outcome(matches.size(), false, Optional.empty());
+            return Claim.of(new Outcome(matches.size(), false, Optional.empty()));
         }
 
-        sendEmail(savedSearch, batch.get(), now);
-        return new Outcome(matches.size(), true, batch);
+        return new Claim(new Outcome(matches.size(), true, batch), Optional.of(pendingEmail(savedSearch, batch.get())));
     }
 
-    private void sendEmail(SavedSearch s, SavedSearchAlertBookkeeper.Batch batch, OffsetDateTime now) {
+    /**
+     * Composes both phases for single-search callers. The job uses {@link #evaluate} and
+     * {@link #deliver} separately so it can commit and release its advisory lock in between
+     * (#2482); callers that hold no lock can keep using this.
+     */
+    public Outcome evaluateAndDeliver(SavedSearch savedSearch, OffsetDateTime now) {
+        Claim claim = evaluate(savedSearch, now);
+        claim.pendingEmail().ifPresent(pending -> deliver(pending, now));
+        return claim.outcome();
+    }
+
+    /** Snapshot taken while the entity is in scope, so the send never touches it. */
+    private PendingEmail pendingEmail(SavedSearch s, SavedSearchAlertBookkeeper.Batch batch) {
+        return new PendingEmail(
+                s.getId(),
+                s.getUserId(),
+                batch.batchId(),
+                s.getLabel(),
+                SavedSearchSummary.scopeSummary(s),
+                SavedSearchSummary.filtersSummary(s),
+                batch.matchCount(),
+                SavedSearchRestoreLink.restoreUrl(publicBaseUrl, s));
+    }
+
+    /**
+     * Step 5: the blocking outbound send.
+     *
+     * <p>#2482 — the caller MUST have committed and released the run's advisory lock before calling
+     * this. Every database touch below ({@code findEmailAlertsEnabledById}, the address lookup,
+     * {@code markEmail}) opens and closes its own short transaction, so a hung email provider pins
+     * no connection and blocks no other run.
+     */
+    public void deliver(PendingEmail pending, OffsetDateTime now) {
+        UUID savedSearchId = pending.savedSearchId();
+        UUID batchId = pending.batchId();
         // #2481: re-check consent with a fresh scalar DB read at the last safe point, immediately
-        // before the outbound send. `s.isEmailAlertsEnabled()` is the in-memory field of an entity
-        // loaded (possibly minutes) earlier in this run; findById would return the same stale,
-        // managed instance from the L1 cache, so this deliberately uses a projection query instead.
+        // before the outbound send. The entity this batch came from was read earlier in the run
+        // (and, since #2482, in a transaction that has since committed and closed), so its
+        // in-memory `emailAlertsEnabled` may be minutes stale; findById could still be served from
+        // a Hibernate L1 cache, so this deliberately uses a projection query instead.
         // Fail closed on every branch: false -> opted out (unchanged), empty -> skipped (row gone,
         // never misreported as an opt-out), thrown -> failed and logged, never silently swallowed
-        // and never allowed to escape uncaught (this method runs outside evaluateAndDeliver's
-        // try/catch, so an uncaught exception here would count toward the job's failed++ and leave
-        // the batch stuck PENDING).
+        // and never allowed to escape uncaught (this method runs outside evaluate's try/catch, so
+        // an uncaught exception here would count toward the job's failed++ and leave the batch
+        // stuck PENDING).
         Optional<Boolean> currentEmailAlertsEnabled;
         try {
-            currentEmailAlertsEnabled = savedSearchRepository.findEmailAlertsEnabledById(s.getId());
+            currentEmailAlertsEnabled = savedSearchRepository.findEmailAlertsEnabledById(savedSearchId);
         } catch (RuntimeException e) {
             log.error("Saved-search alert consent check failed savedSearchId={} batchId={}",
-                    s.getId(), batch.batchId(), e);
-            bookkeeper.markEmail(batch.batchId(), SavedSearchAlertBookkeeper.EmailStatus.FAILED, now);
+                    savedSearchId, batchId, e);
+            bookkeeper.markEmail(batchId, SavedSearchAlertBookkeeper.EmailStatus.FAILED, now);
             return;
         }
         if (currentEmailAlertsEnabled.isEmpty()) {
-            bookkeeper.markEmail(batch.batchId(), SavedSearchAlertBookkeeper.EmailStatus.SKIPPED, now);
+            bookkeeper.markEmail(batchId, SavedSearchAlertBookkeeper.EmailStatus.SKIPPED, now);
             log.info("Saved-search alert email skipped (saved search no longer exists) savedSearchId={} batchId={}",
-                    s.getId(), batch.batchId());
+                    savedSearchId, batchId);
             return;
         }
         boolean emailAlertsEnabled = currentEmailAlertsEnabled.get();
@@ -131,32 +213,32 @@ public class SavedSearchAlertDeliveryService {
         // user_saved_areas.alerts_enabled precedent — no user-level email preference exists in
         // this app). Bookkeeping + in-app notification are already committed regardless.
         if (!emailAlertsEnabled) {
-            bookkeeper.markEmail(batch.batchId(), SavedSearchAlertBookkeeper.EmailStatus.OPTED_OUT, now);
+            bookkeeper.markEmail(batchId, SavedSearchAlertBookkeeper.EmailStatus.OPTED_OUT, now);
             log.info("Saved-search alert email not sent (owner opted out) savedSearchId={} batchId={}",
-                    s.getId(), batch.batchId());
+                    savedSearchId, batchId);
             return;
         }
-        List<String> emails = savedAreaRepository.findEmailsByUserIds(List.of(s.getUserId()));
+        List<String> emails = savedAreaRepository.findEmailsByUserIds(List.of(pending.userId()));
         if (emails.isEmpty()) {
-            bookkeeper.markEmail(batch.batchId(), SavedSearchAlertBookkeeper.EmailStatus.SKIPPED, now);
+            bookkeeper.markEmail(batchId, SavedSearchAlertBookkeeper.EmailStatus.SKIPPED, now);
             log.info("Saved-search alert email skipped (no email on file) savedSearchId={} batchId={}",
-                    s.getId(), batch.batchId());
+                    savedSearchId, batchId);
             return;
         }
         try {
             emailService.sendSavedSearchAlert(
                     emails.get(0),
-                    s.getLabel(),
-                    SavedSearchSummary.scopeSummary(s),
-                    SavedSearchSummary.filtersSummary(s),
-                    batch.matchCount(),
-                    SavedSearchRestoreLink.restoreUrl(publicBaseUrl, s),
+                    pending.label(),
+                    pending.scopeSummary(),
+                    pending.filtersSummary(),
+                    pending.matchCount(),
+                    pending.restoreUrl(),
                     SavedSearchRestoreLink.manageUrl(publicBaseUrl));
-            bookkeeper.markEmail(batch.batchId(), SavedSearchAlertBookkeeper.EmailStatus.SENT, now);
+            bookkeeper.markEmail(batchId, SavedSearchAlertBookkeeper.EmailStatus.SENT, now);
         } catch (Exception e) {
             // Never log the address (PII); the batch id is the support handle.
-            log.error("Saved-search alert email failed savedSearchId={} batchId={}", s.getId(), batch.batchId(), e);
-            bookkeeper.markEmail(batch.batchId(), SavedSearchAlertBookkeeper.EmailStatus.FAILED, now);
+            log.error("Saved-search alert email failed savedSearchId={} batchId={}", savedSearchId, batchId, e);
+            bookkeeper.markEmail(batchId, SavedSearchAlertBookkeeper.EmailStatus.FAILED, now);
         }
     }
 }
