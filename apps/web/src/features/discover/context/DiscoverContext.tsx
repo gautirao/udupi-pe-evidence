@@ -136,6 +136,13 @@ const ACTION_KEYS = [
   // commitResultScope above: omitting it here fails ActionKeysExhaustive AND
   // leaves `actions.commitAreaSet` silently undefined at runtime.
   'commitAreaSet',
+  // Issue #2674 — cancel a pending debounced `reportViewport` commit. Same
+  // requirement as commitResultScope/commitAreaSet above: omitting it here
+  // fails ActionKeysExhaustive AND leaves `actions.cancelViewportCommit`
+  // silently undefined at runtime (confirmed live during this issue's
+  // investigation — DiscoverMapCanvas's unmount cleanup called it via
+  // optional chaining, which silently no-op'd instead of throwing).
+  'cancelViewportCommit',
 ] as const satisfies readonly (keyof DiscoverUrlActions)[];
 
 // A deliberately-omitted (or renamed/added) DiscoverUrlActions key makes this

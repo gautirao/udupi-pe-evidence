@@ -355,6 +355,33 @@ export interface DiscoverUrlActions {
   deselectArea: (resultScope?: ResultScope) => void;
   /** Report map viewport change — debounced replace (300 ms), does NOT push history */
   reportViewport: (vp: DiscoverViewport) => void;
+  /**
+   * Issue #2674 — cancel any PENDING debounced `reportViewport` commit
+   * without writing anything. Idempotent; safe to call when no timer is
+   * armed.
+   *
+   * Exists because the existing two cancellation guards for this exact race
+   * (per-writer synchronous cancels in area.ts/city.ts/filters.ts/
+   * navigation.ts, and the `location.key`-keyed universal guard just below in
+   * this file — both from issue #2083) only ever fire on a URL NAVIGATION.
+   * Mobile Discover's List<->Map toggle is NOT a navigation — it is local UI
+   * state (useMobileMapOverlayShell) that real-unmounts/remounts
+   * DiscoverMapCanvas (and therefore the Leaflet map) while `location.key`
+   * and this facade itself stay put. A `reportViewport` timer armed by a
+   * pan on the map instance being closed is untouched by either existing
+   * guard and fires later — after the close, possibly after a Return has
+   * already restored a DIFFERENT committed scope — silently overwriting the
+   * URL's `lat`/`lon`/`zoom` with the stale, now-irrelevant pre-close pan
+   * position. Confirmed live (see issue #2674 investigation notes): pan,
+   * close to List within the 300ms debounce window, and the URL's lat/lon
+   * flip to the panned-away position ~300ms later while the map sits
+   * unmounted in List view, with no mechanism left to ever correct it until
+   * another real pan happens.
+   *
+   * Callers: DiscoverMapCanvas's own unmount cleanup (the real-unmount
+   * boundary for the mobile map).
+   */
+  cancelViewportCommit: () => void;
   /** Set filters as a live/uncommitted change — debounced replace */
   setFiltersLive: (filters: DiscoverUrlFilters) => void;
   /** Set filters as a committed Apply action — pushes a new history entry */
@@ -832,6 +859,11 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     ...compatibilityDomain.actions,
     ...navigationDomain.actions,
     ...resultScopeDomain.actions,
+    // Issue #2674 — see DiscoverUrlActions.cancelViewportCommit's doc above
+    // for why this facade-level action exists alongside the per-writer and
+    // per-navigation guards. Reuses the SAME helper navigation.ts's own
+    // writers already call, against the SAME `timers` ref.
+    cancelViewportCommit: () => cancelPendingViewportCommit(timers),
   };
 
   return [state, actions];

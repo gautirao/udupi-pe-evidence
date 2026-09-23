@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode, RefObject, MutableRefObject, Dispatch, SetStateAction } from 'react';
 import { useDiscoverActions, useDiscoverNav, useDiscoverShell, useDiscoverViewport } from '@/features/discover/context/useDiscoverContext';
 import { PropertyMap, type PropertyListingWithImages } from '@/components/map/PropertyMap';
@@ -548,6 +548,41 @@ export function DiscoverMapCanvas({
   const viewport = useDiscoverViewport();
   const urlActions = useDiscoverActions();
   const shell = useDiscoverShell();
+
+  // Issue #2674 — cancel any pending `reportViewport` debounce commit when
+  // THIS component real-unmounts. DiscoverMapSurface.tsx's `shouldMount`
+  // gate is what makes this the genuine unmount boundary for mobile's
+  // List<->Map toggle (Discover is panel-first — the whole Leaflet map,
+  // this component included, is torn down and rebuilt on every toggle).
+  // Neither of the two existing viewport-debounce guards (the per-writer
+  // synchronous cancels in area.ts/city.ts/filters.ts/navigation.ts, or the
+  // `location.key`-keyed universal guard in useDiscoverUrlState.ts — both
+  // issue #2083) cover this: the toggle is local UI state, not a URL
+  // navigation, and the facade that owns the debounce timer lives ABOVE
+  // this component and never unmounts with it. A pan just before closing to
+  // List leaves its 300ms-debounced URL write armed with nothing left to
+  // cancel it; ~300ms later it fires — possibly well after the close, even
+  // after a Return has restored a different committed scope — and silently
+  // overwrites the URL's lat/lon/zoom with the stale pre-close pan position
+  // (confirmed live during this issue's investigation).
+  //
+  // Ref pattern (empty dep array, not `[urlActions]`): the facade returns a
+  // fresh `cancelViewportCommit` closure every render, so this effect must
+  // NOT re-run its cleanup on every re-render — that would cancel a
+  // legitimate in-flight debounce on every keystroke-adjacent render and
+  // defeat it entirely. Only a genuine unmount should call it.
+  const cancelViewportCommitRef = useRef(urlActions.cancelViewportCommit);
+  cancelViewportCommitRef.current = urlActions.cancelViewportCommit;
+  useEffect(() => {
+    return () => {
+      // Optional call: defensive against a test/mock `useDiscoverActions()`
+      // stub that predates this action (see the many `urlActions = {...}`
+      // literals across this repo's DiscoverMapCanvas/MapDiscovery test
+      // suites) — never a production gap, since the real facade
+      // (useDiscoverUrlState.ts) always provides it.
+      cancelViewportCommitRef.current?.();
+    };
+  }, []);
 
   const [isMapTipDismissed, setIsMapTipDismissed] = useState(false);
 
