@@ -10,6 +10,8 @@ import com.example.realestate.intelligence.BuyerAreaIntelligenceResponse;
 import com.example.realestate.intelligence.BuyerAreaIntelligenceService;
 import com.example.realestate.intelligence.ResolveAreaResponse;
 import com.example.realestate.discover.navigation.PostgresAreaCountProvider;
+import com.example.realestate.discover.navigation.PublicActiveCityRevision;
+import com.example.realestate.discover.navigation.PublicActiveCityRevisionReader;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.school.SchoolRepository;
@@ -459,6 +461,55 @@ class CityActiveGating1935IT {
         assertThat(unknownEx.getMessage()).contains(UNKNOWN_AREA);
     }
 
+    // ── 9c. /api/public/areas/{areaKey}/overview — geo-centre-bearing area (school-radius path)
+    //        #2676 B0(b) gap (b): the test above only proves the gate holds when
+    //        area_overview_stats.centroid_lat/centroid_lon are NULL — AreaOverviewService.
+    //        querySchools() short-circuits to an empty list before SchoolService.findNearby()
+    //        is ever invoked, so it never exercises is_active gating on the school-radius
+    //        lookup itself. AreaOnboardingApplyService's INSERT (B1) always writes a real
+    //        geo-centre, so this is the untested scenario B1 is about to make routine, not a
+    //        pre-existing acceptable gap. This test seeds a REAL centroid plus a REAL nearby
+    //        school on both the active and inactive fixture areas, proving the inactive case is
+    //        blocked by the is_active gate — not merely by an empty radius query with nothing to
+    //        leak. ──────────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("trends/overview: geo-centre-bearing area (school-radius path) — inactive city "
+            + "still gated even with a real nearby school; active city returns it (proves the "
+            + "guard, not an empty query, blocks the inactive case)")
+    void areaOverview_withRealCentroid_inactiveStillGated_activeReturnsSchool() {
+        // Give both fixture areas a real, non-null geo-centre — the exact precondition
+        // AreaOnboardingApplyService's INSERT establishes for every B1-onboarded area.
+        jdbcTemplate.update(
+                "UPDATE area_overview_stats SET centroid_lat = ?, centroid_lon = ? WHERE area_key = ?",
+                13.0, 74.0, ACTIVE_AREA);
+        jdbcTemplate.update(
+                "UPDATE area_overview_stats SET centroid_lat = ?, centroid_lon = ? WHERE area_key = ?",
+                13.0, 74.0, INACTIVE_AREA);
+
+        // A real school ~55m from that centroid — well inside querySchools' 3km radius —
+        // so a leak would be trivially observable, not masked by an empty result set.
+        jdbcTemplate.update(
+                "INSERT INTO schools (name, latitude, longitude) VALUES (?, ?, ?)",
+                "QA1935 Test School", 13.0005, 74.0005);
+
+        // Positive control: the active city, with the same real centroid and the same nearby
+        // school, actually returns it — proving the school-lookup path is genuinely live here,
+        // not a false negative from missing fixture data.
+        AreaOverviewResponse active = areaOverviewService.assembleResponse(ACTIVE_AREA);
+        assertThat(active.schools())
+                .extracting(AreaOverviewResponse.SchoolEntry::name)
+                .contains("QA1935 Test School");
+
+        // The real assertion: even with a real, non-null centroid AND a real nearby school that
+        // WOULD be returned if CityActivationGuard were bypassed, the inactive city is still
+        // rejected exactly like an unknown area.
+        AreaNotFoundException inactiveEx =
+                catchAreaNotFound(() -> areaOverviewService.assembleResponse(INACTIVE_AREA));
+        assertThat(inactiveEx).isNotNull();
+        assertThat(inactiveEx.getMessage()).contains(INACTIVE_AREA);
+    }
+
     private static AreaNotFoundException catchAreaNotFound(Runnable r) {
         try {
             r.run();
@@ -789,5 +840,58 @@ class CityActiveGating1935IT {
         assertThat(inactive).usingRecursiveComparison()
                 .ignoringFields("city", "generatedAt")
                 .isEqualTo(unknown);
+    }
+
+    // ── PublicActiveCityRevisionReader — #2676 B0(b) gap closure ────────────────────────
+    //
+    // PublicActiveCityRevisionReader.findAll() is gated directly by "WHERE c.is_active = true"
+    // in its own SQL (SELECT_SQL joins cities to city_launch_revision on a PROMOTED,
+    // non-superseded row) — no other coincidental filter is involved. This test proves that
+    // gate holds against a real Postgres instance: an inactive city with a PROMOTED revision
+    // must never appear in findAll(), and flipping is_active back to true (the mandatory
+    // positive control, per #2676 B0(b)) must make the SAME revision row appear immediately.
+
+    @Test
+    @DisplayName("PublicActiveCityRevisionReader: inactive city excluded from findAll() despite a "
+            + "PROMOTED revision; flipping is_active=true includes it immediately (positive control)")
+    void publicActiveCityRevisionReader_inactiveExcluded_thenActiveIncluded() {
+        PublicActiveCityRevisionReader reader = new PublicActiveCityRevisionReader(jdbcTemplate);
+
+        long activeRevisionId = insertPromotedRevision(activeCityId);
+        long inactiveRevisionId = insertPromotedRevision(inactiveCityId);
+
+        List<PublicActiveCityRevision> beforeFlip = reader.findAll();
+        assertThat(beforeFlip)
+                .extracting(PublicActiveCityRevision::citySlug)
+                .contains(ACTIVE_CITY)
+                .doesNotContain(INACTIVE_CITY);
+        assertThat(beforeFlip)
+                .filteredOn(r -> r.citySlug().equals(ACTIVE_CITY))
+                .singleElement()
+                .satisfies(r -> assertThat(r.revisionId()).isEqualTo(activeRevisionId));
+
+        // Positive control (#2676 B0(b) hard requirement): flip the same city active and re-run
+        // the identical query — the SAME PROMOTED revision row (never re-inserted) must now be
+        // returned, proving the negative assertion above was not vacuous.
+        jdbcTemplate.update("UPDATE cities SET is_active = true WHERE id = ?", inactiveCityId);
+
+        List<PublicActiveCityRevision> afterFlip = reader.findAll();
+        assertThat(afterFlip)
+                .extracting(PublicActiveCityRevision::citySlug)
+                .contains(ACTIVE_CITY, INACTIVE_CITY);
+        assertThat(afterFlip)
+                .filteredOn(r -> r.citySlug().equals(INACTIVE_CITY))
+                .singleElement()
+                .satisfies(r -> assertThat(r.revisionId()).isEqualTo(inactiveRevisionId));
+    }
+
+    private long insertPromotedRevision(int cityId) {
+        jdbcTemplate.update(
+                "INSERT INTO city_launch_revision (city_id, revision_number, lifecycle_status, promoted_at) "
+                        + "VALUES (?, 1, 'PROMOTED', now())",
+                cityId);
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM city_launch_revision WHERE city_id = ? AND lifecycle_status = 'PROMOTED'",
+                Long.class, cityId);
     }
 }
