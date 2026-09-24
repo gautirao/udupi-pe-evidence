@@ -276,7 +276,7 @@ function originPinHTML(name) {
 }
 const CLUSTER_PX = 46;
 
-function ExpMap({ view, isMobile, onPick, onCluster, onArea, onOpenListing, hover, onHover, onCameraMove, onSearchThisArea, dirty, phase, onCrumb, showAllAreas, onFitAll, onSchool, onSchoolHover, schoolHover, onAgriNav, onAgriTown, onParcel, agriActive }) {
+function ExpMap({ lead, view, isMobile, onPick, onCluster, onArea, onOpenListing, hover, onHover, onCameraMove, onSearchThisArea, dirty, phase, onCrumb, showAllAreas, onFitAll, onSchool, onSchoolHover, schoolHover, onAgriNav, onAgriTown, onParcel, agriActive }) {
   const elRef = React.useRef(null), mapRef = React.useRef(null);
   const navG = React.useRef(null), leafG = React.useRef(null), shapeG = React.useRef(null);
   const progRef = React.useRef(false), fitRef = React.useRef(null);
@@ -579,12 +579,21 @@ function ExpMap({ view, isMobile, onPick, onCluster, onArea, onOpenListing, hove
             <button onClick={showAllAreas} style={{ border: "none", cursor: "pointer", padding: "4px 10px", borderRadius: "var(--radius-full)", background: "rgba(255,255,255,0.16)", color: "#fff", fontFamily: "var(--font-sans)", fontSize: "11.5px", fontWeight: 700 }}>Show all areas</button>
           </div>
         )}
-        {view.scopeKind === "AREA_SET" && view.committed.length > 1 && (
+        {/* #2627 — mobile Map: the Filters entry leads the top-left row; Fit all sits beside it */}
+        {lead && (
+          <div data-design-component="map-top-row" style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+            {lead}
+            {view.scopeKind === "AREA_SET" && view.committed.length > 1 && (
+              <button onClick={onFitAll} style={{ minHeight: "44px", padding: "0 13px", borderRadius: "var(--radius-full)", border: "1px solid var(--border-strong)", background: "var(--paper)", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "12.5px", fontWeight: 600, color: "var(--text-strong)", boxShadow: "var(--shadow-sm)" }}>Fit all {view.committed.length} areas</button>
+            )}
+          </div>
+        )}
+        {!lead && view.scopeKind === "AREA_SET" && view.committed.length > 1 && (
           <button onClick={onFitAll} style={{ padding: "7px 12px", borderRadius: "var(--radius-full)", border: "1px solid var(--border-strong)", background: "var(--paper)", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "12px", fontWeight: 600, color: "var(--text-strong)", boxShadow: "var(--shadow-sm)" }}>Fit all {view.committed.length} areas</button>
         )}
       </div>
       {view.listingCapable && (dirty || phase === "loading") && (
-        <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: isMobile ? "128px" : "22px", zIndex: 500, transition: "opacity var(--dur-normal), transform var(--dur-normal)" }}>
+        <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", ...(isMobile ? { top: "70px" } : { bottom: "22px" }), zIndex: 500, transition: "opacity var(--dur-normal), transform var(--dur-normal)" }}>
           <button onClick={onSearchThisArea} disabled={phase === "loading"} style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 16px", borderRadius: "var(--radius-full)", border: "1px solid var(--border-strong)", background: "var(--paper)", boxShadow: "var(--shadow-lg)", cursor: phase === "loading" ? "default" : "pointer", fontFamily: "var(--font-sans)", fontSize: "13px", fontWeight: 700, color: "var(--accent)" }}>
             <span dangerouslySetInnerHTML={{ __html: MG.zoom("var(--accent)") }} />{phase === "loading" ? "Searching…" : "Search this area"}
           </button>

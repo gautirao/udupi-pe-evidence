@@ -77,7 +77,24 @@ const SCENARIOS = [
   { id: "pre-agri", label: "Agricultural", group: "pre" },
   { id: "pre-listmap", label: "List / Map", group: "pre" },
   { id: "pre-marker", label: "Marker", group: "pre" },
-  { id: "pre-cleared", label: "Com. cleared", group: "pre" }
+  { id: "pre-cleared", label: "Com. cleared", group: "pre" },
+  // #2627 — mobile Map filtering. One canonical filter state; the sheet stages a copy.
+  { id: "mf-01", label: "01 No filters", group: "mf" },
+  { id: "mf-02", label: "02 Entry", group: "mf" },
+  { id: "mf-03", label: "03 Sheet · Res.", group: "mf" },
+  { id: "mf-04", label: "04 Edited, not applied", group: "mf" },
+  { id: "mf-05", label: "05 Applied", group: "mf" },
+  { id: "mf-06", label: "06 Reopened", group: "mf" },
+  { id: "mf-07", label: "07 Clear all", group: "mf" },
+  { id: "mf-08", label: "08 Zero results", group: "mf" },
+  { id: "mf-09", label: "09 Sheet · Com.", group: "mf" },
+  { id: "mf-10", label: "10 Com. applied", group: "mf" },
+  { id: "mf-11", label: "11 Marker + filter", group: "mf" },
+  { id: "mf-12", label: "12 375 × 667", group: "mf" },
+  { id: "mf-13", label: "13 Rent only", group: "mf" },
+  { id: "mf-14", label: "14 Schools · homes", group: "mf" },
+  { id: "mf-15", label: "15 Schools · sheet", group: "mf" },
+  { id: "mf-16", label: "16 Schools · applied", group: "mf" }
 ];
 const SCENARIO_GROUPS = [
   { key: null, label: "Existing Discover" },
@@ -85,7 +102,8 @@ const SCENARIO_GROUPS = [
   { key: "fam", label: "Family switching" },
   { key: "attr", label: "Contextual attributes" },
   { key: "carea", label: "Commercial area & budget" },
-  { key: "pre", label: "Preserved behaviour" }
+  { key: "pre", label: "Preserved behaviour" },
+  { key: "mf", label: "Map filters · #2627" }
 ];
 const TRIO = ["hebbal", "nagawara", "jakkur"];
 // Commercial review scopes — real areas from the canonical catalogue, chosen because
@@ -187,9 +205,53 @@ function scenarioState(id) {
   else if (id === "pre-listmap") Object.assign(s, { device: "mobile", presentation: "map", nodeKey: "hebbal", scope: { kind: "AREA_SET", areaKeys: TRIO.slice() }, committed: TRIO.slice() });
   else if (id === "pre-marker") Object.assign(s, { nodeKey: "hebbal", scope: { kind: "AREA_SET", areaKeys: ["hebbal"] }, committed: ["hebbal"] });
   else if (id === "pre-cleared") Object.assign(s, { nodeKey: "indiranagar", scope: { kind: "AREA_SET", areaKeys: COM_TRIO.slice() }, committed: COM_TRIO.slice(), filters: { ...EX.DEFAULT_FILTERS, comSubs: ["shop", "office"] } });
+  if (id.indexOf("mf-") === 0) {
+    const D = EX.DEFAULT_FILTERS;
+    const bud = (f) => { const b = EX.budgetsFor(f).filter((x) => x.k); return b.length ? b[Math.min(2, b.length - 1)].k : 0; };
+    const resEd = { ...D, ptype: "Apartment", beds: 2 };
+    resEd.maxPrice = bud(resEd);
+    const res = { device: "mobile", vp: id === "mf-12" ? "375" : "390", presentation: "map", nodeKey: "hebbal", scope: { kind: "AREA_SET", areaKeys: TRIO.slice() }, committed: TRIO.slice() };
+    const com = { ...res, nodeKey: "indiranagar", scope: { kind: "AREA_SET", areaKeys: COM_TRIO.slice() }, committed: COM_TRIO.slice() };
+    const comD = { ...D, family: "Commercial", comSubs: [] };
+    Object.assign(s, id === "mf-09" || id === "mf-10" ? com : res);
+    if (id === "mf-02") s.mfFocusDemo = true;
+    else if (id === "mf-03") s.mfSheet = { draft: { ...D } };
+    else if (id === "mf-04" || id === "mf-12") s.mfSheet = { draft: { ...resEd } };
+    else if (id === "mf-05") s.filters = { ...resEd };
+    else if (id === "mf-06") { s.filters = { ...resEd }; s.mfSheet = { draft: { ...resEd } }; }
+    else if (id === "mf-07") { s.filters = { ...resEd }; s.mfSheet = { draft: { ...D, purpose: resEd.purpose, family: resEd.family } }; }
+    else if (id === "mf-08") s.filters = { ...D, beds: 3, maxPrice: 5000000, ready: true };
+    else if (id === "mf-09") { s.filters = { ...comD }; s.mfSheet = { draft: { ...comD, comSubs: ["shop"] } }; }
+    else if (id === "mf-10") s.filters = { ...comD, comSubs: ["shop"] };
+    else if (id === "mf-13") s.filters = { ...D, purpose: "Rent" };
+    else if (id === "mf-14" || id === "mf-15" || id === "mf-16") {
+      const sel = window.EXJ.schoolsIn("hebbal")[0];
+      Object.assign(s, { journey: "schools", sch: { ...schBase(), nodeKey: sel.areaKey, areaKey: sel.areaKey, areaKeys: [sel.areaKey], selId: sel.id, radiusKm: 5 } });
+      const schEd = { ...D, ptype: "Apartment", beds: 2 };
+      if (id === "mf-15") s.mfSheet = { draft: schEd };
+      if (id === "mf-16") s.filters = schEd;
+    }
+    else if (id === "mf-11") { s.filters = { ...resEd }; const first = EX.inAreas(TRIO, resEd)[0]; s.peek = first ? first.id : null; }
+  }
   return s;
 }
 const HINTS = {
+  "mf-01": () => "Map, no filters: Filters leads the top-left row — outlined, labelled, 44px, clear of zoom and the results sheet. Tap it.",
+  "mf-02": () => "Keyboard focus on the entry. Its accessible name states the count: “Filters, none active”. Enter opens the sheet and focus moves to its heading.",
+  "mf-03": () => "Modal bottom sheet over a dimmed, inert map. The same List groups, all open. Buy/Rent sits first because the List control bar is not on Map.",
+  "mf-04": () => "Staged: chips change, the map behind does not. The footer states the gap — not applied yet — and the button carries the live count for the draft.",
+  "mf-05": () => "Applied: the entry turns navy with a count, the results sheet says Filtered: … with Edit, and the markers, sheet and List all show the same result set.",
+  "mf-06": () => "Reopening restores the applied selections exactly — the draft is seeded from the canonical filters every time. Nothing to apply until something changes.",
+  "mf-07": () => "Clear all resets the DRAFT (Buy/Rent and family kept, like the List reset). The map still shows the filtered set until Show is tapped; Cancel keeps the old filters.",
+  "mf-08": () => "Honest zero: 0 matching homes, the filters named, nothing widened. Edit filters reopens the sheet; Clear filters applies the reset at once.",
+  "mf-09": () => "Commercial in the same sheet: family, Commercial type, contextual area and budget — no bedrooms. The draft adds Shops; the count updates before Apply.",
+  "mf-10": () => "Commercial subtype applied: pins, sheet title and the Filtered line agree. The entry counts refinements only (the family is said by the result noun).",
+  "mf-11": () => "A marker preview replaces the results sheet at the bottom; Filters stays top-left and usable. Opening Filters closes the preview first.",
+  "mf-13": () => "Buy → Rent only: the badge shows no count (intent is not a refinement), but the heading says homes to rent · Residential, so the Rent context is never lost.",
+  "mf-14": () => "Schools → Homes near a school, on Map: the same Filters entry. The heading states intent + family; school and radius stay owned by Schools (ring, pin, breadcrumb).",
+  "mf-15": () => "Same sheet, property filters only — no school, radius, board or level controls. The count is homes within the SAME school radius for the draft.",
+  "mf-16": () => "Applied in Schools: entry shows ②, Filtered: 2+ BHK · Apartment. Radius, selected school and Back to schools are unchanged.",
+  "mf-12": () => "375 × 667: the sheet stops 88px below the top edge (app bar stays visible, dimmed), the body scrolls, the footer with Show stays pinned. Switch 390/412 in the bar above to compare.",
   "guided-areas": (st, v) => st.detail ? "Press Back to results — the scope, filters and camera come back unchanged."
     : v.scopeKind === "HIERARCHY" ? "Browse all is the full " + (st.scope.level === "direction" ? "Direction" : "Local destination") + " — Back restores the exact hierarchy screen, camera and cluster focus."
       : v.scopeKind === "CITY" ? "Browse all listings is city-wide. Back returns to the directional Areas root."
@@ -272,6 +334,7 @@ function Experience() {
   const set = (patch) => setSt((s) => ({ ...s, ...patch }));
   const setHover = (k) => setSt((s) => (s.hover === k ? s : { ...s, hover: k }));
   const snapRef = React.useRef([]);
+  const mfOpenRef = React.useRef(false), mfSkipPop = React.useRef(false);
 
   // ---- browser history: committed states only -------------------------------
   const snapOf = (s) => ({ journey: s.journey, city: s.city, nodeKey: s.nodeKey, scope: s.scope, committed: s.committed, filters: s.filters, sch: s.sch, ag: s.ag, clusterFocus: null, draft: null, focusChip: null });
@@ -291,6 +354,9 @@ function Experience() {
   }, []);
   React.useEffect(() => {
     const onPop = (e) => {
+      // #2627: browser Back while the filter sheet is open = Cancel, nothing else
+      if (mfSkipPop.current) { mfSkipPop.current = false; return; }
+      if (mfOpenRef.current) { mfOpenRef.current = false; setSt((s) => ({ ...s, mfSheet: null })); return; }
       const i = e.state && e.state.i;
       const snap = i != null ? snapRef.current[i] : null;
       setSt((s) => ({ ...s, ...(snap || { journey: "areas", nodeKey: "blr", scope: null, committed: [], clusterFocus: null, detail: null, draft: null }) }));
@@ -353,6 +419,10 @@ function Experience() {
   }, [st.scope, st.filters, st.query, st.journey]);
 
   // ---- actions -------------------------------------------------------------
+  const mfClose = (patch) => {
+    set({ mfSheet: null, ...patch });
+    if (mfOpenRef.current) { mfOpenRef.current = false; mfSkipPop.current = true; window.history.back(); }
+  };
   const act = {
     hover: (k) => setHover(k),
     setCity: (c) => commit({ city: c, journey: "areas", nodeKey: "blr", scope: null, committed: [], sch: schBase(), ag: agBase(), note: null }),
@@ -583,7 +653,24 @@ function Experience() {
     closeAlerts: () => set({ view: null, note: null }),
     showMore: () => set({ shown: st.shown + 8 }),
     toggleSave: (id) => set({ saved: st.saved.indexOf(id) !== -1 ? st.saved.filter((x) => x !== id) : st.saved.concat(id) }),
-    setPresentation: (p) => set({ presentation: p }),
+    setPresentation: (p) => set({ presentation: p, mfSheet: null }),
+    // ---- #2627 mobile Map filters: staged copy of the canonical filters -------
+    openMapFilters: () => {
+      if (!mfOpenRef.current) { mfOpenRef.current = true; window.history.pushState({ i: Math.max(0, snapRef.current.length - 1), mf: true }, ""); }
+      set({ mfSheet: { draft: { ...st.filters } }, peek: null, mfFocusDemo: false });
+    },
+    mfEdit: (p) => setSt((s) => (s.mfSheet ? { ...s, mfSheet: { ...s.mfSheet, draft: { ...s.mfSheet.draft, ...p } } } : s)),
+    mfClear: () => setSt((s) => (s.mfSheet ? { ...s, mfSheet: { ...s.mfSheet, draft: window.MFX.cleared(s.mfSheet.draft) } } : s)),
+    mfCancel: () => mfClose({}),
+    mfApply: () => {
+      const f = st.mfSheet.draft;
+      const n = window.MFX.count(st, f);
+      mfClose({ filters: { ...f }, shown: 8, phase: "idle", peek: null, mfAnnounce: "Filters applied. " + n + " " + EX.nounsOf(f).count(n) + " on the map." });
+    },
+    mapClearFilters: () => {
+      const f = window.MFX.cleared(st.filters);
+      set({ filters: f, shown: 8, phase: "idle", mfAnnounce: "Filters cleared. " + window.MFX.count(st, f) + " listings on the map." });
+    },
     toggleSignedIn: () => set({ signedIn: !st.signedIn }),
     openAlerts: () => set({ view: "alerts" })
   };
@@ -603,7 +690,7 @@ function Experience() {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--canvas-200)", display: "flex", flexDirection: "column" }}>
-      <ExpReviewerBar st={st} setSt={setSt} hint={hint} onScenario={(id) => { snapRef.current = []; setSt(scenarioState(id)); }} />
+      <ExpReviewerBar st={st} setSt={setSt} hint={hint} onScenario={(id) => { snapRef.current = []; mfOpenRef.current = false; setSt((prev) => { const n = scenarioState(id); if (n.device === "mobile" && prev.device === "mobile" && id !== "mf-12" && prev.vp) n.vp = prev.vp; return n; }); }} />
       <div style={{ flex: 1, display: "grid", placeItems: "start center", padding: isMobile ? "24px 16px 40px" : "18px 16px 32px" }}>
         <ExpErrorBoundary>
           <ExpShell st={st} view={view} act={act} isMobile={isMobile} />
@@ -694,9 +781,13 @@ function ExpReviewerBar({ st, setSt, onScenario, hint }) {
           );
         })}
         <span style={{ marginLeft: "auto", display: "flex", gap: "4px" }}>
-          {["desktop", "mobile"].map((d) => (
-            <button key={d} onClick={() => setSt((s) => ({ ...s, device: d, presentation: "list" }))} style={{ padding: "4px 10px", borderRadius: "var(--radius-full)", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "11.5px", fontWeight: 600, border: "1px solid rgba(255,255,255,0.2)", background: st.device === d ? "rgba(255,255,255,0.16)" : "transparent", color: "rgba(255,255,255,0.85)" }}>{d === "desktop" ? "1366 × 768" : "390 × 844"}</button>
-          ))}
+          <button onClick={() => setSt((s) => ({ ...s, device: "desktop", presentation: "list", mfSheet: null }))} style={{ padding: "4px 10px", borderRadius: "var(--radius-full)", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "11.5px", fontWeight: 600, border: "1px solid rgba(255,255,255,0.2)", background: st.device === "desktop" ? "rgba(255,255,255,0.16)" : "transparent", color: "rgba(255,255,255,0.85)", whiteSpace: "nowrap" }}>1366 × 768</button>
+          {/* Mobile viewports: switching size keeps List/Map and every other state, so the
+              same screen can be compared at 375 × 667, 390 × 844 and 412 × 915. */}
+          {Object.keys(EXP_MOBILE_VP).map((k) => {
+            const on = st.device === "mobile" && (st.vp || "390") === k;
+            return <button key={k} onClick={() => setSt((s) => ({ ...s, device: "mobile", vp: k, presentation: s.device === "mobile" ? s.presentation : "list" }))} style={{ padding: "4px 10px", borderRadius: "var(--radius-full)", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "11.5px", fontWeight: 600, border: "1px solid rgba(255,255,255,0.2)", background: on ? "rgba(255,255,255,0.16)" : "transparent", color: "rgba(255,255,255,0.85)", whiteSpace: "nowrap" }}>{EXP_MOBILE_VP[k].join(" × ")}</button>;
+          })}
           {/* Commercial listings are price-gated for anonymous buyers, so the review needs
               both sides. This is review chrome, never product UI — the product decides
               anonymity from the session, not from a control in the filter toolbar. */}
@@ -743,8 +834,10 @@ class ExpErrorBoundary extends React.Component {
 }
 
 // ---- shell: fixed target sizes, scaled to fit ------------------------------
+const EXP_MOBILE_VP = { 375: [375, 667], 390: [390, 844], 412: [412, 915] };
 function ExpShell({ st, view, act, isMobile }) {
-  const W = isMobile ? 390 : 1366, H = isMobile ? 844 : 768;
+  const mvp = EXP_MOBILE_VP[st.vp || "390"] || EXP_MOBILE_VP[390];
+  const W = isMobile ? mvp[0] : 1366, H = isMobile ? mvp[1] : 768;
   const [scale, setScale] = React.useState(1);
   // The review chrome is MEASURED, never hardcoded — a constant here went stale twice.
   // But measuring is not enough on its own: the chrome's height also changes when the
@@ -860,7 +953,7 @@ function ExpMobile({ st, view, act }) {
       </div>
       {mapMode ? (
         <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
-          <window.ExpMap {...mapProps(st, view, act)} isMobile />
+          <window.ExpMap {...mapProps(st, view, act)} isMobile lead={window.MFX && window.MFX.available(st, view) ? <window.ExpMapFilterButton st={st} act={act} focusDemo={st.mfFocusDemo} /> : null} />
           <ExpSheet st={st} view={view} act={act} />
         </div>
       ) : (
@@ -868,12 +961,17 @@ function ExpMobile({ st, view, act }) {
           <window.ExpPanel view={view} st={st} act={act} isMobile />
         </div>
       )}
+      {mapMode && st.mfSheet && <window.ExpMapFilterSheet st={st} act={act} view={view} />}
+      <div aria-live="polite" style={{ position: "absolute", width: "1px", height: "1px", overflow: "hidden", clip: "rect(0 0 0 0)" }}>{st.mfAnnounce || ""}</div>
     </>
   );
 }
 
 function ExpSheet({ st, view, act }) {
   const rows = view.sheetRows || [];
+  const mapFilters = !!(window.MFX && window.MFX.available(st, view) && (view.listingCapable || view.level === "schools-homes"));
+  // #2627 ruling 2: intent + family always stated in the heading; refinements go on the Filtered line
+  const sheetTitle = mapFilters ? window.MFX.intent(st.filters, view.results.length) : view.sheetTitle;
   // mobile Map mode: a selected marker opens a listing PREVIEW here, never a silent no-op
   if (st.peek) {
     const l = EX.listings.find((x) => x.id === st.peek);
@@ -903,12 +1001,14 @@ function ExpSheet({ st, view, act }) {
     <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 700, padding: "10px 14px 18px", background: "var(--paper)", borderRadius: "16px 16px 0 0", borderTop: "1px solid var(--border)", boxShadow: "0 -8px 26px rgba(20,26,40,0.16)", transition: "transform var(--dur-normal) var(--ease-out)" }}>
       <div style={{ width: "38px", height: "4px", borderRadius: "999px", background: "var(--stone-400)", margin: "0 auto 10px" }} />
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "10px" }}>
-        <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-strong)" }}>{view.sheetTitle}</span>
+        <span data-design-component="map-result-heading" style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-strong)" }}>{sheetTitle}</span>
         {view.clusterFocus
           ? <button onClick={st.journey === "schools" ? act.schoolsShowAll : act.showAllAreas} style={{ border: "none", background: "transparent", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "12px", fontWeight: 700, color: "var(--accent)" }}>Show all areas</button>
           : view.scopeKind === "AREA_SET" && view.committed.length > 1 ? <button onClick={act.fitAll} style={{ border: "none", background: "transparent", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "12px", fontWeight: 700, color: "var(--accent)" }}>Fit all</button> : null}
       </div>
       {view.scopeKind && <div style={{ marginTop: "6px", display: "inline-flex", alignItems: "center", gap: "6px", padding: "4px 9px", borderRadius: "var(--radius-xs)", border: "1px solid var(--border-strong)", background: "var(--surface-subtle)", fontSize: "11.5px", fontWeight: 700, color: "var(--text-strong)" }}>Result scope — {view.scopeLabel}</div>}
+      {mapFilters && view.results.length > 0 && <window.ExpMapFilterSummary st={st} act={act} />}
+      {mapFilters && view.results.length === 0 ? <div style={{ marginTop: "10px" }}><window.ExpMapZero st={st} act={act} view={view} /></div> : (
       <div style={{ display: "flex", flexDirection: "column", gap: "7px", marginTop: "9px", maxHeight: "190px", overflowY: "auto" }}>
         {rows.map((r) => (
           <button key={r.key} onClick={r.onClick} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 11px", background: "var(--surface-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", cursor: "pointer", textAlign: "left", fontFamily: "var(--font-sans)" }}>
@@ -918,6 +1018,7 @@ function ExpSheet({ st, view, act }) {
           </button>
         ))}
       </div>
+      )}
       {view.stickyCta && <div style={{ marginTop: "10px" }}><button onClick={view.stickyCta.onClick} style={{ width: "100%", padding: "12px", borderRadius: "var(--radius-md)", border: "none", background: "var(--accent)", color: "#fff", fontFamily: "var(--font-sans)", fontSize: "14px", fontWeight: 700, cursor: "pointer" }}>{view.stickyCta.label}</button></div>}
     </div>
   );

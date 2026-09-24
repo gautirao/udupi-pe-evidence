@@ -117,7 +117,7 @@ function EPGroup({ label, dc, children, isMobile, rowStyle }) {
   );
 }
 const epShortArea = (s) => String(s || "").replace(" (sq ft)", "");
-function EPFilters({ st, act, isMobile }) {
+function EPFilters({ st, act, isMobile, expanded }) {
   const f = st.filters;
   const rent = f.purpose === "Rent";
   const com = f.family === "Commercial";
@@ -216,7 +216,18 @@ function EPFilters({ st, act, isMobile }) {
         </EPGroup>
       )}
       {divider}
-      {isMobile ? (
+      {isMobile && expanded ? (
+        // #2627 — inside the mobile Map filter sheet every group is already one scroll
+        // away, so there is no disclosure: the same groups, in the same order, all open.
+        <>
+          <span style={{ height: "1px", background: "var(--border)" }} />
+          {attrGroups}
+          <EPGroup {...grp} dc="standing-toggles-group" label="Only show">
+            <EPChip label={rent ? "Available now" : com ? "Ready to occupy" : "Ready to move"} on={f.ready} onClick={() => act.setFilters({ ready: !f.ready })} />
+            <EPChip label="Broker identity verified" on={f.verified} onClick={() => act.setFilters({ verified: !f.verified })} tone="var(--evergreen-600)" />
+          </EPGroup>
+        </>
+      ) : isMobile ? (
         // 390px cannot show six full-height groups and any results at the same time.
         // Rather than shrinking the groups back into label-less sideways strips, the
         // refinements sit behind one disclosure: the two decisions that change which
@@ -980,4 +991,4 @@ function ExpPanel({ view, st, act, isMobile }) {
   );
 }
 
-Object.assign(window, { ExpPanel, ExpListingsGrid });
+Object.assign(window, { ExpPanel, ExpListingsGrid, EPFilters, EPChip, EPGroup, EPToolLabel });
