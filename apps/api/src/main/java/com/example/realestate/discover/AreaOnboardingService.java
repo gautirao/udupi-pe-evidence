@@ -142,6 +142,15 @@ public class AreaOnboardingService {
         List<String> blockingReasons = new ArrayList<>();
         Map<CandidateOutcome, Integer> counts = new EnumMap<>(CandidateOutcome.class);
 
+        // Batch/city-level blocking reasons (#2676 B1a) — checked once per batch, not per candidate.
+        if (city == null || city.minLat() == null || city.minLon() == null
+                || city.maxLat() == null || city.maxLon() == null) {
+            blockingReasons.add("CITY_BOUNDS_MISSING: city " + cityId + " has no min/max lat/lon bounds");
+        }
+        if (!existsRegionPolicy(cityId)) {
+            blockingReasons.add("REGION_POLICY_MISSING: city " + cityId + " has no city_region_policy row");
+        }
+
         for (CandidateInput candidate : candidates) {
             AreaOnboardingReport.CandidateProjection projection =
                     classify(cityId, city, candidate, duplicateExternalSourceIds);
@@ -360,6 +369,18 @@ public class AreaOnboardingService {
     }
 
     /**
+     * #2676 B1a: a city with no {@code city_region_policy} row falls back to the
+     * self-healing region-classification retry path (silent, unbounded) instead of failing fast.
+     * This surfaces that state as a dry-run blocking reason so an operator sees it before apply,
+     * rather than the retry loop discovering it later. This is an observability/UX improvement —
+     * the underlying retry behaviour is unchanged and stays out of scope here.
+     */
+    private boolean existsRegionPolicy(int cityId) {
+        Integer count = jdbcOperations.queryForObject(REGION_POLICY_EXISTS_SQL, Integer.class, cityId);
+        return count != null && count > 0;
+    }
+
+    /**
      * Queries the empty-in-PR1 area_alias table — must not fail even with zero rows (see IT).
      * Scoped to {@code cityId} (#1887 rework BLOCKING 1): an alias belonging to a DIFFERENT city
      * must never conflict with this candidate, matching the non-blocking
@@ -492,6 +513,9 @@ public class AreaOnboardingService {
               AND min_lat IS NOT NULL AND min_lon IS NOT NULL
               AND max_lat IS NOT NULL AND max_lon IS NOT NULL
             """;
+
+    private static final String REGION_POLICY_EXISTS_SQL =
+            "SELECT COUNT(*) FROM city_region_policy WHERE city_id = ?";
 
     // ── SQL (staging tables: writes) ────────────────────────────────────────────
 

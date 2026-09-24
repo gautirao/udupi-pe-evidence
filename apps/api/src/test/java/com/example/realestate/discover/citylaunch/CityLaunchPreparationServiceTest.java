@@ -91,6 +91,31 @@ class CityLaunchPreparationServiceTest {
     }
 
     @Test
+    @DisplayName("prepare() treats a 4-segment area_key with a BLANK segment (e.g. "
+            + "\"citytest||g|h\") as locality-level and proceeds to CityRegionOnboardingService.apply() "
+            + "— documenting isLocalityLevelAreaKey's intentional divergence from "
+            + "AreaKeyFormat.isValidFourSegment (which rejects blank segments); this test documents "
+            + "the existing behaviour, it does not assert isValidFourSegment should be used here")
+    void prepare_fourSegmentAreaKeyWithBlankSegment_isTreatedAsLocalityLevel() {
+        stubAdvisoryLock();
+        when(geographyReader.findCity(CITY_ID)).thenReturn(Optional.of(city()));
+        CanonicalGeographyReader.CanonicalGeography geography = new CanonicalGeographyReader.CanonicalGeography(
+                List.of(activeArea("citytest||g|h")), List.of(),
+                List.of(new CanonicalGeographyReader.CanonicalCityRegion(
+                        "CENTRAL", "Central", 1, null, null, null, null, null, null, null)),
+                List.of(), List.of(), List.of());
+        when(geographyReader.loadGeography(CITY_ID)).thenReturn(geography);
+        when(revisionRepository.findByCityId(CITY_ID)).thenReturn(List.of());
+        CityLaunchRevision saved = new CityLaunchRevision(CITY_ID, 1, CALLER_ID);
+        when(revisionRepository.saveAndFlush(any())).thenReturn(saved);
+
+        service.prepare(CITY_ID, CALLER_ID);
+
+        verify(cityRegionOnboardingService, times(1))
+                .apply(CITY_ID, CityRegionOnboardingService.ClassificationSource.CANONICAL_GEOMETRY);
+    }
+
+    @Test
     @DisplayName("prepare() converts a RegionOnboardingBlockedException/NAMESPACE_COLLISION from "
             + "apply() into CityPrerequisiteGenerationException with the same reason name")
     void prepare_namespaceCollision_convertsToCityPrerequisiteGenerationException() {

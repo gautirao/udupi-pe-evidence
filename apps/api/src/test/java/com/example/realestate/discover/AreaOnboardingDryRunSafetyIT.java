@@ -280,6 +280,40 @@ class AreaOnboardingDryRunSafetyIT {
         assertThat(report.blockingReasons()).isNotEmpty();
     }
 
+    // ── #2676 B1a: batch/city-level blocking reasons ────────────────────────────
+
+    @Test
+    @DisplayName("CITY_BOUNDS_MISSING blocking reason + applyAllowed=false when the target city "
+            + "has no min/max lat/lon bounds, even though the candidate itself is otherwise clean")
+    void cityBoundsMissing_blocksApply_whenCityHasNoBbox() {
+        jdbcTemplate.update(
+                "UPDATE cities SET min_lat = NULL, min_lon = NULL, max_lat = NULL, max_lon = NULL WHERE id = ?",
+                bangaloreCityId);
+
+        AreaOnboardingReport report = onboardingService.dryRun(bangaloreCityId, "safety-it", List.of(
+                candidate("IN|KA|Bengaluru|CleanCandidate", "Clean Candidate", 12.97, 77.59,
+                        null, null, null, null, null, null)));
+
+        assertThat(report.blockingReasons()).anyMatch(reason -> reason.startsWith("CITY_BOUNDS_MISSING"));
+        assertThat(report.applyAllowed()).isFalse();
+    }
+
+    @Test
+    @DisplayName("REGION_POLICY_MISSING blocking reason + applyAllowed=false when the target city "
+            + "has no city_region_policy row — surfaces the otherwise-silent self-healing retry "
+            + "path as a visible dry-run signal (observability/UX, not a correctness fix; the "
+            + "retry behaviour itself is unchanged)")
+    void regionPolicyMissing_blocksApply_whenCityHasNoRegionPolicyRow() {
+        jdbcTemplate.update("DELETE FROM city_region_policy WHERE city_id = ?", bangaloreCityId);
+
+        AreaOnboardingReport report = onboardingService.dryRun(bangaloreCityId, "safety-it", List.of(
+                candidate("IN|KA|Bengaluru|CleanCandidate", "Clean Candidate", 12.97, 77.59,
+                        null, null, null, null, null, null)));
+
+        assertThat(report.blockingReasons()).anyMatch(reason -> reason.startsWith("REGION_POLICY_MISSING"));
+        assertThat(report.applyAllowed()).isFalse();
+    }
+
     // ── AC3: GeometryTrust computed only from geometry columns, never listings ──
 
     @Test
