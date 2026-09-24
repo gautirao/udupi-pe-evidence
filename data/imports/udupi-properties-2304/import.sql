@@ -630,7 +630,7 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.listing_images (id, listing_id, storage_path, url, position) VALUES (gen_random_uuid(), (md5('99acres:' || 'Y92487718'))::uuid, 'external:https://imagecdn.99acres.com/media1/39487/4/789744682M-1783427560821.jpg', 'https://imagecdn.99acres.com/media1/39487/4/789744682M-1783427560821.jpg', 0) ON CONFLICT (listing_id, storage_path) DO NOTHING;
 INSERT INTO public.listing_images (id, listing_id, storage_path, url, position) VALUES (gen_random_uuid(), (md5('99acres:' || 'Y92487718'))::uuid, 'external:https://imagecdn.99acres.com/media1/39487/4/789744682T-1783427560641.jpg', 'https://imagecdn.99acres.com/media1/39487/4/789744682T-1783427560641.jpg', 1) ON CONFLICT (listing_id, storage_path) DO NOTHING;
 INSERT INTO public.listing_commercial_space_details (listing_id, commercial_subtype, floor_number, total_floors, furnishing_status, washrooms, parking_count, road_frontage_ft, commercial_usage) VALUES
-  ((md5('99acres:' || 'Y92487718'))::uuid, NULL, NULL, 4, NULL, 0, NULL, NULL, NULL)
+  ((md5('99acres:' || 'Y92487718'))::uuid, 'SHOP', NULL, 4, NULL, 0, NULL, NULL, NULL)
 ON CONFLICT (listing_id) DO NOTHING;
 
 INSERT INTO public.property_listings (id, created_by, property_type, listing_family, status, is_valid, is_duplicate, address_confirmed, area_key, area_label, locality, title, latitude, longitude, price, price_paise, bedrooms, bathrooms, built_area, built_area_unit, land_area, land_area_unit, listing_purpose, facing, property_age, floor_number, total_floors, furnishing_status, washrooms, parking_count, road_frontage_ft, commercial_usage, number_of_units, commercial_subtype, commercial_furnishing_status, area_resolution_status, area_resolution_method, parsed_data) VALUES
@@ -666,7 +666,7 @@ INSERT INTO public.property_listings (id, created_by, property_type, listing_fam
   ((md5('99acres:' || 'L91307580'))::uuid, 'e7b61f70-d087-44d8-a81d-7f8a057d2775', 'commercial', 'COMMERCIAL', 'LIVE', true, false, false, 'IN|KA|Udupi|Manipal', 'Manipal', 'Shivalli', 'Shop for sale in Shivalli, Udupi', 13.361615, 74.784238, 52000000, 5200000000, NULL, 0, 2000, 'sqft', NULL, NULL, 'sale', NULL, '5', NULL, 4, NULL, 0, NULL, NULL, NULL, NULL, 'SHOP', NULL, 'RESOLVED', 'CANONICAL_KEY', '{"source": "99acres", "listingId": "L91307580", "importIssue": 2304}'::jsonb)
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.listing_commercial_space_details (listing_id, commercial_subtype, floor_number, total_floors, furnishing_status, washrooms, parking_count, road_frontage_ft, commercial_usage) VALUES
-  ((md5('99acres:' || 'L91307580'))::uuid, NULL, NULL, 4, NULL, 0, NULL, NULL, NULL)
+  ((md5('99acres:' || 'L91307580'))::uuid, 'SHOP', NULL, 4, NULL, 0, NULL, NULL, NULL)
 ON CONFLICT (listing_id) DO NOTHING;
 
 INSERT INTO public.property_listings (id, created_by, property_type, listing_family, status, is_valid, is_duplicate, address_confirmed, area_key, area_label, locality, title, latitude, longitude, price, price_paise, bedrooms, bathrooms, built_area, built_area_unit, land_area, land_area_unit, listing_purpose, facing, property_age, floor_number, total_floors, furnishing_status, washrooms, parking_count, road_frontage_ft, commercial_usage, number_of_units, commercial_subtype, commercial_furnishing_status, area_resolution_status, area_resolution_method, parsed_data) VALUES
@@ -703,7 +703,7 @@ INSERT INTO public.listing_images (id, listing_id, storage_path, url, position) 
 INSERT INTO public.listing_images (id, listing_id, storage_path, url, position) VALUES (gen_random_uuid(), (md5('99acres:' || 'K90606448'))::uuid, 'external:https://imagecdn.99acres.com/media1/37422/2/748442364M-1776975825249.jpg', 'https://imagecdn.99acres.com/media1/37422/2/748442364M-1776975825249.jpg', 3) ON CONFLICT (listing_id, storage_path) DO NOTHING;
 INSERT INTO public.listing_images (id, listing_id, storage_path, url, position) VALUES (gen_random_uuid(), (md5('99acres:' || 'K90606448'))::uuid, 'external:https://imagecdn.99acres.com/media1/37422/2/748442376M-1776975824369.jpg', 'https://imagecdn.99acres.com/media1/37422/2/748442376M-1776975824369.jpg', 4) ON CONFLICT (listing_id, storage_path) DO NOTHING;
 INSERT INTO public.listing_commercial_space_details (listing_id, commercial_subtype, floor_number, total_floors, furnishing_status, washrooms, parking_count, road_frontage_ft, commercial_usage) VALUES
-  ((md5('99acres:' || 'K90606448'))::uuid, NULL, NULL, 5, NULL, 0, NULL, NULL, NULL)
+  ((md5('99acres:' || 'K90606448'))::uuid, 'SHOP', NULL, 5, NULL, 0, NULL, NULL, NULL)
 ON CONFLICT (listing_id) DO NOTHING;
 
 INSERT INTO public.property_listings (id, created_by, property_type, listing_family, status, is_valid, is_duplicate, address_confirmed, area_key, area_label, locality, title, latitude, longitude, price, price_paise, bedrooms, bathrooms, built_area, built_area_unit, land_area, land_area_unit, listing_purpose, facing, property_age, floor_number, total_floors, furnishing_status, washrooms, parking_count, road_frontage_ft, commercial_usage, number_of_units, commercial_subtype, commercial_furnishing_status, area_resolution_status, area_resolution_method, parsed_data) VALUES

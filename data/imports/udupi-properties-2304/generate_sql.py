@@ -56,6 +56,11 @@ COMMERCIAL_DETAIL_TABLES = {
 def commercial_detail_values(item, column):
     """Map a detail-table column to the (only) 99acres source field that genuinely supplies it.
     Every column not listed here has no source field and is always NULL."""
+    if column == "commercial_subtype":
+        # Must agree with property_listings.commercial_subtype (the V104 write-model
+        # column set directly from this same source field) so the V135 guard trigger
+        # (assert_commercial_subtype_projected) never fires. See issue #2690.
+        return item.get("commercial_subtype")
     if column == "floor_number":
         return item.get("floor_number")
     if column == "total_floors":
