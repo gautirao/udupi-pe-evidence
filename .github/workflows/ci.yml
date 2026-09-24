@@ -12,6 +12,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ── Flyway migration version order guard (#2686) ─────────────────────────────
+  # Runs on every PR against main. Prevents recurrence of the production
+  # ordering incident: a branch allocates a migration version against a STALE
+  # main, another branch independently lands a migration and advances main
+  # first, and the first branch's now-lower version merges afterward — Flyway
+  # then refuses to start in production ("Detected resolved migration not
+  # applied to database: <N>"). See scripts/db/check-migration-version-order.sh
+  # for the full incident writeup and scripts/dev/tests/check-migration-version-order.test.sh
+  # for the regression test proving this exact two-lane scenario.
+  #
+  # fetch-depth: 0 is required — the guard needs full history to read
+  # origin/main's migration tree, not just the PR's own commits. This job re-runs
+  # on every push to the PR branch (GitHub Actions `pull_request` trigger), so it
+  # naturally re-checks against whatever main looked like at that point; branch
+  # protection's "Require branches to be up to date before merging" is what
+  # forces one final re-run against a truly fresh main immediately before merge
+  # is allowed — a repo-settings change, not something this workflow can enforce
+  # by itself, and out of scope for this PR (raised separately for review).
+  migration-version-guard:
+    name: Flyway migration version order guard
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check new migrations are newer than fresh main
+        run: bash scripts/db/check-migration-version-order.sh origin/main
+
   # ── Frontend ────────────────────────────────────────────────────────────────
   # Runs on every PR and push to main.
   # Required check for branch protection.

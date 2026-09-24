@@ -12,6 +12,16 @@ Date: YYYY-MM-DD | Sprint: <name or standalone/quick> | Route: <agent chain>
 ---
 -->
 
+## PR #2701 — fix(#2686): durable pre-merge guard against Flyway migration ordering incidents
+Date: 2026-09-24 | Sprint: standalone/quick | Route: qa-fast → self (implementer) → code-reviewer (REQUEST CHANGES → fixed) — open PR, awaiting CI/further review
+- What: `scripts/db/next-migration-version.sh` (checkpoint 1, advisory — reports next free version against fresh origin/main before authoring a migration) + `scripts/db/check-migration-version-order.sh` (checkpoint 2, enforcing — fails the build if a new migration's version isn't strictly greater than fresh origin/main's highest, or duplicates a version), shared logic in `scripts/db/lib/flyway-version-lib.sh`; wired into `.github/workflows/ci.yml` as new `migration-version-guard` job (`fetch-depth: 0`)
+- Why: the existing same-checkout `FlywayMigrationVersionUniquenessTest` (#2272) cannot detect the real incident shape — a version lower than fresh origin/main's current max landing after another lane advanced past it (2026-09-23 production incident, `FlywayV142V144OutOfOrderIT`'s reactive regression test)
+- Deviations: NONE — no `db/migration/` files touched; branch-protection "require branches up to date before merging" recommendation raised as a PR comment for owner review, not applied
+- Risks: NONE carried forward — code-reviewer's 2 BLOCKING findings (GNU-only `xargs -r` silently making the guard a no-op on macOS; a fetch fallback that left the tracking ref stale on failure, reproducing the incident inside the guard) both fixed and covered by new regression tests (T-FETCH-FAIL, and macOS re-verification)
+- Test evidence: `bash scripts/dev/tests/check-migration-version-order.test.sh` — 18/18 assertions PASS (AUTOMATED_PASS, exit 0), incl. the two-lane incident reproduction (T-INCIDENT), dotted-version numeric ordering (T-DOTTED), leading-zero duplicate normalization (T-LEADING-ZERO), fetch-failure fail-closed (T-FETCH-FAIL); manual (MANUAL_PASS) re-run of both scripts against this repo's real current `origin/main` (read-only fetch) — guard reports OK, advisory helper correctly reports V145 highest / V146 next free
+- PR: https://github.com/gautirao/udupi-property-explorer/pull/2701 — head d0a4b7d5
+---
+
 ## PR #2403 — fix(#2402): regenerate lockfile with full Linux optional-dependency records
 Date: 2026-08-30 | Sprint: standalone/quick | Route: self (docs/lockfile-only) — open PR, awaiting review
 - What: regenerated root `package-lock.json` from scratch in a clean `linux/amd64 node:22.16.0-bookworm` container so `@rollup/rollup-linux-x64-gnu`, `@swc/core-linux-x64-gnu`, and `@esbuild/linux-x64` get their own resolved package records (previously only referenced inside parent `optionalDependencies`, with only `darwin-arm64` fully resolved); corrected `.claude/DEPLOYMENT.md`'s disproven "lockfile is already correct" claim and removed the now-unneeded `SKIP_DEPENDENCY_INSTALL`/npm-self-upgrade workaround from PR #2402
