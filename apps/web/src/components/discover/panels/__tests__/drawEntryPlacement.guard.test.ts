@@ -47,6 +47,14 @@ describe('#2419 — draw entry placement', () => {
     const singleAreaRegion = source.slice(source.indexOf('area-single-action-row'));
     expect(source).toContain('area-single-action-row');
     expect(singleAreaRegion.slice(0, 400)).toMatch(/DrawSearchAreaEntry/);
-    expect(source).toMatch(/!isViewportScope && \(/);
+    expect(source).toMatch(/!isViewportScope && resultScopeKind !== 'POLYGON' && \(/);
+  });
+
+  // Issue #2419 (remaining gap) — a committed POLYGON scope already has its
+  // own redraw CTA via AreaSelectedPanelScopeBar's "Redraw" button. Without
+  // this exclusion, "Draw search area" renders alongside it: two competing
+  // redraw/start-draw controls for the same committed polygon.
+  it('gates the single-area entry out of POLYGON scope too', () => {
+    expect(source).toMatch(/!isViewportScope && resultScopeKind !== 'POLYGON' && \(/);
   });
 });

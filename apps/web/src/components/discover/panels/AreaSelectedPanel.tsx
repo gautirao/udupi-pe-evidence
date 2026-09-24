@@ -2416,7 +2416,15 @@ export function AreaSelectedPanel({
                 eligibility rule on this route) while its `mb-2` still applies, so it contributed
                 8px of whitespace for nothing. `:empty` matches precisely when the child rendered
                 null, so the margin survives wherever the row actually has content. */}
-            {!isViewportScope && (
+            {/* Issue #2419 (remaining gap) — also exclude committed POLYGON scope.
+                AreaSelectedPanelScopeBar already renders its own "Redraw" CTA for
+                resultScopeKind === 'POLYGON' below; without this exclusion, that
+                Redraw button and this "Draw search area" entry render side by side
+                for the same committed polygon — two competing redraw/start-draw
+                controls. `resolveDrawSearchAreaEligibility` has no POLYGON awareness
+                by design (it governs auth/journey/hierarchy, not scope), so the
+                exclusion belongs at this call site, mirroring the VIEWPORT one. */}
+            {!isViewportScope && resultScopeKind !== 'POLYGON' && (
               <div
                 className="mb-2 flex flex-wrap items-center gap-1.5 empty:hidden"
                 data-testid="area-single-action-row"
