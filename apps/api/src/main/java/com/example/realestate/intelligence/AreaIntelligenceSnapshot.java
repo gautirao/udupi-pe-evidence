@@ -21,8 +21,11 @@ import java.time.Instant;
  * <p>Nullable fields use boxed types ({@link Long}, {@link BigDecimal}, {@link String})
  * so that {@code null} unambiguously signals "absent / suppressed", never 0.
  *
- * <p>demand_score is ALWAYS null in this entity until issue #1532 populates it.
- * NEVER fabricate a value.
+ * <p>demand_score is populated separately by {@code AreaDemandSignalRepository.updateDemandScore}
+ * (issue #1532), via a targeted UPDATE driven by the hourly {@code AreaDemandSignalRollupJob}.
+ * It is {@code null} only when no demand-signal run has scored this area yet, or all its
+ * buckets were suppressed. {@link AreaIntelligenceSnapshotService} does not compute this column
+ * itself and must preserve it across its own full-row upsert. NEVER fabricate a value.
  */
 @Entity
 @Table(name = "area_intelligence_snapshot", schema = "public")
@@ -108,8 +111,12 @@ public class AreaIntelligenceSnapshot {
     private String confidence;
 
     /**
-     * Reserved for issue #1532. ALWAYS null in this version.
-     * Deferred demand score — never fabricate a value.
+     * Volume-weighted demand/supply gap score, written separately by
+     * {@code AreaDemandSignalRepository.updateDemandScore} (issue #1532) via the hourly
+     * {@code AreaDemandSignalRollupJob}. Null when no demand-signal run has scored this area
+     * yet, or all its buckets were suppressed — never fabricate a value.
+     * {@link AreaIntelligenceSnapshotService} does not compute this column itself and must
+     * preserve it across its own full-row upsert (see that class's javadoc).
      */
     @Column(name = "demand_score", precision = 5, scale = 2)
     private BigDecimal demandScore;

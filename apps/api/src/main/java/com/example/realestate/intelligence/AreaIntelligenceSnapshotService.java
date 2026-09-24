@@ -9,6 +9,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Service that computes per-area aggregate statistics and upserts them into
@@ -25,6 +27,12 @@ import java.util.List;
  * issues a SELECT-before-INSERT sequence; for a full replace pattern this is acceptable
  * because snapshots are refreshed in bulk periodically, not at high-concurrency per-row rate.
  *
+ * <p>{@link AreaIntelligenceSnapshot} has no {@code @Version} and a composite {@code @IdClass}
+ * key that is never null, so Spring Data's default {@code isNew()} treats every instance as
+ * "not new" and this merge is a <b>full-column</b> UPDATE — it would silently overwrite a
+ * column this service does not itself compute (see {@code demand_score} below) unless that
+ * column is explicitly preserved first. See {@link #preserveExistingDemandScores}.
+ *
  * <p><b>k-anonymity suppression rule ({@link AggregationConstants#K_ANON_MIN}):</b>
  * When {@code activeListingCount < K_ANON_MIN}, precise values ({@code median_price_paise},
  * {@code dominant_property_type}) are suppressed (set to NULL, never 0).
@@ -32,8 +40,13 @@ import java.util.List;
  * required because 0 is a false value that could mislead callers into thinking there is
  * zero price, not that price is unknown.
  *
- * <p><b>demand_score:</b> ALWAYS null in this issue (#1526). Populated by #1532.
- * Never fabricate a value.
+ * <p><b>demand_score:</b> not computed by this service. It is written separately by
+ * {@link AreaDemandSignalRepository#updateDemandScore} (issue #1532), driven by the
+ * hourly {@code AreaDemandSignalRollupJob}, via a targeted {@code UPDATE} that touches
+ * only that one column. Because {@link #buildSnapshots} performs a full-column merge
+ * (see above), {@link #preserveExistingDemandScores} copies each row's current
+ * {@code demand_score} onto the freshly built entity before save so this recompute never
+ * clobbers that separately-maintained value. Never fabricate a value.
  *
  * <p><b>avg_listing_quality:</b> SQL AVG returns NULL when no scored rows exist.
  * The service passes the raw Double (which may be null) through directly — NEVER coerces
@@ -74,10 +87,58 @@ public class AreaIntelligenceSnapshotService {
                 .map(row -> toSnapshot(row, now))
                 .toList();
 
+        preserveExistingDemandScores(snapshots);
+
         snapshotRepository.saveAllAndFlush(snapshots);
 
         log.info("AreaIntelligenceSnapshotService: upserted {} snapshot rows", snapshots.size());
         return snapshots.size();
+    }
+
+    /**
+     * Preserve each row's currently-persisted {@code demand_score} across the full-column
+     * merge performed by {@link #buildSnapshots}.
+     *
+     * <p>{@link #toSnapshot} never sets {@code demand_score} — it is populated separately and
+     * asynchronously by {@link AreaDemandSignalRepository#updateDemandScore} (issue #1532),
+     * driven by the hourly {@code AreaDemandSignalRollupJob}. Because {@code saveAllAndFlush}
+     * on this composite-key, unversioned entity performs a full-column
+     * {@code EntityManager.merge()} (see class javadoc), leaving {@code demand_score} unset on
+     * the in-memory entity would silently null out a live, separately-maintained column on
+     * every existing row on every nightly run. This looks up the current persisted value for
+     * each {@code (city_slug, area_key)} bucket in one batch fetch (no N+1) and copies it onto
+     * the freshly built entity before save. Newly-created buckets (no existing row) correctly
+     * keep {@code demand_score = null} — there is nothing to preserve yet.
+     *
+     * @param snapshots freshly built entities (pre-save), mutated in place
+     */
+    private void preserveExistingDemandScores(List<AreaIntelligenceSnapshot> snapshots) {
+        if (snapshots.isEmpty()) {
+            return;
+        }
+
+        List<AreaIntelligenceSnapshotId> ids = snapshots.stream()
+                .map(s -> new AreaIntelligenceSnapshotId(s.getCitySlug(), s.getAreaKey()))
+                .toList();
+
+        // Collectors.toMap() throws NullPointerException on a null value, and most rows'
+        // demand_score IS legitimately null — filter those out before collecting; the
+        // lookup below already treats "absent from the map" the same as "null", so this
+        // changes nothing observable, it just avoids the NPE.
+        Map<AreaIntelligenceSnapshotId, BigDecimal> existingDemandScoresById =
+                snapshotRepository.findAllById(ids).stream()
+                        .filter(s -> s.getDemandScore() != null)
+                        .collect(Collectors.toMap(
+                                s -> new AreaIntelligenceSnapshotId(s.getCitySlug(), s.getAreaKey()),
+                                AreaIntelligenceSnapshot::getDemandScore));
+
+        for (AreaIntelligenceSnapshot snapshot : snapshots) {
+            BigDecimal existingDemandScore = existingDemandScoresById.get(
+                    new AreaIntelligenceSnapshotId(snapshot.getCitySlug(), snapshot.getAreaKey()));
+            if (existingDemandScore != null) {
+                snapshot.setDemandScore(existingDemandScore);
+            }
+        }
     }
 
     /**
@@ -86,7 +147,8 @@ public class AreaIntelligenceSnapshotService {
      *
      * @param row   raw aggregate row from the native query
      * @param now   snapshot computation timestamp (caller-supplied for consistency)
-     * @return fully populated snapshot entity (demand_score stays null)
+     * @return fully populated snapshot entity ({@code demand_score} stays null here — see
+     *         {@link #preserveExistingDemandScores}, applied by the caller after mapping)
      */
     AreaIntelligenceSnapshot toSnapshot(AreaIntelligenceSnapshotRow row, Instant now) {
         int activeCount = row.getActiveListingCount() != null
@@ -136,7 +198,8 @@ public class AreaIntelligenceSnapshotService {
         snapshot.setPriceComparisonSampleCount(priceComparisonSampleCount);
         snapshot.setPriceComparisonSupported(supported);
         snapshot.setConfidence(confidence);
-        // demand_score intentionally not set — stays null (reserved for #1532).
+        // demand_score intentionally not set here — preserved separately by the caller
+        // (preserveExistingDemandScores), since it is maintained by a different job (#1532).
 
         return snapshot;
     }
