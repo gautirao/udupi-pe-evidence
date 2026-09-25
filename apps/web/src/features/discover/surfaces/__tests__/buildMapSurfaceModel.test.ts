@@ -424,6 +424,28 @@ describe('buildMapSurfaceCommands', () => {
     );
   });
 
+  // Issue #2711 — the missing wire: `commands.filters.onIntentChange` must reach
+  // `DiscoverMapCanvas`'s `onIntentChange` prop (then `MapFilterSheet`) by reference, the SAME
+  // pattern `onFiltersChange`/`handleFiltersChange` already use, so the composition root's
+  // `actions.setIntent` (the canonical, List-shared intent command) is reachable at all.
+  it('wires filters.onFiltersChange/onIntentChange through verbatim', () => {
+    const handleFiltersChange = vi.fn();
+    const handleIntentChange = vi.fn();
+    const params = makeCommandsParams({ handleFiltersChange, handleIntentChange }) as never as Record<
+      string,
+      unknown
+    >;
+    const commands = buildMapSurfaceCommands(params as never as Parameters<typeof buildMapSurfaceCommands>[0]);
+    expect(commands.filters.onFiltersChange).toBe(handleFiltersChange);
+    expect(commands.filters.onIntentChange).toBe(handleIntentChange);
+  });
+
+  it('filters.onIntentChange is undefined when the composition root has not wired handleIntentChange', () => {
+    const params = makeCommandsParams() as never as Record<string, unknown>;
+    const commands = buildMapSurfaceCommands(params as never as Parameters<typeof buildMapSurfaceCommands>[0]);
+    expect(commands.filters.onIntentChange).toBeUndefined();
+  });
+
   it('overlays.onClusterFocusChange reuses the SAME command as navigation.onClusterFocusChange', () => {
     const params = makeCommandsParams() as never as Record<string, Record<string, unknown>>;
     const commands = buildMapSurfaceCommands(params as never as Parameters<typeof buildMapSurfaceCommands>[0]);

@@ -194,6 +194,12 @@ export function assembleDiscoverSurfaceProps(
     // query for `map-filters-pill` absent despite the mobile Map overlay itself being
     // genuinely open) even though every other link in the chain was correctly wired.
     handleFiltersChange,
+    // Issue #2711 — the matching canonical Buy/Rent intent command: the SAME `actions.setIntent`
+    // (city.ts) `DiscoverControlBar.tsx` already passes to `IntentSelector` as `onIntentChange`
+    // for List. Wired through the same optional seam as `handleFiltersChange` above so the Map
+    // "Filters" sheet's Apply can commit an intent switch atomically instead of the sheet's own
+    // `onIntentChange?.(draftIntent)` silently no-op'ing (the bug this issue fixes).
+    handleIntentChange: actions.setIntent,
     pageContextController,
     pageStateController,
     mapDataController,

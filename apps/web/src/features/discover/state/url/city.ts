@@ -18,11 +18,13 @@ import type { UrlDomainCtx, UrlDomainModule } from './_shared';
 import type {
   DiscoverIntent,
   DiscoverUrlActions,
+  DiscoverUrlFilters,
   DiscoverUrlState,
 } from '@/hooks/useDiscoverUrlState';
 import { clearNodeParam } from './navigation';
 import { applyResultScopeCommit } from './resultScope';
 import { applyIntentTransition } from '@/features/discover/filters/intentTransition';
+import { serializeFilters } from './filters';
 
 type CityState = Pick<DiscoverUrlState, 'city' | 'intent'>;
 type CityActions = Pick<DiscoverUrlActions, 'changeCity' | 'setCity' | 'setIntent' | 'setScope'>;
@@ -108,8 +110,29 @@ export function useCityUrlDomain(ctx: UrlDomainCtx): UrlDomainModule<CityState, 
   // call as the `intent` write itself: one atomic REPLACE, not a second PUSH-shaped
   // write racing a separate `setFiltersCommitted` call (which would also add an
   // unwanted extra history entry — AC6).
+  //
+  // Issue #2711 (live-browser follow-up) — `filtersOverride`. `react-router`'s
+  // `setSearchParams` functional form closes over the `searchParams` snapshot from
+  // THIS render; a SECOND, separately-scheduled `setUrlParams` call (List's own
+  // `onApply`/`handleFiltersChange` → the debounced `setFiltersLive`) captured in the
+  // SAME synchronous handler still sees that SAME stale snapshot when its own callback
+  // finally runs, even after THIS call has already landed — so its `next` silently
+  // omits the intent + everything this call just wrote, and its own `navigate()` replaces
+  // the URL wholesale, discarding them (live-verified: `intent` reverted to its
+  // pre-Apply value once that second write landed). `filtersOverride` — the caller's FULL
+  // staged filter set (MapFilterSheet's `draft`, already carrying the post-intent-transition
+  // `propertyTypes`/`priceMin`/`priceMax` from `handleSelectIntent`'s own local
+  // `applyIntentTransition` call, PLUS any other field the buyer staged in the same visit —
+  // bedrooms, sellerTypes, dates, … — see that component's own `handleApply`) — lets this ONE
+  // call be the ONLY write for the WHOLE Apply, not just its intent-owned subset. Serialized via
+  // `serializeFilters` (state/url/filters.ts), the SAME writer List's own live filter edits use,
+  // so this isn't a second, independently-drifting serialization of the same fields. Omitted
+  // (List's own shape, unchanged): re-derives `propertyTypes` from the CURRENT URL via
+  // `applyIntentTransition` and always resets both budget bounds; every OTHER filter field is
+  // untouched (List's `IntentSelector` never edits them in the same gesture, so there is nothing
+  // else to serialize on that path).
   const setIntent = useCallback(
-    (newIntent: DiscoverIntent) => {
+    (newIntent: DiscoverIntent, filtersOverride?: DiscoverUrlFilters) => {
       if (newIntent === intent) return;
       setUrlParams(
         (prev) => {
@@ -120,22 +143,26 @@ export function useCityUrlDomain(ctx: UrlDomainCtx): UrlDomainModule<CityState, 
             next.delete('intent');
           }
 
-          const currentPropertyTypes = next.get('type')
-            ?.split(',')
-            .map((t) => t.trim())
-            .filter(Boolean);
-          const { propertyTypes } = applyIntentTransition(
-            { propertyTypes: currentPropertyTypes },
-            newIntent,
-          );
-          if (propertyTypes && propertyTypes.length > 0) {
-            next.set('type', propertyTypes.join(','));
+          if (filtersOverride) {
+            serializeFilters(next, filtersOverride);
           } else {
-            next.delete('type');
+            const currentPropertyTypes = next.get('type')
+              ?.split(',')
+              .map((t) => t.trim())
+              .filter(Boolean);
+            const { propertyTypes } = applyIntentTransition(
+              { propertyTypes: currentPropertyTypes },
+              newIntent,
+            );
+            if (propertyTypes && propertyTypes.length > 0) {
+              next.set('type', propertyTypes.join(','));
+            } else {
+              next.delete('type');
+            }
+            // Budget bounds always reset on an intent switch, both directions.
+            next.delete('priceMin');
+            next.delete('priceMax');
           }
-          // Budget bounds always reset on an intent switch, both directions.
-          next.delete('priceMin');
-          next.delete('priceMax');
 
           return next;
         },

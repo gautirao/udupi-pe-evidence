@@ -18,6 +18,7 @@ import type {
   DiscoverUrlFilters,
   DiscoverUrlState,
 } from '@/hooks/useDiscoverUrlState';
+import type { PropertyFilters } from '@/hooks/usePropertyListings';
 
 const DEBOUNCE_MS = 300;
 
@@ -51,7 +52,14 @@ function parseCommaStrings(value: string | null): string[] | undefined {
   return parsed.length > 0 ? parsed : undefined;
 }
 
-function serializeFilters(
+/**
+ * Issue #2711 — exported (was module-private) so `city.ts`'s `setIntent` can serialize a
+ * caller-supplied FULL filters override into the SAME `setUrlParams` call as the intent write
+ * itself, instead of MapFilterSheet's Apply needing a second, separately-scheduled write (which
+ * silently discarded whatever `setIntent` had just written — see `setIntent`'s own doc comment
+ * in city.ts). No behavior change to this function itself.
+ */
+export function serializeFilters(
   params: URLSearchParams,
   filters: DiscoverUrlFilters,
 ): URLSearchParams {
@@ -206,6 +214,39 @@ function serializeFilters(
     params.delete('agriWaterSource');
   }
   return params;
+}
+
+/**
+ * Issue #2711 — extracted from `useDiscoverPageState.ts`'s `handleFiltersChange` (byte-identical
+ * field mapping, moved here verbatim rather than duplicated) so BOTH that hook's own debounced
+ * `setFiltersLive` write AND `city.ts`'s `setIntent` (for MapFilterSheet's Apply, which needs to
+ * serialize a FULL staged draft atomically alongside an intent switch — see that function's own
+ * doc comment) share ONE definition of "how a `PropertyFilters` becomes a `DiscoverUrlFilters`",
+ * rather than two independently-maintained copies that could silently drift. Pure — no URL/React
+ * state; the school-radius side effect `handleFiltersChange` also performs
+ * (`urlActions.setSchoolParams`) is NOT part of this mapping and stays the caller's own concern.
+ */
+export function toDiscoverUrlFilters(filters: PropertyFilters): DiscoverUrlFilters {
+  return {
+    propertyTypes: filters.propertyTypes,
+    // Issue #2431 — written alongside propertyTypes so the two always move together.
+    commercialSubtypes: filters.commercialSubtypes,
+    bedrooms: filters.bedrooms,
+    priceMin: filters.priceMin,
+    priceMax: filters.priceMax,
+    // Issue #2459 — write-back half of AC7.
+    areaMinSqft: filters.areaMinSqft,
+    areaMaxSqft: filters.areaMaxSqft,
+    sellerTypes: filters.sellerTypes,
+    boardFilters: filters.boardFilters,
+    categoryFilters: filters.categoryFilters,
+    backOnMarket: filters.backOnMarket,
+    newToMarket: filters.newToMarket,
+    reraRegistered: filters.reraRegistered,
+    readyToMove: filters.readyToMove,
+    dateFrom: filters.dateFrom ? filters.dateFrom.toISOString().slice(0, 10) : undefined,
+    dateTo: filters.dateTo ? filters.dateTo.toISOString().slice(0, 10) : undefined,
+  };
 }
 
 export function useFiltersUrlDomain(

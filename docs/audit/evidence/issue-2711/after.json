@@ -1,0 +1,26 @@
+{
+  "build": "after",
+  "base": "http://localhost:5274",
+  "results": {
+    "rentBudget": {
+      "beforeApply": "?city=bangalore&type=apartment",
+      "afterSearch": "?city=bangalore&type=apartment&intent=rent&priceMax=15000",
+      "canonAfter": {
+        "city": "bangalore",
+        "intent": "rent",
+        "type": "apartment",
+        "priceMax": "15000"
+      }
+    },
+    "rentPlusBedrooms": {
+      "beforeApply": "?city=bangalore&type=apartment",
+      "afterSearch": "?city=bangalore&type=apartment&intent=rent&beds=2",
+      "canonAfter": {
+        "city": "bangalore",
+        "intent": "rent",
+        "type": "apartment",
+        "beds": "2"
+      }
+    }
+  }
+}

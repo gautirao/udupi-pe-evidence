@@ -112,16 +112,29 @@ describe('MapFilterSheet', () => {
   });
 
   it('Buy→Rent resets the budget and drops Residential Plot', () => {
-    const { onApply } = renderSheet({
+    // Issue #2711 — an intent switch now commits via `onIntentChange`'s `filtersOverride` (its
+    // ONE atomic call with city.ts's `setIntent`), not `onApply` — see `handleApply`'s own
+    // comment. Wiring a real `onIntentChange` here observes the SAME transitioned values that
+    // reached `draft` (and, pre-#2711, `onApply`) via `handleSelectIntent`'s local
+    // `applyIntentTransition` call.
+    const onIntentChange = vi.fn();
+    renderSheet({
+      intent: 'buy',
+      onIntentChange,
       filters: { propertyTypes: ['apartment', 'residential_plot'], priceMax: 5_000_000 },
     });
 
     fireEvent.click(screen.getByTestId('map-filter-sheet-intent-rent'));
     fireEvent.click(screen.getByTestId('map-filter-sheet-apply'));
 
-    const applied = onApply.mock.calls[0][0] as PropertyFilters;
-    expect(applied.propertyTypes).toEqual(['apartment']);
-    expect(applied.priceMax).toBeUndefined();
+    expect(onIntentChange).toHaveBeenCalledTimes(1);
+    const [calledIntent, filtersOverride] = onIntentChange.mock.calls[0] as [
+      string,
+      PropertyFilters,
+    ];
+    expect(calledIntent).toBe('rent');
+    expect(filtersOverride.propertyTypes).toEqual(['apartment']);
+    expect(filtersOverride.priceMax).toBeUndefined();
   });
 
   it('shows the "still shows M" status line while a draft edit is unapplied', () => {
@@ -185,5 +198,121 @@ describe('MapFilterSheet', () => {
     fireEvent.click(screen.getByTestId('map-filter-sheet-apply'));
     const applied = onApply.mock.calls[0][0] as PropertyFilters;
     expect(applied.schoolRadiusKm).toBe(3);
+  });
+
+  // Issue #2711 — Apply must commit an intent switch through `onIntentChange` (the canonical
+  // `city.ts` `setIntent`), not silently drop it. Regression coverage for the bug: Apply
+  // previously called `onApply(draft)`/`onIntentChange(draftIntent)` in the WRONG order and the
+  // composition root never even passed `onIntentChange` through, so a Rent selection in the
+  // sheet never reached the URL's `intent` param.
+  //
+  // Issue #2711 (live-browser follow-up) — a SECOND real-browser defect (a stale
+  // `react-router` `setSearchParams` closure inside the debounced `onApply`/`setFiltersLive`
+  // path silently discarding whatever `onIntentChange` had just written) meant `onApply` could
+  // no longer ALSO be called when intent changes — see `handleApply`'s own comment and
+  // `setIntent`'s in city.ts. `onIntentChange` now carries `draft` as its own `filtersOverride`
+  // argument, making it the ONLY write for an intent-changed Apply.
+  describe('#2711 — Apply commits an intent switch atomically via onIntentChange', () => {
+    it('calls onIntentChange with the new intent and the transitioned filters, and does NOT also call onApply', () => {
+      const onIntentChange = vi.fn();
+      const { onApply } = renderSheet({
+        intent: 'buy',
+        onIntentChange,
+        filters: { propertyTypes: ['apartment'] },
+      });
+
+      fireEvent.click(screen.getByTestId('map-filter-sheet-intent-rent'));
+      fireEvent.click(screen.getByTestId('map-filter-sheet-apply'));
+
+      expect(onIntentChange).toHaveBeenCalledTimes(1);
+      const [calledIntent, filtersOverride] = onIntentChange.mock.calls[0] as [
+        string,
+        PropertyFilters,
+      ];
+      expect(calledIntent).toBe('rent');
+      expect(filtersOverride.propertyTypes).toEqual(['apartment']);
+      // AC1/the live-browser fix: onApply must NOT also fire for an intent-changed Apply — a
+      // second, separately-scheduled write is exactly what silently discarded the intent commit
+      // in the real browser (see handleApply's own comment).
+      expect(onApply).not.toHaveBeenCalled();
+    });
+
+    // Issue #2711 (code-review follow-up, REQUEST CHANGES) — regression coverage for the data-
+    // loss gap a reviewer caught: staging a field the intent transition does NOT own (bedrooms,
+    // sellerTypes, dates, …) IN THE SAME sheet visit as an intent switch must still commit that
+    // field, not silently drop it just because `onApply` can no longer also fire. `handleApply`
+    // now passes `toDiscoverUrlFilters(draft)` — the buyer's ENTIRE staged draft, not just the
+    // propertyTypes/priceMin/priceMax subset `applyIntentTransition` touches — as
+    // `onIntentChange`'s `filtersOverride`, so `bedrooms` (staged here alongside Rent) survives.
+    it('a bedrooms edit staged in the SAME visit as an intent switch is NOT dropped — filtersOverride carries the full draft', () => {
+      const onIntentChange = vi.fn();
+      renderSheet({
+        intent: 'buy',
+        onIntentChange,
+        filters: { propertyTypes: ['apartment'] },
+      });
+
+      fireEvent.click(screen.getByTestId('quick-chip-2-bhk'));
+      fireEvent.click(screen.getByTestId('map-filter-sheet-intent-rent'));
+      fireEvent.click(screen.getByTestId('map-filter-sheet-apply'));
+
+      expect(onIntentChange).toHaveBeenCalledTimes(1);
+      const [calledIntent, filtersOverride] = onIntentChange.mock.calls[0] as [
+        string,
+        { propertyTypes?: string[]; bedrooms?: number[] },
+      ];
+      expect(calledIntent).toBe('rent');
+      // The intent-owned field, still correctly transitioned:
+      expect(filtersOverride.propertyTypes).toEqual(['apartment']);
+      // The UNRELATED staged field — this is the regression: it must NOT be undefined/dropped.
+      expect(filtersOverride.bedrooms).toEqual([2]);
+    });
+
+    it('never calls onIntentChange when the draft intent is unchanged', () => {
+      const onIntentChange = vi.fn();
+      const { onApply } = renderSheet({
+        intent: 'buy',
+        onIntentChange,
+        filters: { propertyTypes: ['apartment'] },
+      });
+
+      fireEvent.click(screen.getByTestId('quick-chip-2-bhk'));
+      fireEvent.click(screen.getByTestId('map-filter-sheet-apply'));
+
+      expect(onIntentChange).not.toHaveBeenCalled();
+      expect(onApply).toHaveBeenCalledTimes(1);
+    });
+
+    it('a staged-then-reverted intent (Rent then back to Buy) calls onIntentChange with "buy", not "rent"', () => {
+      const onIntentChange = vi.fn();
+      renderSheet({ intent: 'buy', onIntentChange, filters: {} });
+
+      fireEvent.click(screen.getByTestId('map-filter-sheet-intent-rent'));
+      fireEvent.click(screen.getByTestId('map-filter-sheet-intent-buy'));
+      fireEvent.click(screen.getByTestId('map-filter-sheet-apply'));
+
+      // Net intent is unchanged (buy -> rent -> buy), so no commit is needed at all.
+      expect(onIntentChange).not.toHaveBeenCalled();
+    });
+
+    it('Cancel never calls onIntentChange even after staging a Rent switch', () => {
+      const onIntentChange = vi.fn();
+      const { onApply, onOpenChange } = renderSheet({ intent: 'buy', onIntentChange, filters: {} });
+
+      fireEvent.click(screen.getByTestId('map-filter-sheet-intent-rent'));
+      fireEvent.keyDown(screen.getByTestId('map-filter-sheet'), { key: 'Escape' });
+
+      expect(onIntentChange).not.toHaveBeenCalled();
+      expect(onApply).not.toHaveBeenCalled();
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    it('falls back to onApply (the pre-#2711 default) when the caller has not wired onIntentChange', () => {
+      const { onApply } = renderSheet({ intent: 'buy', filters: {} });
+
+      fireEvent.click(screen.getByTestId('map-filter-sheet-intent-rent'));
+      expect(() => fireEvent.click(screen.getByTestId('map-filter-sheet-apply'))).not.toThrow();
+      expect(onApply).toHaveBeenCalledTimes(1);
+    });
   });
 });

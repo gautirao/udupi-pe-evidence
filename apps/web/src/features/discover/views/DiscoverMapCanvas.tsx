@@ -56,7 +56,7 @@ import { Button } from '@/components/ui/button';
 // any displayed value (see PropertyFilterGroups.tsx's file header on why a second call that DID
 // feed rendered UI would be unsafe).
 import { usePropertyFilterGroups } from '@/components/discover/panels/PropertyFilterGroups';
-import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
+import type { DiscoverIntent, DiscoverUrlFilters } from '@/hooks/useDiscoverUrlState';
 import type {
   PolygonDraftBlock,
   PolygonDraftPhase,
@@ -371,6 +371,21 @@ export interface DiscoverMapCanvasProps {
    */
   intent?: DiscoverIntent;
 
+  /**
+   * Issue #2711 — writes the applied Buy/Rent intent, mirroring `onFiltersChange` above: the
+   * ONE canonical command (`city.ts`'s `setIntent`, the exact function `DiscoverControlBar`'s
+   * `IntentSelector` already calls for List — see `DiscoverControlBar.tsx`'s own
+   * `onIntentChange={actions.setIntent}` wire), reached through this same optional/inert-until-
+   * wired seam so the mobile Map "Filters" sheet's Buy/Rent Apply produces the IDENTICAL
+   * intent+propertyTypes+priceMin/Max URL transition List's Buy/Rent control does (AC3 parity),
+   * instead of `MapFilterSheet`'s `handleApply` silently no-op'ing on the intent half of Apply
+   * (the bug this issue fixes — `onIntentChange` was never passed to `MapFilterSheet` below).
+   * Widened (2nd/3rd #2711 follow-ups) to `setIntent`'s optional `filtersOverride` second
+   * argument, now the FULL `DiscoverUrlFilters` (not just the intent-owned subset) — see that
+   * prop's own doc on `MapFilterSheetProps` and `setIntent`'s in city.ts.
+   */
+  onIntentChange?: (intent: DiscoverIntent, filtersOverride?: DiscoverUrlFilters) => void;
+
   // ── DiscoverMapLegend#1 schoolRadiusChrome (L2016) ──
   schoolRadiusOverlay: boolean;
 
@@ -539,6 +554,7 @@ export function DiscoverMapCanvas({
   mobileListButton,
   onFiltersChange,
   intent = 'buy',
+  onIntentChange,
   schoolRadiusOverlay,
   resolvedPanelContent,
   isSelectedGroupState,
@@ -1288,6 +1304,10 @@ export function DiscoverMapCanvas({
           filters={filters}
           onApply={onFiltersChange}
           intent={intent}
+          // Issue #2711 — the missing wire: without this, MapFilterSheet's own
+          // `onIntentChange?.(draftIntent)` silently no-op'd and Apply never committed a Rent/Buy
+          // switch (only the transitioned filters landed). See this prop's own doc above.
+          onIntentChange={onIntentChange}
           isCommercialSubtypeSupported
           appliedResultCount={mapResultsCount}
           // mf-09 — "Show 2 commercial properties"; the sheet's own generic 'homes' default

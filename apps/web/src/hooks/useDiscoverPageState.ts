@@ -24,6 +24,7 @@ import {
   projectUrlFilters,
   urlFilterSignature,
 } from '@/features/discover/selectors/urlFiltersProjection';
+import { toDiscoverUrlFilters } from '@/features/discover/state/url/filters';
 
 export interface UseDiscoverPageStateParams {
   urlState: DiscoverUrlState;
@@ -428,31 +429,11 @@ export function useDiscoverPageState({
       if (next.schoolRadiusKm != null && selectedSchool) {
         urlActions.setSchoolParams({ schoolId: selectedSchool.id, radiusKm: next.schoolRadiusKm });
       }
-      urlActions.setFiltersLive({
-        propertyTypes: next.propertyTypes,
-        // Issue #2431 — written alongside propertyTypes so the two always move together.
-        // PropertyTypeFilter clears this when the buyer leaves the generic Commercial family,
-        // and that cleared value must reach the URL in the SAME write, or the URL would retain
-        // a subtype the visible controls no longer express.
-        commercialSubtypes: next.commercialSubtypes,
-        bedrooms: next.bedrooms,
-        priceMin: next.priceMin,
-        priceMax: next.priceMax,
-        // Issue #2459 — write-back half of AC7. Without it the bound would live only in React
-        // state: a reload or a Back step would silently drop the predicate while the results
-        // stayed on screen.
-        areaMinSqft: next.areaMinSqft,
-        areaMaxSqft: next.areaMaxSqft,
-        sellerTypes: next.sellerTypes,
-        boardFilters: next.boardFilters,
-        categoryFilters: next.categoryFilters,
-        backOnMarket: next.backOnMarket,
-        newToMarket: next.newToMarket,
-        reraRegistered: next.reraRegistered,
-        readyToMove: next.readyToMove,
-        dateFrom: next.dateFrom ? next.dateFrom.toISOString().slice(0, 10) : undefined,
-        dateTo: next.dateTo ? next.dateTo.toISOString().slice(0, 10) : undefined,
-      });
+      // Issue #2711 — the PropertyFilters→DiscoverUrlFilters mapping moved to the SHARED
+      // `toDiscoverUrlFilters` (state/url/filters.ts), reused by MapFilterSheet's Apply
+      // (city.ts's `setIntent`) so both paths serialize filters identically instead of
+      // maintaining two copies of this same field list.
+      urlActions.setFiltersLive(toDiscoverUrlFilters(next));
     },
     [selectedSchool, urlActions],
   );

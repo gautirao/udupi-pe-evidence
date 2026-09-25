@@ -555,8 +555,20 @@ export interface DiscoverUrlActions {
   /**
    * Issue #1494 — set the buy/rent intent. REPLACE (preference change, not a new
    * navigation destination; Back should not undo a buy/rent toggle).
+   *
+   * Issue #2711 — optional `filtersOverride`: when the caller (MapFilterSheet's staged
+   * Apply) has ALREADY computed the correct FULL final filter set locally (its staged
+   * `draft` — post-intent-transition `propertyTypes`/`priceMin`/`priceMax`, PLUS any other
+   * field staged in the same visit), passing it here writes intent + that whole filter set
+   * in the SAME atomic `setUrlParams` call this function already makes — rather than a
+   * SECOND, separately-scheduled write (List's own `onApply`/`handleFiltersChange` path)
+   * whose `prev` snapshot cannot see this call's effect within the same render (both close
+   * over the SAME pre-click `searchParams`), which silently discards the intent (and
+   * anything else) this call just wrote once its own `navigate()` replaces the URL
+   * wholesale. Omitted (List's own call shape, unchanged): re-derives `propertyTypes` from
+   * the CURRENT URL's `type` param via `applyIntentTransition`, exactly as before.
    */
-  setIntent: (intent: DiscoverIntent) => void;
+  setIntent: (intent: DiscoverIntent, filtersOverride?: DiscoverUrlFilters) => void;
   /**
    * Atomic school-first journey start — sets journey='school-first', school params (schoolId,
    * radiusKm, lat, lon, zoom), and areaKey in a single PUSH. Ensures all params reach the URL

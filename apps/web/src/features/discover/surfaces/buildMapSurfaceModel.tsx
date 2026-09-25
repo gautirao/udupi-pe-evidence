@@ -209,8 +209,13 @@ type MapStatusView = Pick<
 
 type MapMobileView = Pick<DiscoverMapCanvasProps, 'mobileListButton'>;
 
-/** Issue #2628 — the mobile Map "Filters" staged sheet's one canonical write command. */
-type MapFiltersCommands = Pick<DiscoverMapCanvasProps, 'onFiltersChange'>;
+/**
+ * Issue #2628 — the mobile Map "Filters" staged sheet's one canonical write command.
+ * Issue #2711 — plus `onIntentChange`, the matching canonical Buy/Rent intent command
+ * (city.ts's `setIntent`) so the sheet's Apply can commit an intent switch atomically,
+ * the same way `onFiltersChange` lets it commit the transitioned filters.
+ */
+type MapFiltersCommands = Pick<DiscoverMapCanvasProps, 'onFiltersChange' | 'onIntentChange'>;
 
 type MapRegionGuideView = Pick<DiscoverMapCanvasProps, 'regionGuideVisible' | 'regionGuideRingActive'> &
   Pick<DiscoverMapCanvasProps, 'resolvedRegionLabel' | 'regionSelectNonce' | 'regionOverviewMarkerKind'>;
@@ -415,6 +420,8 @@ export type BuildMapSurfaceViewParams = Omit<
   | 'handlePolygonCleared'
   // Issue #2628 — command, not view data; lives in MapFiltersCommands below.
   | 'onFiltersChange'
+  // Issue #2711 — command, not view data; lives in MapFiltersCommands below.
+  | 'onIntentChange'
   // Issue #2016 — commands, not view data; live in MapDrawingCommands below.
   | 'isReplaceScopeConfirmOpen'
   | 'handleConfirmReplaceScope'
@@ -909,6 +916,15 @@ export type BuildMapSurfaceCommandsParams = Pick<
    * is equally optional and gates the pill's very presence — see that component).
    */
   handleFiltersChange?: (next: DiscoverMapCanvasProps['filters']) => void;
+  /**
+   * Issue #2711 — the matching canonical Buy/Rent intent command (city.ts's `setIntent`, the
+   * SAME function `DiscoverControlBar.tsx` already passes as `IntentSelector`'s own
+   * `onIntentChange`), reached through this same optional/inert-until-wired seam as
+   * `handleFiltersChange` above so the Map "Filters" sheet's Apply can commit an intent switch
+   * atomically instead of silently dropping it (the bug this issue fixes). Typed off the prop
+   * itself (rather than retyped here) so its `filtersOverride` second argument can't drift.
+   */
+  handleIntentChange?: DiscoverMapCanvasProps['onIntentChange'];
 };
 
 export function buildMapSurfaceCommands(
@@ -969,12 +985,15 @@ export function buildMapSurfaceCommands(
     clearSelectedListing,
     // Issue #2628 — see this param's doc comment above.
     handleFiltersChange,
+    // Issue #2711 — see this param's doc comment above.
+    handleIntentChange,
   } = params;
 
   return {
     camera: { publishCameraIntent, setMapZoom, handleBoundsChange, handleUserCameraGesture },
     // Issue #2628 — the mobile Map "Filters" sheet's one canonical write command.
-    filters: { onFiltersChange: handleFiltersChange },
+    // Issue #2711 — plus `onIntentChange`, its matching canonical intent command.
+    filters: { onFiltersChange: handleFiltersChange, onIntentChange: handleIntentChange },
     drawing: {
       handlePolygonDrawn,
       handlePolygonCleared,

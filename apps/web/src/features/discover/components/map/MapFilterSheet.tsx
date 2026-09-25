@@ -30,9 +30,10 @@ import {
   PropertyFilterGroups,
 } from '@/components/discover/panels/PropertyFilterGroups';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
-import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
+import type { DiscoverIntent, DiscoverUrlFilters } from '@/hooks/useDiscoverUrlState';
 import { computeMapFilterRefinementCount } from './MapFiltersPill';
 import { applyIntentTransition } from '@/features/discover/filters/intentTransition';
+import { toDiscoverUrlFilters } from '@/features/discover/state/url/filters';
 
 export interface MapFilterSheetProps {
   open: boolean;
@@ -43,8 +44,18 @@ export interface MapFilterSheetProps {
   onApply: (next: PropertyFilters) => void;
   /** Current applied Buy/Rent intent. Optional — defaults to 'buy' where the caller has no intent wiring yet. */
   intent?: DiscoverIntent;
-  /** Writes the applied intent alongside `onApply`. Omit where the caller has no intent command to give. */
-  onIntentChange?: (intent: DiscoverIntent) => void;
+  /**
+   * Writes the applied intent. Omit where the caller has no intent command to give.
+   *
+   * Issue #2711 — the SAME `setIntent` (city.ts) List's `IntentSelector` calls, widened to accept
+   * an optional second `filtersOverride` argument: this sheet passes its ENTIRE staged `draft`
+   * (converted via `toDiscoverUrlFilters`) so intent + the FULL final filter set — not just the
+   * intent-owned propertyTypes/priceMin/priceMax — land in `setIntent`'s ONE atomic
+   * `setUrlParams` call, rather than racing a second write (`onApply`'s debounced
+   * `setFiltersLive`) that would silently discard the intent (and everything else) this call
+   * just wrote — see `setIntent`'s own doc comment in city.ts and `handleApply` below.
+   */
+  onIntentChange?: (intent: DiscoverIntent, filtersOverride?: DiscoverUrlFilters) => void;
   isCommercialSubtypeSupported?: boolean;
   isReadyToMoveSupported?: boolean;
   /** Result count for the CURRENTLY APPLIED filters — drives the "still shows M ⟨units⟩" status line. */
@@ -139,10 +150,52 @@ export function MapFilterSheet({
     onOpenChange(false);
   };
 
+  // Issue #2711 (live-browser follow-up, qa-verified) — Apply must NOT call
+  // `consumeHistoryEntry()` (the `window.history.back()` Cancel uses). Both `onIntentChange` and
+  // `onApply` write via `history.replaceState` onto the CURRENT entry — the one this sheet
+  // pushed on open (see the popstate effect above). `history.back()` moves the browser off that
+  // entry and onto the PRE-open one, which was never replaced and still carries the pre-Apply
+  // URL — so calling it after a commit silently discards everything just written. Leaving the
+  // pushed entry in place — now holding the committed URL via replace — is also what AC1 asks
+  // for literally ("history.length increases by exactly 1 (not 2)"): the ONE entry the open
+  // already pushed becomes the applied entry; Apply neither pushes a second one nor pops the
+  // first. Only Cancel — where DISCARDING is the entire point — still calls
+  // `consumeHistoryEntry()` below.
+  //
+  // Issue #2711 (2nd live-browser follow-up, qa-verified) — when intent changed, this calls
+  // ONLY `onIntentChange(draftIntent, ...)`, NOT ALSO `onApply(draft)`. `onApply` routes through
+  // the SAME debounced `setFiltersLive` List's live filter editing uses (~300ms later, outside
+  // this handler's own synchronous tick) — `react-router`'s `setSearchParams` functional form
+  // closes over the `searchParams` snapshot from the RENDER `onApply`/`handleFiltersChange` was
+  // bound to, which is the SAME stale (pre-click) snapshot regardless of how much later that
+  // debounced callback actually fires (its closure was captured at SCHEDULE time, in this same
+  // synchronous handler, not at fire time). That callback's own `next = new URLSearchParams(prev)`
+  // therefore never sees `onIntentChange`'s write, and its `navigate()` call replaces the URL
+  // wholesale — silently discarding the just-committed intent (live-verified: `intent` reverted
+  // once that debounced write landed, ~300ms after Apply, even though `onIntentChange`'s own
+  // write was correct at the instant it ran).
+  //
+  // Issue #2711 (3rd follow-up) — `onIntentChange` is now passed `toDiscoverUrlFilters(draft)`,
+  // the FULL staged filter set (not just the intent-owned propertyTypes/priceMin/priceMax): a
+  // buyer who ALSO edits bedrooms/sellerTypes/dates/etc. in the SAME sheet visit as an intent
+  // switch must not have that edit silently dropped just because `onApply` can no longer also
+  // fire (see `setIntent`'s own doc comment in city.ts for how the whole set is serialized in
+  // that ONE call, reusing the exact same `serializeFilters` writer `onApply` itself uses via
+  // `toDiscoverUrlFilters`/`handleFiltersChange` — one shared definition, not two).
+  //
+  // When the caller has NOT wired `onIntentChange` (the pre-#2711 default, still supported), this
+  // falls back to the ORIGINAL `onApply(draft)`-only behavior — the intent half silently stays
+  // uncommitted, exactly as before this issue, rather than committing nothing at all.
   const handleApply = () => {
-    onApply(draft);
-    onIntentChange?.(draftIntent);
-    consumeHistoryEntry();
+    if (draftIntent !== intent && onIntentChange) {
+      onIntentChange(draftIntent, toDiscoverUrlFilters(draft));
+    } else {
+      onApply(draft);
+    }
+    // No consumeHistoryEntry() here — see comment above. Still mark the pushed entry as
+    // consumed (without navigating) so a later reopen re-arms `pushedHistoryRef` cleanly rather
+    // than leaving a stale `true` behind.
+    pushedHistoryRef.current = false;
     onOpenChange(false);
   };
 
