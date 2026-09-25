@@ -175,8 +175,20 @@ export function MapFilterSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby="mf-title"
-        className="max-h-[calc(100%-88px)]"
+        className="z-[70] max-h-[calc(100%-88px)]"
+        overlayClassName="z-[70]"
         data-testid="map-filter-sheet"
+        // Issue #2712 — this sheet is portalled to `document.body` (vaul Drawer, default z-50),
+        // as a page-level SIBLING of DiscoverPageShell's `fixed inset-0 z-[60]` mobile-map
+        // overlay (see that file — z-[60] is a hard constraint from #1953, never lowered).
+        // Neither element is nested inside the other's stacking context, so plain numeric
+        // z-index governs paint order between them; z-50 lost to z-60, so vaul's own
+        // `pointer-events:none` on `<body>` left taps landing on invisible map chrome instead of
+        // this sheet. Raising ONLY this sheet's overlay+content to z-[70] (via the additive
+        // `overlayClassName` prop on `DrawerContent`, mirroring `AlertDialogContentProps` from
+        // #2471) is sufficient to beat the ENTIRE map subtree regardless of any higher z-indices
+        // used internally within that z-60 stacking context (e.g. draw-mode/marker overlays),
+        // since those are contained inside it and never compete with page-level siblings.
         // #2628 (live-browser finding) — this sheet is the FIRST nested dialog ever
         // mounted inside the mobile full-screen Map overlay. `useMobileMapOverlayShell`
         // (pre-existing, shared infrastructure) attaches its own unconditional

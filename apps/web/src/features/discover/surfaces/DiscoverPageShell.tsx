@@ -53,6 +53,11 @@ export function DiscoverPageShell({
             className={
               mobileMapOpen ? 'fixed inset-0 z-[60] bg-background [&>div]:!h-full' : 'contents'
             }
+            // Issue #2712 — stable anchor for e2e paint-order assertions (this IS the z-[60]
+            // mobile-map overlay boundary MapFilterSheet's overlayClassName must beat). Additive
+            // only: no class/z-index change, so #2142's "byte-identical to previously inline"
+            // note above still holds for everything else in this file.
+            data-testid="mobile-map-surface-wrapper"
           >
             {mapSurface}
           </div>
