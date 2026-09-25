@@ -225,16 +225,48 @@ _response_body() {
 }
 
 _lookup_user_id_by_email() {
-  local email="$1" resp status body id
-  resp="$(_admin_api_call GET "/auth/v1/admin/users?email=$(printf '%s' "$email")" )"
-  status="$(_response_status "$resp")"
-  body="$(_response_body "$resp")"
-  if [[ "$status" != 2* ]]; then
-    echo "ERROR: lookup for ${email} failed (HTTP ${status})." >&2
-    return 1
-  fi
-  id="$(printf '%s' "$body" | jq -r '(.users // [.]) | .[0].id // empty' 2>/dev/null || true)"
-  printf '%s' "$id"
+  # #2691: GoTrue's admin list-users endpoint does NOT support an `email`
+  # query filter — the param is silently ignored, so a naive `?email=...`
+  # call returns an unfiltered page and reading `.[0].id` picks an ARBITRARY
+  # account rather than the intended one (same defect #2307 fixed elsewhere,
+  # via a by-id lookup — not available here since discovering the id from a
+  # known, fixed email is the whole point of this function). The fix:
+  # paginate through the full user list and filter for an EXACT email match
+  # client-side, never trusting response ordering/position.
+  local email="$1"
+  local page=1
+  local per_page=200
+  local max_pages=50
+  local resp status body id count
+
+  while (( page <= max_pages )); do
+    resp="$(_admin_api_call GET "/auth/v1/admin/users?page=${page}&per_page=${per_page}")"
+    status="$(_response_status "$resp")"
+    body="$(_response_body "$resp")"
+    if [[ "$status" != 2* ]]; then
+      echo "ERROR: lookup for ${email} failed (HTTP ${status}, page ${page})." >&2
+      return 1
+    fi
+
+    id="$(printf '%s' "$body" | jq -r --arg email "$email" \
+      '(.users // []) | map(select(.email == $email)) | .[0].id // empty' 2>/dev/null || true)"
+    if [[ -n "$id" ]]; then
+      printf '%s' "$id"
+      return 0
+    fi
+
+    count="$(printf '%s' "$body" | jq -r '(.users // []) | length' 2>/dev/null || echo 0)"
+    if [[ -z "$count" || "$count" -lt "$per_page" ]]; then
+      # Short (or empty) page — end of the list, no match anywhere.
+      printf ''
+      return 0
+    fi
+
+    page=$((page + 1))
+  done
+
+  echo "ERROR: lookup for ${email} scanned ${max_pages} pages (per_page=${per_page}) without finding a match — aborting rather than looping unbounded." >&2
+  return 1
 }
 
 _provision_identity() {

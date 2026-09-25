@@ -109,9 +109,20 @@ case "$URL" in
     STATUS="${MOCK_LOGIN_STATUS:-200}"
     if [[ -n "${MOCK_LOGIN_BODY:-}" ]]; then BODY="$MOCK_LOGIN_BODY"; else BODY='{}'; fi
     ;;
-  *admin/users\?email=*)
+  *admin/users\?page=*)
+    # Paginated list-users call (#2691 fix). Supports per-page bodies via
+    # MOCK_LOOKUP_PAGE<N>_BODY (falls back to MOCK_LOOKUP_BODY, then a
+    # default empty page) so tests can exercise real multi-page pagination.
     STATUS="${MOCK_LOOKUP_STATUS:-200}"
-    if [[ -n "${MOCK_LOOKUP_BODY:-}" ]]; then BODY="$MOCK_LOOKUP_BODY"; else BODY='{"users":[]}'; fi
+    PAGE_NUM="$(printf '%s' "$URL" | sed -n 's/.*[?&]page=\([0-9]*\).*/\1/p')"
+    PAGE_VAR="MOCK_LOOKUP_PAGE${PAGE_NUM}_BODY"
+    if [[ -n "${!PAGE_VAR:-}" ]]; then
+      BODY="${!PAGE_VAR}"
+    elif [[ -n "${MOCK_LOOKUP_BODY:-}" ]]; then
+      BODY="$MOCK_LOOKUP_BODY"
+    else
+      BODY='{"users":[]}'
+    fi
     ;;
   *admin/users/*)
     if [[ "$METHOD" == "PUT" ]]; then
@@ -424,30 +435,147 @@ else
 fi
 
 # ===========================================================================
-# A13 — idempotency: mocked 409 leads to password-update (PUT), not failure
+# A13 — idempotency: mocked 409 leads to password-update (PUT), not failure.
+# #2691 regression: the lookup response is an UNFILTERED page (decoys before
+# AND after each target, matching a real GoTrue response that ignores
+# ?email=) — asserts each identity's PUT lands on the id matching ITS OWN
+# email, not `.[0]` / a decoy. This is a discrimination check, not a
+# containment check: it would have caught the pre-fix `.[0].id` behaviour.
 # ===========================================================================
 
 SB13="$(mktemp -d)"; CLEANUP_DIRS+=("$SB13")
 mkdir -p "$SB13/scripts/dev"
 cp "${REPO_ROOT}/scripts/dev/provision-e2e-auth-identities.sh" "$SB13/scripts/dev/"
 cp -r "${REPO_ROOT}/scripts/dev/lib" "$SB13/scripts/dev/"
-CURL_ARGV_LOG13="$(mktemp)"
+CURL_CONFIG_LOG13="$(mktemp)"
 LOG13="$(mktemp)"
+UNFILTERED_USERS_PAGE='{"users":[
+  {"id":"DECOY-BEFORE-1","email":"decoy1@example.com"},
+  {"id":"DECOY-BEFORE-2","email":"decoy2@example.com"},
+  {"id":"ADMIN-REAL-ID","email":"e2e-admin@udupi-e2e.invalid"},
+  {"id":"BROKER-REAL-ID","email":"e2e-broker@udupi-e2e.invalid"},
+  {"id":"USER-REAL-ID","email":"e2e-user@udupi-e2e.invalid"},
+  {"id":"DEALER-REAL-ID","email":"e2e-dealer@udupi-e2e.invalid"},
+  {"id":"DECOY-AFTER-1","email":"decoy3@example.com"}
+]}'
 env -i PATH="$MOCKBIN:$ORIG_PATH" HOME="${HOME:-/tmp}" "${VALID_ENV[@]}" \
   MOCK_CREATE_STATUS=409 MOCK_CREATE_BODY='{"msg":"Email address already registered"}' \
-  MOCK_LOOKUP_STATUS=200 MOCK_LOOKUP_BODY='{"users":[{"id":"11111111-2222-3333-4444-555555555555"}]}' \
+  MOCK_LOOKUP_STATUS=200 MOCK_LOOKUP_PAGE1_BODY="$UNFILTERED_USERS_PAGE" \
   MOCK_UPDATE_STATUS=200 MOCK_UPDATE_BODY='{}' \
-  CURL_ARGV_LOG="$CURL_ARGV_LOG13" \
+  CURL_CONFIG_LOG="$CURL_CONFIG_LOG13" \
   bash "$SB13/scripts/dev/provision-e2e-auth-identities.sh" > "$LOG13" 2>&1
 RC13=$?
 if [[ $RC13 -eq 0 ]]; then ok "A13: mocked 409 on create leads to overall success (idempotent path), not a hard failure"; else not_ok "A13: mocked 409 -> success (rc=$RC13, log: $(cat "$LOG13"))"; fi
 assert_contains "A13: log shows the already-exists/update-instead branch was taken" "$(cat "$LOG13")" "already exists"
-ARGV13="$(cat "$CURL_ARGV_LOG13" 2>/dev/null || true)"
 if [[ -f "$SB13/.env.e2e.auth" ]]; then
   ok "A13: .env.e2e.auth still written after the 409/update path"
 else
   not_ok "A13: .env.e2e.auth still written after the 409/update path"
 fi
+
+CFG13="$(cat "$CURL_CONFIG_LOG13" 2>/dev/null || true)"
+assert_contains "A13 (#2691): admin identity's PUT targets the email-matched id (ADMIN-REAL-ID), not a decoy" "$CFG13" "/auth/v1/admin/users/ADMIN-REAL-ID"
+assert_contains "A13 (#2691): broker identity's PUT targets the email-matched id (BROKER-REAL-ID)" "$CFG13" "/auth/v1/admin/users/BROKER-REAL-ID"
+assert_contains "A13 (#2691): user identity's PUT targets the email-matched id (USER-REAL-ID)" "$CFG13" "/auth/v1/admin/users/USER-REAL-ID"
+assert_contains "A13 (#2691): dealer identity's PUT targets the email-matched id (DEALER-REAL-ID)" "$CFG13" "/auth/v1/admin/users/DEALER-REAL-ID"
+assert_not_contains "A13 (#2691): no PUT ever targets a decoy id (would prove the pre-fix .[0] bug)" "$CFG13" "/auth/v1/admin/users/DECOY-"
+assert_contains "A13 (#2691): lookup call uses pagination params (page=, per_page=), not the non-functional ?email= filter" "$CFG13" "admin/users?page=1&per_page="
+
+# ===========================================================================
+# A16 (#2691) — pagination continues across pages: page 1 is FULL (count ==
+# per_page) and contains no match; the target is found on page 2. Proves the
+# fix doesn't stop after a single unfiltered page.
+# ===========================================================================
+
+SB16="$(mktemp -d)"; CLEANUP_DIRS+=("$SB16")
+mkdir -p "$SB16/scripts/dev"
+cp "${REPO_ROOT}/scripts/dev/provision-e2e-auth-identities.sh" "$SB16/scripts/dev/"
+cp -r "${REPO_ROOT}/scripts/dev/lib" "$SB16/scripts/dev/"
+CURL_CONFIG_LOG16="$(mktemp)"
+LOG16="$(mktemp)"
+
+# Build a page-1 body with exactly 200 decoy users (== per_page in the
+# script) so the fix's "short page => stop" heuristic does NOT stop here.
+PAGE1_USERS="$(python3 -c '
+import json
+print(json.dumps({"users": [{"id": f"DECOY-{i}", "email": f"decoy{i}@example.com"} for i in range(200)]}))
+' 2>/dev/null || node -e '
+const users = Array.from({length:200}, (_,i)=>({id:`DECOY-${i}`, email:`decoy${i}@example.com`}));
+console.log(JSON.stringify({users}));
+')"
+PAGE2_USERS='{"users":[{"id":"ADMIN-PAGE2-ID","email":"e2e-admin@udupi-e2e.invalid"},{"id":"BROKER-PAGE2-ID","email":"e2e-broker@udupi-e2e.invalid"},{"id":"USER-PAGE2-ID","email":"e2e-user@udupi-e2e.invalid"},{"id":"DEALER-PAGE2-ID","email":"e2e-dealer@udupi-e2e.invalid"}]}'
+
+env -i PATH="$MOCKBIN:$ORIG_PATH" HOME="${HOME:-/tmp}" "${VALID_ENV[@]}" \
+  MOCK_CREATE_STATUS=409 MOCK_CREATE_BODY='{"msg":"Email address already registered"}' \
+  MOCK_LOOKUP_STATUS=200 MOCK_LOOKUP_PAGE1_BODY="$PAGE1_USERS" MOCK_LOOKUP_PAGE2_BODY="$PAGE2_USERS" \
+  MOCK_UPDATE_STATUS=200 MOCK_UPDATE_BODY='{}' \
+  CURL_CONFIG_LOG="$CURL_CONFIG_LOG16" \
+  bash "$SB16/scripts/dev/provision-e2e-auth-identities.sh" > "$LOG16" 2>&1
+RC16=$?
+if [[ $RC16 -eq 0 ]]; then ok "A16: pagination continues to page 2 and succeeds when the match is on a later page"; else not_ok "A16: pagination continues to page 2 (rc=$RC16, log: $(cat "$LOG16"))"; fi
+CFG16="$(cat "$CURL_CONFIG_LOG16" 2>/dev/null || true)"
+assert_contains "A16: a page=2 request was actually made" "$CFG16" "admin/users?page=2&per_page="
+assert_contains "A16: admin identity's PUT targets the page-2-matched id" "$CFG16" "/auth/v1/admin/users/ADMIN-PAGE2-ID"
+
+# ===========================================================================
+# A17 (#2691) — SHORT page (count < per_page), no match anywhere on it ->
+# treated as end-of-list, fail closed (non-zero exit) via _provision_identity's
+# own "could not be looked up" check, never silently proceeds with a wrong/
+# empty id. (Does NOT exercise the max_pages cap — see A18 for that.)
+# ===========================================================================
+
+SB17="$(mktemp -d)"; CLEANUP_DIRS+=("$SB17")
+mkdir -p "$SB17/scripts/dev"
+cp "${REPO_ROOT}/scripts/dev/provision-e2e-auth-identities.sh" "$SB17/scripts/dev/"
+cp -r "${REPO_ROOT}/scripts/dev/lib" "$SB17/scripts/dev/"
+LOG17="$(mktemp)"
+env -i PATH="$MOCKBIN:$ORIG_PATH" HOME="${HOME:-/tmp}" "${VALID_ENV[@]}" \
+  MOCK_CREATE_STATUS=409 MOCK_CREATE_BODY='{"msg":"Email address already registered"}' \
+  MOCK_LOOKUP_STATUS=200 MOCK_LOOKUP_BODY='{"users":[{"id":"NEVER-MATCHES","email":"nobody@example.com"}]}' \
+  bash "$SB17/scripts/dev/provision-e2e-auth-identities.sh" > "$LOG17" 2>&1
+RC17=$?
+if [[ $RC17 -ne 0 ]]; then ok "A17: no matching identity found on a short (end-of-list) page -> non-zero exit (fail closed, never proceeds)"; else not_ok "A17: no matching identity found -> non-zero exit (rc=$RC17)"; fi
+if [[ ! -f "$SB17/.env.e2e.auth" ]]; then ok "A17: .env.e2e.auth NOT written when lookup never finds a match"; else not_ok "A17: .env.e2e.auth NOT written when lookup never finds a match"; fi
+
+# ===========================================================================
+# A18 (#2691) — max_pages CAP EXHAUSTION: every page is FULL (count ==
+# per_page, so pagination never sees a "short page" end-of-list signal) and
+# never contains a match. Proves the safety cap actually fires: exactly
+# max_pages (50) GET calls, the specific "scanned 50 pages" error text,
+# non-zero exit, no .env.e2e.auth. Without this, the cap-exhaustion branch
+# (as opposed to the short-page branch A17 exercises) is unverified.
+# ===========================================================================
+
+SB18="$(mktemp -d)"; CLEANUP_DIRS+=("$SB18")
+mkdir -p "$SB18/scripts/dev"
+cp "${REPO_ROOT}/scripts/dev/provision-e2e-auth-identities.sh" "$SB18/scripts/dev/"
+cp -r "${REPO_ROOT}/scripts/dev/lib" "$SB18/scripts/dev/"
+CURL_CONFIG_LOG18="$(mktemp)"
+LOG18="$(mktemp)"
+
+# Every page returns 200 non-matching users via the generic MOCK_LOOKUP_BODY
+# fallback (no per-page override set), so count == per_page on EVERY call —
+# the loop can only stop via the max_pages cap, never the short-page branch.
+FULL_NONMATCHING_PAGE="$(python3 -c '
+import json
+print(json.dumps({"users": [{"id": f"NOMATCH-{i}", "email": f"nomatch{i}@example.com"} for i in range(200)]}))
+' 2>/dev/null || node -e '
+const users = Array.from({length:200}, (_,i)=>({id:`NOMATCH-${i}`, email:`nomatch${i}@example.com`}));
+console.log(JSON.stringify({users}));
+')"
+
+env -i PATH="$MOCKBIN:$ORIG_PATH" HOME="${HOME:-/tmp}" "${VALID_ENV[@]}" \
+  MOCK_CREATE_STATUS=409 MOCK_CREATE_BODY='{"msg":"Email address already registered"}' \
+  MOCK_LOOKUP_STATUS=200 MOCK_LOOKUP_BODY="$FULL_NONMATCHING_PAGE" \
+  CURL_CONFIG_LOG="$CURL_CONFIG_LOG18" \
+  bash "$SB18/scripts/dev/provision-e2e-auth-identities.sh" > "$LOG18" 2>&1
+RC18=$?
+if [[ $RC18 -ne 0 ]]; then ok "A18: max_pages cap exhausted without a match -> non-zero exit (fail closed)"; else not_ok "A18: max_pages cap exhausted -> non-zero exit (rc=$RC18)"; fi
+assert_contains "A18: log names the specific cap-exhaustion error (scanned 50 pages)" "$(cat "$LOG18")" "scanned 50 pages"
+if [[ ! -f "$SB18/.env.e2e.auth" ]]; then ok "A18: .env.e2e.auth NOT written after cap exhaustion"; else not_ok "A18: .env.e2e.auth NOT written after cap exhaustion"; fi
+CFG18="$(cat "$CURL_CONFIG_LOG18" 2>/dev/null || true)"
+PAGE_GET_COUNT18="$(printf '%s\n' "$CFG18" | grep -c 'admin/users?page=' || true)"
+assert_eq "A18: exactly 50 lookup GET calls were made (one per page, cap fires — never loops past max_pages)" "$PAGE_GET_COUNT18" "50"
 
 # ===========================================================================
 # A14 — failure atomicity: mocked mid-run API failure leaves NO partial
