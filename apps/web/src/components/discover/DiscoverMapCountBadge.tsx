@@ -110,17 +110,32 @@ export function DiscoverMapCountBadge({
         <div
           className={
             // Issue #1595 — on the selected-group step the pill is centred at the bottom.
-            // Issue #1606 — area-first selected-area step also centres the pill (bottom-8
-            // for clearance above attribution; clear of zoom bottom-right + legend bottom-left).
-            // Every other drill-down context keeps the compact bottom-right placement.
+            // Issue #1606 — area-first selected-area step also centres the pill (clear of zoom
+            // bottom-right + legend bottom-left). Every other drill-down context keeps the
+            // compact bottom-right placement.
+            // Issue #2714 — both variants sat too low. The centred one was bottom-8: wide
+            // long-copy variants ("Showing 8 verified properties in University Belt") reached the
+            // bottom-left legend at 1024x768 even after capping their width (below), because
+            // wrapping to 2 lines made the pill taller, not narrower, and the taller pill's top
+            // edge still reached into the legend's tallest variant (live-measured top edge
+            // 129px). The compact bottom-right one was bottom-16 (64px), which sat inside the
+            // Leaflet zoom control's footprint (live-measured 28x27px overlap at 1440x900 in the
+            // school-first landing state — this is the branch the school-radius "Showing X
+            // homes/schools" copy below also uses) and also needs to clear DiscoverMapCanvas's
+            // "Recenter on <city>" button (bottom-48, top edge 222px) and DiscoverMapStatusHints's
+            // school-radius "more" hint (bottom-28, live-measured top edge 178px), both of which
+            // can render alongside it in the anon school-radius "showing first N" state. Both
+            // variants now share bottom-60 (240px), clearing every one of those neighbours (zoom's
+            // top edge 91px, the legend's 129px, the hint's 178px, the city-recenter button's
+            // 222px) with an 18px+ margin — confirmed via Playwright at 1024x768 and 1440x900.
             isSelectedGroupState || isAreaFirstSelectedAreaState
-              ? 'absolute bottom-8 left-1/2 z-[1000] -translate-x-1/2'
-              : 'absolute bottom-16 right-4 z-[1000]'
+              ? 'absolute bottom-60 left-1/2 z-[1000] max-w-[220px] -translate-x-1/2'
+              : 'absolute bottom-60 right-4 z-[1000]'
           }
           data-testid="discover-badge"
         >
           <div
-            className="flex items-center gap-2 whitespace-nowrap rounded-full border border-border bg-card/95 px-4 py-2 text-sm text-muted-foreground shadow-sm backdrop-blur-sm"
+            className="flex items-center gap-2 rounded-full border border-border bg-card/95 px-4 py-2 text-sm text-muted-foreground shadow-sm backdrop-blur-sm"
             aria-busy={discoverBadge.loading}
           >
             <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -221,11 +236,21 @@ export function DiscoverMapCountBadge({
             // clearance the sibling drill-down pill uses above the recenter button)
             // plus a width cap so the (unchanged) copy wraps and stays clear of the
             // zoom control's column horizontally too. Verified 0 intersections at all
-            // 3 mobile widths (measurements-finalfix.json). Desktop bottom-5 pill is
-            // untouched — byte-identical className/geometry (AC4).
+            // 3 mobile widths (measurements-finalfix.json). Mobile placement (bottom-8) is
+            // untouched here.
+            // Issue #2714 — the desktop bottom-5 pill's width (up to ~257px unwrapped, centred)
+            // reached the bottom-left legend column at 1024x768 (live-measured 98x18px overlap).
+            // Capping its width to max-w-[220px] (same cap #2716 already uses for mobile above,
+            // which stays on its own untouched w-[calc(100%-6rem)]/bottom-8 — AC4's
+            // mobile-unchanged guarantee still holds) wrapped the copy to 2 lines instead of
+            // reaching sideways, but the now-taller pill still reached the legend's tallest
+            // variant (live-measured top edge 129px) at bottom-5. Raised to bottom-60 (240px),
+            // matching the sibling drill-down centred badge above for the same reason (clears the
+            // legend, the zoom control and the bottom-right recenter column with an 18px+
+            // margin); confirmed 0 intersections at 1024x768 and 1440x900 via Playwright.
             isMobileMapOverlay
               ? 'absolute bottom-8 left-1/2 z-[1000] w-[calc(100%-6rem)] max-w-[220px] -translate-x-1/2'
-              : 'absolute bottom-5 left-1/2 z-[1000] -translate-x-1/2'
+              : 'absolute bottom-60 left-1/2 z-[1000] max-w-[220px] -translate-x-1/2'
           }
           data-testid="discover-badge"
         >
@@ -233,7 +258,7 @@ export function DiscoverMapCountBadge({
             className={
               isMobileMapOverlay
                 ? 'flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-[13px] font-semibold text-muted-foreground shadow-md'
-                : 'flex items-center gap-2 whitespace-nowrap rounded-full border border-border bg-card px-4 py-2 text-[13px] font-semibold text-muted-foreground shadow-md'
+                : 'flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-[13px] font-semibold text-muted-foreground shadow-md'
             }
           >
             <MapPin className="h-[15px] w-[15px] shrink-0 text-[hsl(var(--copper))]" aria-hidden="true" />

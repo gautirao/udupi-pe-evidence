@@ -6,7 +6,7 @@
  * which only exercise the CameraIntent producer in isolation and never render
  * the button's real DOM position): the recenter `<button>` this file portals
  * into `mapContainerRef.current` and `DiscoverMapCountBadge.tsx`'s
- * `data-testid="discover-badge"` pill are BOTH anchored to the exact same
+ * `data-testid="discover-badge"` pill were BOTH anchored to the exact same
  * spot in several journey states — `absolute ... left-1/2 -translate-x-1/2`
  * inside the SAME `position: relative` map container, i.e. one stacking
  * context. Before the fix, the recenter button used `bottom-4` (16px)
@@ -18,23 +18,16 @@
  * while the button's own `display`/`visibility`/`opacity` all reported as
  * visible (a jsdom-only assertion on those properties would have passed).
  *
- * `DiscoverMapCountBadge.tsx` renders this pill with more than one possible
- * `left-1/2`-anchored `bottom-*` offset depending on navigation state
- * (public-landing city total vs. selected-group/selected-area states) — see
- * that file's own `isSelectedGroupState || isAreaFirstSelectedAreaState`
- * branch. Rather than pinning the test to whichever single variant this
- * investigation happened to reproduce live, this test scans the WHOLE file
- * for every `left-1/2`-anchored, `bottom-*` className token (i.e. every
- * variant that shares the recenter button's horizontal anchor and could
- * therefore collide with it) and asserts the recenter button clears all of
- * them with a safe margin.
- *
- * This is a static-source assertion (not a full render), because jsdom has
- * no layout engine and can't reproduce the real overlap — the actual defect
- * was only ever observable via real `getBoundingClientRect()` geometry in a
- * live browser. A future edit that moves either element back into collision
- * range fails loudly here instead of silently regressing behind a green
- * test suite again.
+ * Issue #2714 (desktop bottom-chrome overlap) moved this button OFF the
+ * horizontal centre entirely, into the bottom-right column (alongside the
+ * Leaflet zoom control, the "Recenter on <city>" button and the school-radius
+ * "more" hint — see the stacking-budget describe block below), so the
+ * original #2088 "shares the badge's left-1/2 anchor" premise this file's
+ * helpers were built around no longer holds on desktop. The tests below were
+ * updated in place rather than deleted: the underlying regression risk (two
+ * `position: relative`-child controls painting over each other in a stacking
+ * context jsdom can't lay out) is the same one #2714's stacking-budget tests
+ * guard against, just via a different anchor.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -60,6 +53,18 @@ function tailwindSpacingToPx(token: string): number {
   const match = token.match(/^bottom-(\d+)$/);
   if (!match) throw new Error(`Unrecognized bottom-* token: ${token}`);
   return Number(match[1]) * 4;
+}
+
+/**
+ * Strips both block comments and line comments. Issue #2714's own source comments narrate the
+ * exact bottom-N/right-4 values being fixed (for the historical record), so a literal-scanning
+ * regex run against the raw source risks pairing an apostrophe inside prose (e.g. "control's")
+ * with an unrelated string literal's quote and capturing a false "className" that spans real code
+ * and comment text. Scanning comment-stripped source first removes that whole class of false
+ * positive.
+ */
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 }
 
 /**
@@ -104,73 +109,79 @@ function extractClassNameLiterals(source: string, testId: string): string[] {
   throw new Error(`Could not find a real, classed JSX tag for data-testid="${testId}"`);
 }
 
-/**
- * Every `left-1/2`-anchored, `bottom-*` className string token anywhere in
- * `source` — covers both a plain `className="..."` and each branch of a
- * `className={cond ? '...' : '...'}` ternary, since either form can back the
- * SAME `data-testid="discover-badge"` element across different nav states.
- */
-function findLeftAnchoredBottomClassNames(source: string): string[] {
-  const stringLiteralPattern = /(["'])((?:(?!\1).)*)\1/g;
-  const matches: string[] = [];
-  for (const m of source.matchAll(stringLiteralPattern)) {
-    const literal = m[2];
-    if (literal.includes('left-1/2') && /\bbottom-\d+\b/.test(literal)) {
-      matches.push(literal);
-    }
-  }
-  return matches;
-}
-
-describe('Issue #2088 — recenter button vs. DiscoverMapCountBadge z-order/position', () => {
+describe('Issue #2088 — recenter button is portalled with an explicit stacking z-index', () => {
+  // The horizontal-centre collision this file originally guarded against no longer applies on
+  // desktop (Issue #2714 moved the button into the bottom-right column — see the stacking-budget
+  // describe block below), but the z-index defence-in-depth check still stands on its own.
   const mapDiscoverySource = readFileSync(MAP_DISCOVERY_PATH, 'utf-8');
-  const countBadgeSource = readFileSync(COUNT_BADGE_PATH, 'utf-8');
-
   const recenterClassNames = extractClassNameLiterals(mapDiscoverySource, 'areas-recenter-button');
-  // The desktop placement is the centred one; Issue #2698's mobile-shell branch
-  // sits in the right-hand column instead (asserted separately below).
-  const recenterButtonClassName =
-    recenterClassNames.find((c) => c.includes('left-1/2')) ?? recenterClassNames[0];
-  const badgeCollisionCandidates = findLeftAnchoredBottomClassNames(countBadgeSource);
 
-  it('the recenter button is anchored to the map\'s horizontal centre (precondition for the collision)', () => {
-    expect(recenterButtonClassName).toMatch(/\bleft-1\/2\b/);
-    expect(recenterButtonClassName).toMatch(/-translate-x-1\/2\b/);
-  });
-
-  it('Issue #2698 — the mobile-shell placement leaves the centre (where it covered the bottom-left legend) for the right-hand column', () => {
-    const mobile = recenterClassNames.filter((c) => !c.includes('left-1/2'));
-    expect(mobile).toHaveLength(1);
-    expect(mobile[0]).toMatch(/\bright-\[10px\]/);
-    expect(mobile[0]).not.toMatch(/translate-x/);
-  });
-
-  it('DiscoverMapCountBadge.tsx still has at least one left-1/2-anchored bottom pill variant (sanity check for the scan below)', () => {
-    expect(badgeCollisionCandidates.length).toBeGreaterThan(0);
-  });
-
-  it('the recenter button clears every left-1/2-anchored count-badge variant with a safe margin, so the badge can never paint over it', () => {
-    const recenterBottomToken = recenterButtonClassName.match(/\bbottom-\d+\b/)?.[0];
-    expect(recenterBottomToken, 'recenter button must declare a bottom-N offset').toBeDefined();
-    const recenterBottomPx = tailwindSpacingToPx(recenterBottomToken as string);
-
-    // Both pills render around ~38px tall in practice (live-measured). A
-    // 40px minimum gap between their `bottom` offsets guarantees their
-    // bands never touch regardless of small text/line-height drift.
-    const SAFE_MARGIN_PX = 40;
-
-    for (const candidate of badgeCollisionCandidates) {
-      const badgeBottomToken = candidate.match(/\bbottom-\d+\b/)?.[0] as string;
-      const badgeBottomPx = tailwindSpacingToPx(badgeBottomToken);
-      expect(
-        recenterBottomPx - badgeBottomPx,
-        `recenter button (bottom-${recenterBottomPx / 4}) does not clear count-badge variant "${candidate}" by ${SAFE_MARGIN_PX}px`,
-      ).toBeGreaterThanOrEqual(SAFE_MARGIN_PX);
+  it('every recenter button placement (mobile and desktop) declares an explicit z-index', () => {
+    expect(recenterClassNames.length).toBeGreaterThan(0);
+    for (const className of recenterClassNames) {
+      expect(className, `"${className}" is missing a z-[N] stacking index`).toMatch(/\bz-\[\d+\]/);
     }
   });
+});
 
-  it('the recenter button is portalled with an explicit stacking z-index (defence in depth alongside the position fix)', () => {
-    expect(recenterButtonClassName).toMatch(/\bz-\[\d+\]/);
+// Issue #2714 — the desktop bottom-right column, bottom-up: attribution, the Leaflet zoom control
+// (not in our source, live-measured top edge ≈91px), "Recenter on <city>" (DiscoverMapCanvas), the
+// school-radius "more" hint (DiscoverMapStatusHints — the count badge's school-radius branch and
+// this hint can render together in the anon school-radius "showing first N" state), the count
+// badge's right-anchored variant (DiscoverMapCountBadge), then "Recenter on <area>"
+// (DiscoverMapSurface, shown when a selected node scrolls out of view — can co-occur with all of
+// the above). Heights are the live-measured (Playwright, 1440x900/1024x768) rendered heights:
+// city recenter 30px, the hint 66px (wraps inside its max-w-[16rem]), the badge 38px (no wrap —
+// unlike its centred sibling, this variant has no width cap), area recenter 38px.
+describe('Issue #2714 — desktop bottom-right column stacking budget', () => {
+  const read = (rel: string) => readFileSync(resolve(__dirname, rel), 'utf-8');
+  const canvasSource = read('../../features/discover/views/DiscoverMapCanvas.tsx');
+  const surfaceSource = readFileSync(MAP_DISCOVERY_PATH, 'utf-8');
+  const countBadgeSource = readFileSync(COUNT_BADGE_PATH, 'utf-8');
+  const hintsSource = read('../../components/discover/DiscoverMapStatusHints.tsx');
+
+  /** The single `right-4` (desktop, not mobile's `right-[10px]`) + `bottom-N` string literal in a file. */
+  function desktopColumnBottomPx(source: string, label: string): number {
+    const literals = Array.from(stripComments(source).matchAll(/'([^']*\bright-4\b[^']*)'/g), (m) => m[1]);
+    expect(literals, `${label}: expected exactly one right-4-anchored desktop placement`).toHaveLength(1);
+    const token = literals[0].match(/\bbottom-\d+\b/)?.[0];
+    expect(token, `${label}: desktop placement must declare bottom-N`).toBeDefined();
+    return tailwindSpacingToPx(token as string);
+  }
+
+  const ZOOM_TOP_PX = 91;
+  const CITY_RECENTER_HEIGHT_PX = 30;
+  const HINT_HEIGHT_PX = 66;
+  const BADGE_HEIGHT_PX = 38;
+  const MIN_GAP_PX = 8;
+
+  const cityBottom = desktopColumnBottomPx(canvasSource, 'city recenter (DiscoverMapCanvas)');
+  const hintBottom = desktopColumnBottomPx(hintsSource, 'school-radius hint (DiscoverMapStatusHints)');
+  const badgeBottom = desktopColumnBottomPx(countBadgeSource, 'count badge, right-anchored variant (DiscoverMapCountBadge)');
+  const areaBottom = desktopColumnBottomPx(surfaceSource, 'area recenter (DiscoverMapSurface)');
+
+  it('"Recenter on <city>" clears the Leaflet zoom control', () => {
+    expect(cityBottom - ZOOM_TOP_PX).toBeGreaterThanOrEqual(MIN_GAP_PX);
+  });
+
+  it('the school-radius "more" hint clears the Leaflet zoom control', () => {
+    expect(hintBottom - ZOOM_TOP_PX).toBeGreaterThanOrEqual(MIN_GAP_PX);
+  });
+
+  it('the count badge clears "Recenter on <city>"', () => {
+    expect(badgeBottom - (cityBottom + CITY_RECENTER_HEIGHT_PX)).toBeGreaterThanOrEqual(MIN_GAP_PX);
+  });
+
+  it('the count badge clears the school-radius "more" hint', () => {
+    expect(badgeBottom - (hintBottom + HINT_HEIGHT_PX)).toBeGreaterThanOrEqual(MIN_GAP_PX);
+  });
+
+  it('"Recenter on <area>" clears the count badge', () => {
+    expect(areaBottom - (badgeBottom + BADGE_HEIGHT_PX)).toBeGreaterThanOrEqual(MIN_GAP_PX);
+  });
+
+  it('"Recenter on <area>" clears "Recenter on <city>"', () => {
+    expect(areaBottom - (cityBottom + CITY_RECENTER_HEIGHT_PX)).toBeGreaterThanOrEqual(MIN_GAP_PX);
   });
 });
 
@@ -204,7 +215,7 @@ describe('Issue #2698 — mobile Map right-hand column stacking budget', () => {
 
   /** The single `right-[10px]` + `bottom-[Npx]` string literal in a file, as N. */
   function mobileColumnBottomPx(source: string, label: string): number {
-    const literals = Array.from(source.matchAll(/'([^']*\bright-\[10px\][^']*)'/g), (m) => m[1]);
+    const literals = Array.from(stripComments(source).matchAll(/'([^']*\bright-\[10px\][^']*)'/g), (m) => m[1]);
     expect(literals, `${label}: expected exactly one right-[10px] mobile placement`).toHaveLength(1);
     const px = literals[0].match(/\bbottom-\[(\d+)px\]/)?.[1];
     expect(px, `${label}: mobile placement must declare bottom-[Npx]`).toBeDefined();

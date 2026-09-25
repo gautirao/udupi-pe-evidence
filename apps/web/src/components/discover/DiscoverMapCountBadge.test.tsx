@@ -151,10 +151,13 @@ describe('DiscoverMapCountBadge', () => {
       };
     }
 
-    it('keeps the desktop bottom-5 centred placement when isMobileMapOverlay is omitted (default false)', () => {
+    // Issue #2714 — was bottom-5 with no width cap; that overlapped the bottom-left legend at
+    // 1024x768 (live-measured). Raised to bottom-60 and capped to max-w-[220px], clearing the
+    // legend, the zoom control and the bottom-right recenter column.
+    it('keeps the desktop centred placement, raised clear of the legend/zoom/recenter column (#2714), when isMobileMapOverlay is omitted (default false)', () => {
       render(<DiscoverMapCountBadge {...publicLandingProps()} />);
       const badge = screen.getByTestId('discover-badge');
-      expect(badge.className).toBe('absolute bottom-5 left-1/2 z-[1000] -translate-x-1/2');
+      expect(badge.className).toBe('absolute bottom-60 left-1/2 z-[1000] max-w-[220px] -translate-x-1/2');
     });
 
     it('raises the pill to bottom-8 and constrains its width (clear of the zoom control) when isMobileMapOverlay is true', () => {

@@ -1,0 +1,518 @@
+[1440x900] area-first-city-landing: visible=tipPill,countBadge,cityRecenter,zoom,legend,attribution overlaps=NONE
+[1440x900] selected-group: visible=tipPill,countBadge,cityRecenter,zoom,legend,attribution overlaps=NONE
+[1440x900] selected-area-residential: visible=tipPill,countBadge,cityRecenter,zoom,legend,attribution overlaps=NONE
+[1440x900] school-first-landing: visible=tipPill,countBadge,cityRecenter,zoom,legend,attribution overlaps=NONE
+[1440x900] agri-first-landing: visible=tipPill,cityRecenter,zoom,legend,attribution overlaps=NONE
+[1024x768] area-first-city-landing: visible=tipPill,countBadge,cityRecenter,zoom,legend,attribution overlaps=NONE
+[1024x768] selected-group: visible=tipPill,countBadge,cityRecenter,zoom,legend,attribution overlaps=NONE
+[1024x768] selected-area-residential: visible=tipPill,countBadge,cityRecenter,zoom,legend,attribution overlaps=NONE
+[1024x768] school-first-landing: visible=tipPill,countBadge,cityRecenter,zoom,legend,attribution overlaps=NONE
+[1024x768] agri-first-landing: visible=tipPill,cityRecenter,zoom,legend,attribution overlaps=NONE
+[
+  {
+    "viewport": "1440x900",
+    "label": "area-first-city-landing",
+    "url": "http://localhost:5714/discover?city=udupi",
+    "visible": [
+      "tipPill",
+      "countBadge",
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [],
+    "rects": {
+      "tipPill": {
+        "x": 180,
+        "y": 518,
+        "width": 360,
+        "height": 46
+      },
+      "countBadge": {
+        "x": 250,
+        "y": 603,
+        "width": 220,
+        "height": 57
+      },
+      "cityRecenter": {
+        "x": 572.921875,
+        "y": 678,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 676,
+        "y": 809.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 822,
+        "width": 171.671875,
+        "height": 38
+      },
+      "attribution": {
+        "x": 550.984375,
+        "y": 883.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    }
+  },
+  {
+    "viewport": "1440x900",
+    "label": "selected-group",
+    "url": "http://localhost:5714/discover?city=udupi&journey=area-first&node=g%3AIN%7CKA%7CUdupi%7CManipal-belt",
+    "visible": [
+      "tipPill",
+      "countBadge",
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [],
+    "rects": {
+      "tipPill": {
+        "x": 180,
+        "y": 518,
+        "width": 360,
+        "height": 46
+      },
+      "countBadge": {
+        "x": 250,
+        "y": 603,
+        "width": 220,
+        "height": 57
+      },
+      "cityRecenter": {
+        "x": 572.921875,
+        "y": 678,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 676,
+        "y": 809.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 822,
+        "width": 171.671875,
+        "height": 38
+      },
+      "attribution": {
+        "x": 550.984375,
+        "y": 883.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    }
+  },
+  {
+    "viewport": "1440x900",
+    "label": "selected-area-residential",
+    "url": "http://localhost:5714/discover?city=udupi&journey=area-first&node=a%3AIN%7CKA%7CUdupi%7CManipal&rscope=areas&rareas=IN%7CKA%7CUdupi%7CManipal&lat=13.35250&lon=74.78640&zoom=15",
+    "visible": [
+      "tipPill",
+      "countBadge",
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [],
+    "rects": {
+      "tipPill": {
+        "x": 180,
+        "y": 518,
+        "width": 360,
+        "height": 46
+      },
+      "countBadge": {
+        "x": 250,
+        "y": 602,
+        "width": 220,
+        "height": 58
+      },
+      "cityRecenter": {
+        "x": 572.921875,
+        "y": 678,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 676,
+        "y": 809.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 771,
+        "width": 141.609375,
+        "height": 89
+      },
+      "attribution": {
+        "x": 550.984375,
+        "y": 883.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    }
+  },
+  {
+    "viewport": "1440x900",
+    "label": "school-first-landing",
+    "url": "http://localhost:5714/discover?city=udupi&journey=school-first",
+    "visible": [
+      "tipPill",
+      "countBadge",
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [],
+    "rects": {
+      "tipPill": {
+        "x": 180,
+        "y": 518,
+        "width": 360,
+        "height": 46
+      },
+      "countBadge": {
+        "x": 516.40625,
+        "y": 622,
+        "width": 187.59375,
+        "height": 38
+      },
+      "cityRecenter": {
+        "x": 572.921875,
+        "y": 678,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 676,
+        "y": 809.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 822,
+        "width": 124.78125,
+        "height": 38
+      },
+      "attribution": {
+        "x": 550.984375,
+        "y": 883.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    }
+  },
+  {
+    "viewport": "1440x900",
+    "label": "agri-first-landing",
+    "url": "http://localhost:5714/discover?city=udupi&journey=agri-first",
+    "visible": [
+      "tipPill",
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [],
+    "rects": {
+      "tipPill": {
+        "x": 180,
+        "y": 518,
+        "width": 360,
+        "height": 46
+      },
+      "cityRecenter": {
+        "x": 572.921875,
+        "y": 678,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 676,
+        "y": 809.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 822,
+        "width": 103.03125,
+        "height": 38
+      },
+      "attribution": {
+        "x": 550.984375,
+        "y": 883.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    }
+  },
+  {
+    "viewport": "1024x768",
+    "label": "area-first-city-landing",
+    "url": "http://localhost:5714/discover?city=udupi",
+    "visible": [
+      "tipPill",
+      "countBadge",
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [],
+    "rects": {
+      "tipPill": {
+        "x": 128,
+        "y": 386,
+        "width": 256,
+        "height": 46
+      },
+      "countBadge": {
+        "x": 146,
+        "y": 471,
+        "width": 220,
+        "height": 57
+      },
+      "cityRecenter": {
+        "x": 364.921875,
+        "y": 546,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 468,
+        "y": 677.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 690,
+        "width": 171.671875,
+        "height": 38
+      },
+      "attribution": {
+        "x": 342.984375,
+        "y": 751.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    }
+  },
+  {
+    "viewport": "1024x768",
+    "label": "selected-group",
+    "url": "http://localhost:5714/discover?city=udupi&journey=area-first&node=g%3AIN%7CKA%7CUdupi%7CManipal-belt",
+    "visible": [
+      "tipPill",
+      "countBadge",
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [],
+    "rects": {
+      "tipPill": {
+        "x": 128,
+        "y": 386,
+        "width": 256,
+        "height": 46
+      },
+      "countBadge": {
+        "x": 146,
+        "y": 471,
+        "width": 220,
+        "height": 57
+      },
+      "cityRecenter": {
+        "x": 364.921875,
+        "y": 546,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 468,
+        "y": 677.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 690,
+        "width": 171.671875,
+        "height": 38
+      },
+      "attribution": {
+        "x": 342.984375,
+        "y": 751.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    }
+  },
+  {
+    "viewport": "1024x768",
+    "label": "selected-area-residential",
+    "url": "http://localhost:5714/discover?city=udupi&journey=area-first&node=a%3AIN%7CKA%7CUdupi%7CManipal&rscope=areas&rareas=IN%7CKA%7CUdupi%7CManipal&lat=13.35250&lon=74.78640&zoom=15",
+    "visible": [
+      "tipPill",
+      "countBadge",
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [],
+    "rects": {
+      "tipPill": {
+        "x": 128,
+        "y": 386,
+        "width": 256,
+        "height": 46
+      },
+      "countBadge": {
+        "x": 146,
+        "y": 470,
+        "width": 220,
+        "height": 58
+      },
+      "cityRecenter": {
+        "x": 364.921875,
+        "y": 546,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 468,
+        "y": 677.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 639,
+        "width": 141.609375,
+        "height": 89
+      },
+      "attribution": {
+        "x": 342.984375,
+        "y": 751.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    }
+  },
+  {
+    "viewport": "1024x768",
+    "label": "school-first-landing",
+    "url": "http://localhost:5714/discover?city=udupi&journey=school-first",
+    "visible": [
+      "tipPill",
+      "countBadge",
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [],
+    "rects": {
+      "tipPill": {
+        "x": 128,
+        "y": 386,
+        "width": 256,
+        "height": 46
+      },
+      "countBadge": {
+        "x": 308.40625,
+        "y": 490,
+        "width": 187.59375,
+        "height": 38
+      },
+      "cityRecenter": {
+        "x": 364.921875,
+        "y": 546,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 468,
+        "y": 677.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 690,
+        "width": 124.78125,
+        "height": 38
+      },
+      "attribution": {
+        "x": 342.984375,
+        "y": 751.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    }
+  },
+  {
+    "viewport": "1024x768",
+    "label": "agri-first-landing",
+    "url": "http://localhost:5714/discover?city=udupi&journey=agri-first",
+    "visible": [
+      "tipPill",
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [],
+    "rects": {
+      "tipPill": {
+        "x": 128,
+        "y": 386,
+        "width": 256,
+        "height": 46
+      },
+      "cityRecenter": {
+        "x": 364.921875,
+        "y": 546,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 468,
+        "y": 677.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 690,
+        "width": 103.03125,
+        "height": 38
+      },
+      "attribution": {
+        "x": 342.984375,
+        "y": 751.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    }
+  }
+]

@@ -1121,14 +1121,17 @@ describe('Issue #2698 — mobile Map bottom chrome', () => {
     onFiltersChange: vi.fn(),
   };
 
-  it('desktop (no mobile overlay): keeps the tip pill, the count badge and the bottom-4 Recenter placement', () => {
+  it('desktop (no mobile overlay): keeps the tip pill, the count badge and the bottom-right Recenter column', () => {
     renderCanvas(<DiscoverMapCanvas {...baseProps(AREA_SELECTED_WITH_COUNT)} />);
 
     expect(screen.getByTestId('discover-map-tip-pill')).toBeInTheDocument();
     expect(screen.getByTestId('discover-badge')).toHaveTextContent('4 verified properties in Manipal');
+    // Issue #2714 — bottom-4 sat inside the Leaflet zoom control's footprint (live-measured
+    // 28x19px overlap at 1440x900); raised to bottom-48 to clear it and the other bottom-right
+    // column occupants (the school-radius hint at bottom-28, the count badge at bottom-60).
     const recenterColumn = screen.getByTestId('map-recenter-city-button').parentElement;
-    expect(recenterColumn).toHaveClass('bottom-4', 'right-4');
-    expect(recenterColumn).not.toHaveClass('bottom-[100px]');
+    expect(recenterColumn).toHaveClass('bottom-48', 'right-4');
+    expect(recenterColumn).not.toHaveClass('bottom-4', 'bottom-[100px]');
   });
 
   it('mobile Map: drops the desktop "Click an area marker" tip pill', () => {

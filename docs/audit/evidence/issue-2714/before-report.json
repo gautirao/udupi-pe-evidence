@@ -1,0 +1,567 @@
+[1440x900] area-first-city-landing: visible=tipPill,countBadge,cityRecenter,zoom,legend,attribution overlaps=tipPill x countBadge (204x26px) | tipPill x legend (172x6px) | cityRecenter x zoom (28x19px)
+[1440x900] selected-group: visible=tipPill,countBadge,cityRecenter,zoom,legend,attribution overlaps=tipPill x countBadge (204x26px) | tipPill x legend (172x6px) | cityRecenter x zoom (28x19px)
+[1440x900] selected-area-residential: visible=tipPill,countBadge,cityRecenter,zoom,legend,attribution overlaps=tipPill x countBadge (166x14px) | tipPill x legend (142x6px) | cityRecenter x zoom (28x19px)
+[1440x900] school-first-landing: visible=tipPill,countBadge,cityRecenter,zoom,legend,attribution overlaps=tipPill x legend (125x6px) | countBadge x zoom (28x27px) | cityRecenter x zoom (28x19px)
+[1440x900] agri-first-landing: visible=tipPill,cityRecenter,zoom,legend,attribution overlaps=tipPill x legend (103x6px) | cityRecenter x zoom (28x19px)
+[1024x768] area-first-city-landing: visible=tipPill,countBadge,cityRecenter,zoom,legend,attribution overlaps=tipPill x countBadge (308x26px) | tipPill x cityRecenter (33x30px) | tipPill x legend (172x6px) | countBadge x cityRecenter (57x26px) | countBadge x legend (98x18px) | cityRecenter x zoom (28x19px)
+[1024x768] selected-group: visible=tipPill,countBadge,cityRecenter,zoom,legend,attribution overlaps=tipPill x countBadge (308x26px) | tipPill x cityRecenter (33x30px) | tipPill x legend (172x6px) | countBadge x cityRecenter (57x26px) | countBadge x legend (98x18px) | cityRecenter x zoom (28x19px)
+[1024x768] selected-area-residential: visible=tipPill,countBadge,cityRecenter,zoom,legend,attribution overlaps=tipPill x countBadge (257x14px) | tipPill x cityRecenter (33x30px) | tipPill x legend (142x6px) | countBadge x cityRecenter (20x14px) | countBadge x legend (30x30px) | cityRecenter x zoom (28x19px)
+[1024x768] school-first-landing: visible=tipPill,countBadge,cityRecenter,zoom,legend,attribution overlaps=tipPill x cityRecenter (33x30px) | tipPill x legend (125x6px) | countBadge x zoom (28x27px) | cityRecenter x zoom (28x19px)
+[1024x768] agri-first-landing: visible=tipPill,cityRecenter,zoom,legend,attribution overlaps=tipPill x cityRecenter (33x30px) | tipPill x legend (103x6px) | cityRecenter x zoom (28x19px)
+[
+  {
+    "viewport": "1440x900",
+    "label": "area-first-city-landing",
+    "url": "http://localhost:5714/discover?city=udupi",
+    "visible": [
+      "tipPill",
+      "countBadge",
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [
+      "tipPill x countBadge (204x26px)",
+      "tipPill x legend (172x6px)",
+      "cityRecenter x zoom (28x19px)"
+    ],
+    "rects": {
+      "tipPill": {
+        "x": 16,
+        "y": 854,
+        "width": 381.890625,
+        "height": 30
+      },
+      "countBadge": {
+        "x": 193.9296875,
+        "y": 842.5,
+        "width": 332.140625,
+        "height": 37.5
+      },
+      "cityRecenter": {
+        "x": 572.921875,
+        "y": 854,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 676,
+        "y": 809.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 822,
+        "width": 171.671875,
+        "height": 38
+      },
+      "attribution": {
+        "x": 550.984375,
+        "y": 883.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    }
+  },
+  {
+    "viewport": "1440x900",
+    "label": "selected-group",
+    "url": "http://localhost:5714/discover?city=udupi&journey=area-first&node=g%3AIN%7CKA%7CUdupi%7CManipal-belt",
+    "visible": [
+      "tipPill",
+      "countBadge",
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [
+      "tipPill x countBadge (204x26px)",
+      "tipPill x legend (172x6px)",
+      "cityRecenter x zoom (28x19px)"
+    ],
+    "rects": {
+      "tipPill": {
+        "x": 16,
+        "y": 854,
+        "width": 381.890625,
+        "height": 30
+      },
+      "countBadge": {
+        "x": 193.9296875,
+        "y": 842.5,
+        "width": 332.140625,
+        "height": 37.5
+      },
+      "cityRecenter": {
+        "x": 572.921875,
+        "y": 854,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 676,
+        "y": 809.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 822,
+        "width": 171.671875,
+        "height": 38
+      },
+      "attribution": {
+        "x": 550.984375,
+        "y": 883.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    }
+  },
+  {
+    "viewport": "1440x900",
+    "label": "selected-area-residential",
+    "url": "http://localhost:5714/discover?city=udupi&journey=area-first&node=a%3AIN%7CKA%7CUdupi%7CManipal&rscope=areas&rareas=IN%7CKA%7CUdupi%7CManipal&lat=13.35250&lon=74.78640&zoom=15",
+    "visible": [
+      "tipPill",
+      "countBadge",
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [
+      "tipPill x countBadge (166x14px)",
+      "tipPill x legend (142x6px)",
+      "cityRecenter x zoom (28x19px)"
+    ],
+    "rects": {
+      "tipPill": {
+        "x": 16,
+        "y": 854,
+        "width": 381.890625,
+        "height": 30
+      },
+      "countBadge": {
+        "x": 231.4453125,
+        "y": 830,
+        "width": 257.109375,
+        "height": 38
+      },
+      "cityRecenter": {
+        "x": 572.921875,
+        "y": 854,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 676,
+        "y": 809.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 771,
+        "width": 141.609375,
+        "height": 89
+      },
+      "attribution": {
+        "x": 550.984375,
+        "y": 883.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    }
+  },
+  {
+    "viewport": "1440x900",
+    "label": "school-first-landing",
+    "url": "http://localhost:5714/discover?city=udupi&journey=school-first",
+    "visible": [
+      "tipPill",
+      "countBadge",
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [
+      "tipPill x legend (125x6px)",
+      "countBadge x zoom (28x27px)",
+      "cityRecenter x zoom (28x19px)"
+    ],
+    "rects": {
+      "tipPill": {
+        "x": 16,
+        "y": 854,
+        "width": 381.890625,
+        "height": 30
+      },
+      "countBadge": {
+        "x": 516.40625,
+        "y": 798,
+        "width": 187.59375,
+        "height": 38
+      },
+      "cityRecenter": {
+        "x": 572.921875,
+        "y": 854,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 676,
+        "y": 809.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 822,
+        "width": 124.78125,
+        "height": 38
+      },
+      "attribution": {
+        "x": 550.984375,
+        "y": 883.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    }
+  },
+  {
+    "viewport": "1440x900",
+    "label": "agri-first-landing",
+    "url": "http://localhost:5714/discover?city=udupi&journey=agri-first",
+    "visible": [
+      "tipPill",
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [
+      "tipPill x legend (103x6px)",
+      "cityRecenter x zoom (28x19px)"
+    ],
+    "rects": {
+      "tipPill": {
+        "x": 16,
+        "y": 854,
+        "width": 381.890625,
+        "height": 30
+      },
+      "cityRecenter": {
+        "x": 572.921875,
+        "y": 854,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 676,
+        "y": 809.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 822,
+        "width": 103.03125,
+        "height": 38
+      },
+      "attribution": {
+        "x": 550.984375,
+        "y": 883.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    }
+  },
+  {
+    "viewport": "1024x768",
+    "label": "area-first-city-landing",
+    "url": "http://localhost:5714/discover?city=udupi",
+    "visible": [
+      "tipPill",
+      "countBadge",
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [
+      "tipPill x countBadge (308x26px)",
+      "tipPill x cityRecenter (33x30px)",
+      "tipPill x legend (172x6px)",
+      "countBadge x cityRecenter (57x26px)",
+      "countBadge x legend (98x18px)",
+      "cityRecenter x zoom (28x19px)"
+    ],
+    "rects": {
+      "tipPill": {
+        "x": 16,
+        "y": 722,
+        "width": 381.890625,
+        "height": 30
+      },
+      "countBadge": {
+        "x": 89.9296875,
+        "y": 710.5,
+        "width": 332.140625,
+        "height": 37.5
+      },
+      "cityRecenter": {
+        "x": 364.921875,
+        "y": 722,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 468,
+        "y": 677.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 690,
+        "width": 171.671875,
+        "height": 38
+      },
+      "attribution": {
+        "x": 342.984375,
+        "y": 751.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    }
+  },
+  {
+    "viewport": "1024x768",
+    "label": "selected-group",
+    "url": "http://localhost:5714/discover?city=udupi&journey=area-first&node=g%3AIN%7CKA%7CUdupi%7CManipal-belt",
+    "visible": [
+      "tipPill",
+      "countBadge",
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [
+      "tipPill x countBadge (308x26px)",
+      "tipPill x cityRecenter (33x30px)",
+      "tipPill x legend (172x6px)",
+      "countBadge x cityRecenter (57x26px)",
+      "countBadge x legend (98x18px)",
+      "cityRecenter x zoom (28x19px)"
+    ],
+    "rects": {
+      "tipPill": {
+        "x": 16,
+        "y": 722,
+        "width": 381.890625,
+        "height": 30
+      },
+      "countBadge": {
+        "x": 89.9296875,
+        "y": 710.5,
+        "width": 332.140625,
+        "height": 37.5
+      },
+      "cityRecenter": {
+        "x": 364.921875,
+        "y": 722,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 468,
+        "y": 677.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 690,
+        "width": 171.671875,
+        "height": 38
+      },
+      "attribution": {
+        "x": 342.984375,
+        "y": 751.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    }
+  },
+  {
+    "viewport": "1024x768",
+    "label": "selected-area-residential",
+    "url": "http://localhost:5714/discover?city=udupi&journey=area-first&node=a%3AIN%7CKA%7CUdupi%7CManipal&rscope=areas&rareas=IN%7CKA%7CUdupi%7CManipal&lat=13.35250&lon=74.78640&zoom=15",
+    "visible": [
+      "tipPill",
+      "countBadge",
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [
+      "tipPill x countBadge (257x14px)",
+      "tipPill x cityRecenter (33x30px)",
+      "tipPill x legend (142x6px)",
+      "countBadge x cityRecenter (20x14px)",
+      "countBadge x legend (30x30px)",
+      "cityRecenter x zoom (28x19px)"
+    ],
+    "rects": {
+      "tipPill": {
+        "x": 16,
+        "y": 722,
+        "width": 381.890625,
+        "height": 30
+      },
+      "countBadge": {
+        "x": 127.4453125,
+        "y": 698,
+        "width": 257.109375,
+        "height": 38
+      },
+      "cityRecenter": {
+        "x": 364.921875,
+        "y": 722,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 468,
+        "y": 677.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 639,
+        "width": 141.609375,
+        "height": 89
+      },
+      "attribution": {
+        "x": 342.984375,
+        "y": 751.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    }
+  },
+  {
+    "viewport": "1024x768",
+    "label": "school-first-landing",
+    "url": "http://localhost:5714/discover?city=udupi&journey=school-first",
+    "visible": [
+      "tipPill",
+      "countBadge",
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [
+      "tipPill x cityRecenter (33x30px)",
+      "tipPill x legend (125x6px)",
+      "countBadge x zoom (28x27px)",
+      "cityRecenter x zoom (28x19px)"
+    ],
+    "rects": {
+      "tipPill": {
+        "x": 16,
+        "y": 722,
+        "width": 381.890625,
+        "height": 30
+      },
+      "countBadge": {
+        "x": 308.40625,
+        "y": 666,
+        "width": 187.59375,
+        "height": 38
+      },
+      "cityRecenter": {
+        "x": 364.921875,
+        "y": 722,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 468,
+        "y": 677.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 690,
+        "width": 124.78125,
+        "height": 38
+      },
+      "attribution": {
+        "x": 342.984375,
+        "y": 751.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    }
+  },
+  {
+    "viewport": "1024x768",
+    "label": "agri-first-landing",
+    "url": "http://localhost:5714/discover?city=udupi&journey=agri-first",
+    "visible": [
+      "tipPill",
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [
+      "tipPill x cityRecenter (33x30px)",
+      "tipPill x legend (103x6px)",
+      "cityRecenter x zoom (28x19px)"
+    ],
+    "rects": {
+      "tipPill": {
+        "x": 16,
+        "y": 722,
+        "width": 381.890625,
+        "height": 30
+      },
+      "cityRecenter": {
+        "x": 364.921875,
+        "y": 722,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 468,
+        "y": 677.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 690,
+        "width": 103.03125,
+        "height": 38
+      },
+      "attribution": {
+        "x": 342.984375,
+        "y": 751.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    }
+  }
+]

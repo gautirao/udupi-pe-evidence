@@ -1631,13 +1631,27 @@ export function DiscoverMapCanvas({
         container={mapContainerRef.current}
       />
 
-      {/* Step 4: Bottom-left map tip banner pill. Issue #2698 — desktop only: its "Click …"
-          pointer copy does not apply to touch, and on the mobile Map it ran under the legend,
-          the count badge and the Recenter button. */}
+      {/* Step 4: Bottom-centre map tip banner pill, stacked above the count badge. Issue #2698
+          fixed the mobile Map by dropping this pill entirely (its "Click …" pointer copy does
+          not apply to touch). Issue #2714 — on desktop it stayed at bottom-4 left-4, sharing the
+          legend's left column (overlapping it: 142x6px measured) and reaching into the centred
+          count badge's column (166x14px measured, since its "Click an area marker to explore ·
+          The map will zoom for you" copy is wide, up to 360px rendered).
+          Live-measured (Playwright, 1440x900 and 1024x768) across every state in #2714's affected-
+          states list: because this pill is centred (not left-anchored) its ~360px width reaches
+          into the bottom-right column at narrower map widths (1024x768 measured a real 19-30px
+          overlap against the recenter/badge/hint stack even before those moved), so horizontal
+          separation alone can't be relied on — it must clear the TALLEST item in either bottom
+          column vertically. The bottom-right column's tallest live-measured top edge is the
+          area-recenter button at bottom-72 (+38px height = 326px from the container bottom, only
+          reachable in the rare state where a school-radius "more" hint, the count badge, city
+          recenter AND an out-of-view area recenter all render together); the bottom-left legend's
+          tallest live-measured top edge (school-radius variant) is 178px. bottom-84 (336px) clears
+          both with an 8-10px margin, confirmed 0 intersecting pairs across all measured states. */}
       {!isMapTipDismissed && !isMobileMapOverlay && (
         <div
           data-testid="discover-map-tip-pill"
-          className="absolute bottom-4 left-4 z-[500] flex items-center gap-2 px-3 py-1.5 bg-white/95 backdrop-blur-sm border border-slate-200 rounded-full shadow-md text-xs font-medium text-slate-700"
+          className="absolute bottom-[336px] left-1/2 z-[500] flex -translate-x-1/2 items-center gap-2 px-3 py-1.5 bg-white/95 backdrop-blur-sm border border-slate-200 rounded-full shadow-md text-xs font-medium text-slate-700"
         >
           <span>Click an area marker to explore · The map will zoom for you</span>
           <button
@@ -1653,12 +1667,24 @@ export function DiscoverMapCanvas({
 
       {/* Step 4: Bottom-right stacked Recenter button. Issue #2698 — on the mobile Map it sat
           on top of the Leaflet zoom control (bottom-right corner, above the attribution), so it
-          is lifted above that control there, keeping the zoom's own 10px right inset. */}
+          is lifted above that control there, keeping the zoom's own 10px right inset.
+          Issue #2714 — on desktop it stayed at bottom-4 right-4, which sat inside the Leaflet
+          bottomright zoom control's own footprint (measured 28x19px overlap at 1440x900, over
+          the "−" button). Per #2714's placement boundaries the bottom-right column stacks, bottom
+          to top: attribution, zoom, this "Recenter on <city>" button, the school-radius-more-hint
+          (DiscoverMapStatusHints, unchanged at bottom-28/112px), then (DiscoverMapCountBadge's
+          right-anchored variant, bottom-60) the count badge, then (DiscoverMapSurface's "Recenter
+          on <area>" button, bottom-72) — since the hint, this button and the badge can all render
+          together in the anon school-radius "showing first N" state (live-measured), this button
+          sits ABOVE the hint (live-measured height 66px at bottom-28, top edge 178px) rather than
+          between it and zoom (only a 21px gap there, too tight for a 30px button + margins).
+          bottom-48 (192px) clears both the zoom control (top edge 91px) and the hint (top edge
+          178px) with a 14px+ margin, confirmed via Playwright across every #2714 affected state. */}
       <div
         className={
           isMobileMapOverlay
             ? 'absolute bottom-[100px] right-[10px] z-[500] flex flex-col items-end gap-2'
-            : 'absolute bottom-4 right-4 z-[500] flex flex-col items-end gap-2'
+            : 'absolute bottom-48 right-4 z-[500] flex flex-col items-end gap-2'
         }
       >
         <button
