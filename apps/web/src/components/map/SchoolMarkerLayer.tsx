@@ -113,11 +113,24 @@ export function SchoolMarkerLayer({
   // Diagnostic: log empty state (successful load but no schools).
   // Intentionally still gated to school-first — this warn must NOT surface in
   // the area-first sub-step (Issue #1157 rev-5 WARN3 scope note).
+  // Issue #2715 — `schools` is the AREA-schools query result and is empty
+  // whenever a specific school is already selected (schoolsAreaKey is only
+  // populated for the 'schools-in-area' picking sub-step — see
+  // useDiscoverSchoolController.ts). The selected school itself always
+  // renders its own pin via SchoolRadiusOverlay (fed by `selectedSchool`,
+  // independent of this `schools` array), so an empty area-schools list is
+  // not "no schools" while a school is selected — suppress the diagnostic too.
   useEffect(() => {
-    if (journey === 'school-first' && !isLoading && !isError && schools.length === 0) {
+    if (
+      journey === 'school-first' &&
+      !isLoading &&
+      !isError &&
+      schools.length === 0 &&
+      selectedSchoolId === null
+    ) {
       console.warn('[SchoolMarkerLayer] No schools found for selected area in school-first journey');
     }
-  }, [journey, isLoading, isError, schools.length]);
+  }, [journey, isLoading, isError, schools.length, selectedSchoolId]);
 
   useEffect(() => {
     if (!showSchoolMarkers || schools.length === 0) return;
@@ -202,7 +215,10 @@ export function SchoolMarkerLayer({
   }
 
   // Empty state
-  if (schools.length === 0) {
+  // Issue #2715 — never claim "No schools found" while a selected school's
+  // own pin is visibly rendered elsewhere (SchoolRadiusOverlay, driven by
+  // `selectedSchool` independent of this `schools` area-query result).
+  if (schools.length === 0 && selectedSchoolId === null) {
     return (
       <div
         data-testid="school-marker-empty"

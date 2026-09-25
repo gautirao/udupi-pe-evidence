@@ -191,6 +191,44 @@ describe('SchoolMarkerLayer', () => {
       expect(screen.queryByTestId('school-marker-empty')).not.toBeInTheDocument();
     });
 
+    // Issue #2715 — a selected school always renders its own pin via
+    // SchoolRadiusOverlay (fed by `selectedSchool`, independent of the
+    // `schools` area-query array), so an empty `schools` list must not
+    // produce "No schools found" while a school is selected. Pre-fix this
+    // test fails: the pill rendered contradicting the visible pin.
+    it('does not render empty message when a school is selected, even if the area-schools query is empty', () => {
+      render(
+        <SchoolMarkerLayer
+          schools={[]}
+          journey="school-first"
+          isLoading={false}
+          isError={false}
+          showSchoolMarkers={true}
+          selectedSchoolId="11111111-2222-3333-4444-555555555555"
+          onSelectSchool={vi.fn()}
+        />
+      );
+
+      expect(screen.queryByTestId('school-marker-empty')).not.toBeInTheDocument();
+    });
+
+    it('does not log the empty-area diagnostic warning when a school is selected', () => {
+      const warnSpy = vi.spyOn(console, 'warn');
+      render(
+        <SchoolMarkerLayer
+          schools={[]}
+          journey="school-first"
+          isLoading={false}
+          isError={false}
+          showSchoolMarkers={true}
+          selectedSchoolId="11111111-2222-3333-4444-555555555555"
+          onSelectSchool={vi.fn()}
+        />
+      );
+
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
     it('does not render empty message while loading', () => {
       render(
         <SchoolMarkerLayer
