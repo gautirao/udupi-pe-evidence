@@ -131,4 +131,38 @@ describe('DiscoverMapCountBadge', () => {
     );
     expect(screen.queryByTestId('discover-badge')).not.toBeInTheDocument();
   });
+
+  // Issue #2716 — the public-landing summary pill's bottom offset must switch
+  // to clear the Leaflet zoom control's bottom-right footprint when rendered
+  // inside the mobile Map overlay, while staying byte-identical on desktop
+  // (AC4 — DiscoverMapSurface/#2714 own desktop bottom chrome, unaffected here).
+  describe('#2716 public-landing pill mobile-overlay placement', () => {
+    function publicLandingProps(): DiscoverMapCountBadgeProps {
+      return {
+        ...baseProps(),
+        resolvedPanelContent: 'guided-entry',
+        isAreaFirstCityLanding: false,
+        isAreaFirstSelectedAreaState: false,
+        isSelectedGroupState: false,
+        selectedArea: null,
+        areaResultSummaryText: null,
+        journey: null,
+        cityTotal: 42,
+      };
+    }
+
+    it('keeps the desktop bottom-5 centred placement when isMobileMapOverlay is omitted (default false)', () => {
+      render(<DiscoverMapCountBadge {...publicLandingProps()} />);
+      const badge = screen.getByTestId('discover-badge');
+      expect(badge.className).toBe('absolute bottom-5 left-1/2 z-[1000] -translate-x-1/2');
+    });
+
+    it('raises the pill to bottom-8 and constrains its width (clear of the zoom control) when isMobileMapOverlay is true', () => {
+      render(<DiscoverMapCountBadge {...publicLandingProps()} isMobileMapOverlay />);
+      const badge = screen.getByTestId('discover-badge');
+      expect(badge.className).toBe(
+        'absolute bottom-8 left-1/2 z-[1000] w-[calc(100%-6rem)] max-w-[220px] -translate-x-1/2',
+      );
+    });
+  });
 });

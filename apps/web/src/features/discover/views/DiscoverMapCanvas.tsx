@@ -1529,6 +1529,7 @@ export function DiscoverMapCanvas({
         cityTotal={cityTotal}
         city={city}
         hideDrillDownBadge={hideDuplicateCountBadge}
+        isMobileMapOverlay={isMobileMapOverlay}
       />
 
       {/* Issue #1261 — non-blocking "showing first N" hint for the anonymous

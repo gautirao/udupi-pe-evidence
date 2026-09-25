@@ -1,0 +1,70 @@
+[
+  {
+    "label": "after",
+    "viewport": "375x667",
+    "pillRect": {
+      "left": 77.5,
+      "top": 558.5,
+      "right": 297.5,
+      "bottom": 635
+    },
+    "zoomOutRect": {
+      "left": 333,
+      "top": 608.203125,
+      "right": 363,
+      "bottom": 638.203125
+    },
+    "intersects": false
+  },
+  {
+    "label": "after",
+    "viewport": "390x844",
+    "pillRect": {
+      "left": 85,
+      "top": 735.5,
+      "right": 305,
+      "bottom": 812
+    },
+    "zoomOutRect": {
+      "left": 348,
+      "top": 785.203125,
+      "right": 378,
+      "bottom": 815.203125
+    },
+    "intersects": false
+  },
+  {
+    "label": "after",
+    "viewport": "412x915",
+    "pillRect": {
+      "left": 96,
+      "top": 806.5,
+      "right": 316,
+      "bottom": 883
+    },
+    "zoomOutRect": {
+      "left": 370,
+      "top": 856.203125,
+      "right": 400,
+      "bottom": 886.203125
+    },
+    "intersects": false
+  },
+  {
+    "label": "after",
+    "viewport": "1440x900",
+    "pillRect": {
+      "left": 180.4296875,
+      "top": 842.5,
+      "right": 539.5703125,
+      "bottom": 880
+    },
+    "zoomOutRect": {
+      "left": 678,
+      "top": 841.203125,
+      "right": 708,
+      "bottom": 871.203125
+    },
+    "intersects": false
+  }
+]

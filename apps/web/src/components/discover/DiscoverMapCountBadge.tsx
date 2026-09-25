@@ -50,6 +50,16 @@ export interface DiscoverMapCountBadgeProps {
    * mobile Map results heading. Defaults to false, so desktop is unchanged.
    */
   hideDrillDownBadge?: boolean;
+  /**
+   * Issue #2716 — the full-screen mobile Map overlay (same signal as
+   * DiscoverMapCanvas's `isMobileMapOverlay`/DiscoverMapStatusHints's prop of
+   * the same name) needs the public-landing summary pill raised clear of the
+   * Leaflet zoom control's bottom-right footprint. Mirrors the `bottom-8`
+   * value the sibling drill-down pill already uses at line ~106 for the same
+   * centred-pill-clears-zoom-bottom-right-and-legend-bottom-left geometry.
+   * Defaults to false, so desktop stays byte-identical (`bottom-5`).
+   */
+  isMobileMapOverlay?: boolean;
 }
 
 export function DiscoverMapCountBadge({
@@ -72,6 +82,7 @@ export function DiscoverMapCountBadge({
   cityTotal,
   city,
   hideDrillDownBadge = false,
+  isMobileMapOverlay = false,
 }: DiscoverMapCountBadgeProps) {
   return (
     <>
@@ -201,10 +212,32 @@ export function DiscoverMapCountBadge({
           ever changes. */}
       {(resolvedPanelContent === 'guided-entry' || isAreaFirstCityLanding) &&
         journey !== 'agri-first' && cityTotal > 0 && (
-        <div className="absolute bottom-5 left-1/2 z-[1000] -translate-x-1/2" data-testid="discover-badge">
-          <div className="flex items-center gap-2 whitespace-nowrap rounded-full border border-border bg-card px-4 py-2 text-[13px] font-semibold text-muted-foreground shadow-md">
+        <div
+          className={
+            // Issue #2716 — mobile Map: base bottom-5 pill overlapped the Leaflet
+            // zoom control at 375/390/412px (measured, see measurements-before.json).
+            // Only ~9px separates the #2713 recenter button from the zoom control at
+            // 375x667, so no bottom-* offset alone clears it — fix is bottom-8 (same
+            // clearance the sibling drill-down pill uses above the recenter button)
+            // plus a width cap so the (unchanged) copy wraps and stays clear of the
+            // zoom control's column horizontally too. Verified 0 intersections at all
+            // 3 mobile widths (measurements-finalfix.json). Desktop bottom-5 pill is
+            // untouched — byte-identical className/geometry (AC4).
+            isMobileMapOverlay
+              ? 'absolute bottom-8 left-1/2 z-[1000] w-[calc(100%-6rem)] max-w-[220px] -translate-x-1/2'
+              : 'absolute bottom-5 left-1/2 z-[1000] -translate-x-1/2'
+          }
+          data-testid="discover-badge"
+        >
+          <div
+            className={
+              isMobileMapOverlay
+                ? 'flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-[13px] font-semibold text-muted-foreground shadow-md'
+                : 'flex items-center gap-2 whitespace-nowrap rounded-full border border-border bg-card px-4 py-2 text-[13px] font-semibold text-muted-foreground shadow-md'
+            }
+          >
             <MapPin className="h-[15px] w-[15px] shrink-0 text-[hsl(var(--copper))]" aria-hidden="true" />
-            <span>
+            <span className={isMobileMapOverlay ? 'text-center' : undefined}>
               Showing{' '}
               <strong className="font-mono font-bold tabular-nums text-foreground">
                 {cityTotal.toLocaleString()}
