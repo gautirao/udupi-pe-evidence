@@ -35,11 +35,21 @@ export interface DiscoverMapStatusHintsProps {
     /** FLAG-A — precomputed hasActiveAnonPropertyFilter(filters) boolean. */
     hasActiveAnonFilter: boolean;
   } | null;
+  /**
+   * Issue #2698 — true only on the full-screen mobile Map. There the right-hand
+   * column holds the Leaflet zoom (≈0–90px from the bottom), "Recenter on
+   * <city>" (100–130px) and "Recenter on <area>" (144–182px); the desktop
+   * `bottom-28 right-4` hint box sat across both buttons and, at `z-[1000]`,
+   * swallowed their taps. Mobile lifts it above the whole column. Defaults to
+   * false, so desktop is unchanged.
+   */
+  isMobileMapOverlay?: boolean;
 }
 
 export function DiscoverMapStatusHints({
   showLoader = false,
   schoolRadiusHint = null,
+  isMobileMapOverlay = false,
 }: DiscoverMapStatusHintsProps) {
   return (
     <>
@@ -65,7 +75,14 @@ export function DiscoverMapStatusHints({
         schoolRadiusHint.schoolRadiusActive &&
         schoolRadiusHint.schoolRadiusHasMore &&
         !schoolRadiusHint.hasActiveAnonFilter && (
-        <div className="absolute bottom-28 right-4 z-[1000]" data-testid="school-radius-more-hint">
+        <div
+          className={
+            isMobileMapOverlay
+              ? 'absolute bottom-[192px] right-[10px] z-[1000]'
+              : 'absolute bottom-28 right-4 z-[1000]'
+          }
+          data-testid="school-radius-more-hint"
+        >
           <div
             className="bg-card/95 rounded-lg px-4 py-2 shadow-sm text-xs text-muted-foreground border border-border max-w-[16rem]"
             aria-live="polite"

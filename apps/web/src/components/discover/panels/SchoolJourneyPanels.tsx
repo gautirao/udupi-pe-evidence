@@ -1462,9 +1462,9 @@ export function SchoolSelectedPanel({
             {filtersContent && (
               <Sheet>
                 <SheetTrigger asChild>
-                  <Button variant="outline" size="icon" className="h-7 w-7">
+                  <Button variant="outline" size="sm" className="h-7 gap-1.5 px-2 text-xs">
                     <SlidersHorizontal className="h-3.5 w-3.5" />
-                    <span className="sr-only">Filters</span>
+                    Filters
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="right" className="w-80 p-0">
@@ -1816,9 +1816,9 @@ export function AreaSchoolCombinedPanel({
             {filtersContent && (
               <Sheet>
                 <SheetTrigger asChild>
-                  <Button variant="outline" size="icon" className="h-7 w-7">
+                  <Button variant="outline" size="sm" className="h-7 gap-1.5 px-2 text-xs">
                     <SlidersHorizontal className="h-3.5 w-3.5" />
-                    <span className="sr-only">Filters</span>
+                    Filters
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="right" className="w-80 p-0">

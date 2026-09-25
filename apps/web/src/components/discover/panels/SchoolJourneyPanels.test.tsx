@@ -72,6 +72,29 @@ function renderPanel(props: Partial<React.ComponentProps<typeof SchoolSelectedPa
   );
 }
 
+// Issue #2698 — the Filters sheet trigger used to be icon-only on both
+// SchoolSelectedPanel and AreaSchoolCombinedPanel: its only text was an
+// `sr-only` span, so sighted shoppers saw a bare sliders glyph. The label must
+// now be VISIBLE. `toHaveTextContent` alone cannot prove that (it also matches
+// sr-only text), so assert there is no sr-only wrapper and that the label is a
+// direct text node of the button.
+function expectVisibleFiltersLabel() {
+  const trigger = screen.getByRole('button', { name: 'Filters' });
+  expect(trigger.querySelector('.sr-only')).toBeNull();
+  const ownText = Array.from(trigger.childNodes)
+    .filter((node) => node.nodeType === Node.TEXT_NODE)
+    .map((node) => node.textContent?.trim())
+    .join('');
+  expect(ownText).toBe('Filters');
+}
+
+describe('SchoolSelectedPanel — Filters trigger (discoverability, #2698)', () => {
+  it('renders a visible "Filters" label, not an icon with sr-only text', () => {
+    renderPanel({ filtersContent: <div>Filter controls</div> });
+    expectVisibleFiltersLabel();
+  });
+});
+
 describe('SchoolSelectedPanel — grid layout (AC15)', () => {
   it('AC15: listing grid uses grid-cols-1 2xl:grid-cols-2 gap-3 p-3', () => {
     const { container } = renderPanel({
@@ -272,6 +295,13 @@ describe('AreaSchoolCombinedPanel — nearest-first sort order (Issue #1974)', (
       </DiscoverProvider>,
     );
   }
+
+  // Issue #2698 — same icon-only-trigger defect as SchoolSelectedPanel; must
+  // carry a visible "Filters" label, not just an sr-only one.
+  it('renders a visible "Filters" label, not an icon with sr-only text', () => {
+    renderCombinedPanel({ filtersContent: <div>Filter controls</div> });
+    expectVisibleFiltersLabel();
+  });
 
   it('renders cards in ascending distance order regardless of input (server) order', () => {
     const far = makeListing('l-far', { lat: 13.39, lon: 74.79 });

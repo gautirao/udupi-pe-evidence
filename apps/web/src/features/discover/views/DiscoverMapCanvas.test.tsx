@@ -1094,3 +1094,164 @@ describe('DiscoverMapCanvas — Issue #2478: floating ActiveScopeChip overlay re
     expect(screen.queryByTestId('active-scope-chip-polygon')).not.toBeInTheDocument();
   });
 });
+
+// ── Issue #2698 — mobile Map bottom chrome no longer stacks on one strip ─────
+//
+// At 375–412px the desktop bottom chrome (tip pill, count badge, legend, both
+// Recenter buttons, Leaflet zoom) overlapped on the full-screen mobile Map.
+// `mobileListButton` is supplied ONLY while that overlay is open, so it is the
+// mobile/desktop discriminator here; desktop must stay exactly as it was.
+describe('Issue #2698 — mobile Map bottom chrome', () => {
+  const AREA_SELECTED_WITH_COUNT: Partial<DiscoverMapCanvasProps> = {
+    isLandingState: false,
+    resolvedPanelContent: 'area-selected',
+    isAreaFirstSelectedAreaState: true,
+    selectedArea: {
+      areaKey: 'IN|KA|Udupi|Manipal',
+      areaLabel: 'Manipal',
+      geo_center_lat: 13.35,
+      geo_center_lon: 74.79,
+      bbox: null,
+    },
+    areaResultSummaryText: '4 verified properties in Manipal',
+    discoverBadge: { ...DISCOVER_BADGE, visible: true, count: 4, state: 'ok' },
+  };
+  const MOBILE_MAP: Partial<DiscoverMapCanvasProps> = {
+    mobileListButton: <button type="button">List</button>,
+    onFiltersChange: vi.fn(),
+  };
+
+  it('desktop (no mobile overlay): keeps the tip pill, the count badge and the bottom-4 Recenter placement', () => {
+    renderCanvas(<DiscoverMapCanvas {...baseProps(AREA_SELECTED_WITH_COUNT)} />);
+
+    expect(screen.getByTestId('discover-map-tip-pill')).toBeInTheDocument();
+    expect(screen.getByTestId('discover-badge')).toHaveTextContent('4 verified properties in Manipal');
+    const recenterColumn = screen.getByTestId('map-recenter-city-button').parentElement;
+    expect(recenterColumn).toHaveClass('bottom-4', 'right-4');
+    expect(recenterColumn).not.toHaveClass('bottom-[100px]');
+  });
+
+  it('mobile Map: drops the desktop "Click an area marker" tip pill', () => {
+    renderCanvas(<DiscoverMapCanvas {...baseProps({ ...AREA_SELECTED_WITH_COUNT, ...MOBILE_MAP })} />);
+
+    expect(screen.queryByTestId('discover-map-tip-pill')).not.toBeInTheDocument();
+  });
+
+  // The heading counts the map's own result set (`markersReturnedElements`), not
+  // `discoverBadge.count`. With no markers supplied it renders the "0 matching" zero-state
+  // block instead of a count, so each badge-hidden case feeds the SAME 4 to both sources and
+  // asserts the heading actually states it.
+  const FOUR_MAP_RESULTS: Partial<DiscoverMapCanvasProps> = { markersReturnedElements: 4 };
+
+  it('mobile Map: drops the bottom count badge the results heading already states', () => {
+    renderCanvas(
+      <DiscoverMapCanvas {...baseProps({ ...AREA_SELECTED_WITH_COUNT, ...FOUR_MAP_RESULTS, ...MOBILE_MAP })} />,
+    );
+
+    // The count is still on screen — once, in the #2628 results heading.
+    expect(screen.getByTestId('map-results-heading-text')).toHaveTextContent(/^4 homes for sale · Residential/);
+    expect(screen.queryByTestId('discover-badge')).not.toBeInTheDocument();
+  });
+
+  it('mobile Map, school radius: drops the count badge while the results heading states the same count', () => {
+    renderCanvas(
+      <DiscoverMapCanvas
+        {...baseProps({
+          ...MOBILE_MAP,
+          ...FOUR_MAP_RESULTS,
+          isLandingState: false,
+          resolvedPanelContent: 'school-selected',
+          schoolRadiusActive: true,
+          discoverBadge: { ...DISCOVER_BADGE, visible: true, count: 4, state: 'ok' },
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId('map-results-heading-text')).toHaveTextContent(/^4 homes for sale · Residential/);
+    expect(screen.queryByTestId('discover-badge')).not.toBeInTheDocument();
+  });
+
+  // The 'stale' badge state ("Filtered results", no figure) arises in school radius with filters
+  // when no honest unfiltered N exists. On the mobile Map it stays hidden: the heading already says
+  // the results are filtered ("Filtered: …") beside the map's own count, and re-showing the pill
+  // would put it back across the zoom control. ('loading' needs no case: deriveDiscoverBadge
+  // returns visible:false there, so the badge renders on neither desktop nor mobile.)
+  const SCHOOL_RADIUS_STALE: Partial<DiscoverMapCanvasProps> = {
+    ...FOUR_MAP_RESULTS,
+    isLandingState: false,
+    resolvedPanelContent: 'school-selected',
+    schoolRadiusActive: true,
+    filters: { ...baseProps().filters, bedrooms: [2] },
+    discoverBadge: { ...DISCOVER_BADGE, visible: true, count: null, state: 'stale' },
+  };
+
+  it('desktop, school radius + filters (stale badge): the "Filtered results" pill renders', () => {
+    renderCanvas(<DiscoverMapCanvas {...baseProps(SCHOOL_RADIUS_STALE)} />);
+
+    expect(screen.getByTestId('discover-badge-stale')).toHaveTextContent('Filtered results');
+  });
+
+  it('mobile Map, school radius + filters (stale badge): the heading covers it — count plus "Filtered:" summary', () => {
+    renderCanvas(<DiscoverMapCanvas {...baseProps({ ...SCHOOL_RADIUS_STALE, ...MOBILE_MAP })} />);
+
+    expect(screen.queryByTestId('discover-badge')).not.toBeInTheDocument();
+    expect(screen.getByTestId('map-results-heading-text')).toHaveTextContent(/^4 homes for sale · Residential/);
+    expect(screen.getByTestId('map-filtered-summary')).toHaveTextContent(/Filtered:/);
+  });
+
+  it('mobile Map: lifts "Recenter on <city>" above the bottom-right Leaflet zoom control', () => {
+    renderCanvas(<DiscoverMapCanvas {...baseProps({ ...AREA_SELECTED_WITH_COUNT, ...MOBILE_MAP })} />);
+
+    const recenterColumn = screen.getByTestId('map-recenter-city-button').parentElement;
+    expect(recenterColumn).toHaveClass('bottom-[100px]', 'right-[10px]');
+    expect(recenterColumn).not.toHaveClass('bottom-4');
+  });
+
+  it('mobile Map: keeps the count badge where the results heading does NOT state that count (selected group)', () => {
+    renderCanvas(
+      <DiscoverMapCanvas
+        {...baseProps({
+          ...MOBILE_MAP,
+          isLandingState: false,
+          resolvedPanelContent: 'area-groups-landing',
+          isSelectedGroupState: true,
+          discoverBadge: { ...DISCOVER_BADGE, visible: true, count: 8, state: 'ok' },
+          fallbackBadgeCopy: '8 properties',
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId('discover-badge')).toBeInTheDocument();
+  });
+
+  // The anonymous school-radius "showing first N" hint is `z-[1000]`; the Recenter buttons are
+  // `z-[500]`. Wherever the hint's box shares the right-hand column with them it swallows their
+  // taps, so on the mobile Map it must sit ABOVE the whole column (zoom ≈ 0–90px, city recenter
+  // 100–130px, area recenter 144–182px from the bottom), not at the desktop `bottom-28` (112px).
+  const SCHOOL_RADIUS_MORE_HINT: Partial<DiscoverMapCanvasProps> = {
+    isLandingState: false,
+    resolvedPanelContent: 'school-selected',
+    isAuthenticated: false,
+    schoolRadiusActive: true,
+    schoolRadiusHasMore: true,
+    hasActiveAnonFilter: false,
+  };
+
+  it('mobile Map: lifts the school-radius "more" hint above the right-hand Recenter column', () => {
+    renderCanvas(<DiscoverMapCanvas {...baseProps({ ...SCHOOL_RADIUS_MORE_HINT, ...MOBILE_MAP })} />);
+
+    const hint = screen.getByTestId('school-radius-more-hint');
+    expect(hint).toHaveClass('bottom-[192px]', 'right-[10px]');
+    expect(hint).not.toHaveClass('bottom-28');
+    // Still on screen alongside the city recenter it used to cover.
+    expect(screen.getByTestId('map-recenter-city-button')).toBeInTheDocument();
+  });
+
+  it('desktop (no mobile overlay): keeps the school-radius "more" hint at bottom-28 right-4', () => {
+    renderCanvas(<DiscoverMapCanvas {...baseProps(SCHOOL_RADIUS_MORE_HINT)} />);
+
+    const hint = screen.getByTestId('school-radius-more-hint');
+    expect(hint).toHaveClass('bottom-28', 'right-4');
+    expect(hint).not.toHaveClass('bottom-[192px]');
+  });
+});

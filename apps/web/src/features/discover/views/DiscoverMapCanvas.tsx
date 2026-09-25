@@ -627,6 +627,18 @@ export function DiscoverMapCanvas({
 
   const [isMapTipDismissed, setIsMapTipDismissed] = useState(false);
 
+  // Issue #2698 — the full-screen mobile Map (`mobileListButton` is supplied only while that
+  // overlay is open, never on desktop) has no room for the desktop bottom chrome: at 375–412px
+  // the tip pill, the count badge, the legend, both "Recenter on …" buttons and the Leaflet zoom
+  // control all landed in one bottom strip and covered each other (zoom "−" was unreachable).
+  const isMobileMapOverlay = !!mobileListButton;
+  // In the listing-result states the #2628 results heading at the top of the mobile Map already
+  // states the same count ("4 homes for sale · Residential"), so the bottom count pill there is a
+  // duplicate that only costs map space. Its no-figure 'stale' ("Filtered results") state stays
+  // hidden too: the heading's "Filtered: …" summary already says so. ('loading' is never visible.)
+  const hideDuplicateCountBadge =
+    isMobileMapOverlay && !!onFiltersChange && (isAreaFirstSelectedAreaState || schoolRadiusActive);
+
   // Issue #2628 — the mobile Map "Filters" staged bottom sheet. Local, transient open state:
   // the canonical filter state stays untouched until Apply (see MapFilterSheet.tsx's header).
   const [isMapFilterSheetOpen, setIsMapFilterSheetOpen] = useState(false);
@@ -1516,6 +1528,7 @@ export function DiscoverMapCanvas({
         schoolFirstLandingSchoolCount={schoolFirstLandingSchoolCount}
         cityTotal={cityTotal}
         city={city}
+        hideDrillDownBadge={hideDuplicateCountBadge}
       />
 
       {/* Issue #1261 — non-blocking "showing first N" hint for the anonymous
@@ -1535,6 +1548,7 @@ export function DiscoverMapCanvas({
           schoolListingsCount: schoolListings.length,
           hasActiveAnonFilter,
         }}
+        isMobileMapOverlay={isMobileMapOverlay}
       />
 
       {/* Issue #2419 (PR-2) — MapStatsBar deleted here and in its own file.
@@ -1596,8 +1610,10 @@ export function DiscoverMapCanvas({
         container={mapContainerRef.current}
       />
 
-      {/* Step 4: Bottom-left map tip banner pill */}
-      {!isMapTipDismissed && (
+      {/* Step 4: Bottom-left map tip banner pill. Issue #2698 — desktop only: its "Click …"
+          pointer copy does not apply to touch, and on the mobile Map it ran under the legend,
+          the count badge and the Recenter button. */}
+      {!isMapTipDismissed && !isMobileMapOverlay && (
         <div
           data-testid="discover-map-tip-pill"
           className="absolute bottom-4 left-4 z-[500] flex items-center gap-2 px-3 py-1.5 bg-white/95 backdrop-blur-sm border border-slate-200 rounded-full shadow-md text-xs font-medium text-slate-700"
@@ -1614,8 +1630,16 @@ export function DiscoverMapCanvas({
         </div>
       )}
 
-      {/* Step 4: Bottom-right stacked Recenter button */}
-      <div className="absolute bottom-4 right-4 z-[500] flex flex-col items-end gap-2">
+      {/* Step 4: Bottom-right stacked Recenter button. Issue #2698 — on the mobile Map it sat
+          on top of the Leaflet zoom control (bottom-right corner, above the attribution), so it
+          is lifted above that control there, keeping the zoom's own 10px right inset. */}
+      <div
+        className={
+          isMobileMapOverlay
+            ? 'absolute bottom-[100px] right-[10px] z-[500] flex flex-col items-end gap-2'
+            : 'absolute bottom-4 right-4 z-[500] flex flex-col items-end gap-2'
+        }
+      >
         <button
           type="button"
           data-testid="map-recenter-city-button"

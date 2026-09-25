@@ -44,6 +44,12 @@ export interface DiscoverMapCountBadgeProps {
   schoolFirstLandingSchoolCount: number | null;
   cityTotal: number;
   city: string;
+  /**
+   * Issue #2698 — suppresses the drill-down count pill (not the public-landing
+   * summary pill) where the caller already shows the same count elsewhere: the
+   * mobile Map results heading. Defaults to false, so desktop is unchanged.
+   */
+  hideDrillDownBadge?: boolean;
 }
 
 export function DiscoverMapCountBadge({
@@ -65,13 +71,14 @@ export function DiscoverMapCountBadge({
   schoolFirstLandingSchoolCount,
   cityTotal,
   city,
+  hideDrillDownBadge = false,
 }: DiscoverMapCountBadgeProps) {
   return (
     <>
       {/* City / area listing count — bottom-right (Issue #1152). Issue #1588 — on the
           public landing this is replaced by the centered city-wide summary pill below;
           kept bottom-right for contextual (area/school/group) drill-down counts. */}
-      {resolvedPanelContent !== 'guided-entry' && !isAreaFirstCityLanding &&
+      {!hideDrillDownBadge && resolvedPanelContent !== 'guided-entry' && !isAreaFirstCityLanding &&
         // Issue #2169 Bug 2 — Agricultural land is a separate model (parcels,
         // corridors, distances — see DiscoverRightPanel's Agri intro copy),
         // kept apart from residential area counts. This badge's only count

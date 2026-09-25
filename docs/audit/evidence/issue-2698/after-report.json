@@ -1,0 +1,607 @@
+[
+  {
+    "viewport": "375x667",
+    "state": "map-manipal",
+    "url": "http://127.0.0.1:5184/discover?city=udupi&journey=area-first&node=a%3AIN%7CKA%7CUdupi%7CManipal&rscope=areas&rareas=IN%7CKA%7CUdupi%7CManipal&lat=13.34624&lon=74.78640&zoom=14",
+    "visible": [
+      "cityRecenter",
+      "areaRecenter",
+      "zoom",
+      "legend",
+      "attribution",
+      "heading"
+    ],
+    "overlaps": [],
+    "rects": {
+      "cityRecenter": {
+        "x": 233.921875,
+        "y": 537,
+        "width": 131.078125,
+        "height": 30
+      },
+      "areaRecenter": {
+        "x": 195.5,
+        "y": 485,
+        "width": 169.5,
+        "height": 38
+      },
+      "zoom": {
+        "x": 331,
+        "y": 576.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 538,
+        "width": 141.609375,
+        "height": 89
+      },
+      "attribution": {
+        "x": 205.984375,
+        "y": 650.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      },
+      "heading": {
+        "x": 12,
+        "y": 92,
+        "width": 191.9375,
+        "height": 30
+      }
+    },
+    "files": [
+      "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/62884379-6975-4b7a-a923-79c04127be6c/scratchpad/ev2/after-375x667-list-manipal.jpg",
+      "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/62884379-6975-4b7a-a923-79c04127be6c/scratchpad/ev2/after-375x667-map-manipal.jpg"
+    ]
+  },
+  {
+    "viewport": "375x667",
+    "state": "list-school",
+    "url": "http://127.0.0.1:5184/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=11111111-2222-3333-4444-555555555555&radiusKm=3",
+    "filtersTrigger": {
+      "box": {
+        "x": 186.0625,
+        "y": 298.75,
+        "width": 74.953125,
+        "height": 28
+      },
+      "visibleText": "Filters"
+    },
+    "files": [
+      "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/62884379-6975-4b7a-a923-79c04127be6c/scratchpad/ev2/after-375x667-list-school.jpg"
+    ]
+  },
+  {
+    "viewport": "375x667",
+    "state": "map-school",
+    "url": "http://127.0.0.1:5184/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=11111111-2222-3333-4444-555555555555&radiusKm=3&lat=13.34247&lon=74.80000&zoom=13",
+    "visible": [
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution",
+      "heading"
+    ],
+    "overlaps": [],
+    "rects": {
+      "cityRecenter": {
+        "x": 233.921875,
+        "y": 537,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 331,
+        "y": 576.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 489,
+        "width": 107.421875,
+        "height": 82
+      },
+      "attribution": {
+        "x": 205.984375,
+        "y": 650.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      },
+      "heading": {
+        "x": 12,
+        "y": 92,
+        "width": 191.9375,
+        "height": 30
+      }
+    },
+    "files": [
+      "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/62884379-6975-4b7a-a923-79c04127be6c/scratchpad/ev2/after-375x667-map-school.jpg"
+    ]
+  },
+  {
+    "viewport": "375x667",
+    "state": "map-school-hasmore",
+    "url": "http://127.0.0.1:5184/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=11111111-2222-3333-4444-555555555555&radiusKm=3&lat=13.34247&lon=74.80000&zoom=13",
+    "visible": [
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution",
+      "moreHint",
+      "heading"
+    ],
+    "overlaps": [],
+    "rects": {
+      "cityRecenter": {
+        "x": 233.921875,
+        "y": 537,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 331,
+        "y": 576.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 489,
+        "width": 107.421875,
+        "height": 82
+      },
+      "attribution": {
+        "x": 205.984375,
+        "y": 650.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      },
+      "moreHint": {
+        "x": 109,
+        "y": 409,
+        "width": 256,
+        "height": 66
+      },
+      "heading": {
+        "x": 12,
+        "y": 92,
+        "width": 191.9375,
+        "height": 30
+      }
+    },
+    "files": [
+      "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/62884379-6975-4b7a-a923-79c04127be6c/scratchpad/ev2/after-375x667-map-school-hasmore.jpg"
+    ]
+  },
+  {
+    "viewport": "390x844",
+    "state": "map-manipal",
+    "url": "http://127.0.0.1:5184/discover?city=udupi&journey=area-first&node=a%3AIN%7CKA%7CUdupi%7CManipal&rscope=areas&rareas=IN%7CKA%7CUdupi%7CManipal&lat=13.34624&lon=74.78640&zoom=14",
+    "visible": [
+      "cityRecenter",
+      "areaRecenter",
+      "zoom",
+      "legend",
+      "attribution",
+      "heading"
+    ],
+    "overlaps": [],
+    "rects": {
+      "cityRecenter": {
+        "x": 248.921875,
+        "y": 714,
+        "width": 131.078125,
+        "height": 30
+      },
+      "areaRecenter": {
+        "x": 210.5,
+        "y": 662,
+        "width": 169.5,
+        "height": 38
+      },
+      "zoom": {
+        "x": 346,
+        "y": 753.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 715,
+        "width": 141.609375,
+        "height": 89
+      },
+      "attribution": {
+        "x": 220.984375,
+        "y": 827.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      },
+      "heading": {
+        "x": 12,
+        "y": 92,
+        "width": 191.9375,
+        "height": 30
+      }
+    },
+    "files": [
+      "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/62884379-6975-4b7a-a923-79c04127be6c/scratchpad/ev2/after-390x844-list-manipal.jpg",
+      "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/62884379-6975-4b7a-a923-79c04127be6c/scratchpad/ev2/after-390x844-map-manipal.jpg"
+    ]
+  },
+  {
+    "viewport": "390x844",
+    "state": "list-school",
+    "url": "http://127.0.0.1:5184/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=11111111-2222-3333-4444-555555555555&radiusKm=3",
+    "filtersTrigger": {
+      "box": {
+        "x": 201.0625,
+        "y": 298.75,
+        "width": 74.953125,
+        "height": 28
+      },
+      "visibleText": "Filters"
+    },
+    "files": [
+      "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/62884379-6975-4b7a-a923-79c04127be6c/scratchpad/ev2/after-390x844-list-school.jpg"
+    ]
+  },
+  {
+    "viewport": "390x844",
+    "state": "map-school",
+    "url": "http://127.0.0.1:5184/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=11111111-2222-3333-4444-555555555555&radiusKm=3&lat=13.34247&lon=74.80000&zoom=13",
+    "visible": [
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution",
+      "heading"
+    ],
+    "overlaps": [],
+    "rects": {
+      "cityRecenter": {
+        "x": 248.921875,
+        "y": 714,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 346,
+        "y": 753.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 666,
+        "width": 107.421875,
+        "height": 82
+      },
+      "attribution": {
+        "x": 220.984375,
+        "y": 827.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      },
+      "heading": {
+        "x": 12,
+        "y": 92,
+        "width": 191.9375,
+        "height": 30
+      }
+    },
+    "files": [
+      "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/62884379-6975-4b7a-a923-79c04127be6c/scratchpad/ev2/after-390x844-map-school.jpg"
+    ]
+  },
+  {
+    "viewport": "390x844",
+    "state": "map-school-hasmore",
+    "url": "http://127.0.0.1:5184/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=11111111-2222-3333-4444-555555555555&radiusKm=3&lat=13.34247&lon=74.80000&zoom=13",
+    "visible": [
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution",
+      "moreHint",
+      "heading"
+    ],
+    "overlaps": [],
+    "rects": {
+      "cityRecenter": {
+        "x": 248.921875,
+        "y": 714,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 346,
+        "y": 753.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 666,
+        "width": 107.421875,
+        "height": 82
+      },
+      "attribution": {
+        "x": 220.984375,
+        "y": 827.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      },
+      "moreHint": {
+        "x": 124,
+        "y": 586,
+        "width": 256,
+        "height": 66
+      },
+      "heading": {
+        "x": 12,
+        "y": 92,
+        "width": 191.9375,
+        "height": 30
+      }
+    },
+    "files": [
+      "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/62884379-6975-4b7a-a923-79c04127be6c/scratchpad/ev2/after-390x844-map-school-hasmore.jpg"
+    ]
+  },
+  {
+    "viewport": "412x915",
+    "state": "map-manipal",
+    "url": "http://127.0.0.1:5184/discover?city=udupi&journey=area-first&node=a%3AIN%7CKA%7CUdupi%7CManipal&rscope=areas&rareas=IN%7CKA%7CUdupi%7CManipal&lat=13.34624&lon=74.78640&zoom=14",
+    "visible": [
+      "cityRecenter",
+      "areaRecenter",
+      "zoom",
+      "legend",
+      "attribution",
+      "heading"
+    ],
+    "overlaps": [],
+    "rects": {
+      "cityRecenter": {
+        "x": 270.921875,
+        "y": 785,
+        "width": 131.078125,
+        "height": 30
+      },
+      "areaRecenter": {
+        "x": 232.5,
+        "y": 733,
+        "width": 169.5,
+        "height": 38
+      },
+      "zoom": {
+        "x": 368,
+        "y": 824.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 786,
+        "width": 141.609375,
+        "height": 89
+      },
+      "attribution": {
+        "x": 242.984375,
+        "y": 898.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      },
+      "heading": {
+        "x": 12,
+        "y": 92,
+        "width": 191.9375,
+        "height": 30
+      }
+    },
+    "files": [
+      "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/62884379-6975-4b7a-a923-79c04127be6c/scratchpad/ev2/after-412x915-list-manipal.jpg",
+      "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/62884379-6975-4b7a-a923-79c04127be6c/scratchpad/ev2/after-412x915-map-manipal.jpg"
+    ]
+  },
+  {
+    "viewport": "412x915",
+    "state": "list-school",
+    "url": "http://127.0.0.1:5184/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=11111111-2222-3333-4444-555555555555&radiusKm=3",
+    "filtersTrigger": {
+      "box": {
+        "x": 223.0625,
+        "y": 298.75,
+        "width": 74.953125,
+        "height": 28
+      },
+      "visibleText": "Filters"
+    },
+    "files": [
+      "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/62884379-6975-4b7a-a923-79c04127be6c/scratchpad/ev2/after-412x915-list-school.jpg"
+    ]
+  },
+  {
+    "viewport": "412x915",
+    "state": "map-school",
+    "url": "http://127.0.0.1:5184/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=11111111-2222-3333-4444-555555555555&radiusKm=3&lat=13.34247&lon=74.80000&zoom=13",
+    "visible": [
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution",
+      "heading"
+    ],
+    "overlaps": [],
+    "rects": {
+      "cityRecenter": {
+        "x": 270.921875,
+        "y": 785,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 368,
+        "y": 824.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 737,
+        "width": 107.421875,
+        "height": 82
+      },
+      "attribution": {
+        "x": 242.984375,
+        "y": 898.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      },
+      "heading": {
+        "x": 12,
+        "y": 92,
+        "width": 191.9375,
+        "height": 30
+      }
+    },
+    "files": [
+      "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/62884379-6975-4b7a-a923-79c04127be6c/scratchpad/ev2/after-412x915-map-school.jpg"
+    ]
+  },
+  {
+    "viewport": "412x915",
+    "state": "map-school-hasmore",
+    "url": "http://127.0.0.1:5184/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=11111111-2222-3333-4444-555555555555&radiusKm=3&lat=13.34247&lon=74.80000&zoom=13",
+    "visible": [
+      "cityRecenter",
+      "zoom",
+      "legend",
+      "attribution",
+      "moreHint",
+      "heading"
+    ],
+    "overlaps": [],
+    "rects": {
+      "cityRecenter": {
+        "x": 270.921875,
+        "y": 785,
+        "width": 131.078125,
+        "height": 30
+      },
+      "zoom": {
+        "x": 368,
+        "y": 824.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 737,
+        "width": 107.421875,
+        "height": 82
+      },
+      "attribution": {
+        "x": 242.984375,
+        "y": 898.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      },
+      "moreHint": {
+        "x": 146,
+        "y": 657,
+        "width": 256,
+        "height": 66
+      },
+      "heading": {
+        "x": 12,
+        "y": 92,
+        "width": 191.9375,
+        "height": 30
+      }
+    },
+    "files": [
+      "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/62884379-6975-4b7a-a923-79c04127be6c/scratchpad/ev2/after-412x915-map-school-hasmore.jpg"
+    ]
+  },
+  {
+    "viewport": "1440x900",
+    "state": "desktop-manipal",
+    "url": "http://127.0.0.1:5184/discover?city=udupi&journey=area-first&node=a%3AIN%7CKA%7CUdupi%7CManipal&rscope=areas&rareas=IN%7CKA%7CUdupi%7CManipal&lat=13.35250&lon=74.78640&zoom=15",
+    "visible": [
+      "tipPill",
+      "countBadge",
+      "cityRecenter",
+      "areaRecenter",
+      "zoom",
+      "legend",
+      "attribution"
+    ],
+    "overlaps": [
+      "tipPill x countBadge (166x14px)",
+      "tipPill x legend (142x6px)",
+      "cityRecenter x zoom (28x19px)"
+    ],
+    "rects": {
+      "tipPill": {
+        "x": 16,
+        "y": 854,
+        "width": 381.890625,
+        "height": 30
+      },
+      "countBadge": {
+        "x": 231.4453125,
+        "y": 830,
+        "width": 257.109375,
+        "height": 38
+      },
+      "cityRecenter": {
+        "x": 572.921875,
+        "y": 854,
+        "width": 131.078125,
+        "height": 30
+      },
+      "areaRecenter": {
+        "x": 275.25,
+        "y": 782,
+        "width": 169.5,
+        "height": 38
+      },
+      "zoom": {
+        "x": 676,
+        "y": 809.203125,
+        "width": 34,
+        "height": 64
+      },
+      "legend": {
+        "x": 16,
+        "y": 771,
+        "width": 141.609375,
+        "height": 89
+      },
+      "attribution": {
+        "x": 550.984375,
+        "y": 883.203125,
+        "width": 169.015625,
+        "height": 16.796875
+      }
+    },
+    "files": [
+      "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/62884379-6975-4b7a-a923-79c04127be6c/scratchpad/ev2/after-1440x900-manipal.jpg"
+    ]
+  },
+  {
+    "viewport": "1440x900",
+    "state": "desktop-school",
+    "url": "http://127.0.0.1:5184/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=11111111-2222-3333-4444-555555555555&radiusKm=3&lat=13.34625&lon=74.78615&zoom=13",
+    "filtersTrigger": {
+      "visibleText": "Filters"
+    },
+    "files": [
+      "/private/tmp/claude-501/-Users-gouthamrao-projects-udupi-property-explorer/62884379-6975-4b7a-a923-79c04127be6c/scratchpad/ev2/after-1440x900-school.jpg"
+    ]
+  }
+]

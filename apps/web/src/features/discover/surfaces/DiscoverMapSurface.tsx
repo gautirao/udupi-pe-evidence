@@ -39,6 +39,10 @@ export interface DiscoverMapSurfaceProps {
 export function DiscoverMapSurface({ view, commands, mapContainerRef }: DiscoverMapSurfaceProps) {
   const { isMobileShell, mobileView } = useDiscoverShell();
   const shouldMount = !isMobileShell || mobileView === 'MAP';
+  // Issue #2698 — the SAME discriminator DiscoverMapCanvas uses (`!!mobileListButton`, supplied
+  // only while the full-screen mobile Map is open), so the area recenter and the canvas's
+  // right-hand column (city recenter, school-radius hint) can never disagree on "mobile".
+  const isMobileMapOverlay = !!view.mobile.mobileListButton;
 
   const canvasProps: DiscoverMapCanvasProps = {
     ...view.camera,
@@ -95,7 +99,14 @@ export function DiscoverMapSurface({ view, commands, mapContainerRef }: Discover
             type="button"
             data-testid="areas-recenter-button"
             onClick={commands.overlays.onRecenter}
-            className="absolute bottom-20 left-1/2 z-[500] -translate-x-1/2 rounded-full border border-border bg-background/95 px-4 py-2 text-sm font-medium shadow-md"
+            // Issue #2698 — centred at bottom-20 it covered the bottom-left map legend at
+            // 375–412px. On the mobile Map it stacks in the right-hand column instead,
+            // directly above the canvas's own "Recenter on <city>" button (bottom-[100px]).
+            className={
+              isMobileMapOverlay
+                ? 'absolute bottom-[144px] right-[10px] z-[500] rounded-full border border-border bg-background/95 px-4 py-2 text-sm font-medium shadow-md'
+                : 'absolute bottom-20 left-1/2 z-[500] -translate-x-1/2 rounded-full border border-border bg-background/95 px-4 py-2 text-sm font-medium shadow-md'
+            }
           >
             Recenter on {view.overlays.recenter.label}
           </button>,

@@ -64,27 +64,44 @@ function tailwindSpacingToPx(token: string): number {
 
 /**
  * Finds the real JSX opening tag for a given `data-testid` (skipping any
- * doc-comment mentions of the same string) and returns its `className="..."`
- * value.
+ * doc-comment mentions of the same string) and returns every className string
+ * literal on it: the single `className="..."` value, or each branch of a
+ * `className={cond ? '...' : '...'}` ternary (Issue #2698 split the recenter
+ * button into a mobile-shell and a desktop placement).
  */
-function extractStaticClassName(source: string, testId: string): string {
+function extractClassNameLiterals(source: string, testId: string): string[] {
   const marker = `data-testid="${testId}"`;
   let searchFrom = 0;
   for (;;) {
     const idx = source.indexOf(marker, searchFrom);
     if (idx === -1) break;
-    const tagStart = source.lastIndexOf('<', idx);
-    const tagEnd = source.indexOf('>', idx);
-    if (tagStart !== -1 && tagEnd !== -1) {
-      const candidate = source.slice(tagStart, tagEnd + 1);
-      const isRealTag =
-        !candidate.includes('/*') && !candidate.includes('*/') && !candidate.includes('<!--');
-      const classNameMatch = isRealTag ? candidate.match(/className="([^"]+)"/) : null;
-      if (classNameMatch) return classNameMatch[1];
-    }
     searchFrom = idx + marker.length;
+    // A mention inside a `/* ... */` (or JSX `{/* ... */}`) doc comment is not
+    // the element: skip it when the nearest preceding block-comment opener has
+    // not been closed yet.
+    if (source.lastIndexOf('/*', idx) > source.lastIndexOf('*/', idx)) continue;
+    const tagStart = source.lastIndexOf('<', idx);
+    // Search for the tag's closing `>` only after the className attribute, so
+    // a `>` inside a `//` comment that sits BEFORE className (e.g. "<city>")
+    // is skipped. The className values themselves contain no `>`. With no
+    // className after this mention there is no tag to read — never fall back
+    // to `indexOf('>', -1)`, which would scan from the start of the file.
+    const classNameIdx = source.indexOf('className', idx);
+    if (tagStart === -1 || classNameIdx === -1) continue;
+    const tagEnd = source.indexOf('>', classNameIdx);
+    if (tagEnd === -1) continue;
+    // Drop `//` line comments first: an apostrophe in one would otherwise
+    // open a bogus string literal for the ternary scan below.
+    const candidate = source.slice(tagStart, tagEnd + 1).replace(/^\s*\/\/.*$/gm, '');
+    // A block comment inside the sliced span means the slice straddled a
+    // comment rather than one opening tag.
+    if (candidate.includes('/*') || candidate.includes('*/') || candidate.includes('<!--')) continue;
+    const staticMatch = candidate.match(/className="([^"]+)"/);
+    if (staticMatch) return [staticMatch[1]];
+    const literals = Array.from(candidate.matchAll(/'([^']*\bbottom-[^']*)'/g), (m) => m[1]);
+    if (literals.length > 0) return literals;
   }
-  throw new Error(`Could not find a real, statically-classed JSX tag for data-testid="${testId}"`);
+  throw new Error(`Could not find a real, classed JSX tag for data-testid="${testId}"`);
 }
 
 /**
@@ -109,15 +126,23 @@ describe('Issue #2088 — recenter button vs. DiscoverMapCountBadge z-order/posi
   const mapDiscoverySource = readFileSync(MAP_DISCOVERY_PATH, 'utf-8');
   const countBadgeSource = readFileSync(COUNT_BADGE_PATH, 'utf-8');
 
-  const recenterButtonClassName = extractStaticClassName(
-    mapDiscoverySource,
-    'areas-recenter-button',
-  );
+  const recenterClassNames = extractClassNameLiterals(mapDiscoverySource, 'areas-recenter-button');
+  // The desktop placement is the centred one; Issue #2698's mobile-shell branch
+  // sits in the right-hand column instead (asserted separately below).
+  const recenterButtonClassName =
+    recenterClassNames.find((c) => c.includes('left-1/2')) ?? recenterClassNames[0];
   const badgeCollisionCandidates = findLeftAnchoredBottomClassNames(countBadgeSource);
 
   it('the recenter button is anchored to the map\'s horizontal centre (precondition for the collision)', () => {
     expect(recenterButtonClassName).toMatch(/\bleft-1\/2\b/);
     expect(recenterButtonClassName).toMatch(/-translate-x-1\/2\b/);
+  });
+
+  it('Issue #2698 — the mobile-shell placement leaves the centre (where it covered the bottom-left legend) for the right-hand column', () => {
+    const mobile = recenterClassNames.filter((c) => !c.includes('left-1/2'));
+    expect(mobile).toHaveLength(1);
+    expect(mobile[0]).toMatch(/\bright-\[10px\]/);
+    expect(mobile[0]).not.toMatch(/translate-x/);
   });
 
   it('DiscoverMapCountBadge.tsx still has at least one left-1/2-anchored bottom pill variant (sanity check for the scan below)', () => {
@@ -146,5 +171,71 @@ describe('Issue #2088 — recenter button vs. DiscoverMapCountBadge z-order/posi
 
   it('the recenter button is portalled with an explicit stacking z-index (defence in depth alongside the position fix)', () => {
     expect(recenterButtonClassName).toMatch(/\bz-\[\d+\]/);
+  });
+});
+
+describe('extractClassNameLiterals — parser guards', () => {
+  it('skips a data-testid mention inside a /* */ doc comment and reads the real tag after it', () => {
+    const source = [
+      '/* the <div data-testid="x" className="bottom-1 comment-copy"> pill */',
+      '<div data-testid="x" className="bottom-2 real-tag">',
+    ].join('\n');
+    expect(extractClassNameLiterals(source, 'x')).toEqual(['bottom-2 real-tag']);
+  });
+
+  it('throws rather than slicing from the start of the file when no className follows the mention', () => {
+    // Unguarded, `indexOf('>', -1)` finds the FIRST `>` in the file and the slice returns the
+    // OTHER element's classes as if they belonged to data-testid="x".
+    const source = '<div className="bottom-9 other-element">\n// mentions data-testid="x" only in prose';
+    expect(() => extractClassNameLiterals(source, 'x')).toThrow(/Could not find/);
+  });
+});
+
+// Issue #2698 — the full-screen mobile Map's bottom-right column, bottom-up. The Leaflet zoom
+// control (not in our source) tops out at ≈90px above the map's bottom edge. Heights are the
+// rendered pill heights: "Recenter on <city>" (py-1.5 + text-xs + border ≈ 30px), "Recenter on
+// <area>" (py-2 + text-sm + border ≈ 38px). Every item must clear the one below by ≥ 8px, and the
+// z-[1000] school-radius hint must sit ABOVE both z-[500] buttons or it swallows their taps.
+describe('Issue #2698 — mobile Map right-hand column stacking budget', () => {
+  const read = (rel: string) => readFileSync(resolve(__dirname, rel), 'utf-8');
+  const canvasSource = read('../../features/discover/views/DiscoverMapCanvas.tsx');
+  const surfaceSource = read('../../features/discover/surfaces/DiscoverMapSurface.tsx');
+  const hintsSource = read('../../components/discover/DiscoverMapStatusHints.tsx');
+
+  /** The single `right-[10px]` + `bottom-[Npx]` string literal in a file, as N. */
+  function mobileColumnBottomPx(source: string, label: string): number {
+    const literals = Array.from(source.matchAll(/'([^']*\bright-\[10px\][^']*)'/g), (m) => m[1]);
+    expect(literals, `${label}: expected exactly one right-[10px] mobile placement`).toHaveLength(1);
+    const px = literals[0].match(/\bbottom-\[(\d+)px\]/)?.[1];
+    expect(px, `${label}: mobile placement must declare bottom-[Npx]`).toBeDefined();
+    return Number(px);
+  }
+
+  const ZOOM_TOP_PX = 90;
+  const CITY_RECENTER_HEIGHT_PX = 30;
+  const AREA_RECENTER_HEIGHT_PX = 38;
+  const MIN_GAP_PX = 8;
+
+  const cityBottom = mobileColumnBottomPx(canvasSource, 'city recenter (DiscoverMapCanvas)');
+  const areaBottom = mobileColumnBottomPx(surfaceSource, 'area recenter (DiscoverMapSurface)');
+  const hintBottom = mobileColumnBottomPx(hintsSource, 'school-radius hint (DiscoverMapStatusHints)');
+
+  it('"Recenter on <city>" clears the Leaflet zoom control', () => {
+    expect(cityBottom - ZOOM_TOP_PX).toBeGreaterThanOrEqual(MIN_GAP_PX);
+  });
+
+  it('"Recenter on <area>" clears "Recenter on <city>"', () => {
+    expect(areaBottom - (cityBottom + CITY_RECENTER_HEIGHT_PX)).toBeGreaterThanOrEqual(MIN_GAP_PX);
+  });
+
+  it('the school-radius "more" hint sits above both Recenter buttons', () => {
+    expect(hintBottom - (areaBottom + AREA_RECENTER_HEIGHT_PX)).toBeGreaterThanOrEqual(MIN_GAP_PX);
+    expect(hintBottom - (cityBottom + CITY_RECENTER_HEIGHT_PX)).toBeGreaterThanOrEqual(MIN_GAP_PX);
+  });
+
+  it('the area recenter keys its mobile placement on the canvas\'s own discriminator (mobileListButton)', () => {
+    expect(surfaceSource).toMatch(/const isMobileMapOverlay = !!view\.mobile\.mobileListButton;/);
+    expect(surfaceSource).toMatch(/className=\{\s*isMobileMapOverlay\s*\?/);
+    expect(canvasSource).toMatch(/const isMobileMapOverlay = !!mobileListButton;/);
   });
 });
