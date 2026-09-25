@@ -32,6 +32,7 @@ import {
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import { computeMapFilterRefinementCount } from './MapFiltersPill';
+import { applyIntentTransition } from '@/features/discover/filters/intentTransition';
 
 export interface MapFilterSheetProps {
   open: boolean;
@@ -153,25 +154,13 @@ export function MapFilterSheet({
     handleClearPropertyFilters();
   };
 
-  // Buy/Rent — NOT part of PropertyFilters (see file header). Staged locally; the "exact List
-  // rule" this design doc cites (§7): Rent resets both budgets and drops Residential Plot.
+  // Buy/Rent — NOT part of PropertyFilters (see file header). Staged locally; applies the
+  // ONE canonical intent-transition rule (Issue #2708) shared with List's `city.ts` setIntent —
+  // see intentTransition.ts's header for the rule itself.
   const handleSelectIntent = (nextIntent: DiscoverIntent) => {
     if (nextIntent === draftIntent) return;
     setDraftIntent(nextIntent);
-    setDraft((prev) => {
-      const filteredTypes = (prev.propertyTypes ?? []).filter((t) => t !== 'residential_plot');
-      return {
-        ...prev,
-        priceMin: undefined,
-        priceMax: undefined,
-        propertyTypes:
-          nextIntent === 'rent'
-            ? filteredTypes.length > 0
-              ? filteredTypes
-              : undefined
-            : prev.propertyTypes,
-      };
-    });
+    setDraft((prev) => applyIntentTransition(prev, nextIntent));
   };
 
   return (

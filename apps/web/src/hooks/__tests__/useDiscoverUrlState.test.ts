@@ -20,7 +20,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
+import { MemoryRouter, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useDiscoverUrlState } from '../useDiscoverUrlState';
@@ -3201,6 +3201,132 @@ describe('useDiscoverUrlState — intent (Issue #1494)', () => {
     // intent must still be rent; areaKey should be gone
     expect(result.current[0].intent).toBe('rent');
     expect(result.current[0].areaKey).toBeFalsy();
+  });
+});
+
+// ─── Issue #2708 — List setIntent applies the canonical Map intent-transition rule ──
+describe('useDiscoverUrlState — setIntent applies the canonical filter-reset rule (Issue #2708)', () => {
+  it('Buy → Rent (AC1): drops residential_plot from a Residential → Plots selection', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&type=residential_plot'),
+    });
+    expect(result.current[0].filters.propertyTypes).toEqual(['residential_plot']);
+    act(() => {
+      result.current[1].setIntent('rent');
+    });
+    expect(result.current[0].intent).toBe('rent');
+    expect(result.current[0].filters.propertyTypes).toBeUndefined();
+  });
+
+  it('Buy → Rent: drops only residential_plot out of a mixed selection, keeps the rest', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&type=apartment,residential_plot,house'),
+    });
+    act(() => {
+      result.current[1].setIntent('rent');
+    });
+    expect(result.current[0].filters.propertyTypes).toEqual(['apartment', 'house']);
+  });
+
+  it('Rent → Buy: propertyTypes are left untouched (AC1 is a Rent-only drop)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&intent=rent&type=apartment,house'),
+    });
+    act(() => {
+      result.current[1].setIntent('buy');
+    });
+    expect(result.current[0].intent).toBe('buy');
+    expect(result.current[0].filters.propertyTypes).toEqual(['apartment', 'house']);
+  });
+
+  it('AC2/budget-reset: Buy → Rent resets both priceMin and priceMax', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&priceMin=1000000&priceMax=5000000'),
+    });
+    act(() => {
+      result.current[1].setIntent('rent');
+    });
+    expect(result.current[0].filters.priceMin).toBeUndefined();
+    expect(result.current[0].filters.priceMax).toBeUndefined();
+  });
+
+  it('AC2/budget-reset: Rent → Buy also resets both priceMin and priceMax', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&intent=rent&priceMin=1000000&priceMax=5000000'),
+    });
+    act(() => {
+      result.current[1].setIntent('buy');
+    });
+    expect(result.current[0].filters.priceMin).toBeUndefined();
+    expect(result.current[0].filters.priceMax).toBeUndefined();
+  });
+
+  it('AC4: unrelated filters (bedrooms, seller) survive an intent switch untouched', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&type=apartment&beds=2,3&seller=owner&priceMin=1000000',
+      ),
+    });
+    act(() => {
+      result.current[1].setIntent('rent');
+    });
+    expect(result.current[0].filters.bedrooms).toEqual([2, 3]);
+    expect(result.current[0].filters.sellerTypes).toEqual(['owner']);
+  });
+
+  it('AC6: switching to the SAME intent is a no-op — no filter reset, no extra write', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&type=residential_plot&priceMin=1000000'),
+    });
+    act(() => {
+      result.current[1].setIntent('buy'); // already buy
+    });
+    expect(result.current[0].intent).toBe('buy');
+    expect(result.current[0].filters.propertyTypes).toEqual(['residential_plot']);
+    expect(result.current[0].filters.priceMin).toBe(1000000);
+  });
+
+  it('AC6: the combined intent+filter-reset write is a single REPLACE (no extra history entry)', () => {
+    // Probe every committed location with its navigation type. A second write (or a
+    // PUSH) would show up as an extra entry / a 'PUSH' type / an intermediate search
+    // carrying intent=rent while type/priceMin are still present.
+    const seen: { search: string; type: string }[] = [];
+    function ProbeWrapper({ children }: { children: React.ReactNode }) {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      function LocationProbe() {
+        const loc = useLocation();
+        const type = useNavigationType();
+        const last = seen[seen.length - 1];
+        if (!last || last.search !== loc.search || last.type !== type) {
+          seen.push({ search: loc.search, type });
+        }
+        return null;
+      }
+      return React.createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        React.createElement(
+          MemoryRouter,
+          { initialEntries: ['/discover?city=udupi&type=residential_plot&priceMin=1000000'] },
+          React.createElement(LocationProbe, null),
+          children,
+        ),
+      );
+    }
+    const { result } = renderHook(() => useDiscoverUrlState(), { wrapper: ProbeWrapper });
+    const before = seen.length;
+    act(() => {
+      result.current[1].setIntent('rent');
+    });
+    expect(result.current[0].intent).toBe('rent');
+    expect(result.current[0].filters.propertyTypes).toBeUndefined();
+    expect(result.current[0].filters.priceMin).toBeUndefined();
+    const writes = seen.slice(before);
+    expect(writes).toHaveLength(1);
+    expect(writes[0].type).toBe('REPLACE');
+    expect(writes[0].search).toContain('intent=rent');
+    expect(writes[0].search).not.toContain('type=');
+    expect(writes[0].search).not.toContain('priceMin=');
   });
 });
 

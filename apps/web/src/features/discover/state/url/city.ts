@@ -22,6 +22,7 @@ import type {
 } from '@/hooks/useDiscoverUrlState';
 import { clearNodeParam } from './navigation';
 import { applyResultScopeCommit } from './resultScope';
+import { applyIntentTransition } from '@/features/discover/filters/intentTransition';
 
 type CityState = Pick<DiscoverUrlState, 'city' | 'intent'>;
 type CityActions = Pick<DiscoverUrlActions, 'changeCity' | 'setCity' | 'setIntent' | 'setScope'>;
@@ -96,8 +97,20 @@ export function useCityUrlDomain(ctx: UrlDomainCtx): UrlDomainModule<CityState, 
 
   // Issue #1494 — buy/rent intent. REPLACE (preference change, not navigation).
   // 'buy' is the default — omit from URL; only emit 'rent'.
+  //
+  // Issue #2708 — List previously routed Buy/Rent through this setter alone, writing
+  // ONLY the `intent` param and leaving `type`/`priceMin`/`priceMax` untouched. That
+  // diverged from the approved Map contract (MapFilterSheet's `handleSelectIntent`),
+  // which resets both budget bounds and drops Buy-only `residential_plot` on every
+  // intent switch (design doc MAP_FILTERS_2627.md §7). This now applies the SAME
+  // canonical rule (intentTransition.ts's `applyIntentTransition` — the one helper
+  // both List and Map call, so the two can't drift again) in the SAME `setUrlParams`
+  // call as the `intent` write itself: one atomic REPLACE, not a second PUSH-shaped
+  // write racing a separate `setFiltersCommitted` call (which would also add an
+  // unwanted extra history entry — AC6).
   const setIntent = useCallback(
     (newIntent: DiscoverIntent) => {
+      if (newIntent === intent) return;
       setUrlParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -106,12 +119,30 @@ export function useCityUrlDomain(ctx: UrlDomainCtx): UrlDomainModule<CityState, 
           } else {
             next.delete('intent');
           }
+
+          const currentPropertyTypes = next.get('type')
+            ?.split(',')
+            .map((t) => t.trim())
+            .filter(Boolean);
+          const { propertyTypes } = applyIntentTransition(
+            { propertyTypes: currentPropertyTypes },
+            newIntent,
+          );
+          if (propertyTypes && propertyTypes.length > 0) {
+            next.set('type', propertyTypes.join(','));
+          } else {
+            next.delete('type');
+          }
+          // Budget bounds always reset on an intent switch, both directions.
+          next.delete('priceMin');
+          next.delete('priceMax');
+
           return next;
         },
         { replace: true },
       );
     },
-    [setUrlParams],
+    [setUrlParams, intent],
   );
 
   // Issue #1745 P2/P8 — residential scope axis. Orthogonal to the agri-only region/maxKm

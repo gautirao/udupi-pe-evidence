@@ -1,0 +1,42 @@
+{
+  "build": "after",
+  "base": "http://127.0.0.1:5181",
+  "results": {
+    "desktop:list": {
+      "viewport": {
+        "w": 1440,
+        "h": 900,
+        "m820": false
+      },
+      "startSearch": "?city=udupi&type=residential_plot&priceMin=1000000&priceMax=5000000",
+      "afterSearch": "?city=udupi&intent=rent",
+      "canonAfter": {
+        "city": "udupi",
+        "intent": "rent"
+      },
+      "mapSummaryAfterList": null
+    },
+    "mobile390:list": {
+      "viewport": {
+        "w": 390,
+        "h": 844,
+        "m820": true
+      },
+      "startSearch": "?city=udupi&type=residential_plot&priceMin=1000000&priceMax=5000000",
+      "afterSearch": "?city=udupi&intent=rent",
+      "canonAfter": {
+        "city": "udupi",
+        "intent": "rent"
+      },
+      "mapSummaryAfterList": "0 matching homes\n\nNothing in udupi matches your 0 filters. Filters were not widened for you.\n\nEdit filters\nClear filters"
+    },
+    "mobile390:map:summary": "0 matching homes\n\nNothing in udupi matches your 0 filters. Filters were not widened for you.\n\nEdit filters\nClear filters",
+    "mobile390:map": {
+      "afterSearch": "?city=udupi",
+      "canonAfter": {
+        "city": "udupi"
+      }
+    },
+    "parity_list_vs_map_mobile390": false
+  }
+}
