@@ -54,6 +54,8 @@ export function DiscoverMapSurface({ view, commands, mapContainerRef }: Discover
     ...commands.navigation,
     ...commands.markers,
     ...commands.regionGuide,
+    // Issue #2628 — the mobile Map "Filters" sheet's one canonical write command.
+    ...commands.filters,
     mapContainerRef,
   };
 

@@ -28,10 +28,26 @@ export function useMobileMapOverlayShell({ isOpen, onClose }: UseMobileMapOverla
   const wasOpenRef = useRef(isOpen);
 
   // Escape closes the overlay.
+  //
+  // Issue #2628 (live-browser finding) — this hook predates any nested dialog
+  // being mounted inside the overlay it manages, so this handler never needed
+  // to consider one. Once the mobile Map "Filters" sheet (MapFilterSheet.tsx)
+  // became the first such nested dialog, this unconditional close created a
+  // real, reproducible regression: pressing Escape to dismiss the sheet also
+  // closed the ENTIRE mobile Map overlay back to List, live-verified. Vaul's
+  // Drawer already discards the sheet's own staged draft correctly on Escape;
+  // the fix is only to defer to it here, using the standard nested-dialog-
+  // stack signal (`event.defaultPrevented`, the same convention Radix's own
+  // DismissableLayer uses internally for stacked dialogs) — the sheet's own
+  // Escape handler marks the event with `preventDefault()` when it owns the
+  // key, and this listener simply steps aside when it sees that, exactly as
+  // if the sheet were not open at all. No new state, no coupling to the
+  // sheet's own implementation — this hook still doesn't need to know the
+  // nested dialog exists, only whether the key was already claimed.
   useEffect(() => {
     if (!isOpen) return;
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !event.defaultPrevented) {
         onClose();
       }
     }

@@ -172,9 +172,28 @@ export function assembleDiscoverSurfaceProps(
     isNodeListingsState,
     activeAreasNavigationJourney,
     navJourney: nav.journey,
+    // Issue #2628 (code review follow-up) — the applied Buy/Rent intent.
+    // `DiscoverMapCanvas`'s `intent` prop defaults to `'buy'` and nothing
+    // supplied a real value here, so the mobile Map's results heading/
+    // summary copy and `MapFilterSheet`'s own Buy/Rent selector silently
+    // ignored a Rent navigation. `nav.intent` is the same source
+    // `DiscoverControlBar.tsx`, `DiscoverAreasJourneyPanel.tsx`, and
+    // `NodeListingsSurface.tsx` already use for this exact prop.
+    intent: nav.intent,
     buildNavigationNodeHref: actions.buildNodeHref,
     onAreaVisualClusterCameraIntent: publishClusterCameraIntent,
     clearSelectedListing: actions.clearSelectedListing,
+    // Issue #2628 — the ONE canonical filter-write command (buildMapSurfaceCommands'
+    // own `handleFiltersChange` param doc: "Deliberately OPTIONAL and a flat top-level
+    // param... Until the composition root passes it through, the Map 'Filters'
+    // pill/sheet stay mounted but inert"). `handleFiltersChange` is already in scope
+    // here (destructured from `pageStateController` above, the same value
+    // `overlayProps` already forwards for the Filters Sheet) — this was the one
+    // missing wire: without it, `DiscoverMapCanvas`'s `onFiltersChange` prop stayed
+    // undefined and the mobile Map "Filters" pill never mounted, live-verified (DOM
+    // query for `map-filters-pill` absent despite the mobile Map overlay itself being
+    // genuinely open) even though every other link in the chain was correctly wired.
+    handleFiltersChange,
     pageContextController,
     pageStateController,
     mapDataController,

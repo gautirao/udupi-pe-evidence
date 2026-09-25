@@ -196,9 +196,21 @@ type MapStatusView = Pick<
   // without a new spread group.
   | 'viewportSearchIsDirty'
   | 'viewportSearchIsEligible'
+  // Issue #2628 — the applied Buy/Rent intent (DiscoverMapCanvasProps' own
+  // `intent` doc: "needed only for the Map results heading/summary copy and
+  // MapFilterSheet's own `intent` prop"). Reuses the already-spread
+  // `view.status` group (see DiscoverMapSurface.tsx) so it reaches
+  // DiscoverMapCanvasProps without a new spread group. Was previously
+  // omitted here entirely: the composition root never supplied it, so
+  // DiscoverMapCanvasProps' `intent` prop silently fell back to its own
+  // `'buy'` default even on a Rent navigation.
+  | 'intent'
 >;
 
 type MapMobileView = Pick<DiscoverMapCanvasProps, 'mobileListButton'>;
+
+/** Issue #2628 — the mobile Map "Filters" staged sheet's one canonical write command. */
+type MapFiltersCommands = Pick<DiscoverMapCanvasProps, 'onFiltersChange'>;
 
 type MapRegionGuideView = Pick<DiscoverMapCanvasProps, 'regionGuideVisible' | 'regionGuideRingActive'> &
   Pick<DiscoverMapCanvasProps, 'resolvedRegionLabel' | 'regionSelectNonce' | 'regionOverviewMarkerKind'>;
@@ -248,6 +260,8 @@ export interface DiscoverMapSurfaceCommands {
   markers: MapMarkersCommands;
   regionGuide: MapRegionGuideCommands;
   overlays: DiscoverMapOverlaysCommands;
+  /** Issue #2628 — the mobile Map "Filters" staged sheet's one canonical write command. */
+  filters: MapFiltersCommands;
 }
 
 /**
@@ -399,6 +413,8 @@ export type BuildMapSurfaceViewParams = Omit<
   | 'navigate'
   | 'handlePolygonDrawn'
   | 'handlePolygonCleared'
+  // Issue #2628 — command, not view data; lives in MapFiltersCommands below.
+  | 'onFiltersChange'
   // Issue #2016 — commands, not view data; live in MapDrawingCommands below.
   | 'isReplaceScopeConfirmOpen'
   | 'handleConfirmReplaceScope'
@@ -660,6 +676,7 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
     activeAreasNavigationJourney,
     navJourney,
     mapContainerRef,
+    intent,
   } = params;
 
   return {
@@ -760,6 +777,8 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
       viewportSearchIsDirty: isViewportSearchDirty,
       /** Issue #2015 MUST-HAVE #2 — CTA eligibility gating (PR review 5085561270). */
       viewportSearchIsEligible: isViewportSearchEligible,
+      /** Issue #2628 — the applied Buy/Rent intent (Map results heading/summary + MapFilterSheet). */
+      intent,
     },
     mobile: { mobileListButton },
     regionGuide: {
@@ -879,6 +898,17 @@ export type BuildMapSurfaceCommandsParams = Pick<
   >;
   buildNavigationNodeHref: DiscoverMapCanvasProps['buildNavigationNodeHref'];
   clearSelectedListing: () => void;
+  /**
+   * Issue #2628 — the mobile Map "Filters" sheet's one canonical write command (the existing
+   * handleFiltersChange/setFilters path List already uses, e.g. `buildPanelSurfaceModel.ts`'s own
+   * `filters: { handleFiltersChange, ... }` command group). Deliberately OPTIONAL and a flat
+   * top-level param, not folded into `pageStateController` — `useDiscoverPageStateController`
+   * itself does not produce this value; it is composed one level up
+   * (`useDiscoverPageComposition.ts`). Until the composition root passes it through, the Map
+   * "Filters" pill/sheet stay mounted but inert (`DiscoverMapCanvas`'s own `onFiltersChange` prop
+   * is equally optional and gates the pill's very presence — see that component).
+   */
+  handleFiltersChange?: (next: DiscoverMapCanvasProps['filters']) => void;
 };
 
 export function buildMapSurfaceCommands(
@@ -937,10 +967,14 @@ export function buildMapSurfaceCommands(
     },
     buildNavigationNodeHref,
     clearSelectedListing,
+    // Issue #2628 — see this param's doc comment above.
+    handleFiltersChange,
   } = params;
 
   return {
     camera: { publishCameraIntent, setMapZoom, handleBoundsChange, handleUserCameraGesture },
+    // Issue #2628 — the mobile Map "Filters" sheet's one canonical write command.
+    filters: { onFiltersChange: handleFiltersChange },
     drawing: {
       handlePolygonDrawn,
       handlePolygonCleared,

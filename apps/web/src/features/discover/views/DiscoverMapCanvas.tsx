@@ -36,7 +36,27 @@ import type { DiscoverBadgeResult } from '@/features/discover/presentation/disco
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import { ReplaceResultScopeDialog } from '@/features/discover/components/ReplaceResultScopeDialog';
 import { SearchThisAreaCta } from '@/features/discover/components/map/SearchThisAreaCta';
+import {
+  MapFiltersPill,
+  computeMapFilterRefinementCount,
+  deriveMapFiltersFamily,
+  computeMapResultsUnitPhrase,
+  computeMapResultsHeadingText,
+  computeMapFilteredSummaryParts,
+} from '@/features/discover/components/map/MapFiltersPill';
+import { MapFilterSheet } from '@/features/discover/components/map/MapFilterSheet';
 import { DrawModeOverlay } from '@/features/discover/components/map/DrawModeOverlay';
+import { Button } from '@/components/ui/button';
+// Issue #2628 (step 5/8) — reuses the EXTRACTED "Clear all" reset rule (Decision #4: "the
+// existing `resetFilters` rule … Buy/Rent and family kept") for the Map zero-state's immediate
+// "Clear filters" action, rather than re-deriving a second reset implementation. This is a
+// SEPARATE `usePropertyFilterGroups` call from MapFilterSheet's/AreaSelectedPanel's own — safe
+// here because this call's `activeFamily`/`familyOverride` state is never read for rendering
+// (only `handleClearPropertyFilters` is used, inside a click handler), so it cannot split-brain
+// any displayed value (see PropertyFilterGroups.tsx's file header on why a second call that DID
+// feed rendered UI would be unsafe).
+import { usePropertyFilterGroups } from '@/components/discover/panels/PropertyFilterGroups';
+import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import type {
   PolygonDraftBlock,
   PolygonDraftPhase,
@@ -332,6 +352,25 @@ export interface DiscoverMapCanvasProps {
    */
   mobileListButton?: ReactNode;
 
+  /**
+   * Issue #2628 — writes the ONE canonical filter state (the existing handleFiltersChange/
+   * setFilters path). Undefined/omitted disables the mobile Map "Filters" entry entirely (the
+   * pill renders only once both `mobileListButton` (mobile Map open) and this are present).
+   */
+  onFiltersChange?: (next: PropertyFilters) => void;
+
+  /**
+   * Issue #2628 (steps 4-5/8) — the applied Buy/Rent intent, needed only for the Map results
+   * heading's "homes for sale" / "homes to rent" noun (Decision #5/#6) and the zero-state's
+   * "Clear filters" reset. Deliberately optional with the app's own default ('buy'), following the
+   * SAME "inert until wired by the composition root" pattern as `onFiltersChange` above —
+   * `useDiscoverPageComposition.ts` is outside this issue's scope_lock.allowed_files (see that
+   * prop's own comment). PropertyFilters carries no `purpose`/intent field of its own (confirmed by
+   * reading `usePropertyListings.ts`'s `PropertyFilters` interface) — Buy/Rent is the page's
+   * separate `DiscoverIntent` URL state, same as `MapFilterSheet.tsx`'s own `intent` prop.
+   */
+  intent?: DiscoverIntent;
+
   // ── DiscoverMapLegend#1 schoolRadiusChrome (L2016) ──
   schoolRadiusOverlay: boolean;
 
@@ -498,6 +537,8 @@ export function DiscoverMapCanvas({
   focusedGroup,
   city,
   mobileListButton,
+  onFiltersChange,
+  intent = 'buy',
   schoolRadiusOverlay,
   resolvedPanelContent,
   isSelectedGroupState,
@@ -585,6 +626,57 @@ export function DiscoverMapCanvas({
   }, []);
 
   const [isMapTipDismissed, setIsMapTipDismissed] = useState(false);
+
+  // Issue #2628 — the mobile Map "Filters" staged bottom sheet. Local, transient open state:
+  // the canonical filter state stays untouched until Apply (see MapFilterSheet.tsx's header).
+  const [isMapFilterSheetOpen, setIsMapFilterSheetOpen] = useState(false);
+  const mapFiltersRefinementCount = computeMapFilterRefinementCount(filters);
+
+  // Issue #2628 (steps 4-6/8) — the pure derivations live in MapFiltersPill.tsx (exported
+  // alongside `computeMapFilterRefinementCount`, same file, same testable-pure-function
+  // pattern) so they are unit-testable without mounting this component.
+  const mapFiltersFamily = deriveMapFiltersFamily(filters);
+  const mapResultsUnitPhrase = computeMapResultsUnitPhrase(mapFiltersFamily, intent);
+  const mapResultsCount = markersReturnedElements ?? currentMapMarkerListings?.length ?? 0;
+  // Design doc Accessibility — "Intent is always spoken" in the pill's accessible name.
+  const mapFiltersIntentFamilySummary = `${mapResultsUnitPhrase}, ${mapFiltersFamily === 'commercial' ? 'Commercial' : 'Residential'}`;
+  const mapFilteredSummaryParts = computeMapFilteredSummaryParts(filters, intent);
+  const mapResultsHeadingText = computeMapResultsHeadingText(mapResultsCount, mapFiltersFamily, intent);
+  const mapFilteredSummaryText =
+    mapFilteredSummaryParts.length > 0 ? `Filtered: ${mapFilteredSummaryParts.join(' · ')}` : null;
+
+  // Issue #2628 (step 6/8) — Schools "Homes near ⟨school⟩" (design doc mf-14..16, Handoff
+  // "Schools" paragraph). The SAME Filters pill/sheet mounted below already reaches the Schools
+  // journey (it is fed the SAME canonical `filters`/`onFiltersChange`, not a journey-specific
+  // one — see the design doc's State-mapping row "Schools homes results — existing school
+  // selection + radiusKm + the same filters"), so no separate entry point is built here. Only the
+  // Schools-specific COPY differs: the plum "Property filters only" note (mf-15) and the
+  // zero-state's school/radius-naming wording (Handoff "Schools" paragraph). `selectedSchool` and
+  // `filters.schoolRadiusKm` are READ here only to build these strings — never written, and never
+  // passed into `MapFilterSheet`, which stays structurally incapable of touching them (see that
+  // component's own props: it takes `filters`/`onApply`/`intent` only).
+  const mapSchoolsRadiusKm = filters.schoolRadiusKm ?? DEFAULT_SCHOOL_RADIUS_KM;
+  const mapSchoolsScopeNote = selectedSchool
+    ? 'Property filters only · school and radius stay on the map'
+    : undefined;
+  // Loading states already suppress markers (`currentMapMarkerListings`), so gating zero-state on
+  // `!showLoader && !isLoading` avoids a false "0 matching" flash while a fetch is in flight.
+  const isMapZeroResults =
+    !!onFiltersChange && !!mobileListButton && mapResultsCount === 0 && !showLoader && !isLoading;
+
+  // Issue #2628 (step 5/8) — the Map zero-state's immediate "Clear filters" action (Decision #4:
+  // "applies immediately … Buy/Rent and family kept … no draft to stage into"). A THIRD
+  // `usePropertyFilterGroups` call, but safe: only `handleClearPropertyFilters` is read from it —
+  // this call's own `activeFamily`/`familyOverride` never feeds any rendered value in this
+  // component, so it cannot disagree with AreaSelectedPanel's or MapFilterSheet's own instance.
+  const mapZeroStateFilterGroups = usePropertyFilterGroups({
+    filters,
+    onFiltersChange: onFiltersChange ?? (() => {}),
+    intent,
+    isReadyToMoveSupported: true,
+    isCommercialSubtypeSupported: true,
+  });
+  const handleClearMapFilters = mapZeroStateFilterGroups.handleClearPropertyFilters;
 
   // Issue #2017 — read the SAME shared AREA_SET draft/nearby-candidate state
   // AreaSetChips (rendered below) drives, via the context extracted for
@@ -1157,9 +1249,142 @@ export function DiscoverMapCanvas({
         // re-derived projection.
         canonicalNavigationNode={areasNavigationJourney?.node ?? null}
         buildNavigationNodeHref={buildNavigationNodeHref}
-        mobileListButton={mobileListButton}
+        mobileListButton={
+          // Issue #2628 — the "Filters" pill renders in this SAME top-left row, immediately
+          // BEFORE the existing mobile List/Map toggle, only while the mobile Map overlay is
+          // open (mirrors `mobileListButton`'s own null-on-desktop / null-when-closed gating)
+          // and only when the caller has wired a canonical filter-write command.
+          mobileListButton && onFiltersChange ? (
+            <>
+              <MapFiltersPill
+                count={mapFiltersRefinementCount}
+                intentFamilySummary={mapFiltersIntentFamilySummary}
+                onClick={() => setIsMapFilterSheetOpen(true)}
+              />
+              {mobileListButton}
+            </>
+          ) : (
+            mobileListButton
+          )
+        }
         onHeightChange={onBreadcrumbHeightChange}
       />
+      {onFiltersChange && (
+        <MapFilterSheet
+          open={isMapFilterSheetOpen}
+          onOpenChange={setIsMapFilterSheetOpen}
+          filters={filters}
+          onApply={onFiltersChange}
+          intent={intent}
+          isCommercialSubtypeSupported
+          appliedResultCount={mapResultsCount}
+          // mf-09 — "Show 2 commercial properties"; the sheet's own generic 'homes' default
+          // (step 2-3/8) did not yet distinguish family. `isAgriJourney` still wins (agri is
+          // never in-scope for this sheet per the design doc's Handoff section, but the prop
+          // itself has no such gate yet — see this component's own onFiltersChange/mobileListButton
+          // gating comment above).
+          resultUnitNoun={isAgriJourney ? 'listings' : mapFiltersFamily === 'commercial' ? 'commercial properties' : 'homes'}
+          // Issue #2628 (step 6/8) — mf-15 "Property filters only" plum banner, shown only
+          // during the Schools "Homes near ⟨school⟩" journey (`selectedSchool` truthy).
+          scopeNote={mapSchoolsScopeNote}
+        />
+      )}
+
+      {/* Issue #2628 (steps 4-5/8) — Map results heading + "Filtered: … Edit" summary
+          (Decision #5) and the Map zero-results block (design doc "Zero results" section).
+          Gated identically to the pill/sheet above (mobile Map open + a canonical filter-write
+          command supplied). Placed directly beneath the top-left overlay row: the actual
+          listing-card results sheet is composed OUTSIDE this component (DiscoverRightPanel /
+          the page shell's mobile sheet positioning), which sit outside this issue's
+          scope_lock.allowed_files — see this file's header/handback notes. This block is
+          therefore an additive Map-surface summary, not an edit to that shared sheet. */}
+      {mobileListButton && onFiltersChange && (
+        <div
+          className="pointer-events-none absolute left-3 right-3 top-[92px] z-20 flex flex-col items-start gap-1"
+          data-testid="map-results-heading"
+        >
+          {isMapZeroResults ? (
+            <div
+              role="status"
+              aria-live="polite"
+              className="pointer-events-auto w-full rounded-xl border border-border bg-background/95 p-3 shadow-md backdrop-blur"
+              data-testid="map-zero-results"
+            >
+              <p className="text-sm font-semibold text-foreground">
+                0 matching {mapFiltersFamily === 'commercial' ? 'commercial properties' : 'homes'}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {selectedSchool ? (
+                  <>
+                    No homes within {mapSchoolsRadiusKm} km of {selectedSchool.name} match your{' '}
+                    {mapFiltersRefinementCount} {mapFiltersRefinementCount === 1 ? 'filter' : 'filters'}. The
+                    school and radius were not changed.
+                  </>
+                ) : (
+                  <>
+                    Nothing in {city || 'this area'} matches your {mapFiltersRefinementCount}{' '}
+                    {mapFiltersRefinementCount === 1 ? 'filter' : 'filters'}. Filters were not widened for you.
+                  </>
+                )}
+              </p>
+              {mapFilteredSummaryParts.length > 0 && (
+                <p className="mt-1 text-xs text-muted-foreground" data-testid="map-zero-results-filters">
+                  {mapFilteredSummaryParts.join(' · ')}
+                </p>
+              )}
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="min-h-[44px]"
+                  onClick={() => setIsMapFilterSheetOpen(true)}
+                  data-testid="map-zero-results-edit-filters"
+                >
+                  Edit filters
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-[44px]"
+                  onClick={handleClearMapFilters}
+                  data-testid="map-zero-results-clear-filters"
+                >
+                  Clear filters
+                </Button>
+                {/* Design doc "Zero results" — "Return to previous scope" appears only when an
+                    existing prevScope return target applies (Polygon/Viewport). That existing
+                    mechanism (`previousResultScope`/`handleReturnToPreviousScope`) lives in
+                    AreaSelectedPanel.tsx, function-local, not exposed as a prop this component
+                    can reach without threading new state through DiscoverRightPanel.tsx (outside
+                    scope_lock.allowed_files) — omitted here rather than re-derived as a second
+                    implementation; see this file's handback notes. */}
+              </div>
+            </div>
+          ) : (
+            <div
+              className="pointer-events-auto rounded-full border border-border bg-background/95 px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm backdrop-blur"
+              data-testid="map-results-heading-text"
+            >
+              {mapResultsHeadingText}
+              {mapFilteredSummaryText && (
+                <span className="ml-2 font-normal text-muted-foreground" data-testid="map-filtered-summary">
+                  {mapFilteredSummaryText}
+                  {' — '}
+                  <button
+                    type="button"
+                    className="pointer-events-auto font-semibold text-foreground underline underline-offset-2"
+                    onClick={() => setIsMapFilterSheetOpen(true)}
+                    data-testid="map-filtered-summary-edit"
+                  >
+                    Edit
+                  </button>
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Issue #2017 — multi-area AREA_SET draft chip strip ("Selected areas" +
           "Add area" + "Search these areas" CTA). Mounted the same way
