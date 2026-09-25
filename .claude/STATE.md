@@ -43,6 +43,7 @@ Guardrails for the milestone:
 - NONE — paused per user request before Issue 1 implementation.
 
 ## Recent Completions (last 6)
+- #2472 (polygon draw "Undo last point" enabled-but-no-op at exactly 1 vertex) → PR #2705 OPEN, awaiting review (2026-09-24) [/quick, lane-2472]
 - #2402 follow-up (Cloudflare Pages build failure — actual root cause was an incomplete lockfile, not the npm-version bug PR #2402 diagnosed) → PR #2403 OPEN, awaiting review (2026-08-30) [/quick]
 - #2207 (admin hierarchy tree: node selection, contextual override actions — first deliverable, bulk deferred) → PR #2383 OPEN, draft, awaiting review (2026-08-29) [/quick]
 - #2264 (pending-listings admin queue truncation banner showed a false loaded-row count — stale issue text vs #2369's redesign, but the banner's `PENDING_PAGE_FETCH_SIZE * MAX_PAGES` math ignored the backend's real `max-page-size: 100` clamp) → PR #2378 OPEN (draft), READY_AWAITING_OWNER (2026-08-28) [/quick]

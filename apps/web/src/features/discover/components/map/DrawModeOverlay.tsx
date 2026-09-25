@@ -109,8 +109,11 @@ export function DrawModeOverlay({
                 variant="outline"
                 size="sm"
                 onClick={onUndoVertex}
-                // Offering to undo a point that does not exist would be a lie.
-                disabled={vertexCount === 0}
+                // Leaflet Draw refuses to remove a polygon's last remaining
+                // vertex (deleteLastVertex() is a no-op at exactly one), so
+                // offering Undo there would be a click that does nothing.
+                // Disabled until there are at least two vertices to remove.
+                disabled={vertexCount <= 1}
                 className="h-8 gap-1.5"
                 data-testid="draw-mode-undo"
               >

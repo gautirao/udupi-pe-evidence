@@ -12,6 +12,14 @@ Date: YYYY-MM-DD | Sprint: <name or standalone/quick> | Route: <agent chain>
 ---
 -->
 
+## PR #2705 — fix(#2472): disable "Undo last point" at exactly one polygon vertex
+Date: 2026-09-24 | Sprint: standalone/quick | Route: /quick (ROUTE_AND_RUN)
+- What: Changed `DrawModeOverlay.tsx` Undo button condition from `disabled={vertexCount === 0}` to `disabled={vertexCount <= 1}`; added discriminating unit tests (0/1/2/3-vertex parametrized, click-at-1 no-op, 2→1 re-disable, Cancel independence at 0/1/3).
+- Why: Leaflet Draw's `deleteLastVertex()` refuses to remove a polygon's last remaining vertex, so at 1 vertex the previously-enabled Undo button was a no-op click.
+- Deviations: NONE — did not touch #2419's `DrawSearchAreaEntry`/`AreaSelectedPanel` files. Disclosed on PR: worktree HEAD was 1 commit behind origin/main (unrelated docs-only delta); live browser verification of the signed-in-only draw flow was not possible (no auth fixture in worktree, interactive sign-in avoided per safety rules) — evidence rests on mutation-proven unit tests instead.
+- Risks: NONE carried forward — awaiting review/CI on PR #2705.
+---
+
 ## PR #2701 — fix(#2686): durable pre-merge guard against Flyway migration ordering incidents
 Date: 2026-09-24 | Sprint: standalone/quick | Route: qa-fast → self (implementer) → code-reviewer (REQUEST CHANGES → fixed) — open PR, awaiting CI/further review
 - What: `scripts/db/next-migration-version.sh` (checkpoint 1, advisory — reports next free version against fresh origin/main before authoring a migration) + `scripts/db/check-migration-version-order.sh` (checkpoint 2, enforcing — fails the build if a new migration's version isn't strictly greater than fresh origin/main's highest, or duplicates a version), shared logic in `scripts/db/lib/flyway-version-lib.sh`; wired into `.github/workflows/ci.yml` as new `migration-version-guard` job (`fetch-depth: 0`)

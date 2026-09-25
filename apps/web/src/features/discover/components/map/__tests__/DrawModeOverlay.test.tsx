@@ -74,9 +74,50 @@ describe('DrawModeOverlay — DRAWING', () => {
     expect(screen.getByTestId('draw-mode-undo')).toBeEnabled();
   });
 
-  // Offering to undo a point that does not exist would be a lie.
-  it('disables Undo at zero vertices', () => {
-    renderOverlay({ status: 'DRAWING' }, null, { vertexCount: 0 });
+  // Issue #2472 — Leaflet Draw's deleteLastVertex() is a no-op at exactly
+  // one vertex (it refuses to remove a polygon's final remaining point), so
+  // Undo must stay disabled there too, not just at zero. This test fails if
+  // the condition ever regresses to `vertexCount === 0`: at 1 vertex that
+  // reads as "enabled", contradicting this assertion.
+  it.each([
+    [0, true],
+    [1, true],
+    [2, false],
+    [3, false],
+  ])('at %i vertices, Undo disabled=%s', (vertexCount, expectDisabled) => {
+    renderOverlay({ status: 'DRAWING' }, null, { vertexCount });
+
+    const undoButton = screen.getByTestId('draw-mode-undo');
+    if (expectDisabled) {
+      expect(undoButton).toBeDisabled();
+    } else {
+      expect(undoButton).toBeEnabled();
+    }
+  });
+
+  // A click on a disabled Undo must not reach the handler — this is what
+  // makes the 1-vertex case an honest "nothing happens" rather than a click
+  // that silently no-ops deep inside Leaflet Draw.
+  it('does not call onUndoVertex when clicked at 1 vertex', async () => {
+    const user = userEvent.setup();
+    const { props } = renderOverlay({ status: 'DRAWING' }, null, { vertexCount: 1 });
+
+    await user.click(screen.getByTestId('draw-mode-undo'));
+
+    expect(props.onUndoVertex).not.toHaveBeenCalled();
+  });
+
+  // The overlay is presentational: DiscoverMapCanvas re-derives vertexCount
+  // from Leaflet's own DRAWVERTEX event and feeds it back down as a prop.
+  // This simulates that round trip — after Undo removes one vertex at 2,
+  // leaving 1, the button must disable immediately rather than staying
+  // enabled for a now-useless click.
+  it('re-disables Undo the instant vertexCount drops from 2 to 1', () => {
+    const { rerender, props } = renderOverlay({ status: 'DRAWING' }, null, { vertexCount: 2 });
+
+    expect(screen.getByTestId('draw-mode-undo')).toBeEnabled();
+
+    rerender(<DrawModeOverlay {...props} vertexCount={1} />);
 
     expect(screen.getByTestId('draw-mode-undo')).toBeDisabled();
   });
@@ -94,12 +135,25 @@ describe('DrawModeOverlay — DRAWING', () => {
 
   it('wires Cancel and Undo to their handlers', async () => {
     const user = userEvent.setup();
-    const { props } = renderOverlay({ status: 'DRAWING' }, null, { vertexCount: 1 });
+    // vertexCount 2 so Undo is actually enabled (#2472: it is disabled at
+    // both 0 and 1) and the click below can reach onUndoVertex at all.
+    const { props } = renderOverlay({ status: 'DRAWING' }, null, { vertexCount: 2 });
 
     await user.click(screen.getByTestId('draw-mode-undo'));
     await user.click(screen.getByTestId('draw-mode-cancel'));
 
     expect(props.onUndoVertex).toHaveBeenCalledTimes(1);
+    expect(props.onCancelDraw).toHaveBeenCalledTimes(1);
+  });
+
+  // Cancel must stay independent of vertex count — it discards the whole
+  // draft (issue #2472 scope guard: this stays unaffected by the Undo fix).
+  it.each([0, 1, 3])('Cancel works at %i vertices', async (vertexCount) => {
+    const user = userEvent.setup();
+    const { props } = renderOverlay({ status: 'DRAWING' }, null, { vertexCount });
+
+    await user.click(screen.getByTestId('draw-mode-cancel'));
+
     expect(props.onCancelDraw).toHaveBeenCalledTimes(1);
   });
 });
