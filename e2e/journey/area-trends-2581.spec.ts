@@ -96,15 +96,26 @@ const hasAdminCreds = hasRealCredentials(adminEmail, adminPassword);
  * direct navigation to the Trends URL.
  */
 async function discoverToTrends(page: Page, areaKey: string): Promise<void> {
-  // journey=area-first is required alongside areaKey for Discover's
-  // useDiscoverJourneyChromeController to resolve `effectiveSelectedArea` and
-  // compute AreaSelectedPanel's area-scoped trendsHref (the canonical route).
-  // A bare `?areaKey=` alone (the "legacy" composition some older specs use
-  // only to mount the Filters Sheet) does not resolve effectiveSelectedArea,
-  // and the page then shows only the site header's generic "Trends" nav link
-  // (/trends?city=..., no areaKey) instead of the area-scoped CTA.
+  // #2702 (superseding the comment this replaces): `journey=area-first`
+  // no longer mounts the legacy areaKey-driven AreaSelectedPanel directly —
+  // it mounts AreaFirstJourneyPanel -> DiscoverAreasJourneyPanel, which reads
+  // its selected node EXCLUSIVELY from the canonical `node=` URL cursor
+  // (useAreasNavigationJourney; see that hook's own doc comment). A bare
+  // `?areaKey=` with no `node=` resolves to the city ROOT there, which is
+  // not an AREA leaf, so the panel never renders a leaf listings surface or
+  // Trends CTA — this is exactly what real in-app navigation never
+  // constructs: `buildNodeHrefFromParams` (state/url/navigation.ts), the one
+  // production code path that builds this app's own area-drilldown links,
+  // always writes `node=`. `node`'s value is the standard
+  // `NavigationController.AREA_NODE_KEY_PREFIX` ("a:") + areaKey — the same
+  // format the #2581 E2E fixture seed (AreaIntelligenceSnapshotRollupJobE2ESeedIT)
+  // now creates its AREA navigation_nodes rows with. `areaKey=` is kept
+  // alongside for the legacy map-breadcrumb/listings-count surface that
+  // still reads it independently (see AreaFirstJourneyPanel's separate
+  // `view.geography`/`selectedArea` wiring) so both surfaces agree.
   await page.goto(
-    `/discover?city=${CITY_SLUG}&journey=area-first&areaKey=${encodeURIComponent(areaKey)}`,
+    `/discover?city=${CITY_SLUG}&journey=area-first&areaKey=${encodeURIComponent(areaKey)}` +
+      `&node=${encodeURIComponent('a:' + areaKey)}`,
   );
   await page.waitForLoadState('domcontentloaded');
   await dismissConsentBannerIfPresent(page);

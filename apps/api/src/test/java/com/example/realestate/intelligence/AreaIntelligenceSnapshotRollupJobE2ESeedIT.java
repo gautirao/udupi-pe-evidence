@@ -126,6 +126,14 @@ class AreaIntelligenceSnapshotRollupJobE2ESeedIT {
     @DisplayName("#2581 E2E fixture seed: real LIVE listings at all three confidence bands, "
             + "then the real AreaIntelligenceSnapshotRollupJob.run() entry point")
     void seedAndRunRollupJob() {
+        // #2702: without a reachable navigation_nodes hierarchy + a PROMOTED city_launch_revision
+        // for Udupi, GET /api/discover/cities/udupi/navigation/resolve 404s ("City has no active
+        // navigation hierarchy") for every one of this spec's three areas, and Discover's
+        // useAreasNavigationJourney surfaces "We couldn't load this area of the map" before the
+        // Playwright journey ever reaches Trends. Seed a minimal, isolated Direction/Area pair per
+        // band (idempotent, own policy_fingerprint) so all three areas resolve.
+        seedNavigationHierarchy();
+
         // Idempotent for local re-runs of the same fixture within one E2E session: only add
         // listings this run hasn't already created (identified by the locality sentinel below).
         removeAnyPreviousE2ESeedListings();
@@ -151,6 +159,109 @@ class AreaIntelligenceSnapshotRollupJobE2ESeedIT {
         return jdbcTemplate.queryForObject(
                 "SELECT confidence FROM area_intelligence_snapshot WHERE city_slug = 'udupi' AND area_key = ?",
                 String.class, areaKey);
+    }
+
+    // #2702: promote a PROMOTED city_launch_revision for Udupi and a minimal DIRECTION -> AREA
+    // navigation_nodes pair per area, so GET /navigation/resolve answers for all three journey
+    // areas instead of 404ing with "City has no active navigation hierarchy"
+    // (PublicActiveCityRevisionReader requires exactly that promoted-revision shape). Mirrors the
+    // column shape and idempotency guards of udupi-canonical-smoke-fixture-seed.sql (#2446) so this
+    // safely coexists whether or not that profile also seeded the same DB — node_keys here are
+    // namespaced with a distinct 'e2e2581' prefix to avoid colliding with that fixture's 'd:n'/'d:s'
+    // keys, and the AREA insert additionally NOT EXISTS-guards on area_key so if that other fixture
+    // already created an AREA node for Brahmavar/Kaup, this is a true no-op for those two.
+    private void seedNavigationHierarchy() {
+        Integer cityId = jdbcTemplate.queryForObject(
+                "SELECT id FROM public.cities WHERE slug = 'udupi'", Integer.class);
+        if (cityId == null) {
+            throw new IllegalStateException(
+                    "AreaIntelligenceSnapshotRollupJobE2ESeedIT: no cities row with slug=udupi — "
+                            + "E2E fixture base seed must run first");
+        }
+
+        jdbcTemplate.update(
+                "INSERT INTO public.city_launch_revision "
+                        + "(city_id, revision_number, lifecycle_status, superseded_by, promoted_at) "
+                        + "VALUES (?, 1, 'PROMOTED', NULL, NOW()) "
+                        + "ON CONFLICT (city_id, revision_number) DO NOTHING",
+                cityId);
+
+        // #2702 root-cause fix (revised): the navigation tree validator requires root-level
+        // DIRECTION siblings' display_order values to be a GAPLESS 1..N sequence, not merely
+        // distinct (NavigationTreeValidationException/INVALID_SIBLING_ORDERING — first seen as
+        // "duplicate display_order" when these were all hardcoded to 1, then as "not a gapless
+        // 1..3 sequence" when hardcoded to a fixed 101/102/103 offset instead). Either bug leaves
+        // the whole Udupi hierarchy failing preload validation and uncached/unresolvable — the same
+        // "City has no active navigation hierarchy" 404 this seed exists to fix, just one layer
+        // deeper. So this must instead continue whatever gapless sequence already exists among this
+        // city's root DIRECTIONs — safe whether these are the only root DIRECTIONs (assigns 1,2,3)
+        // or the canonical SQL fixture's d:n/d:s (#2446) already occupy 1,2 in the same DB (assigns
+        // 3,4,5).
+        Integer nextDisplayOrder = jdbcTemplate.queryForObject(
+                "SELECT COALESCE(MAX(display_order), 0) + 1 FROM public.navigation_nodes "
+                        + "WHERE city_id = ? AND node_type = 'DIRECTION' AND parent_node_id IS NULL",
+                Integer.class, cityId);
+
+        seedDirectionAndArea(cityId, "e2e2581:d:full", "Manipal Direction", FULL_AREA_KEY, "Manipal",
+                FULL_LAT, FULL_LON, nextDisplayOrder);
+        seedDirectionAndArea(cityId, "e2e2581:d:limited", "Brahmavar Direction", LIMITED_AREA_KEY, "Brahmavar",
+                LIMITED_LAT, LIMITED_LON, nextDisplayOrder + 1);
+        seedDirectionAndArea(cityId, "e2e2581:d:insufficient", "Kaup Direction", INSUFFICIENT_AREA_KEY, "Kaup",
+                INSUFFICIENT_LAT, INSUFFICIENT_LON, nextDisplayOrder + 2);
+    }
+
+    private void seedDirectionAndArea(Integer cityId, String directionNodeKey, String directionLabel,
+            String areaKey, String areaLabel, double lat, double lon, int displayOrder) {
+        jdbcTemplate.update(
+                "INSERT INTO public.navigation_nodes "
+                        + "(city_id, region_key, node_type, parent_node_id, node_key, area_key, "
+                        + " representative_area_keys, display_label, display_order, depth, "
+                        + " ancestor_keys, descendant_area_count, "
+                        + " centre_lat, centre_lon, min_lat, min_lon, max_lat, max_lon, "
+                        + " policy_fingerprint, generated_at) "
+                        + "VALUES (?, ?, 'DIRECTION', NULL, ?, NULL, ARRAY[]::text[], ?, ?, 0, "
+                        + " ARRAY[]::text[], 1, ?, ?, ?, ?, ?, ?, 'e2e-2581-2702-fixture-v1', NOW()) "
+                        + "ON CONFLICT (city_id, node_key) DO NOTHING",
+                cityId, directionNodeKey, directionNodeKey, directionLabel, displayOrder,
+                lat, lon, lat - 0.01, lon - 0.01, lat + 0.01, lon + 0.01);
+
+        jdbcTemplate.update(
+                "INSERT INTO public.navigation_nodes "
+                        + "(city_id, region_key, node_type, parent_node_id, node_key, area_key, "
+                        + " representative_area_keys, display_label, display_order, depth, "
+                        + " ancestor_keys, descendant_area_count, "
+                        + " centre_lat, centre_lon, min_lat, min_lon, max_lat, max_lon, "
+                        + " policy_fingerprint, generated_at) "
+                        + "SELECT ?, ?, 'AREA', parent.id, ?, ?, ARRAY[?]::text[], ?, 1, 1, "
+                        + " ARRAY[?]::text[], 1, ?, ?, ?, ?, ?, ?, 'e2e-2581-2702-fixture-v1', NOW() "
+                        + "FROM public.navigation_nodes parent "
+                        + "WHERE parent.city_id = ? AND parent.node_key = ? "
+                        + "AND NOT EXISTS (SELECT 1 FROM public.navigation_nodes existing "
+                        + " WHERE existing.city_id = ? AND existing.node_type = 'AREA' "
+                        + " AND existing.area_key = ?) "
+                        + "ON CONFLICT (city_id, node_key) DO NOTHING",
+                // #2702 root-cause fix (layer 2): the AREA node_key MUST use the standard
+                // "a:"-prefixed format (NavigationController.AREA_NODE_KEY_PREFIX), NOT an
+                // "e2e2581:"-namespaced one. The frontend's areaKey-URL-param path
+                // (useDiscoverPageStateController -> effectiveSelectedArea ->
+                // useDiscoverJourneyChromeController's trendsHref) constructs exactly
+                // "a:" + areaKey when resolving /navigation/resolve for a legacy `areaKey=`
+                // URL param. A differently-prefixed node_key still resolves via the generic
+                // node-key path (confirmed live: GET .../navigation/resolve?node=<this custom
+                // key> returns 200 EXACT), but the frontend's areaKey-driven lookup queries
+                // "a:"+areaKey specifically, gets only an ANCESTOR match against the parent
+                // DIRECTION (not this AREA leaf), and isResolvedAreaLeafNode/
+                // deriveAreaPointFromNode then correctly reject that non-AREA top-level node
+                // — so effectiveSelectedArea, and therefore trendsHref, stay null and the
+                // "Trends" CTA never mounts, even though the breadcrumb, listing counts and
+                // area-selected panel all render correctly from the SAME resolve call. This
+                // is namespace-safe: ON CONFLICT (city_id, node_key) DO NOTHING makes this a
+                // true no-op if the canonical SQL fixture (#2446) already created this same
+                // "a:"+areaKey node for Brahmavar/Kaup in the same DB — verified this is
+                // exactly what the app itself would create for a normal, non-fixture area.
+                cityId, directionNodeKey, "a:" + areaKey, areaKey, areaKey, areaLabel,
+                directionNodeKey, lat, lon, lat - 0.01, lon - 0.01, lat + 0.01, lon + 0.01,
+                cityId, directionNodeKey, cityId, areaKey);
     }
 
     private void removeAnyPreviousE2ESeedListings() {

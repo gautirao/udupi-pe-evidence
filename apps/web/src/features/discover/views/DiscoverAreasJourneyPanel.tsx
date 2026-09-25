@@ -37,6 +37,7 @@ import { useDiscoverCityListings } from '@/hooks/useDiscoverCityListings';
 import { useDiscoverListings } from '@/hooks/useDiscoverListings';
 import { useDiscoverSearchState } from '@/features/discover/state/useDiscoverSearchState';
 import { CITY_CONFIG } from '@/lib/localityUtils';
+import { slugifyFromAreaKey } from '@/lib/areaSlug';
 import { NodeListingsSurface } from './NodeListingsSurface';
 import { AreaSelectedPanel } from '@/components/discover/panels/AreaSelectedPanel';
 import { SchoolsInAreaPanel, AreaSchoolCombinedPanel } from '@/components/discover/panels/SchoolJourneyPanels';
@@ -1285,6 +1286,25 @@ function AreaLeafListingsSurface({
     );
   }
 
+  // #2702 (superseding the "THERE ARE THREE" comment below, which was itself a correction of an
+  // earlier miscount) — this is a FOURTH production render site of AreaSelectedPanel, and the ONE
+  // journey=area-first now actually mounts (see AreaFirstJourneyPanel/DiscoverRightPanel.tsx's own
+  // #1956 PR-2 comment: DiscoverAreasJourneyPanel — this component's tree — "mounts unconditionally
+  // for journey==='area-first'", ahead of DiscoverRightPanel's own 'area-selected' case). This call
+  // site never passed `trendsHref`, so the "View Area Trends" CTA this issue (#2581) depends on has
+  // been unreachable from the real area-first Discover journey since #1956 replaced the legacy
+  // areaKey-driven AreaSelectedPanel mount with this one — the CTA's OWN href-building logic
+  // (useDiscoverJourneyChromeController's `trendsHref`) still exists and is still correct, it is
+  // simply computed from `effectiveSelectedArea` (the legacy, now-unreached-here path) rather than
+  // from `areaPoint` (this component's own already-resolved leaf, the canonical `journey.node`-
+  // driven source of truth). Deriving it directly here, from the SAME `areaPoint`/`nav.city` this
+  // component already threads through `HierarchyBackButton`/`AreaSelectedPanel` above, keeps this
+  // one canonical: it can never disagree with the breadcrumb or the listings this exact render
+  // already shows, and needs no new hook or fetch — `slugifyFromAreaKey` is the same pure,
+  // already-proven function `useDiscoverJourneyChromeController`'s `trendsHref` and
+  // `CompareNearbyAreas.tsx`'s area chips both already use for this identical URL shape.
+  const trendsHref = `/trends/${nav.city}/areas/${slugifyFromAreaKey(areaPoint.areaKey)}`;
+
   return (
     // Issue #1956 PR-4 FIX CYCLE 4 (scope_amendment n=4, mobile reachability)
     // — was a plain `<div className="p-4">`: a block-level box with no
@@ -1326,6 +1346,10 @@ function AreaLeafListingsSurface({
       ) : (
       <AreaSelectedPanel
         selectedArea={areaPoint}
+        // #2702 — see this component's own comment above `trendsHref`'s derivation:
+        // this is what makes the "View Area Trends" CTA reachable from the real
+        // journey=area-first Discover flow.
+        trendsHref={trendsHref}
         // Issue #2572 — COMMERCIAL CAPABILITY ENABLEMENT. See the twin comment
         // at the NodeListingsSurface call site.
         //

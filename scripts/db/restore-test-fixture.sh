@@ -60,6 +60,15 @@ NAV_SCHOOLS_AGRI_SEED_FILE="${SCRIPT_DIR}/fixtures/navigation-hierarchy-schools-
 # the measured placement rationale.
 COMMERCIAL_LISTINGS_SEED_FILE="${SCRIPT_DIR}/fixtures/commercial-listings-seed.sql"
 
+# #2581/#2702: Udupi navigation hierarchy (PROMOTED revision + Manipal/Brahmavar/Kaup
+# DIRECTION->AREA pairs). DEFAULT list, not opt-in — see this file's own header for why a
+# post-boot JPA/JDBC seed cannot make the already-running backend's NavigationGraphCache
+# aware of it (NavigationGraphRefreshListener only fires on an in-process promotion event;
+# NavigationHierarchySafetyPoller is a @Scheduled poller and this stack disables scheduling).
+# Loading it here, pre-boot, is what makes NavigationCachePreloadRunner's normal startup load
+# pick it up with zero new production code.
+NAV_2581_UDUPI_SEED_FILE="${SCRIPT_DIR}/fixtures/area-trends-2581-udupi-navigation-seed.sql"
+
 # #2446 (owner ruling Option 2): OPTIONAL, OPT-IN fixture profile. The default seed list above is
 # deliberately untouched — Udupi stays LEGACY in the default fixture so the six legacy Udupi specs
 # measured in docs/pr-evidence/issue-2427/option-1-blast-radius.md keep their rendering mode.
@@ -121,7 +130,7 @@ fi
 
 for NAV_FILE in "${NAV_HIERARCHY_SEED_FILE}" "${NAV_ACTIVE_REVISION_SEED_FILE}" "${NAV_HIERARCHY_LISTINGS_SEED_FILE}" \
     "${NAV_HIERARCHY_RENT_LISTINGS_SEED_FILE}" "${NAV_SCHOOLS_AGRI_SEED_FILE}" \
-    "${COMMERCIAL_LISTINGS_SEED_FILE}"; do
+    "${COMMERCIAL_LISTINGS_SEED_FILE}" "${NAV_2581_UDUPI_SEED_FILE}"; do
   if [[ ! -f "${NAV_FILE}" ]]; then
     echo "ERROR: Navigation-hierarchy fixture seed file not found: ${NAV_FILE}" >&2
     exit 1
@@ -512,6 +521,25 @@ else
     exit 1
   fi
   echo "==> LIVE commercial-family listing count: ${COMMERCIAL_LISTING_COUNT}."
+
+  # ---------------------------------------------------------------------------
+  # #2581/#2702: Udupi navigation hierarchy, DEFAULT (not opt-in) — see the file's own
+  # header. The seed RAISEs an internal ASSERT; this gate is defence-in-depth in case a
+  # future change silently no-ops it.
+  # ---------------------------------------------------------------------------
+  echo "==> Loading #2581/#2702 Udupi navigation-hierarchy fixture from ${NAV_2581_UDUPI_SEED_FILE}..."
+  PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" \
+    -d "${DB_NAME}" -v ON_ERROR_STOP=1 -f "${NAV_2581_UDUPI_SEED_FILE}"
+
+  UDUPI_2581_AREA_NODE_COUNT=$(PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" \
+    -d "${DB_NAME}" -t -A \
+    -c "SELECT COUNT(*) FROM navigation_nodes nn JOIN cities c ON c.id = nn.city_id
+          WHERE c.slug = 'udupi' AND nn.node_type = 'AREA';" 2>/dev/null || echo "0")
+  if [[ "${UDUPI_2581_AREA_NODE_COUNT}" -lt 3 ]]; then
+    echo "ERROR: Udupi AREA navigation_nodes count is ${UDUPI_2581_AREA_NODE_COUNT} (expected >=3) after loading ${NAV_2581_UDUPI_SEED_FILE} — fixture did not land." >&2
+    exit 1
+  fi
+  echo "==> Udupi AREA navigation_nodes count: ${UDUPI_2581_AREA_NODE_COUNT}."
 
   # ---------------------------------------------------------------------------
   # #2446 opt-in profile: canonical Udupi (isolated smoke only). Applied LAST so
