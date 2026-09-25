@@ -1462,7 +1462,20 @@ export function SchoolSelectedPanel({
             {filtersContent && (
               <Sheet>
                 <SheetTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-7 gap-1.5 px-2 text-xs">
+                  {/* Issue #2717 — mobile (<821px, matches the project's 820px shell
+                      breakpoint) needs a >=44px touch target for WCAG 2.5.5, but the
+                      visible chip must stay h-7 to match its Start over/Back neighbours
+                      (no extra toolbar row, no wrapping at 375x667). `before:` pseudo-
+                      element expands only the HIT AREA (9px on every side -> 46px+),
+                      absolutely positioned so it adds no layout width/height of its
+                      own. Desktop (>=821px) is untouched — the before: rules are all
+                      gated behind the max-[820px] variant. */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    data-testid="school-filters-trigger"
+                    className="relative h-7 gap-1.5 px-2 text-xs max-[820px]:before:absolute max-[820px]:before:inset-[-9px] max-[820px]:before:content-['']"
+                  >
                     <SlidersHorizontal className="h-3.5 w-3.5" />
                     Filters
                   </Button>
@@ -1816,7 +1829,15 @@ export function AreaSchoolCombinedPanel({
             {filtersContent && (
               <Sheet>
                 <SheetTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-7 gap-1.5 px-2 text-xs">
+                  {/* Issue #2717 — see the matching comment in SchoolSelectedPanel above:
+                      before: pseudo expands the mobile (<821px) hit area to >=44px
+                      without growing the visible h-7 chip or touching desktop. */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    data-testid="combined-filters-trigger"
+                    className="relative h-7 gap-1.5 px-2 text-xs max-[820px]:before:absolute max-[820px]:before:inset-[-9px] max-[820px]:before:content-['']"
+                  >
                     <SlidersHorizontal className="h-3.5 w-3.5" />
                     Filters
                   </Button>
