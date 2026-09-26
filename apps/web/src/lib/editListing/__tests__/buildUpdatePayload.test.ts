@@ -549,6 +549,61 @@ describe('buildListingUpdatePayload — commercial subtype-gated fields (#2281)'
     expect(payload.commercialZoning).toBeUndefined();
   });
 
+  it('SHOP subtype: includes shop-only fields (floorChoice/hubType/occupancyStatus), omits OFFICE/BUILDING/WAREHOUSE/LAND-only fields', () => {
+    const ctx = makeUpdatePayloadCtx('commercial', 'sale', 'SHOP');
+    const payload = buildListingUpdatePayload(baseState({ propertyType: 'commercial' }), ctx);
+
+    // Shared with OFFICE (floorChoice/hubType are SHOP||OFFICE per listingFieldConfig.ts).
+    expect(payload.floorChoice).toBe('GROUND_FLOOR');
+    expect(payload.hubType).toBe('MALL');
+    // Shared with BUILDING (occupancyStatus is SHOP||BUILDING per listingFieldConfig.ts —
+    // wider than floorMode/powerLoadKva, which stay BUILDING-only).
+    expect(payload.occupancyStatus).toBe('VACANT');
+    // Built-space fields — every commercial subtype except LAND.
+    expect(payload.washroomsPublic).toBe(2);
+    expect(payload.washroomsPrivate).toBe(1);
+    expect(payload.parkingPublicCount).toBe(4);
+    expect(payload.parkingPrivateCount).toBe(2);
+    expect(payload.commercialFurnishingStatus).toBe('FURNISHED');
+    // Shown for every resolved subtype (no LAND exclusion).
+    expect(payload.commercialAvailability).toBe('IMMEDIATE');
+    expect(payload.commercialAreaUnit).toBe('SQ_FT');
+    expect(payload.suitableUses).toBeUndefined(); // touched flag false — see F3 block below
+    // Sale purpose -> yield/income fields sent.
+    expect(payload.expectedRentalYieldPct).toBe(5.5);
+    expect(payload.currentMonthlyIncomePaise).toBe(25000);
+
+    // OFFICE-only.
+    expect(payload.officeSeats).toBeUndefined();
+    expect(payload.officeCabins).toBeUndefined();
+    expect(payload.officeMeetingRooms).toBeUndefined();
+    // BUILDING-only.
+    expect(payload.floorMode).toBeUndefined();
+    expect(payload.powerLoadKva).toBeUndefined();
+    // WAREHOUSE-only.
+    expect(payload.warehouseClearHeightFt).toBeUndefined();
+    expect(payload.warehouseLoadingBays).toBeUndefined();
+    expect(payload.warehouseTruckAccess).toBeUndefined();
+    expect(payload.warehouseFlooring).toBeUndefined();
+    // LAND-only.
+    expect(payload.commercialZoning).toBeUndefined();
+    expect(payload.commercialOwnership).toBeUndefined();
+    expect(payload.commercialApprovals).toBeUndefined();
+  });
+
+  it('SHOP subtype (lease purpose): sends leaseTermMonths/leaseEscalationPct, omits sale-only yield/income fields', () => {
+    const ctx = makeUpdatePayloadCtx('commercial', 'lease', 'SHOP');
+    const payload = buildListingUpdatePayload(
+      baseState({ propertyType: 'commercial', listingPurpose: 'lease' as unknown as 'sale' | 'rent' }),
+      ctx,
+    );
+
+    expect(payload.leaseTermMonths).toBe(24);
+    expect(payload.leaseEscalationPct).toBe(5);
+    expect(payload.expectedRentalYieldPct).toBeUndefined();
+    expect(payload.currentMonthlyIncomePaise).toBeUndefined();
+  });
+
   it('BUILDING subtype (commercial_building propertyType, no explicit choice needed): includes floorMode/powerLoadKva/occupancyStatus', () => {
     const ctx = makeUpdatePayloadCtx('commercial_building', 'sale', 'BUILDING');
     const payload = buildListingUpdatePayload(baseState({ propertyType: 'commercial_building' }), ctx);
