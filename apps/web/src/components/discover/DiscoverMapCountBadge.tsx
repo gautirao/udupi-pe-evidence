@@ -5,6 +5,10 @@ import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import type { DiscoverBadgeResult } from '@/features/discover/presentation/discoverBadge';
+import {
+  isDrillDownCountBadgeVisible,
+  isLandingCountBadgeVisible,
+} from '@/components/discover/discoverMapCountBadgeVisibility';
 
 /**
  * Issue #1824 Slice S8 — the drill-down count pill (~L3100-3211) + the
@@ -60,6 +64,18 @@ export interface DiscoverMapCountBadgeProps {
    * Defaults to false, so desktop stays byte-identical (`bottom-5`).
    */
   isMobileMapOverlay?: boolean;
+  /**
+   * Issue #2724 (pass 3, area-selected desktop pairing) — true when
+   * DiscoverMapSurface's portalled `areas-recenter-button` is ALSO visible
+   * on this same row for the desktop `isAreaFirstSelectedAreaState` case
+   * (computed once in buildMapSurfaceModel.tsx from the SAME
+   * `overlays.recenter.visible` signal that button itself renders from, so
+   * the two can never disagree). When true, this pill flanks left of centre
+   * to pair with that button flanking right, instead of sitting dead-centre
+   * on top of it. Defaults to false, so both mobile and any desktop render
+   * without this prop stay byte-identical to the centred shape.
+   */
+  isAreaRecenterButtonVisible?: boolean;
 }
 
 export function DiscoverMapCountBadge({
@@ -83,30 +99,29 @@ export function DiscoverMapCountBadge({
   city,
   hideDrillDownBadge = false,
   isMobileMapOverlay = false,
+  isAreaRecenterButtonVisible = false,
 }: DiscoverMapCountBadgeProps) {
   return (
     <>
       {/* City / area listing count — bottom-right (Issue #1152). Issue #1588 — on the
           public landing this is replaced by the centered city-wide summary pill below;
           kept bottom-right for contextual (area/school/group) drill-down counts. */}
-      {!hideDrillDownBadge && resolvedPanelContent !== 'guided-entry' && !isAreaFirstCityLanding &&
-        // Issue #2169 Bug 2 — Agricultural land is a separate model (parcels,
+      {// Issue #2169 Bug 2 — Agricultural land is a separate model (parcels,
         // corridors, distances — see DiscoverRightPanel's Agri intro copy),
-        // kept apart from residential area counts. This badge's only count
-        // source below `discoverBadge`/`fallbackBadgeCopy` is `cityTotal`,
-        // the RESIDENTIAL city-wide sum (useDiscoverBadgeController), which
-        // has no agri-first branch to special-case — so without this guard
-        // every agri state fell through to the generic fallback and showed
-        // the unrelated residential total (e.g. "15 properties in Udupi")
-        // while the right panel showed agri corridor/parcel stats. Suppressed
-        // entirely (mirrors the school-first pattern's journey-aware branch,
-        // but the agri journey already surfaces its own corridor/parcel
-        // counts prominently in the right panel, so a second aggregate here
-        // would be redundant at best and a second value to keep in sync at
-        // worst — see #2169 root-cause notes for the corridor-count derived
-        // alternative that was rejected for that reason).
-        journey !== 'agri-first' &&
-        discoverBadge.visible && (discoverBadge.count != null || discoverBadge.state === 'stale') && (
+        // kept apart from residential area counts; the journey !== 'agri-first'
+        // guard below (inside isDrillDownCountBadgeVisible) prevents this
+        // badge's residential cityTotal-derived count from rendering during
+        // the agri journey — see #2169 root-cause notes.
+        // Issue #2724 (Finding 1) — this call is the SAME predicate
+        // DiscoverMapCanvas's `isDesktopBadgePaired` uses, so the pill's own
+        // gate and the pairing decision can never drift apart.
+        isDrillDownCountBadgeVisible({
+          discoverBadge,
+          resolvedPanelContent,
+          isAreaFirstCityLanding,
+          journey,
+          hideDrillDownBadge,
+        }) && (
         <div
           className={
             // Issue #1595 — on the selected-group step the pill is centred at the bottom.
@@ -128,9 +143,35 @@ export function DiscoverMapCountBadge({
             // variants now share bottom-60 (240px), clearing every one of those neighbours (zoom's
             // top edge 91px, the legend's 129px, the hint's 178px, the city-recenter button's
             // 222px) with an 18px+ margin — confirmed via Playwright at 1024x768 and 1440x900.
-            isSelectedGroupState || isAreaFirstSelectedAreaState
-              ? 'absolute bottom-60 left-1/2 z-[1000] max-w-[220px] -translate-x-1/2'
-              : 'absolute bottom-60 right-4 z-[1000]'
+            //
+            // Issue #2724 (owner follow-up 3, desktop/mobile parity) — on desktop, when the
+            // `isSelectedGroupState`-without-area-selected sub-case is active, DiscoverMapCanvas's
+            // "Recenter on <city>" button now renders on this SAME row (bottom-60) instead of its
+            // own bottom-48 (see that button's `isDesktopBadgePaired` doc). Dead-centring this
+            // pill there would sit it on top of that button, so it flanks right of centre instead
+            // (`right-1/2 mr-2`), mirroring that button's `left-1/2 ml-2` — together a width-
+            // agnostic side-by-side pair, centred as a group.
+            //
+            // Issue #2724 (pass 3) — the area-selected state has its OWN row-mate: the portalled
+            // `areas-recenter-button` (DiscoverMapSurface.tsx), gated by
+            // `view.overlays.recenter.visible` and mutually exclusive with the city-recenter
+            // button above. On desktop, when that button is ALSO visible
+            // (`isAreaRecenterButtonVisible`), this pill flanks left the SAME way (`right-1/2
+            // mr-2`) to pair with it; otherwise (button hidden — e.g. the selected area is
+            // already in view) it stays dead-centred, unchanged. Mobile (`isMobileMapOverlay`)
+            // is carved out FIRST and always renders the single centred value, byte-identical to
+            // before this fix — the flank only ever applies to the desktop shape.
+            isAreaFirstSelectedAreaState
+              ? isMobileMapOverlay
+                ? 'absolute bottom-60 left-1/2 z-[1000] max-w-[220px] -translate-x-1/2'
+                : isAreaRecenterButtonVisible
+                  ? 'absolute bottom-60 right-1/2 z-[1000] mr-2 max-w-[220px]'
+                  : 'absolute bottom-60 left-1/2 z-[1000] max-w-[220px] -translate-x-1/2'
+              : isSelectedGroupState
+                ? isMobileMapOverlay
+                  ? 'absolute bottom-60 left-1/2 z-[1000] max-w-[220px] -translate-x-1/2'
+                  : 'absolute bottom-60 right-1/2 z-[1000] mr-2 max-w-[220px]'
+                : 'absolute bottom-60 right-4 z-[1000]'
           }
           data-testid="discover-badge"
         >
@@ -225,8 +266,15 @@ export function DiscoverMapCountBadge({
           reachable once journey === 'agri-first'; the explicit guard keeps
           that invariant enforced even if isAreaFirstCityLanding's derivation
           ever changes. */}
-      {(resolvedPanelContent === 'guided-entry' || isAreaFirstCityLanding) &&
-        journey !== 'agri-first' && cityTotal > 0 && (
+      {// Issue #2724 (Finding 1) — same predicate DiscoverMapCanvas's
+        // `isDesktopBadgePaired` uses for this pill's visibility, so the pill's
+        // own gate and the pairing decision can never drift apart.
+        isLandingCountBadgeVisible({
+          resolvedPanelContent,
+          isAreaFirstCityLanding,
+          journey,
+          cityTotal,
+        }) && (
         <div
           className={
             // Issue #2716 — mobile Map: base bottom-5 pill overlapped the Leaflet
@@ -248,9 +296,18 @@ export function DiscoverMapCountBadge({
             // matching the sibling drill-down centred badge above for the same reason (clears the
             // legend, the zoom control and the bottom-right recenter column with an 18px+
             // margin); confirmed 0 intersections at 1024x768 and 1440x900 via Playwright.
+            //
+            // Issue #2724 (owner follow-up 3, desktop/mobile parity) — desktop's
+            // "Recenter on <city>" button (DiscoverMapCanvas.tsx) now shares this exact row
+            // (bottom-60) in this same guided-entry/city-landing state instead of sitting
+            // right-anchored at its own bottom-48 — see that button's `isDesktopBadgePaired`
+            // doc. Flanked right of centre (`right-1/2 mr-2`) to pair with that button's
+            // `left-1/2 ml-2`, forming one centred side-by-side row, mirroring mobile's own
+            // STACKED pairing of the same two elements in this state (this pill directly above
+            // that button) rather than introducing a new, unrelated layout. Mobile is unchanged.
             isMobileMapOverlay
               ? 'absolute bottom-8 left-1/2 z-[1000] w-[calc(100%-6rem)] max-w-[220px] -translate-x-1/2'
-              : 'absolute bottom-60 left-1/2 z-[1000] max-w-[220px] -translate-x-1/2'
+              : 'absolute bottom-60 right-1/2 z-[1000] mr-2 max-w-[220px]'
           }
           data-testid="discover-badge"
         >

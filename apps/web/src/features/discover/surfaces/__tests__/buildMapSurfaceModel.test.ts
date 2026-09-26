@@ -359,6 +359,49 @@ describe('buildMapSurfaceModel', () => {
     ).toBe(false);
   });
 
+  // Issue #2724 (owner-reviewed follow-up, PR #2725) — root cause of the duplicate
+  // "Recenter on Bangalore" / "Recenter on bangalore" buttons confirmed on the owner's
+  // screenshots: `useAreasNavigationJourney`'s `node` resolves to the synthetic city ROOT node
+  // (never null) whenever no area/direction/cluster is selected, and that ROOT node has a real
+  // extent too (`getHierarchyExtent` unions its children's bounds), so `isSelectedNodeOutOfView`
+  // can be true for it exactly like a real selected area — rendering a second, redundant
+  // city-level recenter alongside DiscoverMapCanvas's own unconditional one. Suppressed for ROOT.
+  it('recenter.visible is false for the city ROOT node even when out-of-view (the duplicate "Recenter on <city>" root cause) — only a real area/direction/cluster node recenters here', () => {
+    const rootJourney = makeJourney({
+      node: {
+        nodeKey: 'root',
+        nodeType: 'ROOT',
+        displayLabel: 'Bangalore',
+      } as UseAreasNavigationJourneyResult['node'],
+    });
+    const view = buildMapSurfaceModel(
+      makeViewParams({
+        mapReady: true,
+        cameraController: { ...makeCameraController(), isSelectedNodeOutOfView: true },
+        activeAreasNavigationJourney: rootJourney,
+      }),
+    );
+    expect(view.overlays.recenter.visible).toBe(false);
+  });
+
+  it('recenter.visible is still true for a real AREA node out-of-view (regression: the ROOT guard must not over-suppress)', () => {
+    const areaJourney = makeJourney({
+      node: {
+        nodeKey: 'n1',
+        nodeType: 'AREA',
+        displayLabel: 'Indiranagar',
+      } as UseAreasNavigationJourneyResult['node'],
+    });
+    const view = buildMapSurfaceModel(
+      makeViewParams({
+        mapReady: true,
+        cameraController: { ...makeCameraController(), isSelectedNodeOutOfView: true },
+        activeAreasNavigationJourney: areaJourney,
+      }),
+    );
+    expect(view.overlays.recenter.visible).toBe(true);
+  });
+
   it('recenter.label reads the active journey node displayLabel', () => {
     const journeyWithNode = makeJourney({
       node: { nodeKey: 'n1', displayLabel: 'Indiranagar' } as UseAreasNavigationJourneyResult['node'],
@@ -367,6 +410,86 @@ describe('buildMapSurfaceModel', () => {
       makeViewParams({ activeAreasNavigationJourney: journeyWithNode }),
     );
     expect(view.overlays.recenter.label).toBe('Indiranagar');
+  });
+
+  // Issue #2724 (pass 3, area-selected desktop pairing) — status.isAreaRecenterButtonVisible
+  // (read by DiscoverMapCanvas's count pill to decide whether to flank left and pair with the
+  // portalled areas-recenter-button) and overlays.recenter.visible (gates that button itself,
+  // DiscoverMapSurface.tsx) are both assigned from the SAME local `isAreaRecenterButtonVisible`
+  // const in buildMapSurfaceModel.tsx (not two independently-derived booleans), so they cannot
+  // disagree — this asserts that invariant holds across every branch of its own guard, rather
+  // than re-deriving the guard's logic a second time here.
+  describe('#2724 pass 3 — status.isAreaRecenterButtonVisible never disagrees with overlays.recenter.visible', () => {
+    function expectPairedInvariant(overrides: Record<string, unknown>) {
+      const view = buildMapSurfaceModel(makeViewParams(overrides));
+      expect(view.status.isAreaRecenterButtonVisible).toBe(view.overlays.recenter.visible);
+      return view;
+    }
+
+    it('both true for a genuinely selected, out-of-view AREA node', () => {
+      const areaJourney = makeJourney({
+        node: {
+          nodeKey: 'n1',
+          nodeType: 'AREA',
+          displayLabel: 'Indiranagar',
+        } as UseAreasNavigationJourneyResult['node'],
+      });
+      const view = expectPairedInvariant({
+        mapReady: true,
+        cameraController: { ...makeCameraController(), isSelectedNodeOutOfView: true },
+        activeAreasNavigationJourney: areaJourney,
+      });
+      expect(view.status.isAreaRecenterButtonVisible).toBe(true);
+    });
+
+    it('both false for the city ROOT node even when out-of-view (mirrors the duplicate-recenter root cause guard)', () => {
+      const rootJourney = makeJourney({
+        node: {
+          nodeKey: 'root',
+          nodeType: 'ROOT',
+          displayLabel: 'Bangalore',
+        } as UseAreasNavigationJourneyResult['node'],
+      });
+      const view = expectPairedInvariant({
+        mapReady: true,
+        cameraController: { ...makeCameraController(), isSelectedNodeOutOfView: true },
+        activeAreasNavigationJourney: rootJourney,
+      });
+      expect(view.status.isAreaRecenterButtonVisible).toBe(false);
+    });
+
+    it('both false when the map is not yet ready', () => {
+      const areaJourney = makeJourney({
+        node: { nodeKey: 'n1', nodeType: 'AREA', displayLabel: 'Indiranagar' } as UseAreasNavigationJourneyResult['node'],
+      });
+      const view = expectPairedInvariant({
+        mapReady: false,
+        cameraController: { ...makeCameraController(), isSelectedNodeOutOfView: true },
+        activeAreasNavigationJourney: areaJourney,
+      });
+      expect(view.status.isAreaRecenterButtonVisible).toBe(false);
+    });
+
+    it('both false when the selected node is already in view', () => {
+      const areaJourney = makeJourney({
+        node: { nodeKey: 'n1', nodeType: 'AREA', displayLabel: 'Indiranagar' } as UseAreasNavigationJourneyResult['node'],
+      });
+      const view = expectPairedInvariant({
+        mapReady: true,
+        cameraController: { ...makeCameraController(), isSelectedNodeOutOfView: false },
+        activeAreasNavigationJourney: areaJourney,
+      });
+      expect(view.status.isAreaRecenterButtonVisible).toBe(false);
+    });
+
+    it('both false when no node is selected (city-landing)', () => {
+      const view = expectPairedInvariant({
+        mapReady: true,
+        cameraController: { ...makeCameraController(), isSelectedNodeOutOfView: true },
+        activeAreasNavigationJourney: makeJourney(),
+      });
+      expect(view.status.isAreaRecenterButtonVisible).toBe(false);
+    });
   });
 });
 

@@ -1210,6 +1210,51 @@ describe('Issue #2698 — mobile Map bottom chrome', () => {
     expect(recenterColumn).not.toHaveClass('bottom-4');
   });
 
+  // Owner follow-up (PR #2725) — `bottom-[100px]` (the value asserted just above) crowded/
+  // overlapped `DiscoverMapCountBadge`'s "Showing N verified properties" pill directly below it
+  // in the city-landing state (no area selected — the ONE state where that badge, rather than
+  // AreaSelectedPanel's own badge, is on screen). Measured directly (not assumed): the badge's
+  // own `bottom-8` + its ~76.5px wrapped-text height reaches ~108.5px from the bottom, above the
+  // old button's own floor. Raised to `bottom-[130px]`, but ONLY when `isAreaFirstSelectedAreaState`
+  // is false — see this branch's own inline comment for why a single static value cannot clear
+  // both the badge AND `areas-recenter-button`'s `bottom-[144px]` band at once, and why keying it
+  // on the same flag `hideDuplicateCountBadge` already uses is what resolves that.
+  // Owner follow-up 2 (PR #2725) — also re-anchored from right (`right-[10px]`) to centre
+  // (`left-1/2 -translate-x-1/2`) so it shares the badge's own centreline instead of sitting
+  // off to the right of it.
+  it('mobile Map, city-landing (no area selected): raises "Recenter on <city>" further AND centres it on the count-badge pill below it', () => {
+    renderCanvas(
+      <DiscoverMapCanvas
+        {...baseProps({
+          ...MOBILE_MAP,
+          isLandingState: true,
+          resolvedPanelContent: 'guided-entry',
+          isAreaFirstSelectedAreaState: false,
+          cityTotal: 19,
+          discoverBadge: { ...DISCOVER_BADGE, visible: true, count: 19, state: 'ok' },
+        })}
+      />,
+    );
+
+    const recenterColumn = screen.getByTestId('map-recenter-city-button').parentElement;
+    expect(recenterColumn).toHaveClass('bottom-[130px]', 'left-1/2', '-translate-x-1/2');
+    expect(recenterColumn).not.toHaveClass('bottom-[100px]');
+    expect(recenterColumn).not.toHaveClass('bottom-4');
+    expect(recenterColumn).not.toHaveClass('right-[10px]');
+    // Same centreline DiscoverMapCountBadge itself uses (mobile-overlay class list —
+    // DiscoverMapCountBadge.tsx `isMobileMapOverlay` branch).
+    const badge = screen.getByTestId('discover-badge');
+    expect(badge).toHaveClass('left-1/2', '-translate-x-1/2');
+  });
+
+  it('mobile Map, area selected (regression: must not over-apply the raised offset): keeps "Recenter on <city>" at bottom-[100px], clear of areas-recenter-button above it', () => {
+    renderCanvas(<DiscoverMapCanvas {...baseProps({ ...AREA_SELECTED_WITH_COUNT, ...MOBILE_MAP })} />);
+
+    const recenterColumn = screen.getByTestId('map-recenter-city-button').parentElement;
+    expect(recenterColumn).toHaveClass('bottom-[100px]');
+    expect(recenterColumn).not.toHaveClass('bottom-[130px]');
+  });
+
   it('mobile Map: keeps the count badge where the results heading does NOT state that count (selected group)', () => {
     renderCanvas(
       <DiscoverMapCanvas
@@ -1256,5 +1301,335 @@ describe('Issue #2698 — mobile Map bottom chrome', () => {
     const hint = screen.getByTestId('school-radius-more-hint');
     expect(hint).toHaveClass('bottom-28', 'right-4');
     expect(hint).not.toHaveClass('bottom-[192px]');
+  });
+
+  // Owner follow-up 3 (PR #2725, issue #2724) — desktop "N properties" badge + "Recenter on
+  // <city>" pairing. Mirrors DiscoverMapCountBadge.test.tsx's own #2724 describe block (the
+  // matching half of each pair lives there); these assert this button's own `isDesktopBadgePaired`
+  // split instead.
+  describe('Issue #2724 owner follow-up 3 — desktop badge/city-recenter pairing', () => {
+    it('guided-entry (default baseProps state, isDesktopBadgePaired true): flanks left of centre, sharing bottom-60 with the badge', () => {
+      renderCanvas(<DiscoverMapCanvas {...baseProps({ cityTotal: 19 })} />);
+
+      const recenterColumn = screen.getByTestId('map-recenter-city-button').parentElement;
+      expect(recenterColumn).toHaveClass('bottom-60', 'left-1/2', 'ml-2');
+      expect(recenterColumn).not.toHaveClass('bottom-48', '-translate-x-1/2', 'right-4');
+      const badge = screen.getByTestId('discover-badge');
+      expect(badge).toHaveClass('bottom-60', 'right-1/2', 'mr-2');
+    });
+
+    it('selected-group state (isDesktopBadgePaired true via isSelectedGroupState): flanks left of centre, sharing bottom-60 with the badge', () => {
+      renderCanvas(
+        <DiscoverMapCanvas
+          {...baseProps({
+            isLandingState: false,
+            resolvedPanelContent: 'area-groups-landing',
+            isSelectedGroupState: true,
+            discoverBadge: { ...DISCOVER_BADGE, visible: true, count: 8, state: 'ok' },
+            fallbackBadgeCopy: '8 properties',
+          })}
+        />,
+      );
+
+      const recenterColumn = screen.getByTestId('map-recenter-city-button').parentElement;
+      expect(recenterColumn).toHaveClass('bottom-60', 'left-1/2', 'ml-2');
+      expect(recenterColumn).not.toHaveClass('bottom-48', '-translate-x-1/2', 'right-4');
+      const badge = screen.getByTestId('discover-badge');
+      expect(badge).toHaveClass('bottom-60', 'right-1/2', 'mr-2');
+    });
+
+    it('area-selected state (isAreaFirstSelectedAreaState excludes pairing): stays right-anchored at bottom-48 right-4 — regression check, unchanged by #2724', () => {
+      renderCanvas(<DiscoverMapCanvas {...baseProps(AREA_SELECTED_WITH_COUNT)} />);
+
+      const recenterColumn = screen.getByTestId('map-recenter-city-button').parentElement;
+      expect(recenterColumn).toHaveClass('bottom-48', 'right-4');
+      expect(recenterColumn).not.toHaveClass('left-1/2', 'ml-2', 'bottom-60');
+      // The badge stays dead-centred here too — it has no city-recenter counterpart on this row
+      // (paired instead with the mutually-exclusive `areas-recenter-button`, DiscoverMapSurface.tsx).
+      const badge = screen.getByTestId('discover-badge');
+      expect(badge).toHaveClass('bottom-60', 'left-1/2', '-translate-x-1/2');
+      expect(badge).not.toHaveClass('right-1/2', 'mr-2');
+    });
+
+    it('generic fallback (no centred badge variant to pair with, isDesktopBadgePaired false): centres instead of the old right-anchor, matching mobile\'s own centred shape for this state', () => {
+      renderCanvas(
+        <DiscoverMapCanvas
+          {...baseProps({
+            isLandingState: false,
+            resolvedPanelContent: 'school-selected',
+            schoolRadiusActive: false,
+            isSelectedGroupState: false,
+            isAreaFirstCityLanding: false,
+            isAreaFirstSelectedAreaState: false,
+          })}
+        />,
+      );
+
+      const recenterColumn = screen.getByTestId('map-recenter-city-button').parentElement;
+      expect(recenterColumn).toHaveClass('bottom-48', 'left-1/2', '-translate-x-1/2');
+      expect(recenterColumn).not.toHaveClass('right-4', 'ml-2', 'bottom-60');
+    });
+
+    // Code review (Finding 1, pass 3) — BLOCKING. `isDesktopBadgePaired` now calls the SAME
+    // exported predicates the pill's own render gate uses (isDrillDownCountBadgeVisible /
+    // isLandingCountBadgeVisible), rather than re-deriving its own copy of their conditions.
+    // These three assert the not-paired side of that fix directly: each sets up a state where
+    // the pill's own gate is false, and confirms the recenter button no longer claims to be
+    // paired with it (the pre-fix bug: an orphaned "Recenter on <city>" beside an absent pill).
+    it('default baseProps (guided-entry, cityTotal 0): isLandingCountBadgeVisible is false, so NOT paired', () => {
+      renderCanvas(<DiscoverMapCanvas {...baseProps()} />);
+
+      const recenterColumn = screen.getByTestId('map-recenter-city-button').parentElement;
+      expect(recenterColumn).toHaveClass('bottom-48', 'left-1/2', '-translate-x-1/2');
+      // Code review (Finding, pass 4) — 'right-4' dropped: it belongs to the third,
+      // mutually-exclusive area-selected variant (never reachable from this state's
+      // ternary branch), so asserting its absence here proved nothing.
+      expect(recenterColumn).not.toHaveClass('bottom-60', 'ml-2');
+      // No badge renders at all in this state (isLandingCountBadgeVisible is false gates the
+      // pill's own mount, not just its classes) — confirms there is no pill to orphan-pair with.
+      expect(screen.queryByTestId('discover-badge')).not.toBeInTheDocument();
+    });
+
+    it('isSelectedGroupState true with a loading discoverBadge (visible false): isDrillDownCountBadgeVisible is false, so NOT paired', () => {
+      renderCanvas(
+        <DiscoverMapCanvas
+          {...baseProps({
+            isLandingState: false,
+            resolvedPanelContent: 'area-groups-landing',
+            isSelectedGroupState: true,
+            discoverBadge: { ...DISCOVER_BADGE, visible: false, state: 'loading', count: null },
+          })}
+        />,
+      );
+
+      const recenterColumn = screen.getByTestId('map-recenter-city-button').parentElement;
+      expect(recenterColumn).toHaveClass('bottom-48', 'left-1/2', '-translate-x-1/2');
+      // Code review (Finding, pass 4) — 'right-4' dropped: it belongs to the third,
+      // mutually-exclusive area-selected variant (never reachable from this state's
+      // ternary branch), so asserting its absence here proved nothing.
+      expect(recenterColumn).not.toHaveClass('bottom-60', 'ml-2');
+    });
+
+    it("journey 'agri-first' on guided-entry with cityTotal > 0: isLandingCountBadgeVisible's journey guard is false, so NOT paired", () => {
+      const originalJourney = BASE_NAV.journey;
+      BASE_NAV.journey = 'agri-first';
+      try {
+        renderCanvas(<DiscoverMapCanvas {...baseProps({ cityTotal: 19 })} />);
+
+        const recenterColumn = screen.getByTestId('map-recenter-city-button').parentElement;
+        expect(recenterColumn).toHaveClass('bottom-48', 'left-1/2', '-translate-x-1/2');
+        // Code review (Finding, pass 4) — 'right-4' dropped: it belongs to the third,
+        // mutually-exclusive area-selected variant (never reachable from this state's
+        // ternary branch), so asserting its absence here proved nothing.
+        expect(recenterColumn).not.toHaveClass('bottom-60', 'ml-2');
+      } finally {
+        BASE_NAV.journey = originalJourney;
+      }
+    });
+
+    // Positive control — guided-entry, cityTotal > 0, residential (non-agri) journey: this is the
+    // SAME state as 'guided-entry (default baseProps state, isDesktopBadgePaired true)' above
+    // (baseProps({ cityTotal: 19 }) already carries journey: null from BASE_NAV, i.e. residential),
+    // confirming the three NOT-paired cases above are each due to their own specific guard, not a
+    // fixture that never pairs at all.
+    it('positive control — guided-entry, cityTotal > 0, residential journey: IS paired (same assertions as the default baseProps state test above)', () => {
+      renderCanvas(<DiscoverMapCanvas {...baseProps({ cityTotal: 19 })} />);
+
+      const recenterColumn = screen.getByTestId('map-recenter-city-button').parentElement;
+      expect(recenterColumn).toHaveClass('bottom-60', 'left-1/2', 'ml-2');
+      expect(recenterColumn).not.toHaveClass('bottom-48', '-translate-x-1/2', 'right-4');
+      const badge = screen.getByTestId('discover-badge');
+      expect(badge).toHaveClass('bottom-60', 'right-1/2', 'mr-2');
+    });
+  });
+});
+
+// ── Issue #2724 Bug 1 — the "0 matching homes / Edit filters / Clear filters"
+// panel must only render when a GENUINELY ACTIVE property filter is the
+// reason nothing matches, not merely because the map returned zero markers
+// (an empty area/city with no filters applied is not a "filtered to zero"
+// state, and there is nothing to "clear" or "edit"). Reuses the same
+// mobile Map wiring (`mobileListButton` + `onFiltersChange`) as #2698 above.
+describe('Issue #2724 — Map zero-results panel requires a genuinely active filter', () => {
+  // Local re-declaration: #2698's MOBILE_MAP is scoped to its own describe block above.
+  const MOBILE_MAP: Partial<DiscoverMapCanvasProps> = {
+    mobileListButton: <button type="button">List</button>,
+    onFiltersChange: vi.fn(),
+  };
+
+  it('zero results + NO active filters → the "0 matching homes"/Edit filters/Clear filters panel is absent (regression for the bug)', () => {
+    renderCanvas(
+      <DiscoverMapCanvas
+        {...baseProps({
+          ...MOBILE_MAP,
+          markersReturnedElements: 0,
+          filters: {},
+        })}
+      />,
+    );
+
+    expect(screen.queryByTestId('map-zero-results')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('map-zero-results-edit-filters')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('map-zero-results-clear-filters')).not.toBeInTheDocument();
+  });
+
+  it('zero results + an active property filter (bedrooms) → the zero-results panel renders with Edit/Clear filters actions', () => {
+    renderCanvas(
+      <DiscoverMapCanvas
+        {...baseProps({
+          ...MOBILE_MAP,
+          markersReturnedElements: 0,
+          filters: { bedrooms: [2] },
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId('map-zero-results')).toBeInTheDocument();
+    expect(screen.getByTestId('map-zero-results-edit-filters')).toBeInTheDocument();
+    expect(screen.getByTestId('map-zero-results-clear-filters')).toBeInTheDocument();
+  });
+
+  it('nonzero results + NO active filters → panel absent (regression, existing behaviour)', () => {
+    renderCanvas(
+      <DiscoverMapCanvas
+        {...baseProps({
+          ...MOBILE_MAP,
+          markersReturnedElements: 4,
+          filters: {},
+        })}
+      />,
+    );
+
+    expect(screen.queryByTestId('map-zero-results')).not.toBeInTheDocument();
+  });
+
+  // Owner-reviewed follow-up (PR #2725) — the heading-pill fallback ("N homes for sale ·
+  // Residential") duplicated, and could directly CONTRADICT, the bottom DiscoverMapCountBadge
+  // ("Showing 19 verified properties across Bangalore") on the no-filter/startup state, where
+  // `hideDuplicateCountBadge` is false (no area selected, no school radius) and that badge is
+  // ALSO on screen. Gated on the same `mapFiltersRefinementCount > 0` check the panel already
+  // uses — `|| hideDuplicateCountBadge` is required too, or the area-selected/school-radius
+  // states above (which rely on the heading being the SOLE count source there) would go dark.
+  it('city-landing state (no area selected, no school radius), NO active filter → heading-pill fallback is absent, not a "0 vs N" contradiction with the count badge', () => {
+    renderCanvas(
+      <DiscoverMapCanvas
+        {...baseProps({
+          ...MOBILE_MAP,
+          markersReturnedElements: 4,
+          filters: {},
+          // Explicit, matching baseProps' own defaults — the point being tested is that this
+          // state does NOT hide the count badge, so the heading must not show a redundant count.
+          isAreaFirstSelectedAreaState: false,
+          schoolRadiusActive: false,
+        })}
+      />,
+    );
+
+    expect(screen.queryByTestId('map-results-heading-text')).not.toBeInTheDocument();
+  });
+
+  it('city-landing state, WITH an active filter → heading-pill fallback renders (only suppressed on the no-filter state, not generally)', () => {
+    renderCanvas(
+      <DiscoverMapCanvas
+        {...baseProps({
+          ...MOBILE_MAP,
+          markersReturnedElements: 4,
+          filters: { bedrooms: [2] },
+          isAreaFirstSelectedAreaState: false,
+          schoolRadiusActive: false,
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId('map-results-heading-text')).toHaveTextContent(/^4 homes for sale · Residential/);
+  });
+
+  // Follow-up (risk-scan flag) — `useDiscoverMapData.ts` forces the SAME generic filtered-markers
+  // query to `propertyTypes: ['agricultural_land']` in the agri-first journey (`agriFilters`), so
+  // `mapResultsCount === 0` is reachable there too, and `mobileListButton` (mobile Map open) is
+  // NOT gated on journey. Without an `isAgriJourney` guard this panel would render residential-
+  // flavoured copy ("0 matching homes" — `deriveMapFiltersFamily` has no agri branch) on top of
+  // agri land. Mirrors MapEmptyGuidance's own Issue #2169 `!isAgriJourney` guard, same rationale:
+  // the right panel owns the Agri empty/sparse state.
+  it('agri journey: zero results + an active filter (areaMinSqft, a plausible agri land-size filter) → BOTH the panel and the heading-pill fallback stay suppressed, never residential copy', () => {
+    renderCanvas(
+      <DiscoverMapCanvas
+        {...baseProps({
+          ...MOBILE_MAP,
+          markersReturnedElements: 0,
+          filters: { areaMinSqft: 5000 },
+          isAgriJourney: true,
+        })}
+      />,
+    );
+
+    // The panel (this guard's own testid).
+    expect(screen.queryByTestId('map-zero-results')).not.toBeInTheDocument();
+    expect(screen.queryByText(/0 matching homes/i)).not.toBeInTheDocument();
+    // Code-review follow-up — the render is `isMapZeroResults ? panel : headingPill`, so
+    // suppressing only the panel would leak into this else-branch instead
+    // (`computeMapResultsHeadingText`/`computeMapResultsUnitPhrase` have no agri branch and
+    // would render "0 homes for sale · Residential"). Assert the actual rendered text, not
+    // just the panel's absence — a testid-only assertion is exactly how this slipped through.
+    expect(screen.queryByTestId('map-results-heading-text')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Residential/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/for sale/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/to rent/i)).not.toBeInTheDocument();
+  });
+
+  it('agri journey: zero results + NO active filter → heading-pill fallback also stays suppressed (the pre-existing else-branch path, not just the new panel guard)', () => {
+    renderCanvas(
+      <DiscoverMapCanvas
+        {...baseProps({
+          ...MOBILE_MAP,
+          markersReturnedElements: 0,
+          filters: {},
+          isAgriJourney: true,
+        })}
+      />,
+    );
+
+    expect(screen.queryByTestId('map-zero-results')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('map-results-heading-text')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Residential/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/for sale/i)).not.toBeInTheDocument();
+  });
+
+  it('agri journey: NONZERO results + an active filter → heading-pill fallback still renders (this guard only suppresses the zero-results combination, not agri generally)', () => {
+    renderCanvas(
+      <DiscoverMapCanvas
+        {...baseProps({
+          ...MOBILE_MAP,
+          markersReturnedElements: 4,
+          // An active filter is required here since the owner-reviewed follow-up (below) now
+          // also gates the heading on `mapFiltersRefinementCount > 0` — this test is about the
+          // agri suppression being scoped to zero-results, not about the no-filter gate, so it
+          // must supply a filter to isolate that.
+          filters: { areaMinSqft: 5000 },
+          isAgriJourney: true,
+        })}
+      />,
+    );
+
+    // Pre-existing gap (out of this fix's scope, not introduced by it): the heading text itself
+    // still says "4 homes for sale · Residential" here — `computeMapResultsHeadingText` has no
+    // agri branch for the non-zero case either. This test only proves the SUPPRESSION is scoped
+    // to zero-results, not that the non-zero copy is agri-correct.
+    expect(screen.getByTestId('map-results-heading-text')).toBeInTheDocument();
+  });
+
+  it('non-agri journey (isAgriJourney: false, else identical to the agri case above) → the panel still renders (regression: the new guard must not over-suppress)', () => {
+    renderCanvas(
+      <DiscoverMapCanvas
+        {...baseProps({
+          ...MOBILE_MAP,
+          markersReturnedElements: 0,
+          filters: { areaMinSqft: 5000 },
+          isAgriJourney: false,
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId('map-zero-results')).toBeInTheDocument();
   });
 });

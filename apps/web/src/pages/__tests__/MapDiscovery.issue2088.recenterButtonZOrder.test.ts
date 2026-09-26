@@ -28,6 +28,13 @@
  * `position: relative`-child controls painting over each other in a stacking
  * context jsdom can't lay out) is the same one #2714's stacking-budget tests
  * guard against, just via a different anchor.
+ *
+ * Issue #2724 (pass 3, owner-directed desktop/mobile parity) moved "Recenter
+ * on <area>" a third time: OFF the #2714 right-anchored (`right-4`) column
+ * entirely and onto the count badge's own row (`bottom-60`), flanking the
+ * opposite side of centre from it (`left-1/2 ml-2` vs the badge's `right-1/2
+ * mr-2`) — see the dedicated pairing describe block below. It is therefore no
+ * longer part of the #2714 stacking-budget block's right-anchored column.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -127,16 +134,18 @@ describe('Issue #2088 — recenter button is portalled with an explicit stacking
 // Issue #2714 — the desktop bottom-right column, bottom-up: attribution, the Leaflet zoom control
 // (not in our source, live-measured top edge ≈91px), "Recenter on <city>" (DiscoverMapCanvas), the
 // school-radius "more" hint (DiscoverMapStatusHints — the count badge's school-radius branch and
-// this hint can render together in the anon school-radius "showing first N" state), the count
-// badge's right-anchored variant (DiscoverMapCountBadge), then "Recenter on <area>"
-// (DiscoverMapSurface, shown when a selected node scrolls out of view — can co-occur with all of
-// the above). Heights are the live-measured (Playwright, 1440x900/1024x768) rendered heights:
-// city recenter 30px, the hint 66px (wraps inside its max-w-[16rem]), the badge 38px (no wrap —
-// unlike its centred sibling, this variant has no width cap), area recenter 38px.
+// this hint can render together in the anon school-radius "showing first N" state), then the count
+// badge's right-anchored variant (DiscoverMapCountBadge). Heights are the live-measured (Playwright,
+// 1440x900/1024x768) rendered heights: city recenter 30px, the hint 66px (wraps inside its
+// max-w-[16rem]), the badge 38px (no wrap — unlike its centred sibling, this variant has no width
+// cap).
+//
+// Issue #2724 (pass 3) — "Recenter on <area>" (DiscoverMapSurface) is NO LONGER part of this
+// right-anchored column: it moved onto the count badge's own paired row instead (bottom-60,
+// `left-1/2 ml-2`). See the dedicated pairing describe block below for that relationship.
 describe('Issue #2714 — desktop bottom-right column stacking budget', () => {
   const read = (rel: string) => readFileSync(resolve(__dirname, rel), 'utf-8');
   const canvasSource = read('../../features/discover/views/DiscoverMapCanvas.tsx');
-  const surfaceSource = readFileSync(MAP_DISCOVERY_PATH, 'utf-8');
   const countBadgeSource = readFileSync(COUNT_BADGE_PATH, 'utf-8');
   const hintsSource = read('../../components/discover/DiscoverMapStatusHints.tsx');
 
@@ -152,13 +161,11 @@ describe('Issue #2714 — desktop bottom-right column stacking budget', () => {
   const ZOOM_TOP_PX = 91;
   const CITY_RECENTER_HEIGHT_PX = 30;
   const HINT_HEIGHT_PX = 66;
-  const BADGE_HEIGHT_PX = 38;
   const MIN_GAP_PX = 8;
 
   const cityBottom = desktopColumnBottomPx(canvasSource, 'city recenter (DiscoverMapCanvas)');
   const hintBottom = desktopColumnBottomPx(hintsSource, 'school-radius hint (DiscoverMapStatusHints)');
   const badgeBottom = desktopColumnBottomPx(countBadgeSource, 'count badge, right-anchored variant (DiscoverMapCountBadge)');
-  const areaBottom = desktopColumnBottomPx(surfaceSource, 'area recenter (DiscoverMapSurface)');
 
   it('"Recenter on <city>" clears the Leaflet zoom control', () => {
     expect(cityBottom - ZOOM_TOP_PX).toBeGreaterThanOrEqual(MIN_GAP_PX);
@@ -175,13 +182,104 @@ describe('Issue #2714 — desktop bottom-right column stacking budget', () => {
   it('the count badge clears the school-radius "more" hint', () => {
     expect(badgeBottom - (hintBottom + HINT_HEIGHT_PX)).toBeGreaterThanOrEqual(MIN_GAP_PX);
   });
+});
 
-  it('"Recenter on <area>" clears the count badge', () => {
-    expect(areaBottom - (badgeBottom + BADGE_HEIGHT_PX)).toBeGreaterThanOrEqual(MIN_GAP_PX);
+// Issue #2724 (pass 3) — "Recenter on <area>" left the #2714 right-anchored column above and now
+// pairs with the count badge on ONE shared row instead, flanking opposite sides of centre
+// (`left-1/2 ml-2` vs the badge's `right-1/2 mr-2`), mirroring the "Recenter on <city>"/badge
+// pairing that #2724's earlier passes already established for the other desktop states.
+describe('Issue #2724 pass 3 — "Recenter on <area>" pairs with the count badge on one row', () => {
+  const surfaceSource = readFileSync(MAP_DISCOVERY_PATH, 'utf-8');
+  const countBadgeSource = readFileSync(COUNT_BADGE_PATH, 'utf-8');
+
+  it('shares the exact same bottom-N row as the count badge\'s paired ("left row-mate") variant', () => {
+    // extractClassNameLiterals assumes `data-testid` precedes `className` on the tag (true for
+    // `areas-recenter-button`, used below), but DiscoverMapCountBadge's own `discover-badge` tag
+    // declares `className={...}` BEFORE `data-testid="discover-badge"` — so that helper isn't a
+    // fit here; a direct, comment-stripped literal scan (mirroring desktopColumnBottomPx above) is
+    // used for the badge side instead. The badge's `right-1/2 mr-2` text is intentionally reused
+    // verbatim across two mutually-exclusive branches (isAreaFirstSelectedAreaState paired and
+    // isSelectedGroupState paired), so this deliberately does not require exactly one match.
+    const surfaceLiterals = extractClassNameLiterals(surfaceSource, 'areas-recenter-button');
+    const pairedSurfaceLiteral = surfaceLiterals.find(
+      (literal) => literal.includes('left-1/2') && literal.includes('ml-2'),
+    );
+    expect(pairedSurfaceLiteral, 'expected a left-1/2 + ml-2 desktop paired-row literal').toBeDefined();
+    const areaToken = pairedSurfaceLiteral?.match(/\bbottom-\d+\b/)?.[0];
+    expect(areaToken, 'area recenter paired-row placement must declare bottom-N').toBeDefined();
+
+    const badgeLiterals = Array.from(
+      stripComments(countBadgeSource).matchAll(/'([^']*\bright-1\/2\b[^']*\bmr-2\b[^']*)'/g),
+      (m) => m[1],
+    );
+    expect(badgeLiterals.length, 'expected at least one right-1/2 + mr-2 desktop paired-row literal').toBeGreaterThan(0);
+    const badgeToken = badgeLiterals[0].match(/\bbottom-\d+\b/)?.[0];
+    expect(badgeToken, 'count badge paired-row placement must declare bottom-N').toBeDefined();
+
+    expect(tailwindSpacingToPx(areaToken as string)).toBe(tailwindSpacingToPx(badgeToken as string));
   });
 
-  it('"Recenter on <area>" clears "Recenter on <city>"', () => {
-    expect(areaBottom - (cityBottom + CITY_RECENTER_HEIGHT_PX)).toBeGreaterThanOrEqual(MIN_GAP_PX);
+  it('no longer declares a right-4-anchored desktop placement', () => {
+    const literals = Array.from(
+      stripComments(surfaceSource).matchAll(/'([^']*\bright-4\b[^']*)'/g),
+      (m) => m[1],
+    );
+    expect(literals).toHaveLength(0);
+  });
+});
+
+// Issue #2724 (pass 4, code review) — the desktop paired-row placement above had no width cap, so
+// a long area name ("Recenter on Jayaprakash Narayana Extension & Kodihalli Layout Cross") wrapped
+// to 3 lines at 1024px and, being bottom-anchored, grew UPWARD into the count badge sharing its
+// row (see DiscoverMapSurface.tsx's own doc comment on this same button). Fix: cap the button's
+// width to the SAME max-w-[220px] the badge already uses, and clamp the label span to 2 lines.
+describe('Issue #2724 pass 4 — the desktop area-recenter button is width-capped and height-clamped', () => {
+  const surfaceSource = readFileSync(MAP_DISCOVERY_PATH, 'utf-8');
+
+  it('the desktop paired-row placement declares the same max-w-[220px] cap the count badge uses', () => {
+    const surfaceLiterals = extractClassNameLiterals(surfaceSource, 'areas-recenter-button');
+    const pairedSurfaceLiteral = surfaceLiterals.find(
+      (literal) => literal.includes('left-1/2') && literal.includes('ml-2'),
+    );
+    expect(pairedSurfaceLiteral, 'expected a left-1/2 + ml-2 desktop paired-row literal').toBeDefined();
+    // No trailing \b after the closing `]` — `]` is a non-word char, and the
+    // char after it here is a space (also non-word), so \b never matches
+    // there and would silently fail to match even a real occurrence.
+    expect(pairedSurfaceLiteral).toMatch(/\bmax-w-\[220px\]/);
+  });
+
+  it('does not cap the mobile placement (mobile is out of scope — issue #2727)', () => {
+    const surfaceLiterals = extractClassNameLiterals(surfaceSource, 'areas-recenter-button');
+    const mobileLiteral = surfaceLiterals.find((literal) => literal.includes('right-[10px]'));
+    expect(mobileLiteral, 'expected a right-[10px] mobile literal').toBeDefined();
+    expect(mobileLiteral).not.toMatch(/\bmax-w-\[220px\]/);
+  });
+
+  it('clamps the desktop label to 2 lines via line-clamp-2, but leaves the mobile label unclamped', () => {
+    // The label span's className is conditional on `isMobileMapOverlay`
+    // (`isMobileMapOverlay ? undefined : 'line-clamp-2'`) rather than a second
+    // data-testid'd tag, so extractClassNameLiterals (built for data-testid
+    // tags) isn't a fit here — a direct, comment-stripped literal scan is used
+    // instead, mirroring the pattern the pass-3 block above already uses for
+    // DiscoverMapCountBadge.tsx.
+    const stripped = stripComments(surfaceSource);
+    expect(stripped).toMatch(/isMobileMapOverlay\s*\?\s*undefined\s*:\s*'line-clamp-2'/);
+  });
+
+  it('keeps the full "Recenter on <area>" text as the button\'s own accessible-name source (not just in title)', () => {
+    // line-clamp is purely visual (CSS -webkit-line-clamp / overflow), so the
+    // label span's DOM text content — the accessible name's source — must
+    // still contain the full, un-truncated interpolated label, not a
+    // JS-truncated substring. Real-DOM accessible-name computation is covered
+    // separately (DiscoverMapSurface.test.tsx); this guards the JSX itself
+    // never starts pre-truncating the label text in source.
+    const stripped = stripComments(surfaceSource);
+    expect(stripped).toMatch(/Recenter on \{view\.overlays\.recenter\.label\}/);
+  });
+
+  it('also exposes the full label via a title attribute for hover', () => {
+    const stripped = stripComments(surfaceSource);
+    expect(stripped).toMatch(/title=\{`Recenter on \$\{view\.overlays\.recenter\.label\}`\}/);
   });
 });
 

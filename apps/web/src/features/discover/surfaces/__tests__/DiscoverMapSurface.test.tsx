@@ -16,7 +16,7 @@
  * test-only mapping) before rendering, so this suite also exercises those
  * builders, not just the component.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRef } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -464,5 +464,82 @@ describe('DiscoverMapSurface', () => {
     await waitFor(() => {
       expect(screen.getAllByTestId('discover-map-canvas-mock')).toHaveLength(1);
     });
+  });
+});
+
+// Issue #2724 (code review, pass 4) — the desktop areas-recenter-button has no
+// width cap, so a long area name wraps to 3 lines and, being bottom-anchored,
+// grows UPWARD into the tip pill/other overlays. This suite exercises the REAL
+// visibility gate (`isAreaRecenterButtonVisible` in buildMapSurfaceModel.tsx:
+// mapReady + a populated mapContainerRef + isSelectedNodeOutOfView + a
+// non-ROOT active journey node) so the button is genuinely portalled and
+// queryable, not merely asserted against a hand-built view object.
+describe('DiscoverMapSurface — desktop areas-recenter-button width cap (#2724 pass 4)', () => {
+  // The exact long name from the code-review evidence screenshot
+  // (docs/audit/evidence/issue-2724/parity-after-desktop-1024-area-longname.png),
+  // 68 characters — long enough to wrap to 3 lines unclamped at 1024px.
+  const LONG_AREA_NAME = 'Jayaprakash Narayana Extension & Kodihalli Layout Cross';
+  let portalContainer: HTMLDivElement;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // The button is rendered via createPortal(..., mapContainerRef.current).
+    // @testing-library/react's `screen` queries are bound to document.body, so
+    // the portal target must be a real, attached DOM node — a detached
+    // `document.createElement('div')` would make the portaled button
+    // unqueryable even though it renders correctly.
+    portalContainer = document.createElement('div');
+    document.body.appendChild(portalContainer);
+  });
+
+  afterEach(() => {
+    document.body.removeChild(portalContainer);
+  });
+
+  function renderWithLongAreaSelected() {
+    mockShell({ isMobileShell: false, mobileView: 'LIST' });
+    return renderSurface({
+      mapReady: true,
+      mapContainerRef: { current: portalContainer } as unknown as React.RefObject<HTMLDivElement>,
+      cameraController: {
+        agriGroupFocusBounds: null,
+        isColdNavigate: false,
+        isSelectedNodeOutOfView: true,
+        schoolFocusTick: 0,
+        selectedSchoolLat: undefined,
+        selectedSchoolLon: undefined,
+        handleRecenterOnSelectedNode: vi.fn(),
+      },
+      activeAreasNavigationJourney: {
+        ...JOURNEY,
+        node: {
+          nodeKey: 'n1',
+          nodeType: 'AREA',
+          displayLabel: LONG_AREA_NAME,
+        } as UseAreasNavigationJourneyResult['node'],
+      },
+    });
+  }
+
+  it('caps the button width to max-w-[220px] and clamps the label to 2 lines, matching the count pill', async () => {
+    renderWithLongAreaSelected();
+    const button = await screen.findByTestId('areas-recenter-button');
+    expect(button).toHaveClass('max-w-[220px]');
+    const label = button.querySelector('span');
+    expect(label).not.toBeNull();
+    expect(label).toHaveClass('line-clamp-2');
+  });
+
+  it('keeps the FULL long area name as the accessible name and in the title tooltip, even though it is visually clamped', async () => {
+    renderWithLongAreaSelected();
+    const button = await screen.findByTestId('areas-recenter-button');
+    // getByRole with an exact accessible-name match proves line-clamp-2 (a
+    // purely visual CSS truncation) has not also removed the DOM text — a
+    // clamp implemented by truncating the string itself would fail this.
+    const buttonByName = screen.getByRole('button', {
+      name: `Recenter on ${LONG_AREA_NAME}`,
+    });
+    expect(buttonByName).toBe(button);
+    expect(button).toHaveAttribute('title', `Recenter on ${LONG_AREA_NAME}`);
   });
 });

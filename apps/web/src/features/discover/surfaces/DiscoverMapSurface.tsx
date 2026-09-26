@@ -99,6 +99,17 @@ export function DiscoverMapSurface({ view, commands, mapContainerRef }: Discover
             type="button"
             data-testid="areas-recenter-button"
             onClick={commands.overlays.onRecenter}
+            // Issue #2724 (code review, pass 4) — unlike the count pill this button has no
+            // width cap, so a long area name ("Jayaprakash Narayana Extension & Kodihalli
+            // Layout Cross") wraps to 3 lines at 1024px and, being bottom-anchored, grows
+            // UPWARD toward the tip pill/other overlays instead of staying inside its row.
+            // Capped to the SAME max-w-[220px] the pill already uses (DiscoverMapCountBadge.tsx)
+            // and the label clamped to 2 lines so it can never exceed the pill's own worst-case
+            // height. The full "Recenter on <area>" text stays the button's accessible name
+            // (line-clamp is purely visual — the DOM text node is untouched) and is repeated in
+            // `title` for a hover tooltip on the clamped case. Desktop only; mobile (#2727,
+            // out of scope here) is untouched.
+            title={`Recenter on ${view.overlays.recenter.label}`}
             // Issue #2698 — centred at bottom-20 it covered the bottom-left map legend at
             // 375–412px. On the mobile Map it stacks in the right-hand column instead,
             // directly above the canvas's own "Recenter on <city>" button (bottom-[100px]).
@@ -114,13 +125,29 @@ export function DiscoverMapSurface({ view, commands, mapContainerRef }: Discover
             // (live-measured via Playwright; the badge, hint, city recenter and this button can
             // all render together in the anon school-radius "showing first N" + out-of-view-node
             // state), mirroring the mobile column's own stacking order.
+            //
+            // Issue #2724 (pass 3, area-selected desktop pairing) — this button only ever renders
+            // (`view.overlays.recenter.visible`) when a real area/zone is selected AND out of view
+            // (the ROOT-node exclusion above rules out the city-landing/nothing-selected case), so
+            // on desktop it is ALWAYS in the exact state DiscoverMapCountBadge's
+            // `isAreaRecenterButtonVisible` pairing targets — no extra state check needed here.
+            // Moved from its own right-anchored bottom-72 stack to share the pill's row at
+            // bottom-60, flanking right of centre (`left-1/2 ml-2`) to mirror the pill's `right-1/2
+            // mr-2` (see DiscoverMapCountBadge.tsx's own doc for that side), forming one centred
+            // side-by-side pair instead of two independently-stacked right-column elements. This
+            // button and the count pill are mutually exclusive with the OTHER right-column stack
+            // (zoom, "Recenter on <city>", school-radius hint) this comment above describes, since
+            // that stack's badge variant only renders for the non-area-selected states. Mobile is
+            // untouched.
             className={
               isMobileMapOverlay
                 ? 'absolute bottom-[144px] right-[10px] z-[500] rounded-full border border-border bg-background/95 px-4 py-2 text-sm font-medium shadow-md'
-                : 'absolute bottom-72 right-4 z-[500] rounded-full border border-border bg-background/95 px-4 py-2 text-sm font-medium shadow-md'
+                : 'absolute bottom-60 left-1/2 z-[500] ml-2 max-w-[220px] rounded-full border border-border bg-background/95 px-4 py-2 text-sm font-medium shadow-md'
             }
           >
-            Recenter on {view.overlays.recenter.label}
+            <span className={isMobileMapOverlay ? undefined : 'line-clamp-2'}>
+              Recenter on {view.overlays.recenter.label}
+            </span>
           </button>,
           view.overlays.recenter.portalTarget,
         )}

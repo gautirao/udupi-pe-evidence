@@ -28,6 +28,17 @@ interface MapEmptyGuidanceProps {
    * callers that omit it leave this guard dormant.
    */
   isAgriJourney?: boolean;
+  /**
+   * Issue #2724 — true only on the full-screen mobile Map (same discriminator
+   * DiscoverMapCanvas/DiscoverMapStatusHints already use). There the right-hand
+   * column holds "Recenter on <city>" (~100–130px) and "Recenter on <area>"
+   * (~144–182px) from the bottom; this panel's default `bottom-20` centred
+   * position sat in the same band and, on narrow viewports, its `max-w-sm`
+   * width reached into that column too. Mobile lifts it above the whole
+   * column, mirroring DiscoverMapStatusHints' `bottom-[192px]` school-radius
+   * hint. Defaults to false, so any legacy caller is unaffected.
+   */
+  isMobileMapOverlay?: boolean;
 }
 
 /**
@@ -45,6 +56,7 @@ export function MapEmptyGuidance({
   hasAreaSelected,
   areaLayerMaxZoom,
   isAgriJourney,
+  isMobileMapOverlay = false,
 }: MapEmptyGuidanceProps) {
   if (isLoading) return null;
 
@@ -94,20 +106,63 @@ export function MapEmptyGuidance({
 
   if (!message && !showAnonZoomPrompt) return null;
 
-  return (
-    <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[1000] max-w-sm">
-      <div className="bg-card/95 backdrop-blur rounded-lg border shadow-lg px-4 py-3 text-center">
-        {message ? (
-          <p className="text-sm text-muted-foreground">{message}</p>
-        ) : (
+  // Issue #2724 (owner design change) — the anon sign-in prompt (no `message`, the
+  // `showAnonZoomPrompt` branch) no longer sits in the bottom-chrome stack this whole issue is
+  // about: it now renders CENTERED on the map instead, entirely out of the recenter-button
+  // band. The two `cityTotal === 0` messages above keep their original bottom placement (still
+  // collision-avoiding the recenter button(s), per this component's `isMobileMapOverlay` doc).
+  //
+  // Regression found by the pre-push e2e gate (issue-2139-style visual-cluster click test,
+  // "area-first anon: click through to a real AREA marker") — dead center of the map is exactly
+  // where a cluster/area marker is likely to sit after a fitBounds camera move, and this card
+  // previously carried `pointer-events-auto` on its WHOLE surface (needed only so the "sign in"
+  // link is clickable), so it silently absorbed the marker's click instead of letting it reach
+  // the map underneath: a real, deterministic interaction regression, not flakiness (reproduced
+  // twice against this branch, passed twice against the commit before this fix). Fixed by
+  // dropping `pointer-events-auto` from the card/background entirely and scoping it to ONLY the
+  // "sign in" `<Link>` — the card is purely informational otherwise, so every other pixel of it
+  // (including its opaque background) now lets clicks pass through to the map beneath, while the
+  // link itself stays precisely clickable.
+  if (!message) {
+    return (
+      <div
+        className="absolute inset-0 z-[1000] flex items-center justify-center pointer-events-none"
+        data-testid="map-anon-zoom-prompt"
+      >
+        <div
+          className="bg-card/95 backdrop-blur rounded-lg border shadow-lg px-4 py-3 text-center max-w-sm"
+          data-testid="map-anon-zoom-prompt-card"
+        >
           <p className="text-sm text-muted-foreground">
             Select an area to see properties &mdash; or{' '}
-            <Link to="/auth?returnTo=/discover" className="font-medium text-primary underline">
+            <Link
+              to="/auth?returnTo=/discover"
+              className="pointer-events-auto font-medium text-primary underline"
+            >
               sign in
             </Link>{' '}
             to explore the full map.
           </p>
-        )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={
+        // Issue #2724 — `bottom-20 left-1/2` was the EXACT same rectangle the
+        // desktop "Recenter on <area>" button (DiscoverMapSurface.tsx) uses, so
+        // the two collided outright whenever both were visible at once. Lifted
+        // above that button on desktop, and above the mobile Map's whole
+        // right-column recenter stack (see the prop doc above) on mobile.
+        isMobileMapOverlay
+          ? 'absolute bottom-[192px] left-1/2 -translate-x-1/2 z-[1000] max-w-sm'
+          : 'absolute bottom-36 left-1/2 -translate-x-1/2 z-[1000] max-w-sm'
+      }
+    >
+      <div className="bg-card/95 backdrop-blur rounded-lg border shadow-lg px-4 py-3 text-center">
+        <p className="text-sm text-muted-foreground">{message}</p>
       </div>
     </div>
   );

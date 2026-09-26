@@ -151,6 +151,31 @@ function urlZoom(page: Page): number {
 }
 
 /**
+ * Issue #2724 (pass 4) — plain rectangle shape for `Locator.boundingBox()`'s
+ * non-null result, used by `intersects` below.
+ */
+interface BoundingBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Standard axis-aligned bounding-box intersection test, mirroring
+ * `capture-2724-parity.mjs`'s own `intersects()` helper (kept identical in
+ * shape so the two can't silently drift into different overlap definitions).
+ */
+function intersects(a: BoundingBox, b: BoundingBox): boolean {
+  return !(
+    a.x + a.width <= b.x ||
+    b.x + b.width <= a.x ||
+    a.y + a.height <= b.y ||
+    b.y + b.height <= a.y
+  );
+}
+
+/**
  * Drive a real click on a Leaflet map marker.
  *
  * Leaflet recreates each marker's DOM element on layout-affecting events
@@ -564,6 +589,378 @@ test.describe('Discover real-data smoke', () => {
 
     // No auth errors — anon path must use public endpoints only
     expect(authErrors, 'J1: unexpected 401/403 responses on anon journey').toHaveLength(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // Issue #2724 — anon zoom-past-threshold prompt must not swallow marker clicks
+  // -------------------------------------------------------------------------
+
+  /**
+   * Regression test for issue #2724's pointer-events fix (MapEmptyGuidance.tsx's
+   * `showAnonZoomPrompt` branch). That prompt now renders CENTERED on the map
+   * (`absolute inset-0` + `flex items-center justify-center`) instead of pinned to
+   * the bottom-chrome — an owner design change made while fixing #2724's other two
+   * bottom-chrome issues. Centering it re-created exactly the failure class this
+   * whole issue was about: while implementing it, the pre-push gate's J1 above
+   * started failing (a cluster click stopped changing the URL), because the
+   * centered card's WHOLE surface briefly carried `pointer-events-auto` and
+   * silently absorbed clicks meant for whatever marker/cluster the fitBounds
+   * camera happened to center underneath it.
+   *
+   * J1 above incidentally exercises the fixed code (it walks through the same
+   * anon, no-area-selected, zoomed-in state before it ever selects an area,
+   * which is exactly when `showAnonZoomPrompt` is true), and did catch the
+   * regression when it was reintroduced locally — but its own pass/fail signal
+   * is one hop removed from the actual claim (a URL not changing has other
+   * possible causes too). THIS test proves the specific mechanism directly,
+   * with no inference required:
+   *   1. Drives the map into the exact state where the prompt is visible AND a
+   *      real marker/cluster's bounding box provably overlaps the prompt's own
+   *      bounding box (asserted geometrically, not assumed).
+   *   2. Uses `document.elementFromPoint` — the same real-browser hit-testing
+   *      primitive `clickMapZoomControl` above already relies on — at that exact
+   *      overlapping pixel, and asserts the topmost element is the marker/map,
+   *      never a descendant of the prompt card.
+   *   3. Performs a real synthetic click there and asserts it reached the map
+   *      (the URL actually changes), not just that no error was thrown.
+   *   4. Separately confirms the prompt's own "sign in" link is still reachable
+   *      at ITS coordinates, proving the fix didn't break the link itself.
+   */
+  test('#2724 — the centered anon zoom-past-threshold prompt lets a click reach a marker underneath it, not just clicks near it', async ({
+    page,
+  }) => {
+    await page.goto(`/discover?city=${CITY}`);
+    await page.waitForLoadState('domcontentloaded');
+    await expect(
+      page.locator('.leaflet-control-zoom-in'),
+      '#2724: the Discover map (and its zoom control) must mount at the city root',
+    ).toBeVisible({ timeout: 15_000 });
+    await expect
+      .poll(() => urlZoom(page), {
+        message: '#2724: city-root camera-sync must settle a zoom into the URL',
+        timeout: 15_000,
+      })
+      .toBeGreaterThanOrEqual(1);
+    await declineConsentBannerIfPresent(page);
+
+    const prompt = page.getByTestId('map-anon-zoom-prompt');
+    // The ACTUAL blocking element — `prompt` (the outer wrapper) is `absolute inset-0`
+    // (the whole map area) and is itself `pointer-events-none`; it never blocks anything
+    // by itself. Only this inner card (previously `pointer-events-auto` on its whole
+    // surface, the regression) can intercept a click. The precondition/overlap check
+    // below MUST use the card's own (much smaller, centered) box, not the full-map
+    // wrapper's — checking against the wrapper would make "overlap" trivially true for
+    // almost any marker on screen and prove nothing about the actual regression.
+    const promptCard = page.getByTestId('map-anon-zoom-prompt-card');
+    const markers = page.locator(
+      '[data-testid="area-destination-marker"], [data-testid="area-single-marker"], [data-testid="area-visual-cluster-marker"]',
+    );
+
+    // Zoom in (never selecting an area) until the anon prompt is up. Bounded —
+    // fails loudly rather than hanging if the threshold is never crossed.
+    let overlappingMarkerCentre: { x: number; y: number } | null = null;
+    for (let i = 0; i < 8; i += 1) {
+      if (await prompt.isVisible().catch(() => false)) {
+        const promptBox = await promptCard.boundingBox();
+        if (promptBox) {
+          const count = await markers.count();
+          for (let m = 0; m < count; m += 1) {
+            const markerBox = await markers.nth(m).boundingBox();
+            if (!markerBox) continue;
+            // Intersection rectangle, not either element's own centre — two boxes can
+            // overlap at a corner/edge far from a marker's own centre point, and a click
+            // there would land outside the card even though the boxes "overlap". The
+            // point that actually proves the claim is one inside BOTH rectangles.
+            const left = Math.max(markerBox.x, promptBox.x);
+            const right = Math.min(markerBox.x + markerBox.width, promptBox.x + promptBox.width);
+            const top = Math.max(markerBox.y, promptBox.y);
+            const bottom = Math.min(markerBox.y + markerBox.height, promptBox.y + promptBox.height);
+            if (right > left && bottom > top) {
+              overlappingMarkerCentre = { x: (left + right) / 2, y: (top + bottom) / 2 };
+              break;
+            }
+          }
+        }
+        if (overlappingMarkerCentre) break;
+      }
+      await clickMapZoomIn(page);
+      await page.waitForTimeout(300);
+    }
+
+    expect(
+      overlappingMarkerCentre,
+      '#2724: setup precondition — a real marker/cluster must be visibly underneath the anon prompt for this test to prove anything. If this fails, the fixture/camera fit has drifted and the repro needs re-deriving, not the assertion loosened.',
+    ).not.toBeNull();
+    const { x, y } = overlappingMarkerCentre as { x: number; y: number };
+
+    // Step 2 — real-browser hit-testing at the overlapping pixel: the topmost
+    // element there must NOT be part of the prompt CARD (the actual blocking
+    // element — see the note above).
+    const topmostIsPromptCardDescendant = await page.evaluate(
+      ([px, py]) =>
+        Boolean(
+          (document.elementFromPoint(px as number, py as number) as Element | null)?.closest(
+            '[data-testid="map-anon-zoom-prompt-card"]',
+          ),
+        ),
+      [x, y],
+    );
+    expect(
+      topmostIsPromptCardDescendant,
+      '#2724: the anon prompt card must not be the topmost hit-test target over a marker it visually overlaps',
+    ).toBe(false);
+
+    // Step 3 — a real click there must reach the map (URL changes), matching
+    // J1's own "cluster/marker click -> URL state changes" contract.
+    const urlBefore = page.url();
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.up();
+    await expect
+      .poll(() => page.url(), {
+        message: '#2724: a click on a marker visually underneath the anon prompt must still change the app URL state',
+        timeout: 10_000,
+      })
+      .not.toBe(urlBefore);
+
+    // Step 4 — the prompt's own "sign in" link, at its own coordinates, must
+    // still be the real hit-test target (the fix must not have broken it).
+    // Re-navigate fresh: the click above may have selected an area, which
+    // suppresses the anon prompt (hasAreaSelected gate).
+    await page.goto(`/discover?city=${CITY}`);
+    await page.waitForLoadState('domcontentloaded');
+    await declineConsentBannerIfPresent(page);
+    for (let i = 0; i < 8; i += 1) {
+      if (await prompt.isVisible().catch(() => false)) break;
+      await clickMapZoomIn(page);
+      await page.waitForTimeout(300);
+    }
+    await expect(prompt, '#2724: the anon prompt must reappear on a fresh zoomed-in, no-area-selected load').toBeVisible({
+      timeout: 10_000,
+    });
+    // Scoped to the prompt itself — the persistent top nav also has its own
+    // "Sign in" link, which a page-wide role query matches too (strict-mode
+    // violation otherwise).
+    const signIn = prompt.getByRole('link', { name: 'sign in' });
+    await expect(signIn).toBeVisible({ timeout: 10_000 });
+    const linkBox = await signIn.boundingBox();
+    expect(linkBox, '#2724: the sign-in link must have a real bounding box').not.toBeNull();
+    const { x: lx, y: ly } = {
+      x: (linkBox as NonNullable<typeof linkBox>).x + (linkBox as NonNullable<typeof linkBox>).width / 2,
+      y: (linkBox as NonNullable<typeof linkBox>).y + (linkBox as NonNullable<typeof linkBox>).height / 2,
+    };
+    const linkIsHittable = await page.evaluate(
+      ([px, py]) =>
+        Boolean(
+          (document.elementFromPoint(px as number, py as number) as Element | null)?.closest('a[href*="/auth"]'),
+        ),
+      [lx, ly],
+    );
+    expect(linkIsHittable, '#2724: the "sign in" link itself must still be the real hit-test target at its own coordinates').toBe(
+      true,
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // Issue #2724 (pass 4, code review) — desktop area-selected pairing: the
+  // portalled "Recenter on <area>" button must never collide with the count
+  // pill or with "Recenter on <city>", including a long area name.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Regression test for issue #2724 pass 4's width-cap/clamp fix
+   * (DiscoverMapSurface.tsx's `areas-recenter-button`, desktop branch). Before
+   * the fix, that button had no `max-w` cap; a long area name wrapped to 3
+   * lines at 1024px and, being bottom-anchored, grew UPWARD toward the count
+   * pill sharing its row.
+   *
+   * The RR Nagar fixture area's own name ("RR Nagar") is far too short to
+   * organically wrap at any desktop width, so — mirroring the technique
+   * capture-2724-parity.mjs already used for the evidence screenshots —
+   * this test overwrites the already-rendered label `<span>`'s (not the
+   * button's — button.textContent would delete the clamp element itself)
+   * live DOM text content with a deliberately long name AFTER measuring its
+   * real, unforced geometry. Both the "before" and "after" measurements
+   * below read real layout/CSS; only the text content in the "after" step is
+   * synthetic. This is called out explicitly rather than left implicit, so
+   * the assertion is honest about what it does and does not prove: it proves
+   * the CSS cap/clamp holds for an arbitrarily long label, not that any
+   * currently-seeded fixture area has a name this long. "Recenter on <city>"
+   * is checked unconditionally throughout (it is mounted unconditionally by
+   * DiscoverMapCanvas.tsx, not gated by area-selected state).
+   */
+  test('#2724 pass 4 — the desktop area-recenter button never collides with the count pill or "Recenter on <city>", including a forced long area name', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await page.goto(
+      `/discover?city=${CITY}&node=${encodeURIComponent(RR_NAGAR_AREA_NODE)}`,
+    );
+    await page.waitForLoadState('domcontentloaded');
+    await declineConsentBannerIfPresent(page);
+
+    const mapContainer = page.locator('.leaflet-container').first();
+    await expect(
+      mapContainer,
+      '#2724 pass 4: the map must mount before it can be panned out of view',
+    ).toBeVisible({ timeout: 15_000 });
+
+    const areasRecenter = page.getByTestId('areas-recenter-button');
+    const countPill = page.getByTestId('discover-badge').first();
+    // Code review (Finding 2, pass 5) — this button is mounted UNCONDITIONALLY
+    // in DiscoverMapCanvas.tsx (see its own "THIS BUTTON IS UNCONDITIONAL" /
+    // Step 4 comment); only its column position, not its presence, depends on
+    // isAreaFirstSelectedAreaState. It is NOT mutually exclusive with
+    // areas-recenter-button, so it must be asserted visible and non-colliding
+    // below, not skipped behind an `if (isVisible())` that could silently
+    // no-op if a future regression hid it.
+    const cityRecenter = page.getByTestId('map-recenter-city-button');
+
+    // Pan the map so the selected RR Nagar node leaves the viewport — the
+    // precondition for `areas-recenter-button` to render
+    // (view.overlays.recenter.visible in buildMapSurfaceModel.tsx).
+    const mapBox = await mapContainer.boundingBox();
+    expect(mapBox, '#2724 pass 4: the map container needs a real bounding box to be dragged').not.toBeNull();
+    const { x: mx, y: my, width: mw, height: mh } = mapBox as NonNullable<typeof mapBox>;
+    const cx = mx + mw / 2;
+    const cy = my + mh / 2;
+    for (let i = 0; i < 6; i += 1) {
+      if (await areasRecenter.isVisible().catch(() => false)) break;
+      await page.mouse.move(cx, cy);
+      await page.mouse.down();
+      await page.mouse.move(cx + 350, cy + 350, { steps: 10 });
+      await page.mouse.up();
+      await page.waitForTimeout(300);
+    }
+    await expect(
+      areasRecenter,
+      '#2724 pass 4: setup precondition — panning the selected RR Nagar node out of view must surface the area-recenter button, or nothing below proves anything about it',
+    ).toBeVisible({ timeout: 10_000 });
+
+    // --- Real, unforced geometry first ---
+    const realBox = await areasRecenter.boundingBox();
+    const realPillBox = await countPill.boundingBox();
+    expect(realBox, '#2724 pass 4: area-recenter button must have a real bounding box').not.toBeNull();
+    expect(realPillBox, '#2724 pass 4: count pill must have a real bounding box').not.toBeNull();
+    expect(
+      intersects(realBox as BoundingBox, realPillBox as BoundingBox),
+      '#2724 pass 4: with the real (short) RR Nagar area name, the area-recenter button must not collide with the count pill',
+    ).toBe(false);
+
+    // Code review (Finding 2, pass 5) — "Recenter on <city>" is mounted
+    // unconditionally (DiscoverMapCanvas.tsx), not gated behind area-selected
+    // state, and the evidence frame parity-after-desktop-1024-area-longname.png
+    // shows both buttons visible together. Asserted unconditionally: a silent
+    // `if (isVisible())` skip here would let a real regression through.
+    await expect(
+      cityRecenter,
+      '#2724 pass 4: "Recenter on <city>" is mounted unconditionally and must be visible alongside the area-recenter button in this state',
+    ).toBeVisible();
+    const realCityBox = await cityRecenter.boundingBox();
+    expect(realCityBox, '#2724 pass 4: "Recenter on <city>" must have a real bounding box').not.toBeNull();
+    expect(
+      intersects(realBox as BoundingBox, realCityBox as BoundingBox),
+      '#2724 pass 4: with the real (short) RR Nagar area name, the area-recenter button must not collide with "Recenter on <city>"',
+    ).toBe(false);
+
+    // --- Forced long area name: the width-cap/clamp regression case ---
+    // Mirrors capture-2724-parity.mjs's own technique (see its Finding-3
+    // comment): overwrite the already-rendered LABEL's DOM text content
+    // directly. Code review (Finding 1, pass 5) — the earlier version set
+    // `areasRecenter.textContent` on the BUTTON itself, which deletes the
+    // `<span className="line-clamp-2">` child entirely (button.textContent
+    // replaces all children with one plain text node), so the forced-long-name
+    // step never exercised the 2-line clamp — only the width cap. Targeting
+    // the inner <span> instead keeps the clamp element in place. Layout, CSS
+    // and the pill's real box are untouched — only this one element's text is
+    // synthetic, and it's chosen to be implausibly longer than any real
+    // fixture area name so the assertions below are about the CSS cap/clamp
+    // holding in general, not about today's specific fixture data.
+    const areasRecenterLabel = areasRecenter.locator('span');
+    await expect(
+      areasRecenterLabel,
+      '#2724 pass 4: the area-recenter button must render its label inside a <span>, or forcing a long name below would not exercise the line-clamp',
+    ).toHaveCount(1);
+
+    const FORCED_LONG_AREA_NAME =
+      'Recenter on Jayaprakash Narayana Extension & Kodihalli Layout Cross';
+    await areasRecenterLabel.evaluate((el, text) => {
+      el.textContent = text;
+    }, FORCED_LONG_AREA_NAME);
+    await page.waitForTimeout(200);
+
+    const longBox = await areasRecenter.boundingBox();
+    const longPillBox = await countPill.boundingBox();
+    expect(longBox, '#2724 pass 4: area-recenter button must still have a real bounding box after the forced long name').not.toBeNull();
+    expect(longPillBox, '#2724 pass 4: count pill must still have a real bounding box after the forced long name').not.toBeNull();
+
+    // The width cap must actually be constraining something: the button's
+    // rendered width with the forced long name must not exceed the pill's own
+    // max-w-[220px] cap (with a small tolerance for border/padding rounding).
+    // Without this, a test that only checks "no collision" could pass merely
+    // because the (uncapped) button happened not to reach the pill at THIS
+    // particular viewport width, not because the cap is doing anything.
+    expect(
+      (longBox as NonNullable<typeof longBox>).width,
+      '#2724 pass 4: the forced long name must not widen the button past its max-w-[220px] cap',
+    ).toBeLessThanOrEqual(224);
+
+    // Code review (Finding 1, pass 5) — the height bound is DERIVED from the
+    // real rendered line-height/padding/border, not a hard-coded guess, so
+    // this assertion actually exercises `line-clamp-2` rather than a number
+    // that happened to work once. Without it, an unclamped label that merely
+    // stayed narrower than 220px (e.g. if the clamp class were removed but the
+    // text still wrapped only 2-3 lines at this width) could pass on width
+    // alone while silently growing past its 2-line budget.
+    const clampedHeightBound = await areasRecenter.evaluate((el) => {
+      const span = el.querySelector('span');
+      if (!span) return null;
+      const spanStyle = window.getComputedStyle(span);
+      const btnStyle = window.getComputedStyle(el);
+      const lineHeight = parseFloat(spanStyle.lineHeight);
+      const paddingTop = parseFloat(btnStyle.paddingTop);
+      const paddingBottom = parseFloat(btnStyle.paddingBottom);
+      const borderTop = parseFloat(btnStyle.borderTopWidth);
+      const borderBottom = parseFloat(btnStyle.borderBottomWidth);
+      if (!Number.isFinite(lineHeight)) return null;
+      return 2 * lineHeight + paddingTop + paddingBottom + borderTop + borderBottom;
+    });
+    expect(
+      clampedHeightBound,
+      '#2724 pass 4: could not derive a real 2-line height bound from the button\'s own computed line-height/padding/border',
+    ).not.toBeNull();
+    expect(
+      (longBox as NonNullable<typeof longBox>).height,
+      '#2724 pass 4: the forced long name must not grow the button past its own 2-line clamp height (derived from real computed styles, +2px rounding tolerance)',
+    ).toBeLessThanOrEqual((clampedHeightBound as number) + 2);
+
+    expect(
+      intersects(longBox as BoundingBox, longPillBox as BoundingBox),
+      '#2724 pass 4: even with a forced long area name, the width-capped/clamped button must not collide with the count pill',
+    ).toBe(false);
+
+    // Code review (Finding 2, pass 5) — re-check "Recenter on <city>" after
+    // the forced long name too: a wider/taller unclamped button could newly
+    // collide with it even if the short-name check above passed.
+    const longCityBox = await cityRecenter.boundingBox();
+    expect(longCityBox, '#2724 pass 4: "Recenter on <city>" must still have a real bounding box after the forced long name').not.toBeNull();
+    expect(
+      intersects(longBox as BoundingBox, longCityBox as BoundingBox),
+      '#2724 pass 4: even with a forced long area name, the area-recenter button must not collide with "Recenter on <city>"',
+    ).toBe(false);
+
+    // The button must stay fully inside the map container even at its
+    // longest — a capped-width, clamped-height button that's still
+    // bottom-anchored could in principle still grow past the container's own
+    // edges if the cap/clamp were on the wrong element.
+    const mapBoxAfter = await mapContainer.boundingBox();
+    expect(mapBoxAfter, '#2724 pass 4: the map container must still have a real bounding box').not.toBeNull();
+    const mb = mapBoxAfter as NonNullable<typeof mapBoxAfter>;
+    const lb = longBox as NonNullable<typeof longBox>;
+    expect(
+      lb.x >= mb.x && lb.y >= mb.y && lb.x + lb.width <= mb.x + mb.width && lb.y + lb.height <= mb.y + mb.height,
+      '#2724 pass 4: the area-recenter button, even with a forced long name, must stay fully within the map container',
+    ).toBe(true);
   });
 
   // -------------------------------------------------------------------------

@@ -154,10 +154,15 @@ describe('DiscoverMapCountBadge', () => {
     // Issue #2714 — was bottom-5 with no width cap; that overlapped the bottom-left legend at
     // 1024x768 (live-measured). Raised to bottom-60 and capped to max-w-[220px], clearing the
     // legend, the zoom control and the bottom-right recenter column.
-    it('keeps the desktop centred placement, raised clear of the legend/zoom/recenter column (#2714), when isMobileMapOverlay is omitted (default false)', () => {
+    // Issue #2724 (owner follow-up 3) — desktop's "Recenter on <city>" button
+    // (DiscoverMapCanvas.tsx) now shares this exact row instead of sitting right-anchored at its
+    // own bottom-48 (this is the same guided-entry/city-landing state as
+    // DiscoverMapCanvas.tsx's `isDesktopBadgePaired`), so the pill no longer dead-centres here —
+    // it flanks right of centre (`right-1/2 mr-2`) to pair with that button's `left-1/2 ml-2`.
+    it('flanks right of centre (paired with the desktop "Recenter on <city>" button, #2724) when isMobileMapOverlay is omitted (default false)', () => {
       render(<DiscoverMapCountBadge {...publicLandingProps()} />);
       const badge = screen.getByTestId('discover-badge');
-      expect(badge.className).toBe('absolute bottom-60 left-1/2 z-[1000] max-w-[220px] -translate-x-1/2');
+      expect(badge.className).toBe('absolute bottom-60 right-1/2 z-[1000] mr-2 max-w-[220px]');
     });
 
     it('raises the pill to bottom-8 and constrains its width (clear of the zoom control) when isMobileMapOverlay is true', () => {
@@ -166,6 +171,76 @@ describe('DiscoverMapCountBadge', () => {
       expect(badge.className).toBe(
         'absolute bottom-8 left-1/2 z-[1000] w-[calc(100%-6rem)] max-w-[220px] -translate-x-1/2',
       );
+    });
+  });
+
+  // Issue #2724 (owner follow-up 3, desktop/mobile parity) — the drill-down badge's OWN centred
+  // variant (isSelectedGroupState, without an area selected) gets the same desktop flank-right
+  // treatment as the public-landing pill above, for the same reason: DiscoverMapCanvas.tsx's
+  // "Recenter on <city>" button now shares this row instead of its own bottom-48.
+  describe('#2724 drill-down badge desktop pairing (isSelectedGroupState)', () => {
+    function selectedGroupProps(): DiscoverMapCountBadgeProps {
+      return {
+        ...baseProps(),
+        resolvedPanelContent: 'area-groups-landing',
+        isAreaFirstCityLanding: false,
+        isAreaFirstSelectedAreaState: false,
+        isSelectedGroupState: true,
+        selectedArea: null,
+        areaResultSummaryText: null,
+        journey: null,
+      };
+    }
+
+    it('flanks right of centre on desktop (isMobileMapOverlay omitted/false), pairing with the "Recenter on <city>" button', () => {
+      render(<DiscoverMapCountBadge {...selectedGroupProps()} />);
+      const badge = screen.getByTestId('discover-badge');
+      expect(badge.className).toBe('absolute bottom-60 right-1/2 z-[1000] mr-2 max-w-[220px]');
+    });
+
+    it('stays dead-centred on the mobile Map (isMobileMapOverlay true) — unaffected by #2724', () => {
+      render(<DiscoverMapCountBadge {...selectedGroupProps()} isMobileMapOverlay />);
+      const badge = screen.getByTestId('discover-badge');
+      expect(badge.className).toBe('absolute bottom-60 left-1/2 z-[1000] max-w-[220px] -translate-x-1/2');
+    });
+
+    it('the mutually-exclusive isAreaFirstSelectedAreaState branch stays dead-centred on desktop — unaffected by #2724 (no city-recenter counterpart on that row)', () => {
+      render(
+        <DiscoverMapCountBadge
+          {...selectedGroupProps()}
+          isSelectedGroupState={false}
+          isAreaFirstSelectedAreaState
+          selectedArea={AREA_SELECTED}
+          areaResultSummaryText={SENTINEL}
+        />,
+      );
+      const badge = screen.getByTestId('discover-badge');
+      expect(badge.className).toBe('absolute bottom-60 left-1/2 z-[1000] max-w-[220px] -translate-x-1/2');
+    });
+  });
+
+  // Issue #2724 (pass 3, area-selected desktop pairing) — the area-selected pill's OWN row-mate
+  // is the portalled `areas-recenter-button` (DiscoverMapSurface.tsx), a DIFFERENT button from the
+  // "Recenter on <city>" pairing above and gated by a DIFFERENT signal
+  // (`isAreaRecenterButtonVisible`, computed in buildMapSurfaceModel.tsx from the same
+  // `overlays.recenter.visible` that button itself renders from, so the two can never disagree).
+  describe('#2724 pass 3 — area-selected desktop pairing with areas-recenter-button', () => {
+    it('flanks left of centre on desktop when isAreaRecenterButtonVisible is true, pairing with the areas-recenter-button', () => {
+      render(<DiscoverMapCountBadge {...baseProps()} isAreaRecenterButtonVisible />);
+      const badge = screen.getByTestId('discover-badge');
+      expect(badge.className).toBe('absolute bottom-60 right-1/2 z-[1000] mr-2 max-w-[220px]');
+    });
+
+    it('stays dead-centred on desktop when isAreaRecenterButtonVisible is omitted/false (selected area already in view — no row-mate)', () => {
+      render(<DiscoverMapCountBadge {...baseProps()} />);
+      const badge = screen.getByTestId('discover-badge');
+      expect(badge.className).toBe('absolute bottom-60 left-1/2 z-[1000] max-w-[220px] -translate-x-1/2');
+    });
+
+    it('stays dead-centred on the mobile Map even when isAreaRecenterButtonVisible is true — mobile is untouched by #2724', () => {
+      render(<DiscoverMapCountBadge {...baseProps()} isAreaRecenterButtonVisible isMobileMapOverlay />);
+      const badge = screen.getByTestId('discover-badge');
+      expect(badge.className).toBe('absolute bottom-60 left-1/2 z-[1000] max-w-[220px] -translate-x-1/2');
     });
   });
 });

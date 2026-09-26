@@ -187,6 +187,12 @@ type MapStatusView = Pick<
   | 'groupSelectedBadgeCopy'
   | 'fallbackBadgeCopy'
   | 'cityTotal'
+  // Issue #2724 (pass 3, area-selected desktop pairing) — reuses the already-spread
+  // `view.status` group (see DiscoverMapSurface.tsx) so it reaches DiscoverMapCanvasProps
+  // without a new spread group. Computed from the SAME `overlays.recenter.visible` signal
+  // below, so the count pill's desktop pairing and the portalled recenter button's own
+  // visibility can never disagree.
+  | 'isAreaRecenterButtonVisible'
   | 'isAuthenticated'
   | 'hasActiveAnonFilter'
   | 'announcedBadgeText'
@@ -364,6 +370,11 @@ export type BuildMapSurfaceViewParams = Omit<
   | 'isMarkerPopoverEligible'
   | 'areaLayerMaxZoom'
   | 'selectedArea'
+  // Issue #2724 (pass 3, area-selected desktop pairing) — DERIVED here from the
+  // same signal `overlays.recenter.visible` uses, rather than supplied by the
+  // caller (see the local computed just above the `return` in
+  // buildMapSurfaceModel()).
+  | 'isAreaRecenterButtonVisible'
   // Issue #2142 (correction pass) — every field below now arrives as part of
   // its OWNING CONTROLLER's result object (the grouped params after this
   // Omit), so the composition root passes references instead of transcribing
@@ -686,6 +697,20 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
     intent,
   } = params;
 
+  // Issue #2724 (pass 3, area-selected desktop pairing) — computed once here and reused for
+  // BOTH `overlays.recenter.visible` (gates the portalled `areas-recenter-button` itself,
+  // DiscoverMapSurface.tsx) and `status.isAreaRecenterButtonVisible` (tells DiscoverMapCanvas's
+  // count pill whether to flank left to pair with it), so the two can never disagree. See the
+  // `recenter` field below for the ROOT-node suppression rationale (Issue #2724 code-review
+  // follow-up).
+  const isAreaRecenterButtonVisible = !!(
+    mapReady &&
+    mapContainerRef.current &&
+    isSelectedNodeOutOfView &&
+    activeAreasNavigationJourney.node &&
+    activeAreasNavigationJourney.node.nodeType !== 'ROOT'
+  );
+
   return {
     camera: {
       agriGroupFocusBounds,
@@ -777,6 +802,7 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
       groupSelectedBadgeCopy,
       fallbackBadgeCopy,
       cityTotal,
+      isAreaRecenterButtonVisible,
       isAuthenticated,
       hasActiveAnonFilter,
       announcedBadgeText,
@@ -806,13 +832,21 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
         visible: isPreviewSheetOpen && !!selectedListingPreview,
         preview: selectedListingPreview,
       },
+      // Issue #2724 (code-review follow-up) — root cause of the duplicate "Recenter on
+      // Bangalore" / "Recenter on bangalore" buttons: `useAreasNavigationJourney`'s `node`
+      // resolves to the synthetic city ROOT node (displayLabel from the backend, e.g.
+      // "Bangalore") whenever no area/direction/cluster is actually selected — it is NEVER
+      // null at the city-landing level. `getHierarchyExtent` (MapDiscovery.recenter.ts) gives
+      // that ROOT node a real extent too (the union of all its children's bounds), so
+      // `isSelectedNodeOutOfView` can be true for it exactly like a real selected area, and
+      // this "area recenter" portal then renders a SECOND, redundant city-level recenter
+      // button — on top of DiscoverMapCanvas's own unconditional "Recenter on {city}" button
+      // (which reads the raw lowercase URL `city` slug, e.g. "bangalore" — the source of the
+      // capitalization mismatch between the two). This recenter is meant for a genuinely
+      // selected area/direction/cluster, never the whole-city fallback, so it must stay
+      // suppressed for ROOT.
       recenter: {
-        visible: !!(
-          mapReady &&
-          mapContainerRef.current &&
-          isSelectedNodeOutOfView &&
-          activeAreasNavigationJourney.node
-        ),
+        visible: isAreaRecenterButtonVisible,
         label: activeAreasNavigationJourney.node?.displayLabel,
         portalTarget: mapContainerRef.current,
       },

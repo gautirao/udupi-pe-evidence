@@ -306,4 +306,116 @@ describe('MapEmptyGuidance', () => {
     );
     expect(screen.getByText(/Select an area to see properties/i)).toBeInTheDocument();
   });
+
+  // --- Issue #2724 Bug 2: positioning must clear the recenter button(s), not
+  // sit in the exact same rectangle. ---
+
+  it('#2724: desktop (isMobileMapOverlay omitted) positions above the "Recenter on <area>" button\'s bottom-20 rectangle, not on top of it', () => {
+    const { container } = render(
+      <MapEmptyGuidance cityTotal={0} filters={emptyFilters} city="udupi" isLoading={false} />,
+    );
+    const wrapper = container.firstElementChild;
+    expect(wrapper).not.toBeNull();
+    expect(wrapper).toHaveClass('bottom-36');
+    expect(wrapper).not.toHaveClass('bottom-20');
+  });
+
+  it('#2724: mobile Map overlay lifts the panel above the right-column recenter stack (bottom-[192px], matching DiscoverMapStatusHints\' convention)', () => {
+    const { container } = render(
+      <MapEmptyGuidance
+        cityTotal={0}
+        filters={emptyFilters}
+        city="udupi"
+        isLoading={false}
+        isMobileMapOverlay
+      />,
+    );
+    const wrapper = container.firstElementChild;
+    expect(wrapper).not.toBeNull();
+    expect(wrapper).toHaveClass('bottom-[192px]');
+    expect(wrapper).not.toHaveClass('bottom-20');
+  });
+
+  // --- Issue #2724 (owner design change, follow-up) — the anon sign-in prompt moves out of
+  // the bottom-chrome stack entirely and centers on the map instead. Only this ONE branch
+  // (no `message` — `showAnonZoomPrompt`) moves; the `cityTotal === 0` messages above keep
+  // their original bottom placement (asserted by the two tests directly above). ---
+
+  const AREA_LAYER_MAX_ZOOM_2 = 12;
+
+  it('#2724 (owner design change): the anon sign-in prompt centers on the map, not in the bottom-chrome stack', () => {
+    renderWithRouter(
+      <MapEmptyGuidance
+        cityTotal={5}
+        filters={emptyFilters}
+        city="udupi"
+        isLoading={false}
+        isAuthenticated={false}
+        hasAreaSelected={false}
+        mapZoom={AREA_LAYER_MAX_ZOOM_2 + 2}
+        areaLayerMaxZoom={AREA_LAYER_MAX_ZOOM_2}
+      />,
+    );
+    const prompt = screen.getByText(/Select an area to see properties/i);
+    const wrapper = prompt.closest('.absolute');
+    expect(wrapper).not.toBeNull();
+    // Centered via inset-0 + flex items-center justify-center, not the bottom-chrome classes
+    // the cityTotal===0 messages use.
+    expect(wrapper).toHaveClass('inset-0');
+    expect(wrapper).not.toHaveClass('bottom-36');
+    expect(wrapper).not.toHaveClass('bottom-[192px]');
+    expect(wrapper).not.toHaveClass('bottom-20');
+  });
+
+  it('#2724 (owner design change): centering applies regardless of isMobileMapOverlay (the anon prompt never joins the bottom recenter-button band on mobile either)', () => {
+    renderWithRouter(
+      <MapEmptyGuidance
+        cityTotal={5}
+        filters={emptyFilters}
+        city="udupi"
+        isLoading={false}
+        isAuthenticated={false}
+        hasAreaSelected={false}
+        mapZoom={AREA_LAYER_MAX_ZOOM_2 + 2}
+        areaLayerMaxZoom={AREA_LAYER_MAX_ZOOM_2}
+        isMobileMapOverlay
+      />,
+    );
+    const prompt = screen.getByText(/Select an area to see properties/i);
+    const wrapper = prompt.closest('.absolute');
+    expect(wrapper).toHaveClass('inset-0');
+    expect(wrapper).not.toHaveClass('bottom-[192px]');
+  });
+
+  // Regression found by the pre-push e2e gate: centered dead-center of the map is exactly where
+  // an area/cluster marker is likely to sit after a fitBounds camera move. The card previously
+  // carried `pointer-events-auto` on its whole surface (only needed for the "sign in" link),
+  // silently absorbing clicks meant for a marker underneath it — reproduced deterministically
+  // against a real e2e spec (not flaky), fixed by scoping `pointer-events-auto` to ONLY the link.
+  it('#2724 (interaction regression fix): the card surface lets clicks pass through to the map beneath it; only the "sign in" link is clickable', () => {
+    const { container } = renderWithRouter(
+      <MapEmptyGuidance
+        cityTotal={5}
+        filters={emptyFilters}
+        city="udupi"
+        isLoading={false}
+        isAuthenticated={false}
+        hasAreaSelected={false}
+        mapZoom={AREA_LAYER_MAX_ZOOM_2 + 2}
+        areaLayerMaxZoom={AREA_LAYER_MAX_ZOOM_2}
+      />,
+    );
+    const wrapper = container.querySelector('.absolute.inset-0');
+    expect(wrapper).not.toBeNull();
+    expect(wrapper).toHaveClass('pointer-events-none');
+
+    // The card (the prompt's background/text) must NOT re-enable pointer events — only the
+    // link inside it may.
+    const card = screen.getByText(/Select an area to see properties/i).closest('div');
+    expect(card).not.toBeNull();
+    expect(card).not.toHaveClass('pointer-events-auto');
+
+    const signIn = screen.getByRole('link', { name: /sign in/i });
+    expect(signIn).toHaveClass('pointer-events-auto');
+  });
 });

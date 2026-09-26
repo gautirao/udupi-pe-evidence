@@ -9,6 +9,10 @@ import { DiscoverMapLegend } from '@/components/discover/DiscoverMapLegend';
 import { RegionGuidanceCard, type RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCard';
 import { ExploreMapPanel } from '@/components/map/ExploreMapPanel';
 import { DiscoverMapCountBadge } from '@/components/discover/DiscoverMapCountBadge';
+import {
+  isDrillDownCountBadgeVisible,
+  isLandingCountBadgeVisible,
+} from '@/components/discover/discoverMapCountBadgeVisibility';
 import { MarkersTruncationNotice } from '@/components/discover/MapStatsBar';
 import { MapEmptyGuidance } from '@/components/discover/MapEmptyGuidance';
 import { DiscoverMapMarkerPopover } from '@/components/discover/DiscoverMapMarkerPopover';
@@ -426,6 +430,14 @@ export interface DiscoverMapCanvasProps {
   schoolFirstZoneSchoolCount: number | null;
   schoolFirstLandingSchoolCount: number | null;
   cityTotal: number;
+  /**
+   * Issue #2724 (pass 3, area-selected desktop pairing) — true when
+   * DiscoverMapSurface's portalled `areas-recenter-button` is ALSO visible on
+   * this same row for the desktop `isAreaFirstSelectedAreaState` case,
+   * computed once in buildMapSurfaceModel.tsx from the same
+   * `overlays.recenter.visible` signal that button itself renders from.
+   */
+  isAreaRecenterButtonVisible: boolean;
 
   // ── DiscoverMapStatusHints#2 schoolRadiusHint (L2120-2127) ──
   isAuthenticated: boolean;
@@ -581,6 +593,7 @@ export function DiscoverMapCanvas({
   schoolFirstZoneSchoolCount,
   schoolFirstLandingSchoolCount,
   cityTotal,
+  isAreaRecenterButtonVisible,
   isAuthenticated,
   schoolRadiusHasMore,
   schoolListings,
@@ -655,6 +668,35 @@ export function DiscoverMapCanvas({
   const hideDuplicateCountBadge =
     isMobileMapOverlay && !!onFiltersChange && (isAreaFirstSelectedAreaState || schoolRadiusActive);
 
+  // Issue #2724 (owner follow-up 3, desktop/mobile parity; Finding 1, pass 3 code review) —
+  // desktop-only: true in exactly the states where DiscoverMapCountBadge.tsx renders one of its
+  // two horizontally-CENTRED variants alongside this file's "Recenter on <city>" button (see that
+  // button's own doc comment below). `isAreaFirstSelectedAreaState` is excluded here — that state
+  // keeps its own separate pairing with the mutually-exclusive `areas-recenter-button`
+  // (DiscoverMapSurface.tsx) instead, via `isAreaRecenterButtonVisible` below.
+  //
+  // Code review (Finding 1) flagged the previous version of this flag for re-deriving its own
+  // copy of DiscoverMapCountBadge's visibility gates instead of calling them, letting the two
+  // silently drift apart (e.g. an orphaned "Recenter on <city>" paired with an absent pill on
+  // fresh load or during group-loading). Fixed by calling the SAME exported predicates the pill's
+  // own render gate uses, so this flag and the pill's actual visibility can never disagree.
+  const isDesktopBadgePaired =
+    !isAreaFirstSelectedAreaState &&
+    ((isSelectedGroupState &&
+      isDrillDownCountBadgeVisible({
+        discoverBadge,
+        resolvedPanelContent,
+        isAreaFirstCityLanding,
+        journey: nav.journey,
+        hideDrillDownBadge: hideDuplicateCountBadge,
+      })) ||
+      isLandingCountBadgeVisible({
+        resolvedPanelContent,
+        isAreaFirstCityLanding,
+        journey: nav.journey,
+        cityTotal,
+      }));
+
   // Issue #2628 — the mobile Map "Filters" staged bottom sheet. Local, transient open state:
   // the canonical filter state stays untouched until Apply (see MapFilterSheet.tsx's header).
   const [isMapFilterSheetOpen, setIsMapFilterSheetOpen] = useState(false);
@@ -689,8 +731,52 @@ export function DiscoverMapCanvas({
     : undefined;
   // Loading states already suppress markers (`currentMapMarkerListings`), so gating zero-state on
   // `!showLoader && !isLoading` avoids a false "0 matching" flash while a fetch is in flight.
+  // Issue #2724 — this panel (with its "Edit filters"/"Clear filters" actions) must only render
+  // when a genuinely active property filter (`mapFiltersRefinementCount > 0`, the same Buy/Rent-
+  // excluding count the pill/sheet/summary above already use) is the reason nothing matches. With
+  // zero filters active, 0 results means the area/city itself has no inventory — there is nothing
+  // to "clear" or "edit", so this panel must stay hidden (MapEmptyGuidance below owns that
+  // no-inventory case instead).
+  // Issue #2724 (follow-up) — `!isAgriJourney` mirrors MapEmptyGuidance's own Issue #2169 guard
+  // (`if (!isAgriJourney && cityTotal === 0 ...)`, below in this same file). `mobileListButton`
+  // (mobile Map open) is NOT gated on journey — the agri journey can open the mobile Map overlay
+  // just like any other — and `useDiscoverMapData.ts`'s `filteredMarkersData` (the source of
+  // `mapResultsCount`) is the SAME generic markers query forced to `agricultural_land` in
+  // agri-first (`agriFilters`), so `mapResultsCount === 0` is genuinely reachable there. Without
+  // this guard the panel would show residential-flavoured copy ("0 matching homes", the
+  // Buy/Rent-family `deriveMapFiltersFamily` never has an agri branch) atop agri land — the right
+  // panel already owns the Agri empty/sparse state prominently (same rationale as #2169), so this
+  // Map-surface panel stays suppressed rather than growing a second, divergent agri copy.
   const isMapZeroResults =
-    !!onFiltersChange && !!mobileListButton && mapResultsCount === 0 && !showLoader && !isLoading;
+    !!onFiltersChange &&
+    !!mobileListButton &&
+    mapResultsCount === 0 &&
+    mapFiltersRefinementCount > 0 &&
+    !isAgriJourney &&
+    !showLoader &&
+    !isLoading;
+
+  // Issue #2724 (code-review follow-up) — the `!isAgriJourney` guard above only stops the PANEL
+  // from rendering; the render below is a binary `isMapZeroResults ? panel : headingPill`, so an
+  // agri+zero-results state that used to hit the panel now falls into the heading-pill else-
+  // branch instead. That branch (`mapResultsHeadingText`, built from `computeMapResultsHeadingText`/
+  // `computeMapResultsUnitPhrase` in `MapFiltersPill.tsx`) has no agri branch either — it would
+  // render "0 homes for sale · Residential" over agricultural-land results, the exact class of
+  // bug this guard exists to prevent, just relocated. This flag catches that specific combination
+  // (same conditions as `isMapZeroResults` minus the `!isAgriJourney`/`mapFiltersRefinementCount`
+  // checks it deliberately drops — a zero-result agri state is a "nothing here" state regardless
+  // of whether a filter narrowed it) so the render below can suppress BOTH branches for it,
+  // consistent with the same "right panel owns the Agri empty state" rationale used above. The
+  // non-zero-result agri heading ("N homes for sale · Residential" with N > 0) is a separate,
+  // pre-existing gap in `computeMapResultsHeadingText` that predates this fix and is out of this
+  // guard's scope.
+  const isAgriZeroResultsSuppressed =
+    !!onFiltersChange &&
+    !!mobileListButton &&
+    mapResultsCount === 0 &&
+    isAgriJourney &&
+    !showLoader &&
+    !isLoading;
 
   // Issue #2628 (step 5/8) — the Map zero-state's immediate "Clear filters" action (Decision #4:
   // "applies immediately … Buy/Rent and family kept … no draft to stage into"). A THIRD
@@ -1335,7 +1421,24 @@ export function DiscoverMapCanvas({
           className="pointer-events-none absolute left-3 right-3 top-[92px] z-20 flex flex-col items-start gap-1"
           data-testid="map-results-heading"
         >
-          {isMapZeroResults ? (
+          {/* Issue #2724 (code-review follow-up) — agri+zero-results is suppressed entirely
+              rather than falling into the heading-pill branch below, which has no agri copy
+              either (`computeMapResultsHeadingText` never branches on journey) and would show
+              "0 homes for sale · Residential" over agricultural-land results. See
+              `isAgriZeroResultsSuppressed`'s doc comment above. */}
+          {/* Issue #2724 (owner-reviewed follow-up) — the heading pill's raw count
+              ("0 homes for sale · Residential") duplicated, and could directly contradict, the
+              bottom `DiscoverMapCountBadge` ("Showing 19 verified properties across Bangalore")
+              on the no-filter/startup state, where `hideDuplicateCountBadge` (below) is false
+              and that badge is ALSO on screen — a real visible "0 vs 19" contradiction, not just
+              clutter. Gated on the same `mapFiltersRefinementCount > 0` check Finding 1's panel
+              already uses: once a real filter has narrowed results, the heading is the honest
+              place to state the (possibly zero) filtered count. `|| hideDuplicateCountBadge` is
+              the one case this must NOT suppress: when the area-selected/school-radius states
+              already hide that badge (see `hideDuplicateCountBadge`'s own doc above) because
+              THIS heading is the sole place showing the count — suppressing it too there would
+              leave no count visible anywhere, not just remove a duplicate. */}
+          {isAgriZeroResultsSuppressed ? null : isMapZeroResults ? (
             <div
               role="status"
               aria-live="polite"
@@ -1393,7 +1496,7 @@ export function DiscoverMapCanvas({
                     implementation; see this file's handback notes. */}
               </div>
             </div>
-          ) : (
+          ) : mapFiltersRefinementCount > 0 || hideDuplicateCountBadge ? (
             <div
               className="pointer-events-auto rounded-full border border-border bg-background/95 px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm backdrop-blur"
               data-testid="map-results-heading-text"
@@ -1414,7 +1517,7 @@ export function DiscoverMapCanvas({
                 </span>
               )}
             </div>
-          )}
+          ) : null}
         </div>
       )}
 
@@ -1550,6 +1653,7 @@ export function DiscoverMapCanvas({
         city={city}
         hideDrillDownBadge={hideDuplicateCountBadge}
         isMobileMapOverlay={isMobileMapOverlay}
+        isAreaRecenterButtonVisible={isAreaRecenterButtonVisible}
       />
 
       {/* Issue #1261 — non-blocking "showing first N" hint for the anonymous
@@ -1594,6 +1698,7 @@ export function DiscoverMapCanvas({
         hasAreaSelected={!!selectedArea || isBoundedBrowseState}
         areaLayerMaxZoom={areaLayerMaxZoom}
         isAgriJourney={isAgriJourney}
+        isMobileMapOverlay={isMobileMapOverlay}
       />
 
       {/* a3 — Marker popover mini card. Gated to listing-marker clicks via
@@ -1668,6 +1773,36 @@ export function DiscoverMapCanvas({
       {/* Step 4: Bottom-right stacked Recenter button. Issue #2698 — on the mobile Map it sat
           on top of the Leaflet zoom control (bottom-right corner, above the attribution), so it
           is lifted above that control there, keeping the zoom's own 10px right inset.
+          Issue #2724 (owner follow-up) — on the mobile Map's "guided-entry"/city-landing state
+          `bottom-[100px]` crowded/overlapped `DiscoverMapCountBadge`'s "Showing N verified
+          properties across <city>" pill directly below it (that pill's own `bottom-8` + its
+          measured ~76.5px height — it wraps to 2 lines at this width — reaches up to ~108.5px
+          from the bottom, above the old `bottom-[100px]` city-recenter's own floor; measured
+          intersection, not assumed).
+          THIS BUTTON IS UNCONDITIONAL (always mounted whenever the mobile Map is open), so it can
+          coexist with EITHER the badge above (no area selected) OR `areas-recenter-button`
+          (DiscoverMapSurface.tsx, `bottom-[144px]`, once an area/direction/cluster IS selected and
+          panned away) — never both (the badge and that button are mutually exclusive by their own
+          preconditions), but each demands a DIFFERENT safe offset: clearing the badge (~76.5px
+          tall) needs >= ~118px; staying clear of the area-recenter's own 144-182px band needs
+          <= ~114px. No single static value clears both (measured, not assumed — a flat
+          `bottom-[130px]` was tried first and directly overlapped the area-recenter in the
+          selected-area state). So the offset is keyed on `isAreaFirstSelectedAreaState` — the
+          SAME flag `hideDuplicateCountBadge` above already uses for this exact badge/area-selected
+          split: selected (area-recenter may be present, badge is not) keeps the original
+          `bottom-[100px]`; not selected (badge may be present, area-recenter is not) raises to
+          `bottom-[130px]`. Both branches measured directly with zero overlap against the badge,
+          the area-recenter, the zoom control, the tip pill and the anon prompt, at 390x844,
+          375x667 and 1440x900.
+          Issue #2724 (owner follow-up 2) — the city-landing (not-selected) branch was still
+          RIGHT-anchored (`right-[10px]`), so even with the vertical crowding fixed above, it sat
+          off-centre from the badge below it rather than sharing its centreline. Re-anchored to
+          centre (`left-1/2 -translate-x-1/2`, `items-center`) to match `DiscoverMapCountBadge`'s
+          own `left-1/2 -translate-x-1/2` exactly. Scoped to ONLY this branch: the selected-area
+          branch has no count-badge counterpart to align with (the badge and this state are
+          mutually exclusive, per the doc above) and keeps its original right-anchored position —
+          verified unchanged and still non-overlapping with `areas-recenter-button` (also
+          right-anchored in that state) at all 3 measured widths.
           Issue #2714 — on desktop it stayed at bottom-4 right-4, which sat inside the Leaflet
           bottomright zoom control's own footprint (measured 28x19px overlap at 1440x900, over
           the "−" button). Per #2714's placement boundaries the bottom-right column stacks, bottom
@@ -1679,12 +1814,47 @@ export function DiscoverMapCanvas({
           sits ABOVE the hint (live-measured height 66px at bottom-28, top edge 178px) rather than
           between it and zoom (only a 21px gap there, too tight for a 30px button + margins).
           bottom-48 (192px) clears both the zoom control (top edge 91px) and the hint (top edge
-          178px) with a 14px+ margin, confirmed via Playwright across every #2714 affected state. */}
+          178px) with a 14px+ margin, confirmed via Playwright across every #2714 affected state.
+          Reconciled on merge with #2714: desktop now uses #2714's `bottom-48 right-4` (was
+          `bottom-4 right-4`); the mobile isAreaFirstSelectedAreaState split and centring from
+          #2724 are unaffected, since #2714 never touched the mobile branch.
+          Issue #2724 (owner follow-up 3, desktop/mobile parity) — desktop's not-selected branch
+          was still right-anchored while mobile's equivalent branch (above) is centred, and where
+          mobile STACKS the centred badge above this centred button, desktop had them at different
+          columns entirely (badge centred at bottom-60, this button right-anchored at bottom-48) —
+          neither "same alignment as mobile" nor "side by side" as the owner asked. Fixed with an
+          `isDesktopBadgePaired` split (declared just above this JSX, next to the other derived
+          booleans): when a centred `DiscoverMapCountBadge` variant renders alongside this button
+          on desktop, the two sit side by side on ONE shared row (`bottom-60`, badge flanking right
+          `right-1/2 mr-2`, this button flanking left `left-1/2 ml-2` — DiscoverMapCountBadge.tsx
+          carries the matching half of this pairing). Every other desktop state (no centred badge
+          to pair with, or the selected-area state) falls back to the SAME centred/right-anchored
+          shape mobile already uses for that state, so alignment matches mobile even where nothing
+          needs to sit side by side.
+          Issue #2724 (Finding 1, pass 3 code review) — `isDesktopBadgePaired` previously
+          re-derived its own copy of DiscoverMapCountBadge's centred-variant gates instead of
+          calling them, so it could silently drift from the pill's real visibility (e.g. pairing
+          this button with an absent pill on fresh load or during group-loading). Fixed: it now
+          calls `isDrillDownCountBadgeVisible`/`isLandingCountBadgeVisible` (exported from
+          DiscoverMapCountBadge.tsx) directly, so this button and the pill's own render gate can
+          never disagree.
+          Issue #2724 (pass 3, area-selected desktop pairing) — this button (city-recenter) is
+          NOT part of that pairing: the owner's remaining gap was between the count pill and
+          "Recenter on <area>" (`areas-recenter-button`, DiscoverMapSurface.tsx), not this button.
+          The selected-area branch below is intentionally UNCHANGED (`bottom-48 right-4`) — already
+          measured non-overlapping against every other selected-area element, so it stays put
+          rather than being repositioned for a pairing it isn't part of. */}
       <div
         className={
           isMobileMapOverlay
-            ? 'absolute bottom-[100px] right-[10px] z-[500] flex flex-col items-end gap-2'
-            : 'absolute bottom-48 right-4 z-[500] flex flex-col items-end gap-2'
+            ? isAreaFirstSelectedAreaState
+              ? 'absolute bottom-[100px] right-[10px] z-[500] flex flex-col items-end gap-2'
+              : 'absolute bottom-[130px] left-1/2 -translate-x-1/2 z-[500] flex flex-col items-center gap-2'
+            : isAreaFirstSelectedAreaState
+              ? 'absolute bottom-48 right-4 z-[500] flex flex-col items-end gap-2'
+              : isDesktopBadgePaired
+                ? 'absolute bottom-60 left-1/2 z-[500] ml-2 flex flex-col items-start gap-2'
+                : 'absolute bottom-48 left-1/2 z-[500] flex -translate-x-1/2 flex-col items-center gap-2'
         }
       >
         <button
