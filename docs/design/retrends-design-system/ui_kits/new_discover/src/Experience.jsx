@@ -129,6 +129,8 @@ function baseState() {
     // Commercial listings are price-gated for anonymous buyers; this is the only
     // state Commercial adds to the shell, and it changes nothing for residential.
     signedIn: false,
+    // review-only design state: which account type the header is rendered for
+    role: "buyer",
     sch: schBase(), ag: agBase()
   };
 }
@@ -794,6 +796,10 @@ function ExpReviewerBar({ st, setSt, onScenario, hint }) {
           {[["Anon", false], ["Signed in", true]].map(([lbl, v]) => (
             <button key={lbl} onClick={() => setSt((s) => ({ ...s, signedIn: v }))} style={{ padding: "4px 10px", borderRadius: "var(--radius-full)", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "11.5px", fontWeight: 600, border: "1px solid rgba(255,255,255,0.2)", background: !!st.signedIn === v ? "rgba(255,255,255,0.16)" : "transparent", color: "rgba(255,255,255,0.85)", whiteSpace: "nowrap" }}>{lbl}</button>
           ))}
+          {/* review chrome: header coverage per account type (Buyer / Dealer / Admin) */}
+          {[["Buyer", "buyer"], ["Dealer", "dealer"], ["Admin", "admin"]].map(([lbl, v]) => (
+            <button key={v} onClick={() => setSt((s) => ({ ...s, role: v }))} data-review-role={v} style={{ padding: "4px 10px", borderRadius: "var(--radius-full)", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "11.5px", fontWeight: 600, border: "1px solid rgba(255,255,255,0.2)", background: (st.role || "buyer") === v ? "rgba(255,255,255,0.16)" : "transparent", color: "rgba(255,255,255,0.85)", whiteSpace: "nowrap" }}>{lbl}</button>
+          ))}
           <a href="transitions.html" style={{ alignSelf: "center", fontSize: "11.5px", fontWeight: 600, color: "var(--copper-400)", whiteSpace: "nowrap", marginLeft: "4px" }}>Storyboard ↗</a>
         </span>
       </div>
@@ -884,21 +890,93 @@ function ExpShell({ st, view, act, isMobile }) {
 
 const JOURNEY_BADGE = { areas: ["Areas", "accent"], schools: ["Schools", "neutral"], agri: ["Agricultural", "success"] };
 
-function ExpTopNav({ compact, st, act }) {
+// ONE shared global header for every desktop state, session and role (same rule in
+// Discover and Results). Mobile (compact) keeps its existing chrome. Structure:
+// logo · [city | Buy/Rent | search] · journeys · role actions. The passive journey
+// badge is gone on desktop (the selected journey pill already says it). Search is
+// floored at 300px. If the row would still overflow: stage 1 drops the logo
+// tagline, stage 2 tightens gaps, stage 3 folds 2+ role actions into one menu.
+// Nothing ever wraps to a second row.
+// Role actions are review-coverage only: they link to the existing Dealer / Admin
+// artifacts in this system and grant nothing.
+const HDR_ROLE_ACTIONS = {
+  buyer: [],
+  dealer: [{ label: "My listings", icon: "layers", href: "../broker/listings.html" }, { label: "Post a listing", icon: "plus", href: "../buyer/choose-lisiting-journey.html", primary: true }],
+  admin: [{ label: "Admin console", icon: "users", href: "../../City Launch - Admin Wireframes v1.html", primary: true }]
+};
+const HDR_ROLE_LABEL = { buyer: "Buyer", dealer: "Dealer", admin: "Admin" };
+function HdrBtn({ a, compact }) {
+  const base = { display: "inline-flex", alignItems: "center", gap: "6px", border: "1px solid " + (a.primary ? "var(--navy-800)" : "var(--border-strong)"), background: a.primary ? "var(--navy-800)" : "var(--paper)", cursor: "pointer", padding: compact ? "5px 10px" : "7px 12px", borderRadius: "var(--radius-md)", fontFamily: "var(--font-sans)", fontSize: compact ? "11.5px" : "12.5px", fontWeight: 600, color: a.primary ? "#fff" : "var(--text-strong)", whiteSpace: "nowrap", textDecoration: "none", flex: "none" };
+  const { Icon } = window.ReTrendsDesignSystem_f37966;
+  const inner = <>{a.icon && <Icon name={a.icon} size={14} color={a.primary ? "#fff" : "var(--grey-500)"} />}{a.label}</>;
+  return a.href ? <a href={a.href} target="_blank" rel="noopener" data-role-action={a.label} style={base}>{inner}</a> : <button onClick={a.onClick} data-role-action={a.label} style={base}>{inner}</button>;
+}
+function HdrActionsMenu({ label, items }) {
+  const { Icon } = window.ReTrendsDesignSystem_f37966;
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const f = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const k = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", f); document.addEventListener("keydown", k);
+    return () => { document.removeEventListener("mousedown", f); document.removeEventListener("keydown", k); };
+  }, [open]);
+  const row = { display: "flex", alignItems: "center", gap: "9px", width: "100%", padding: "8px 10px", border: "none", borderRadius: "var(--radius-md)", background: "transparent", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "13px", fontWeight: 600, color: "var(--text-strong)", textDecoration: "none", textAlign: "left" };
+  return (
+    <span ref={ref} data-design-component="role-actions-menu" style={{ position: "relative", flex: "none" }}>
+      <button onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} style={{ display: "inline-flex", alignItems: "center", gap: "6px", border: "1px solid var(--border-strong)", background: "var(--paper)", cursor: "pointer", padding: "7px 10px 7px 12px", borderRadius: "var(--radius-md)", fontFamily: "var(--font-sans)", fontSize: "12.5px", fontWeight: 600, color: "var(--text-strong)", whiteSpace: "nowrap" }}>
+        {label}<Icon name="chevron-down" size={14} color="var(--grey-500)" />
+      </button>
+      {open && (
+        <div role="menu" style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 1200, minWidth: "190px", padding: "5px", background: "var(--surface-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-lg)" }}>
+          {items.map((a) => a.href
+            ? <a key={a.label} role="menuitem" href={a.href} target="_blank" rel="noopener" style={row}><Icon name={a.icon || "arrow-right"} size={15} color="var(--grey-500)" />{a.label}</a>
+            : <button key={a.label} role="menuitem" onClick={() => { setOpen(false); a.onClick(); }} style={row}><Icon name={a.icon || "arrow-right"} size={15} color="var(--grey-500)" />{a.label}</button>)}
+        </div>
+      )}
+    </span>
+  );
+}
+function ExpTopNav({ compact, st, act, view }) {
   const { Icon, Badge } = window.ReTrendsDesignSystem_f37966;
   const badge = JOURNEY_BADGE[st.journey] || JOURNEY_BADGE.areas;
+  const ref = React.useRef(null);
+  const [stage, setStage] = React.useState(0);
+  const global = !compact && view;
+  const role = st.role || "buyer";
+  const actions = [{ label: "Saved alerts", onClick: act.openAlerts }].concat(HDR_ROLE_ACTIONS[role] || []);
+  // reset MUST run before the fit check in the same commit (else set(1)+set(0) nets to a no-op bail-out)
+  React.useLayoutEffect(() => { setStage(0); }, [st.journey, role, st.city]);
+  React.useLayoutEffect(() => {
+    const el = ref.current;
+    if (!global || !el || stage >= 3) return;
+    const sr = el.querySelector('[data-design-component="area-autocomplete"]');
+    if (el.scrollWidth > el.clientWidth + 1 || (sr && sr.offsetWidth < 300)) setStage(stage + 1);
+  });
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!global || !el || !window.ResizeObserver) return;
+    let w = el.clientWidth;
+    const ro = new ResizeObserver(() => { if (Math.abs(el.clientWidth - w) > 1) { w = el.clientWidth; setStage(0); } });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [global]);
   return (
-    <header style={{ flex: "none", height: compact ? "44px" : "56px", display: "flex", alignItems: "center", gap: compact ? "10px" : "24px", padding: compact ? "0 14px" : "0 22px", background: "var(--paper)", borderBottom: "1px solid var(--border)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+    <header ref={ref} data-design-component="global-header" data-role={role} data-fit-stage={stage} style={{ flex: "none", position: "relative", zIndex: 1100, height: compact ? "44px" : "58px", display: "flex", alignItems: "center", gap: compact ? "10px" : global ? (stage >= 2 ? "8px" : "14px") : "24px", padding: compact ? "0 14px" : stage >= 2 ? "0 14px" : "0 20px", background: "var(--paper)", borderBottom: "1px solid var(--border)" }}>
+      <div style={{ flex: "none", display: "flex", alignItems: "center", gap: "10px" }}>
         <div style={{ width: compact ? "26px" : "32px", height: compact ? "26px" : "32px", borderRadius: "var(--radius-md)", background: "var(--navy-800)", display: "grid", placeItems: "center" }}><Icon name="map-pin" size={compact ? 15 : 18} color="#fff" /></div>
         <div style={{ lineHeight: 1.1, whiteSpace: "nowrap" }}>
           <div style={{ fontSize: compact ? "13px" : "14.5px", fontWeight: 700, letterSpacing: "-0.01em", color: "var(--text-strong)" }}>Bangalore Property Tracker</div>
-          {!compact && <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Real estate trends</div>}
+          {!compact && stage < 1 && <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Real estate trends</div>}
         </div>
       </div>
-      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "12px" }}>
-        {!compact && <Badge tone={badge[1]} pill>{badge[0]}</Badge>}
-        <button onClick={act.openAlerts} style={{ border: "1px solid var(--border-strong)", background: "var(--paper)", cursor: "pointer", padding: compact ? "5px 10px" : "7px 13px", borderRadius: "var(--radius-md)", fontFamily: "var(--font-sans)", fontSize: compact ? "11.5px" : "12.5px", fontWeight: 600, color: "var(--text-strong)", whiteSpace: "nowrap" }}>Saved alerts</button>
+      {global && <window.ExpModeBar st={st} act={act} view={view} isMobile={false} part="header" tight={stage >= 2} />}
+      <div data-design-component="role-actions" style={{ flex: "none", marginLeft: global ? 0 : "auto", display: "flex", alignItems: "center", gap: "8px" }}>
+        {!global && !compact && <Badge tone={badge[1]} pill>{badge[0]}</Badge>}
+        {global && stage >= 3 && actions.length > 1
+          ? <HdrActionsMenu label={HDR_ROLE_LABEL[role]} items={actions} />
+          : (compact ? actions.slice(0, 1) : actions).map((a) => <HdrBtn key={a.label} a={a} compact={compact} />)}
       </div>
     </header>
   );
@@ -922,7 +1000,7 @@ function mapProps(st, view, act) {
 function ExpDesktop({ st, view, act }) {
   return (
     <>
-      <ExpTopNav st={st} act={act} />
+      <ExpTopNav st={st} act={act} view={view} />
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         <div style={{ flex: "0 0 52%", position: "relative", borderRight: "1px solid var(--border)" }}>
           <window.ExpMap {...mapProps(st, view, act)} isMobile={false} />

@@ -1,4 +1,4 @@
-/* @ds-bundle: {"format":4,"namespace":"ReTrendsDesignSystem_f37966","components":[{"name":"Icon","sourcePath":"components/Icon.jsx"},{"name":"Badge","sourcePath":"components/core/Badge.jsx"},{"name":"Button","sourcePath":"components/core/Button.jsx"},{"name":"Card","sourcePath":"components/core/Card.jsx"},{"name":"CardTitle","sourcePath":"components/core/Card.jsx"},{"name":"CardDescription","sourcePath":"components/core/Card.jsx"},{"name":"Input","sourcePath":"components/core/Input.jsx"},{"name":"Select","sourcePath":"components/core/Select.jsx"},{"name":"PropertyCard","sourcePath":"components/domain/PropertyCard.jsx"},{"name":"StatTile","sourcePath":"components/domain/StatTile.jsx"},{"name":"TrustBadge","sourcePath":"components/domain/TrustBadge.jsx"}],"sourceHashes":{"components/Icon.jsx":"34b98729919b","components/core/Badge.jsx":"ba18c6eaa112","components/core/Button.jsx":"7997ec28af2d","components/core/Card.jsx":"46955e2e0be7","components/core/Input.jsx":"e4b14321cc33","components/core/Select.jsx":"15ec79bf8ad5","components/domain/PropertyCard.jsx":"c9f9cca8f7c2","components/domain/StatTile.jsx":"0a1a6e034b70","components/domain/TrustBadge.jsx":"a688791e5fee","design_handoff_discover_area_first/designs/data.js":"bc7c3fc95e68","design_handoff_discover_area_first/designs/uni-belt-data.js":"4615efefa2bb","ui_kits/admin/AdminChrome.jsx":"c1b9f88ae322","ui_kits/admin/LaunchScreen.jsx":"04122289c2c2","ui_kits/admin/PrepareCityScreen.jsx":"aea16f850b2b","ui_kits/admin/PreviewValidateScreen.jsx":"03a9c9c3a431","ui_kits/admin/SelectCityScreen.jsx":"386250659122","ui_kits/admin/admin-data.js":"a888a39d1c3a","ui_kits/agri-discovery/AgriDiscovery.jsx":"c7d912b64a0a","ui_kits/agri-discovery/AgriMap.jsx":"b158a63dc937","ui_kits/agri-discovery/CorridorDiscovery.jsx":"27e45b9e4852","ui_kits/agri-discovery/CorridorMap.jsx":"111f355c03d6","ui_kits/agri-discovery/CorridorPanel.jsx":"e4da99dfc924","ui_kits/agri-discovery/Panel.jsx":"3770280bb32b","ui_kits/agri-discovery/corridor-data.js":"4f4a5d29cce2","ui_kits/agri-discovery/data.js":"0d01c48cd67b","ui_kits/area-discovery/AreaCards.jsx":"28217654d7c4","ui_kits/area-discovery/AreaDiscovery.jsx":"a975bc54f039","ui_kits/area-discovery/AreaMap.jsx":"aefb677bdb79","ui_kits/area-discovery/data.js":"58e5bbcff3c0","ui_kits/broker/AreaInsights.jsx":"e1f690ce9354","ui_kits/broker/BrokerDashboard.jsx":"0ae926a0be25","ui_kits/broker/DemandGaps.jsx":"cfa511fb5b6b","ui_kits/broker/ListingQuality.jsx":"1ef2ff4230f6","ui_kits/broker/data.js":"487f26207df7","ui_kits/broker/listing-quality-data.js":"694a235c1b91","ui_kits/buyer/BuyerArea.jsx":"b97fadfb8bdd","ui_kits/buyer/data.js":"75326eacebe2","ui_kits/discover-scopes/src/ScopeApp.jsx":"a81f8f84b04a","ui_kits/discover-scopes/src/ScopeBits.jsx":"31785eda442d","ui_kits/discover-scopes/src/ScopeMap.jsx":"c45c7fb6ba9d","ui_kits/discover-scopes/src/ScopePanel.jsx":"3e33b85f714b","ui_kits/discover-scopes/src/scope-data.js":"921cfb8738e1","ui_kits/discover-scopes/src/states-a.js":"f08c048e7c0b","ui_kits/discover-scopes/src/states-b.js":"13ea924286bf","ui_kits/discover/AreaFirstMap.jsx":"c8ed0dd3c444","ui_kits/discover/AreaFirstPanel.jsx":"a57ff9a242c8","ui_kits/discover/DiscoverMap.jsx":"ea1e4cb429c2","ui_kits/discover/DiscoverSurface.jsx":"eff6ccb1f303","ui_kits/discover/JourneyPanel.jsx":"b4be05ea321e","ui_kits/discover/ListingActions.jsx":"e3fa47a860b2","ui_kits/discover/ListingDetail.jsx":"c9e75587b6fd","ui_kits/discover/ManipalResultsMap.jsx":"5cbe46865d7d","ui_kits/discover/ManipalResultsPanel.jsx":"fe7efeda8ca1","ui_kits/discover/UniBeltMap.jsx":"bf4cc6b45a52","ui_kits/discover/UniBeltPanel.jsx":"e35f4d1898f0","ui_kits/discover/cards.jsx":"62e0d8c90053","ui_kits/discover/data.js":"bc7c3fc95e68","ui_kits/discover/discover-data.js":"2924fdbb8e6e","ui_kits/discover/listing-data.js":"6628648dd09b","ui_kits/discover/manipal-data.js":"b69becf252f3","ui_kits/discover/map.jsx":"1b0053303478","ui_kits/discover/panels.jsx":"9407d1278d21","ui_kits/discover/src/DiscoverPanel.jsx":"c57f0e5da5da","ui_kits/discover/src/DiscoverPortal.jsx":"86e367b61dfe","ui_kits/discover/src/PortalMap.jsx":"9896572a3ac5","ui_kits/discover/src/components/cards.jsx":"1ae2aee30e5d","ui_kits/discover/src/components/shared.jsx":"e009e8d1cced","ui_kits/discover/src/data.js":"67ec10dcde7d","ui_kits/discover/uni-belt-data.js":"4615efefa2bb","ui_kits/new_discover/src/ExpAgri.jsx":"d9a31c8170cc","ui_kits/new_discover/src/ExpMap.jsx":"3836b0365ee9","ui_kits/new_discover/src/ExpModeBar.jsx":"cf689182c5b8","ui_kits/new_discover/src/ExpPanel.jsx":"24a923b68afc","ui_kits/new_discover/src/ExpSchools.jsx":"2acf2e45bc4d","ui_kits/new_discover/src/Experience.jsx":"0c7f47b50dd4","ui_kits/new_discover/src/NDMap.jsx":"ed2a1425e383","ui_kits/new_discover/src/NDPanel.jsx":"d22e6558b927","ui_kits/new_discover/src/NewDiscover.jsx":"555f9fea325e","ui_kits/new_discover/src/TBits.jsx":"6fb0b79e3127","ui_kits/new_discover/src/Transitions.jsx":"cdc22eb7d29d","ui_kits/new_discover/src/components/cards.jsx":"b595c1a547fd","ui_kits/new_discover/src/components/shared.jsx":"1af85af1b911","ui_kits/new_discover/src/data.js":"1aa5af9d80ee","ui_kits/new_discover/src/exp-data.js":"c82df8355f0d","ui_kits/new_discover/src/exp-journeys.js":"a45db27a498d","ui_kits/new_discover/src/geo.js":"9539d7cb66b0","ui_kits/new_discover/src/transitions-data.js":"da53e555165e","ui_kits/portal/DiscoverScreen.jsx":"78cdd6cd4bbc","ui_kits/portal/Header.jsx":"6ef7d125655e","ui_kits/portal/HomeScreen.jsx":"a7c6df4e022e","ui_kits/portal/ListingScreen.jsx":"300372c59177","ui_kits/portal/TrendsScreen.jsx":"340ecee7c320","ui_kits/portal/data.js":"b82007b95258","ui_kits/school-discovery/Cards.jsx":"072db7f51fa6","ui_kits/school-discovery/Map.jsx":"61c74789b8e4","ui_kits/school-discovery/SchoolDiscovery.jsx":"74bae9ee7773","ui_kits/school-discovery/data.js":"0338cda8c6dd"},"inlinedExternals":[],"unexposedExports":[]} */
+/* @ds-bundle: {"format":4,"namespace":"ReTrendsDesignSystem_f37966","components":[{"name":"Icon","sourcePath":"components/Icon.jsx"},{"name":"Badge","sourcePath":"components/core/Badge.jsx"},{"name":"Button","sourcePath":"components/core/Button.jsx"},{"name":"Card","sourcePath":"components/core/Card.jsx"},{"name":"CardTitle","sourcePath":"components/core/Card.jsx"},{"name":"CardDescription","sourcePath":"components/core/Card.jsx"},{"name":"Input","sourcePath":"components/core/Input.jsx"},{"name":"Select","sourcePath":"components/core/Select.jsx"},{"name":"PropertyCard","sourcePath":"components/domain/PropertyCard.jsx"},{"name":"StatTile","sourcePath":"components/domain/StatTile.jsx"},{"name":"TrustBadge","sourcePath":"components/domain/TrustBadge.jsx"}],"sourceHashes":{"components/Icon.jsx":"34b98729919b","components/core/Badge.jsx":"ba18c6eaa112","components/core/Button.jsx":"7997ec28af2d","components/core/Card.jsx":"46955e2e0be7","components/core/Input.jsx":"e4b14321cc33","components/core/Select.jsx":"15ec79bf8ad5","components/domain/PropertyCard.jsx":"c9f9cca8f7c2","components/domain/StatTile.jsx":"0a1a6e034b70","components/domain/TrustBadge.jsx":"a688791e5fee","design_handoff_discover_area_first/designs/data.js":"bc7c3fc95e68","design_handoff_discover_area_first/designs/uni-belt-data.js":"4615efefa2bb","ui_kits/admin/AdminChrome.jsx":"0cc0c9fe98fa","ui_kits/admin/LaunchScreen.jsx":"04122289c2c2","ui_kits/admin/ListingsEditor.jsx":"8a16e4c17bf2","ui_kits/admin/ListingsScreen.jsx":"3eb0857f14c6","ui_kits/admin/PA_Shared.jsx":"2dfd4f01b07f","ui_kits/admin/PL_Shared.jsx":"1bec8ae1d7bf","ui_kits/admin/PendingApprovalsScreen.jsx":"443a6ebee629","ui_kits/admin/PrepareCityScreen.jsx":"aea16f850b2b","ui_kits/admin/PreviewValidateScreen.jsx":"03a9c9c3a431","ui_kits/admin/ReviewDrawer.jsx":"f0adfe4179a2","ui_kits/admin/SelectCityScreen.jsx":"386250659122","ui_kits/admin/admin-data.js":"a888a39d1c3a","ui_kits/admin/listings-data.js":"e67d3e015607","ui_kits/admin/pending-data.js":"74ada7d75bbf","ui_kits/agri-discovery/AgriDiscovery.jsx":"c7d912b64a0a","ui_kits/agri-discovery/AgriMap.jsx":"b158a63dc937","ui_kits/agri-discovery/CorridorDiscovery.jsx":"27e45b9e4852","ui_kits/agri-discovery/CorridorMap.jsx":"111f355c03d6","ui_kits/agri-discovery/CorridorPanel.jsx":"e4da99dfc924","ui_kits/agri-discovery/Panel.jsx":"3770280bb32b","ui_kits/agri-discovery/corridor-data.js":"4f4a5d29cce2","ui_kits/agri-discovery/data.js":"0d01c48cd67b","ui_kits/area-discovery/AreaCards.jsx":"28217654d7c4","ui_kits/area-discovery/AreaDiscovery.jsx":"a975bc54f039","ui_kits/area-discovery/AreaMap.jsx":"aefb677bdb79","ui_kits/area-discovery/data.js":"58e5bbcff3c0","ui_kits/broker/AreaInsights.jsx":"e1f690ce9354","ui_kits/broker/BrokerDashboard.jsx":"0ae926a0be25","ui_kits/broker/DemandGaps.jsx":"cfa511fb5b6b","ui_kits/broker/ListingQuality.jsx":"1ef2ff4230f6","ui_kits/broker/data.js":"487f26207df7","ui_kits/broker/listing-quality-data.js":"694a235c1b91","ui_kits/buyer/BuyerArea.jsx":"b97fadfb8bdd","ui_kits/buyer/data.js":"75326eacebe2","ui_kits/discover-scopes/src/ScopeApp.jsx":"a81f8f84b04a","ui_kits/discover-scopes/src/ScopeBits.jsx":"31785eda442d","ui_kits/discover-scopes/src/ScopeMap.jsx":"c45c7fb6ba9d","ui_kits/discover-scopes/src/ScopePanel.jsx":"3e33b85f714b","ui_kits/discover-scopes/src/scope-data.js":"921cfb8738e1","ui_kits/discover-scopes/src/states-a.js":"f08c048e7c0b","ui_kits/discover-scopes/src/states-b.js":"13ea924286bf","ui_kits/discover/AreaFirstMap.jsx":"c8ed0dd3c444","ui_kits/discover/AreaFirstPanel.jsx":"a57ff9a242c8","ui_kits/discover/DiscoverMap.jsx":"ea1e4cb429c2","ui_kits/discover/DiscoverSurface.jsx":"eff6ccb1f303","ui_kits/discover/JourneyPanel.jsx":"b4be05ea321e","ui_kits/discover/ListingActions.jsx":"e3fa47a860b2","ui_kits/discover/ListingDetail.jsx":"c9e75587b6fd","ui_kits/discover/ManipalResultsMap.jsx":"5cbe46865d7d","ui_kits/discover/ManipalResultsPanel.jsx":"fe7efeda8ca1","ui_kits/discover/UniBeltMap.jsx":"bf4cc6b45a52","ui_kits/discover/UniBeltPanel.jsx":"e35f4d1898f0","ui_kits/discover/cards.jsx":"62e0d8c90053","ui_kits/discover/data.js":"bc7c3fc95e68","ui_kits/discover/discover-data.js":"2924fdbb8e6e","ui_kits/discover/listing-data.js":"6628648dd09b","ui_kits/discover/manipal-data.js":"b69becf252f3","ui_kits/discover/map.jsx":"1b0053303478","ui_kits/discover/panels.jsx":"9407d1278d21","ui_kits/discover/src/DiscoverPanel.jsx":"c57f0e5da5da","ui_kits/discover/src/DiscoverPortal.jsx":"86e367b61dfe","ui_kits/discover/src/PortalMap.jsx":"9896572a3ac5","ui_kits/discover/src/components/cards.jsx":"1ae2aee30e5d","ui_kits/discover/src/components/shared.jsx":"e009e8d1cced","ui_kits/discover/src/data.js":"67ec10dcde7d","ui_kits/discover/uni-belt-data.js":"4615efefa2bb","ui_kits/new_discover/src/ExpAgri.jsx":"d9a31c8170cc","ui_kits/new_discover/src/ExpMap.jsx":"e3d81db25289","ui_kits/new_discover/src/ExpMapFilters.jsx":"0a2214540979","ui_kits/new_discover/src/ExpModeBar.jsx":"30c226aa85cf","ui_kits/new_discover/src/ExpPanel.jsx":"20ea951afc8f","ui_kits/new_discover/src/ExpSchools.jsx":"2acf2e45bc4d","ui_kits/new_discover/src/Experience.jsx":"c9e8a85a3343","ui_kits/new_discover/src/NDMap.jsx":"ed2a1425e383","ui_kits/new_discover/src/NDPanel.jsx":"d22e6558b927","ui_kits/new_discover/src/NewDiscover.jsx":"555f9fea325e","ui_kits/new_discover/src/TBits.jsx":"6fb0b79e3127","ui_kits/new_discover/src/Transitions.jsx":"cdc22eb7d29d","ui_kits/new_discover/src/components/cards.jsx":"d050826ac29b","ui_kits/new_discover/src/components/shared.jsx":"1af85af1b911","ui_kits/new_discover/src/data.js":"1aa5af9d80ee","ui_kits/new_discover/src/exp-commercial.js":"65f1f2309cb1","ui_kits/new_discover/src/exp-data.js":"67a7df4ed89f","ui_kits/new_discover/src/exp-journeys.js":"a45db27a498d","ui_kits/new_discover/src/geo.js":"9539d7cb66b0","ui_kits/new_discover/src/transitions-data.js":"da53e555165e","ui_kits/portal/DiscoverScreen.jsx":"78cdd6cd4bbc","ui_kits/portal/Header.jsx":"6ef7d125655e","ui_kits/portal/HomeScreen.jsx":"a7c6df4e022e","ui_kits/portal/ListingScreen.jsx":"300372c59177","ui_kits/portal/TrendsScreen.jsx":"340ecee7c320","ui_kits/portal/data.js":"b82007b95258","ui_kits/school-discovery/Cards.jsx":"072db7f51fa6","ui_kits/school-discovery/Map.jsx":"61c74789b8e4","ui_kits/school-discovery/SchoolDiscovery.jsx":"74bae9ee7773","ui_kits/school-discovery/data.js":"0338cda8c6dd"},"inlinedExternals":[],"unexposedExports":[]} */
 
 (() => {
 
@@ -1969,8 +1969,10 @@ const RTA_STEPS = [{
   tag: "Launch",
   title: "Launch"
 }];
-function RTA_Header() {
-  const nav = [["Dashboard", false], ["Listings", false], ["City launch", true], ["Users", false]];
+function RTA_Header({
+  active = "City launch"
+}) {
+  const nav = ["Dashboard", "Listings", "City launch", "Users"].map(label => [label, label === active]);
   return /*#__PURE__*/React.createElement("header", {
     style: {
       display: "flex",
@@ -2466,6 +2468,3428 @@ function RTA_Launch({
 }
 window.RTA_Launch = RTA_Launch;
 })(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/admin/LaunchScreen.jsx", error: String((e && e.message) || e) }); }
+
+// ui_kits/admin/ListingsEditor.jsx
+try { (() => {
+// Wide right-hand listing editor. Sections, not tabs — same single-scroll structure as the
+// Pending Approvals review drawer — with inline validation, an unsaved-changes guard, a
+// simulated draggable map pin, and lifecycle actions that always route through confirmation.
+const {
+  Icon: EdIcon,
+  Badge: EdBadge,
+  Button: EdButton
+} = window.ReTrendsDesignSystem_f37966;
+function EdFact({
+  label,
+  children
+}) {
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "11px",
+      fontWeight: 700,
+      color: "var(--text-muted)",
+      textTransform: "uppercase",
+      letterSpacing: "0.04em",
+      marginBottom: "5px"
+    }
+  }, label), children);
+}
+const fieldStyle = {
+  width: "100%",
+  height: "36px",
+  padding: "0 12px",
+  fontFamily: "var(--font-sans)",
+  fontSize: "13.5px",
+  border: "1px solid var(--border-strong)",
+  borderRadius: "var(--radius-md)",
+  background: "var(--input-bg)",
+  boxSizing: "border-box"
+};
+function ListingsEditor({
+  listing,
+  onClose,
+  onRequestAction,
+  onSave
+}) {
+  const [form, setForm] = React.useState(null);
+  const [dirty, setDirty] = React.useState(false);
+  const [errors, setErrors] = React.useState([]);
+  const [saving, setSaving] = React.useState(false);
+  const [confirmDiscard, setConfirmDiscard] = React.useState(false);
+  const [showCoords, setShowCoords] = React.useState(false);
+  const [pin, setPin] = React.useState({
+    x: 50,
+    y: 50
+  });
+  const [dragging, setDragging] = React.useState(false);
+  const mapRef = React.useRef(null);
+  React.useEffect(() => {
+    setForm({
+      ...listing,
+      priceInput: String(listing.price)
+    });
+    setDirty(false);
+    setErrors([]);
+    setShowCoords(false);
+    setPin({
+      x: 50,
+      y: 50
+    });
+  }, [listing.id]);
+  React.useEffect(() => {
+    if (!dragging) return;
+    const move = e => {
+      const r = mapRef.current.getBoundingClientRect();
+      setPin({
+        x: Math.max(2, Math.min(98, (e.clientX - r.left) / r.width * 100)),
+        y: Math.max(2, Math.min(98, (e.clientY - r.top) / r.height * 100))
+      });
+      setDirty(true);
+    };
+    const up = () => setDragging(false);
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    return () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+  }, [dragging]);
+  if (!form) return null;
+  const set = patch => {
+    setForm(f => ({
+      ...f,
+      ...patch
+    }));
+    setDirty(true);
+  };
+  const broker = window.PA_BROKERS[form.broker];
+  const localityValid = window.PL_LOCALITIES.includes(form.locality);
+  const price = Number(form.priceInput) || 0;
+  const validate = () => {
+    const errs = [];
+    if (!form.title.trim()) errs.push("Title is required.");
+    if (!localityValid) errs.push("Locality must be chosen from the controlled list.");
+    if (!(price > 0)) errs.push("Price must be a positive amount.");
+    if (price > 5000000000) errs.push("Price looks implausibly high \u2014 double-check the entered amount.");
+    return errs;
+  };
+  const doSave = thenPublish => {
+    const errs = validate();
+    if (errs.length) {
+      setErrors(errs);
+      return;
+    }
+    setSaving(true);
+    setTimeout(() => {
+      onSave(listing.id, {
+        title: form.title,
+        propertyType: form.propertyType,
+        area: form.area,
+        price,
+        locality: form.locality,
+        address: form.address,
+        description: form.description,
+        amenities: form.amenities
+      });
+      setSaving(false);
+      setDirty(false);
+      setErrors([]);
+      if (thenPublish) onRequestAction("publish", [listing.id]);
+    }, 600);
+  };
+  const requestClose = () => dirty ? setConfirmDiscard(true) : onClose();
+  const transitions = window.PL_TRANSITIONS[listing.status] || [];
+  const inconsistent = listing.warnings.includes("inconsistent_state");
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      zIndex: 60,
+      display: "flex",
+      justifyContent: "flex-end"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    onClick: requestClose,
+    style: {
+      position: "absolute",
+      inset: 0,
+      background: "rgba(14,22,38,0.38)"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "relative",
+      width: "min(760px, 96vw)",
+      height: "100%",
+      background: "var(--paper)",
+      boxShadow: "var(--shadow-xl)",
+      display: "flex",
+      flexDirection: "column"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: "none",
+      padding: "20px 24px 16px",
+      borderBottom: "1px solid var(--border)"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: "12px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      minWidth: 0
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "18px",
+      fontWeight: 700,
+      lineHeight: 1.3
+    }
+  }, form.title || "Untitled listing"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "10px",
+      marginTop: "6px",
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "12px",
+      fontFamily: "var(--font-mono)",
+      color: "var(--text-muted)"
+    }
+  }, listing.id), /*#__PURE__*/React.createElement(window.PL_LifecycleBadge, {
+    status: listing.status
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "12px",
+      color: "var(--text-muted)"
+    }
+  }, "Updated ", window.PA_formatAge(listing.updatedAt), " by ", listing.updatedBy))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "8px",
+      flex: "none"
+    }
+  }, /*#__PURE__*/React.createElement(EdButton, {
+    variant: "outline",
+    size: "sm"
+  }, /*#__PURE__*/React.createElement(EdIcon, {
+    name: "arrow-up-right",
+    size: 14
+  }), " Preview"), /*#__PURE__*/React.createElement(EdButton, {
+    variant: "ghost",
+    size: "icon",
+    onClick: requestClose
+  }, /*#__PURE__*/React.createElement(EdIcon, {
+    name: "x",
+    size: 18
+  })))), confirmDiscard && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: "12px",
+      padding: "10px 14px",
+      background: "var(--caution-bg)",
+      borderRadius: "var(--radius-md)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "12px"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "13px",
+      color: "var(--text-strong)"
+    }
+  }, "Discard unsaved changes?"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "8px"
+    }
+  }, /*#__PURE__*/React.createElement(EdButton, {
+    variant: "ghost",
+    size: "sm",
+    onClick: () => setConfirmDiscard(false)
+  }, "Keep editing"), /*#__PURE__*/React.createElement(EdButton, {
+    size: "sm",
+    style: {
+      background: "var(--negative)"
+    },
+    onClick: onClose
+  }, "Discard"))), errors.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: "12px",
+      padding: "12px 14px",
+      background: "var(--negative-bg)",
+      borderRadius: "var(--radius-md)"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "13px",
+      fontWeight: 700,
+      color: "var(--negative)",
+      marginBottom: "4px"
+    }
+  }, "Fix ", errors.length, " issue", errors.length === 1 ? "" : "s", " before saving"), errors.map((e, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      fontSize: "12.5px",
+      color: "var(--negative)"
+    }
+  }, "\u2022", " ", e)))), /*#__PURE__*/React.createElement("div", {
+    className: "upt-scroll",
+    style: {
+      flex: 1,
+      minHeight: 0,
+      overflowY: "auto",
+      padding: "20px 24px"
+    }
+  }, /*#__PURE__*/React.createElement("section", {
+    style: {
+      marginBottom: "26px"
+    }
+  }, /*#__PURE__*/React.createElement(window.PA_SectionTitle, {
+    icon: "file-check"
+  }, "Basic details"), /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: "13px",
+      fontWeight: 600,
+      display: "block",
+      marginBottom: "6px"
+    }
+  }, "Title"), /*#__PURE__*/React.createElement("input", {
+    value: form.title,
+    onChange: e => set({
+      title: e.target.value
+    }),
+    style: {
+      ...fieldStyle,
+      marginBottom: "4px"
+    }
+  })), /*#__PURE__*/React.createElement("section", {
+    style: {
+      marginBottom: "26px"
+    }
+  }, /*#__PURE__*/React.createElement(window.PA_SectionTitle, {
+    icon: "building"
+  }, "Property details"), /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: "13px",
+      fontWeight: 600,
+      display: "block",
+      marginBottom: "6px"
+    }
+  }, "Property type"), /*#__PURE__*/React.createElement("select", {
+    value: form.propertyType,
+    onChange: e => set({
+      propertyType: e.target.value
+    }),
+    style: fieldStyle
+  }, Object.entries(window.PA_PROPERTY_TYPES).map(([k, v]) => /*#__PURE__*/React.createElement("option", {
+    key: k,
+    value: k
+  }, v)))), /*#__PURE__*/React.createElement("section", {
+    style: {
+      marginBottom: "26px"
+    }
+  }, /*#__PURE__*/React.createElement(window.PA_SectionTitle, {
+    icon: "trending-up"
+  }, "Price & area"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: "16px"
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: "13px",
+      fontWeight: 600,
+      display: "block",
+      marginBottom: "6px"
+    }
+  }, "Price (INR)"), /*#__PURE__*/React.createElement("input", {
+    value: form.priceInput,
+    onChange: e => set({
+      priceInput: e.target.value.replace(/[^0-9]/g, "")
+    }),
+    style: fieldStyle
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "12px",
+      color: "var(--text-muted)",
+      marginTop: "5px"
+    }
+  }, "\u2248", " ", window.PA_formatPrice(price || 0))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: "13px",
+      fontWeight: 600,
+      display: "block",
+      marginBottom: "6px"
+    }
+  }, "Area"), /*#__PURE__*/React.createElement("input", {
+    value: form.area,
+    onChange: e => set({
+      area: e.target.value
+    }),
+    style: fieldStyle
+  })))), /*#__PURE__*/React.createElement("section", {
+    style: {
+      marginBottom: "26px"
+    }
+  }, /*#__PURE__*/React.createElement(window.PA_SectionTitle, {
+    icon: "map-pin",
+    right: /*#__PURE__*/React.createElement(EdBadge, {
+      tone: form.locationConfidence === "high" ? "positive" : form.locationConfidence === "medium" ? "caution" : "negative"
+    }, form.locationConfidence[0].toUpperCase() + form.locationConfidence.slice(1), " confidence")
+  }, "Location"), /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: "13px",
+      fontWeight: 600,
+      display: "block",
+      marginBottom: "6px"
+    }
+  }, "Locality"), /*#__PURE__*/React.createElement("input", {
+    list: "pl-localities",
+    value: form.locality,
+    onChange: e => set({
+      locality: e.target.value
+    }),
+    style: {
+      ...fieldStyle,
+      borderColor: localityValid ? "var(--border-strong)" : "var(--negative)"
+    }
+  }), /*#__PURE__*/React.createElement("datalist", {
+    id: "pl-localities"
+  }, window.PL_LOCALITIES.map(l => /*#__PURE__*/React.createElement("option", {
+    key: l,
+    value: l
+  }))), !localityValid && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "12px",
+      color: "var(--negative)",
+      marginTop: "5px"
+    }
+  }, "Not a recognized locality ", "\u2014", " choose one from the list to avoid spelling variants."), /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: "13px",
+      fontWeight: 600,
+      display: "block",
+      margin: "14px 0 6px"
+    }
+  }, "Full address"), /*#__PURE__*/React.createElement("textarea", {
+    value: form.address,
+    onChange: e => set({
+      address: e.target.value
+    }),
+    rows: 2,
+    style: {
+      ...fieldStyle,
+      height: "auto",
+      padding: "8px 12px",
+      resize: "vertical"
+    }
+  }), listing.locationOutOfBounds && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: "12px",
+      padding: "10px 12px",
+      background: "var(--caution-bg)",
+      borderRadius: "var(--radius-md)",
+      fontSize: "12.5px",
+      color: "var(--text-strong)",
+      display: "flex",
+      gap: "8px"
+    }
+  }, /*#__PURE__*/React.createElement(EdIcon, {
+    name: "alert-triangle",
+    size: 14,
+    color: "var(--caution)",
+    style: {
+      flex: "none",
+      marginTop: "1px"
+    }
+  }), "These coordinates fall outside the ", form.locality, " locality boundary ", "\u2014", " verify before publishing."), /*#__PURE__*/React.createElement("div", {
+    ref: mapRef,
+    onMouseDown: e => {
+      setDragging(true);
+      const r = mapRef.current.getBoundingClientRect();
+      setPin({
+        x: (e.clientX - r.left) / r.width * 100,
+        y: (e.clientY - r.top) / r.height * 100
+      });
+    },
+    style: {
+      marginTop: "12px",
+      height: "150px",
+      borderRadius: "var(--radius-md)",
+      border: "1px solid var(--border)",
+      background: "repeating-linear-gradient(45deg, var(--surface-subtle) 0 10px, var(--stone-300) 10px 20px)",
+      position: "relative",
+      cursor: "crosshair",
+      userSelect: "none"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: pin.x + "%",
+      top: pin.y + "%",
+      transform: "translate(-50%,-100%)",
+      cursor: "grab"
+    }
+  }, /*#__PURE__*/React.createElement(EdIcon, {
+    name: "map-pin",
+    size: 26,
+    color: "var(--navy-800)"
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "12px",
+      color: "var(--text-muted)",
+      marginTop: "6px"
+    }
+  }, "Drag the pin to fine-tune the mapped location."), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowCoords(s => !s),
+    style: {
+      marginTop: "10px",
+      background: "transparent",
+      border: "none",
+      padding: 0,
+      color: "var(--primary)",
+      fontSize: "12.5px",
+      fontWeight: 600,
+      cursor: "pointer"
+    }
+  }, showCoords ? "Hide" : "Show", " advanced coordinates"), showCoords && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: "16px",
+      marginTop: "10px"
+    }
+  }, /*#__PURE__*/React.createElement(EdFact, {
+    label: "Latitude"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "var(--font-mono)",
+      fontSize: "13px"
+    }
+  }, listing.lat.toFixed(4))), /*#__PURE__*/React.createElement(EdFact, {
+    label: "Longitude"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "var(--font-mono)",
+      fontSize: "13px"
+    }
+  }, listing.lon.toFixed(4))))), /*#__PURE__*/React.createElement("section", {
+    style: {
+      marginBottom: "26px"
+    }
+  }, /*#__PURE__*/React.createElement(window.PA_SectionTitle, {
+    icon: "camera",
+    right: /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: "12px",
+        color: "var(--text-muted)"
+      }
+    }, listing.photos.length, " photo", listing.photos.length === 1 ? "" : "s")
+  }, "Photos & media"), listing.photos.length ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))",
+      gap: "8px"
+    }
+  }, listing.photos.map((p, i) => /*#__PURE__*/React.createElement("img", {
+    key: i,
+    src: p,
+    alt: "",
+    style: {
+      width: "100%",
+      height: "80px",
+      objectFit: "cover",
+      borderRadius: "var(--radius-sm)",
+      border: "1px solid var(--border)"
+    }
+  }))) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "24px 0",
+      textAlign: "center",
+      background: "var(--surface-subtle)",
+      borderRadius: "var(--radius-md)",
+      border: "1px dashed var(--border-strong)"
+    }
+  }, /*#__PURE__*/React.createElement(EdIcon, {
+    name: "camera",
+    size: 20,
+    color: "var(--text-muted)"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "12.5px",
+      fontWeight: 600,
+      color: "var(--text-muted)",
+      marginTop: "6px"
+    }
+  }, "No photos submitted"))), /*#__PURE__*/React.createElement("section", {
+    style: {
+      marginBottom: "26px"
+    }
+  }, /*#__PURE__*/React.createElement(window.PA_SectionTitle, {
+    icon: "file-check"
+  }, "Description & amenities"), /*#__PURE__*/React.createElement("textarea", {
+    value: form.description,
+    onChange: e => set({
+      description: e.target.value
+    }),
+    rows: 3,
+    placeholder: "Add a description\\u2026",
+    style: {
+      ...fieldStyle,
+      height: "auto",
+      padding: "8px 12px",
+      resize: "vertical",
+      marginBottom: "12px"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: "6px"
+    }
+  }, form.amenities.map(a => /*#__PURE__*/React.createElement("span", {
+    key: a,
+    style: {
+      fontSize: "12px",
+      fontWeight: 600,
+      padding: "4px 10px",
+      borderRadius: "var(--radius-full)",
+      background: "var(--surface-subtle)"
+    }
+  }, a)), form.amenities.length === 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "12.5px",
+      color: "var(--text-muted)"
+    }
+  }, "No amenities recorded."))), /*#__PURE__*/React.createElement("section", {
+    style: {
+      marginBottom: "26px"
+    }
+  }, /*#__PURE__*/React.createElement(window.PA_SectionTitle, {
+    icon: "users"
+  }, "Broker / contact details"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      flexWrap: "wrap",
+      gap: "10px"
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "14px",
+      fontWeight: 700
+    }
+  }, broker.name), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "12px",
+      color: "var(--text-muted)"
+    }
+  }, broker.phone, " \\u00b7 ", broker.email)), /*#__PURE__*/React.createElement(window.PA_VerificationBadge, {
+    tier: broker.verification
+  }))), /*#__PURE__*/React.createElement("section", {
+    style: {
+      marginBottom: "26px"
+    }
+  }, /*#__PURE__*/React.createElement(window.PA_SectionTitle, {
+    icon: "shield-check"
+  }, "Publication & lifecycle"), inconsistent && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: "14px",
+      padding: "12px 14px",
+      background: "var(--negative-bg)",
+      borderRadius: "var(--radius-md)",
+      display: "flex",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: "12px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "8px"
+    }
+  }, /*#__PURE__*/React.createElement(EdIcon, {
+    name: "alert-triangle",
+    size: 15,
+    color: "var(--negative)",
+    style: {
+      flex: "none",
+      marginTop: "1px"
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "12.5px",
+      color: "var(--text-strong)"
+    }
+  }, "This listing is archived but still marked publicly visible ", "\u2014", " a legacy data inconsistency. Unpublish to resolve it.")), /*#__PURE__*/React.createElement(EdButton, {
+    size: "sm",
+    style: {
+      background: "var(--negative)",
+      flex: "none"
+    },
+    onClick: () => onRequestAction("unpublish", [listing.id])
+  }, "Fix now")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: "16px",
+      marginBottom: "16px"
+    }
+  }, /*#__PURE__*/React.createElement(EdFact, {
+    label: "Public visibility"
+  }, /*#__PURE__*/React.createElement(window.PL_VisibilityBadge, {
+    visible: listing.visible,
+    inconsistent: inconsistent
+  })), /*#__PURE__*/React.createElement(EdFact, {
+    label: "Lifecycle status"
+  }, /*#__PURE__*/React.createElement(window.PL_LifecycleBadge, {
+    status: listing.status
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "8px",
+      flexWrap: "wrap"
+    }
+  }, transitions.map(t => {
+    const m = window.PL_ACTION_META[t];
+    return /*#__PURE__*/React.createElement(EdButton, {
+      key: t,
+      variant: t === "publish" ? "primary" : "outline",
+      size: "sm",
+      style: t === "publish" ? {
+        background: m.color
+      } : {
+        borderColor: m.color,
+        color: m.color
+      },
+      onClick: () => onRequestAction(t, [listing.id])
+    }, m.label);
+  }))), /*#__PURE__*/React.createElement("section", null, /*#__PURE__*/React.createElement(window.PA_SectionTitle, {
+    icon: "calendar"
+  }, "Activity history"), listing.history.map((h, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      display: "flex",
+      gap: "10px",
+      padding: "6px 0",
+      fontSize: "12.5px"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: "none",
+      color: "var(--text-muted)",
+      fontFamily: "var(--font-mono)",
+      width: "84px"
+    }
+  }, window.PA_formatDateTime(h.ts).split(",")[0]), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--text-strong)"
+    }
+  }, h.actor, ": "), h.action, h.prev != null && /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "var(--text-muted)"
+    }
+  }, " (", h.prev, " ", "\u2192", " ", h.next, ")"), h.reason && /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "var(--text-muted)"
+    }
+  }, " ", "\u2014", " ", h.reason)))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: "none",
+      display: "flex",
+      alignItems: "center",
+      gap: "10px",
+      padding: "16px 24px",
+      borderTop: "1px solid var(--border)"
+    }
+  }, /*#__PURE__*/React.createElement(EdButton, {
+    variant: "outline",
+    onClick: requestClose
+  }, "Cancel"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }), /*#__PURE__*/React.createElement(EdButton, {
+    variant: "secondary",
+    disabled: saving,
+    onClick: () => doSave(false)
+  }, saving ? "Saving\u2026" : "Save changes"), (listing.status === "unpublished" || listing.status === "draft") && /*#__PURE__*/React.createElement(EdButton, {
+    disabled: saving,
+    style: {
+      background: "var(--positive)"
+    },
+    onClick: () => doSave(true)
+  }, "Save & publish"))));
+}
+Object.assign(window, {
+  ListingsEditor
+});
+})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/admin/ListingsEditor.jsx", error: String((e && e.message) || e) }); }
+
+// ui_kits/admin/ListingsScreen.jsx
+try { (() => {
+// Listings inventory — find, inspect, edit, publish/unpublish/archive/restore listings
+// across their full lifecycle. Same table density, filter conventions, drawer structure
+// and confirmation patterns as the Pending Approvals queue.
+const {
+  Icon: LSIcon,
+  Badge: LSBadge,
+  Button: LSButton,
+  Input: LSInput,
+  Select: LSSelect
+} = window.ReTrendsDesignSystem_f37966;
+const LS_DEFAULT_FILTERS = {
+  types: [],
+  localities: [],
+  brokers: [],
+  visibility: "any",
+  quality: "any",
+  updated: "any"
+};
+const LS_TABS = [["all", "All listings"], ["published", "Published"], ["pending_approval", "Pending approval"], ["needs_attention", "Needs attention"], ["archived", "Archived"]];
+function LS_TabBar({
+  tab,
+  setTab,
+  counts
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "4px",
+      marginBottom: "18px",
+      borderBottom: "1px solid var(--border)"
+    }
+  }, LS_TABS.map(([key, label]) => /*#__PURE__*/React.createElement("button", {
+    key: key,
+    onClick: () => setTab(key),
+    style: {
+      padding: "9px 14px",
+      background: "transparent",
+      border: "none",
+      borderBottom: "2px solid " + (tab === key ? "var(--navy-800)" : "transparent"),
+      color: tab === key ? "var(--text-strong)" : "var(--text-muted)",
+      fontWeight: tab === key ? 700 : 600,
+      fontSize: "13.5px",
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      gap: "6px"
+    }
+  }, label, " ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: "var(--font-mono)",
+      fontSize: "12px",
+      color: tab === key ? "var(--navy-800)" : "var(--text-muted)"
+    }
+  }, counts[key]))));
+}
+function LS_ToggleChip({
+  active,
+  onClick,
+  children
+}) {
+  return /*#__PURE__*/React.createElement("button", {
+    onClick: onClick,
+    style: {
+      padding: "5px 12px",
+      borderRadius: "var(--radius-full)",
+      fontSize: "12.5px",
+      fontWeight: 600,
+      cursor: "pointer",
+      border: "1px solid " + (active ? "var(--navy-800)" : "var(--border-strong)"),
+      background: active ? "var(--navy-800)" : "var(--paper)",
+      color: active ? "#fff" : "var(--text-body)"
+    }
+  }, children);
+}
+function LS_FiltersPanel({
+  filters,
+  setFilters,
+  localities,
+  brokerIds,
+  onClose
+}) {
+  const toggle = (key, value) => setFilters(f => ({
+    ...f,
+    [key]: f[key].includes(value) ? f[key].filter(v => v !== value) : [...f[key], value]
+  }));
+  const chipGroup = (title, key, options) => /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: "16px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "11.5px",
+      fontWeight: 700,
+      color: "var(--text-muted)",
+      textTransform: "uppercase",
+      letterSpacing: "0.03em",
+      marginBottom: "8px"
+    }
+  }, title), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: "6px"
+    }
+  }, options.map(([v, l]) => /*#__PURE__*/React.createElement(LS_ToggleChip, {
+    key: v,
+    active: filters[key].includes(v),
+    onClick: () => toggle(key, v)
+  }, l))));
+  const segGroup = (title, key, options) => /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: "16px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "11.5px",
+      fontWeight: 700,
+      color: "var(--text-muted)",
+      textTransform: "uppercase",
+      letterSpacing: "0.03em",
+      marginBottom: "8px"
+    }
+  }, title), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: "6px"
+    }
+  }, options.map(([v, l]) => /*#__PURE__*/React.createElement(LS_ToggleChip, {
+    key: v,
+    active: filters[key] === v,
+    onClick: () => setFilters(f => ({
+      ...f,
+      [key]: v
+    }))
+  }, l))));
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      top: "46px",
+      left: 0,
+      zIndex: 30,
+      width: "580px",
+      background: "var(--paper)",
+      border: "1px solid var(--border)",
+      borderRadius: "var(--radius-lg)",
+      boxShadow: "var(--shadow-lg)",
+      padding: "18px 20px"
+    }
+  }, chipGroup("Property type", "types", Object.entries(window.PA_PROPERTY_TYPES)), chipGroup("Locality", "localities", localities.map(l => [l, l])), chipGroup("Broker / source", "brokers", brokerIds.map(b => [b, window.PA_BROKERS[b].name])), segGroup("Public visibility", "visibility", [["any", "Any"], ["visible", "Visible"], ["hidden", "Not visible"]]), segGroup("Data quality", "quality", [["any", "Any"], ["high", "High (90%+)"], ["medium", "Medium (60\u201389%)"], ["low", "Low (<60%)"]]), segGroup("Last updated", "updated", [["any", "Any time"], ["7", "Last 7 days"], ["30", "Last 30 days"], ["90", "Stale (90+ days)"]]), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "flex-end"
+    }
+  }, /*#__PURE__*/React.createElement(LSButton, {
+    size: "sm",
+    onClick: onClose
+  }, "Done")));
+}
+const lsThStyle = {
+  padding: "10px 14px",
+  textAlign: "left",
+  fontSize: "11px",
+  fontWeight: 700,
+  color: "var(--text-muted)",
+  textTransform: "uppercase",
+  letterSpacing: "0.03em",
+  cursor: "pointer",
+  userSelect: "none",
+  background: "var(--surface-subtle)",
+  position: "sticky",
+  top: 0,
+  zIndex: 2,
+  borderBottom: "1px solid var(--border)"
+};
+function ListingsScreen() {
+  const [listings, setListings] = React.useState(() => window.PL_LISTINGS.map(l => ({
+    ...l
+  })));
+  const [search, setSearch] = React.useState("");
+  const [filters, setFilters] = React.useState(LS_DEFAULT_FILTERS);
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const [tab, setTab] = React.useState("all");
+  const [sortKey, setSortKey] = React.useState("updatedAt");
+  const [sortDir, setSortDir] = React.useState("desc");
+  const [page, setPage] = React.useState(1);
+  const pageSize = 10;
+  const [selected, setSelected] = React.useState(() => new Set());
+  const [editorId, setEditorId] = React.useState(null);
+  const [confirmAction, setConfirmAction] = React.useState(null);
+  const [openMenuId, setOpenMenuId] = React.useState(null);
+  const [toast, setToast] = React.useState(null);
+  const [infoToast, setInfoToast] = React.useState(null);
+  const [previewState, setPreviewState] = React.useState(null);
+  const [scenario, setScenario] = React.useState("default");
+  const [bulkLocality, setBulkLocality] = React.useState("");
+  const [bulkTag, setBulkTag] = React.useState("");
+  const toastTimer = React.useRef(null);
+  const infoTimer = React.useRef(null);
+  React.useEffect(() => {
+    setEditorId(null);
+    setConfirmAction(null);
+    setPreviewState(null);
+    setSelected(new Set());
+    setSearch("");
+    setFilters(LS_DEFAULT_FILTERS);
+    setPage(1);
+    setFiltersOpen(false);
+    setTab("all");
+    if (scenario === "filtered") {
+      setFilters({
+        ...LS_DEFAULT_FILTERS,
+        types: ["agricultural_land"]
+      });
+      setFiltersOpen(true);
+    } else if (scenario === "needs-attention") setTab("needs_attention");else if (scenario === "editor-open") setEditorId("PS-L-3001");else if (scenario === "location-warning") setEditorId("PS-L-3031");else if (scenario === "missing-photos") setEditorId("PS-L-3012");else if (scenario === "archive-confirm") setConfirmAction({
+      action: "archive",
+      ids: ["PS-L-3010"]
+    });else if (scenario === "empty") setSearch("zzz-no-match-xk9");else if (scenario === "loading") setPreviewState("loading");else if (scenario === "error") setPreviewState("error");
+  }, [scenario]);
+  const counts = {
+    all: listings.length,
+    published: listings.filter(l => l.status === "published").length,
+    pending_approval: listings.filter(l => l.status === "pending_approval").length,
+    needs_attention: listings.filter(l => l.warnings.length > 0).length,
+    archived: listings.filter(l => l.status === "archived").length
+  };
+  const localities = [...new Set(listings.map(l => l.locality))].sort();
+  const brokerIds = [...new Set(listings.map(l => l.broker))];
+  const matchesTab = l => tab === "all" ? true : tab === "needs_attention" ? l.warnings.length > 0 : l.status === tab;
+  const matchesSearch = l => {
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    const broker = window.PA_BROKERS[l.broker];
+    return l.title.toLowerCase().includes(q) || l.id.toLowerCase().includes(q) || broker.name.toLowerCase().includes(q) || broker.phone.includes(q) || l.locality.toLowerCase().includes(q);
+  };
+  const matchesFilters = l => {
+    if (filters.types.length && !filters.types.includes(l.propertyType)) return false;
+    if (filters.localities.length && !filters.localities.includes(l.locality)) return false;
+    if (filters.brokers.length && !filters.brokers.includes(l.broker)) return false;
+    if (filters.visibility === "visible" && !l.visible) return false;
+    if (filters.visibility === "hidden" && l.visible) return false;
+    if (filters.quality === "high" && l.completeness < 90) return false;
+    if (filters.quality === "medium" && (l.completeness < 60 || l.completeness >= 90)) return false;
+    if (filters.quality === "low" && l.completeness >= 60) return false;
+    if (filters.updated !== "any") {
+      const d = window.PA_ageDays(l.updatedAt);
+      if (filters.updated === "7" && d > 7) return false;
+      if (filters.updated === "30" && d > 30) return false;
+      if (filters.updated === "90" && d < 90) return false;
+    }
+    return true;
+  };
+  const filtered = listings.filter(l => matchesTab(l) && matchesSearch(l) && matchesFilters(l));
+  const sorted = [...filtered].sort((a, b) => {
+    let av, bv;
+    if (sortKey === "price") {
+      av = a.price;
+      bv = b.price;
+    } else if (sortKey === "completeness") {
+      av = a.completeness;
+      bv = b.completeness;
+    } else if (sortKey === "createdAt") {
+      av = new Date(a.createdAt).getTime();
+      bv = new Date(b.createdAt).getTime();
+    } else {
+      av = new Date(a.updatedAt).getTime();
+      bv = new Date(b.updatedAt).getTime();
+    }
+    return sortDir === "asc" ? av - bv : bv - av;
+  });
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const pageClamped = Math.min(page, totalPages);
+  const paged = sorted.slice((pageClamped - 1) * pageSize, pageClamped * pageSize);
+  const activeFilterCount = filters.types.length + filters.localities.length + filters.brokers.length + (filters.visibility !== "any" ? 1 : 0) + (filters.quality !== "any" ? 1 : 0) + (filters.updated !== "any" ? 1 : 0);
+  const hasActiveFilters = activeFilterCount > 0 || !!search.trim() || tab !== "all";
+  const resetAll = () => {
+    setFilters(LS_DEFAULT_FILTERS);
+    setSearch("");
+    setPage(1);
+    setTab("all");
+  };
+  const toggleHeaderSort = key => {
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");else {
+      setSortKey(key);
+      setSortDir(key === "completeness" ? "asc" : "desc");
+    }
+  };
+  const arrow = key => sortKey === key ? sortDir === "asc" ? " \u2191" : " \u2193" : "";
+  const toggleSelect = id => setSelected(s => {
+    const n = new Set(s);
+    n.has(id) ? n.delete(id) : n.add(id);
+    return n;
+  });
+  const toggleSelectPage = () => setSelected(s => {
+    const ids = paged.map(l => l.id);
+    const allSel = ids.every(id => s.has(id));
+    const n = new Set(s);
+    ids.forEach(id => allSel ? n.delete(id) : n.add(id));
+    return n;
+  });
+  const pushToast = (ids, prevMap, message) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({
+      ids,
+      prevMap,
+      message
+    });
+    toastTimer.current = setTimeout(() => setToast(null), 6000);
+  };
+  const pushInfo = message => {
+    if (infoTimer.current) clearTimeout(infoTimer.current);
+    setInfoToast(message);
+    infoTimer.current = setTimeout(() => setInfoToast(null), 2400);
+  };
+  const applyLifecycle = (ids, action) => {
+    const prevMap = {};
+    listings.forEach(l => {
+      if (ids.includes(l.id)) prevMap[l.id] = {
+        status: l.status,
+        visible: l.visible
+      };
+    });
+    const newStatus = action === "publish" ? "published" : action === "unpublish" ? "unpublished" : action === "archive" ? "archived" : "unpublished";
+    const newVisible = action === "publish";
+    setListings(ls => ls.map(l => ids.includes(l.id) ? {
+      ...l,
+      status: newStatus,
+      visible: newVisible,
+      warnings: l.warnings.filter(w => w !== "inconsistent_state"),
+      updatedAt: new Date().toISOString(),
+      updatedBy: "admin:You",
+      history: [...l.history, {
+        ts: new Date().toISOString(),
+        actor: "admin:You",
+        action: window.PL_ACTION_META[action].label + "ed",
+        prev: window.PL_LIFECYCLE_META[l.status].label,
+        next: window.PL_LIFECYCLE_META[newStatus].label
+      }]
+    } : l));
+    pushToast(ids, prevMap, window.PL_ACTION_META[action].label + "ed " + ids.length + " listing" + (ids.length === 1 ? "" : "s") + ".");
+    setSelected(s => {
+      const n = new Set(s);
+      ids.forEach(id => n.delete(id));
+      return n;
+    });
+  };
+  const undoLast = () => {
+    if (toast) {
+      setListings(ls => ls.map(l => toast.prevMap[l.id] ? {
+        ...l,
+        ...toast.prevMap[l.id]
+      } : l));
+      setToast(null);
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    }
+  };
+  const requestAction = (action, ids) => setConfirmAction({
+    action,
+    ids
+  });
+  const confirmYes = () => {
+    applyLifecycle(confirmAction.ids, confirmAction.action);
+    setConfirmAction(null);
+  };
+  const doSave = (id, patch) => {
+    setListings(ls => ls.map(l => l.id === id ? {
+      ...l,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+      updatedBy: "admin:You",
+      history: [...l.history, {
+        ts: new Date().toISOString(),
+        actor: "admin:You",
+        action: "Edited listing details"
+      }]
+    } : l));
+    pushInfo("Listing updated.");
+  };
+  const doDuplicate = l => {
+    const copy = {
+      ...l,
+      id: l.id + "-COPY",
+      title: l.title + " (Copy)",
+      status: "draft",
+      visible: false,
+      warnings: [],
+      history: [{
+        ts: new Date().toISOString(),
+        actor: "admin:You",
+        action: "Duplicated from " + l.id
+      }]
+    };
+    setListings(ls => [copy, ...ls]);
+    pushInfo("Duplicated as a new draft.");
+    setOpenMenuId(null);
+  };
+  const doTag = () => {
+    if (!bulkTag.trim()) return;
+    setListings(ls => ls.map(l => selected.has(l.id) ? {
+      ...l,
+      tags: [...(l.tags || []), bulkTag.trim()]
+    } : l));
+    pushInfo("Tagged " + selected.size + " listing" + (selected.size === 1 ? "" : "s") + ".");
+    setBulkTag("");
+  };
+  const doLocality = () => {
+    if (!bulkLocality) return;
+    setListings(ls => ls.map(l => selected.has(l.id) ? {
+      ...l,
+      locality: bulkLocality
+    } : l));
+    pushInfo("Locality updated for " + selected.size + " listing" + (selected.size === 1 ? "" : "s") + ".");
+    setBulkLocality("");
+  };
+  const selArr = [...selected];
+  const eligibleUnpublish = selArr.filter(id => listings.find(l => l.id === id)?.status === "published");
+  const eligibleArchive = selArr.filter(id => listings.find(l => l.id === id)?.status !== "archived");
+  const eligiblePublish = selArr.filter(id => {
+    const l = listings.find(x => x.id === id);
+    return l && l.status === "unpublished" && l.completeness >= 90 && l.warnings.length === 0;
+  });
+  const editor = editorId && listings.find(l => l.id === editorId);
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      height: "100vh",
+      minHeight: 0
+    }
+  }, /*#__PURE__*/React.createElement(window.RTA_Header, {
+    active: "Listings"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "upt-scroll",
+    style: {
+      flex: 1,
+      minHeight: 0,
+      overflowY: "auto",
+      background: "var(--background)"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxWidth: "1440px",
+      margin: "0 auto",
+      padding: "26px 28px 60px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      flexWrap: "wrap",
+      gap: "16px",
+      marginBottom: "18px"
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h1", {
+    style: {
+      fontSize: "23px",
+      fontWeight: 700,
+      margin: 0,
+      color: "var(--text-strong)"
+    }
+  }, "Listings"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "13.5px",
+      color: "var(--text-muted)",
+      margin: "5px 0 0"
+    }
+  }, "Manage property listings across their lifecycle")), /*#__PURE__*/React.createElement(LSButton, {
+    style: {
+      background: "var(--positive)"
+    }
+  }, /*#__PURE__*/React.createElement(LSIcon, {
+    name: "plus",
+    size: 15
+  }), " Add listing")), /*#__PURE__*/React.createElement(LS_TabBar, {
+    tab: tab,
+    setTab: t => {
+      setTab(t);
+      setPage(1);
+    },
+    counts: counts
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "relative",
+      display: "flex",
+      alignItems: "center",
+      gap: "10px",
+      marginBottom: "10px",
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: "1 1 300px",
+      maxWidth: "420px"
+    }
+  }, /*#__PURE__*/React.createElement(LSInput, {
+    placeholder: "Search title, listing ID, broker, phone or locality",
+    leadingIcon: /*#__PURE__*/React.createElement(LSIcon, {
+      name: "search",
+      size: 16
+    }),
+    value: search,
+    onChange: e => {
+      setSearch(e.target.value);
+      setPage(1);
+    }
+  })), /*#__PURE__*/React.createElement(LSButton, {
+    variant: "outline",
+    onClick: () => setFiltersOpen(o => !o)
+  }, /*#__PURE__*/React.createElement(LSIcon, {
+    name: "sliders-horizontal",
+    size: 15
+  }), " Filters", activeFilterCount > 0 ? " (" + activeFilterCount + ")" : ""), /*#__PURE__*/React.createElement(LSButton, {
+    variant: "ghost",
+    size: "sm",
+    onClick: () => {
+      setTab("published");
+    }
+  }, "Published"), /*#__PURE__*/React.createElement(LSButton, {
+    variant: "ghost",
+    size: "sm",
+    onClick: () => {
+      setTab("needs_attention");
+    }
+  }, "Needs attention"), /*#__PURE__*/React.createElement(LSButton, {
+    variant: "ghost",
+    size: "sm",
+    onClick: () => {
+      setTab("archived");
+      setSortKey("updatedAt");
+      setSortDir("desc");
+    }
+  }, "Recently archived"), hasActiveFilters && /*#__PURE__*/React.createElement(LSButton, {
+    variant: "ghost",
+    onClick: resetAll
+  }, "Reset filters"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginLeft: "auto",
+      display: "flex",
+      alignItems: "center",
+      gap: "12px"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "13px",
+      color: "var(--text-muted)"
+    }
+  }, filtered.length, " result", filtered.length === 1 ? "" : "s"), /*#__PURE__*/React.createElement(LSSelect, {
+    size: "sm",
+    value: sortKey + ":" + sortDir,
+    onChange: e => {
+      const [k, d] = e.target.value.split(":");
+      setSortKey(k);
+      setSortDir(d);
+    },
+    options: [{
+      value: "updatedAt:desc",
+      label: "Recently updated"
+    }, {
+      value: "updatedAt:asc",
+      label: "Oldest updated"
+    }, {
+      value: "createdAt:desc",
+      label: "Newest created"
+    }, {
+      value: "price:desc",
+      label: "Price: high to low"
+    }, {
+      value: "completeness:asc",
+      label: "Completeness: low to high"
+    }]
+  })), filtersOpen && /*#__PURE__*/React.createElement(LS_FiltersPanel, {
+    filters: filters,
+    setFilters: f => {
+      setFilters(f);
+      setPage(1);
+    },
+    localities: localities,
+    brokerIds: brokerIds,
+    onClose: () => setFiltersOpen(false)
+  })), selected.size > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "12px",
+      padding: "11px 16px",
+      background: "var(--navy-100)",
+      borderRadius: "var(--radius-md)",
+      marginBottom: "12px",
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("b", {
+    style: {
+      fontSize: "13.5px",
+      color: "var(--navy-800)"
+    }
+  }, selected.size, " selected"), /*#__PURE__*/React.createElement("select", {
+    value: bulkLocality,
+    onChange: e => setBulkLocality(e.target.value),
+    style: {
+      height: "30px",
+      fontSize: "12.5px",
+      borderRadius: "var(--radius-sm)",
+      border: "1px solid var(--border-strong)",
+      padding: "0 6px"
+    }
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "Assign locality\u2026"), window.PL_LOCALITIES.map(l => /*#__PURE__*/React.createElement("option", {
+    key: l,
+    value: l
+  }, l))), /*#__PURE__*/React.createElement(LSButton, {
+    variant: "outline",
+    size: "sm",
+    disabled: !bulkLocality,
+    onClick: doLocality
+  }, "Apply"), /*#__PURE__*/React.createElement("input", {
+    value: bulkTag,
+    onChange: e => setBulkTag(e.target.value),
+    placeholder: "Add internal tag\\u2026",
+    style: {
+      height: "30px",
+      fontSize: "12.5px",
+      borderRadius: "var(--radius-sm)",
+      border: "1px solid var(--border-strong)",
+      padding: "0 8px",
+      width: "140px"
+    }
+  }), /*#__PURE__*/React.createElement(LSButton, {
+    variant: "outline",
+    size: "sm",
+    disabled: !bulkTag.trim(),
+    onClick: doTag
+  }, "Tag"), /*#__PURE__*/React.createElement(LSButton, {
+    variant: "outline",
+    size: "sm",
+    onClick: () => pushInfo("Exported " + selected.size + " listing" + (selected.size === 1 ? "" : "s") + ".")
+  }, "Export"), /*#__PURE__*/React.createElement(LSButton, {
+    variant: "outline",
+    size: "sm",
+    disabled: !eligibleUnpublish.length,
+    style: {
+      borderColor: "var(--caution)",
+      color: "var(--caution)"
+    },
+    onClick: () => requestAction("unpublish", eligibleUnpublish)
+  }, "Unpublish ", eligibleUnpublish.length), /*#__PURE__*/React.createElement(LSButton, {
+    variant: "outline",
+    size: "sm",
+    disabled: !eligibleArchive.length,
+    onClick: () => requestAction("archive", eligibleArchive)
+  }, "Archive ", eligibleArchive.length), /*#__PURE__*/React.createElement(LSButton, {
+    size: "sm",
+    disabled: !eligiblePublish.length,
+    style: {
+      background: "var(--positive)"
+    },
+    onClick: () => requestAction("publish", eligiblePublish)
+  }, "Publish ", eligiblePublish.length, " eligible"), /*#__PURE__*/React.createElement(LSButton, {
+    variant: "ghost",
+    size: "sm",
+    onClick: () => setSelected(new Set())
+  }, "Clear")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "var(--paper)",
+      border: "1px solid var(--border)",
+      borderRadius: "var(--radius-lg)",
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxHeight: "calc(100vh - 330px)",
+      minHeight: "260px",
+      overflowY: "auto"
+    }
+  }, /*#__PURE__*/React.createElement("table", {
+    style: {
+      width: "100%",
+      borderCollapse: "collapse",
+      fontFamily: "var(--font-sans)",
+      tableLayout: "fixed"
+    }
+  }, /*#__PURE__*/React.createElement("colgroup", null, /*#__PURE__*/React.createElement("col", {
+    className: "pa-c-check",
+    style: {
+      width: "3%"
+    }
+  }), /*#__PURE__*/React.createElement("col", {
+    className: "pa-c-listing",
+    style: {
+      width: "14%"
+    }
+  }), /*#__PURE__*/React.createElement("col", {
+    className: "pa-col-broker pa-c-broker",
+    style: {
+      width: "10%"
+    }
+  }), /*#__PURE__*/React.createElement("col", {
+    className: "pa-col-type pa-c-type",
+    style: {
+      width: "9%"
+    }
+  }), /*#__PURE__*/React.createElement("col", {
+    className: "pa-c-locality",
+    style: {
+      width: "8%"
+    }
+  }), /*#__PURE__*/React.createElement("col", {
+    className: "pa-c-price",
+    style: {
+      width: "8%"
+    }
+  }), /*#__PURE__*/React.createElement("col", {
+    className: "pa-c-status",
+    style: {
+      width: "10%"
+    }
+  }), /*#__PURE__*/React.createElement("col", {
+    className: "pa-c-quality",
+    style: {
+      width: "8%"
+    }
+  }), /*#__PURE__*/React.createElement("col", {
+    className: "pa-c-visibility",
+    style: {
+      width: "12%"
+    }
+  }), /*#__PURE__*/React.createElement("col", {
+    className: "pa-c-updated",
+    style: {
+      width: "7%"
+    }
+  }), /*#__PURE__*/React.createElement("col", {
+    className: "pa-c-actions",
+    style: {
+      width: "11%"
+    }
+  })), /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
+    style: {
+      ...lsThStyle,
+      cursor: "default"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: paged.length > 0 && paged.every(l => selected.has(l.id)),
+    onChange: toggleSelectPage,
+    style: {
+      width: "15px",
+      height: "15px"
+    }
+  })), /*#__PURE__*/React.createElement("th", {
+    style: lsThStyle
+  }, "Listing"), /*#__PURE__*/React.createElement("th", {
+    className: "pa-col-broker",
+    style: lsThStyle
+  }, "Broker / source"), /*#__PURE__*/React.createElement("th", {
+    className: "pa-col-type",
+    style: lsThStyle
+  }, "Type"), /*#__PURE__*/React.createElement("th", {
+    style: lsThStyle
+  }, "Locality"), /*#__PURE__*/React.createElement("th", {
+    onClick: () => toggleHeaderSort("price"),
+    style: lsThStyle
+  }, "Price", arrow("price")), /*#__PURE__*/React.createElement("th", {
+    style: lsThStyle
+  }, "Status"), /*#__PURE__*/React.createElement("th", {
+    onClick: () => toggleHeaderSort("completeness"),
+    style: lsThStyle
+  }, "Quality", arrow("completeness")), /*#__PURE__*/React.createElement("th", {
+    style: lsThStyle
+  }, "Visibility"), /*#__PURE__*/React.createElement("th", {
+    onClick: () => toggleHeaderSort("updatedAt"),
+    style: lsThStyle
+  }, "Updated", arrow("updatedAt")), /*#__PURE__*/React.createElement("th", {
+    style: {
+      ...lsThStyle,
+      cursor: "default"
+    }
+  }, "Actions"))), /*#__PURE__*/React.createElement("tbody", null, previewState === "loading" ? Array.from({
+    length: 6
+  }).map((_, i) => /*#__PURE__*/React.createElement("tr", {
+    key: i
+  }, /*#__PURE__*/React.createElement("td", {
+    colSpan: 11,
+    style: {
+      padding: "14px 16px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "upt-shimmer",
+    style: {
+      height: "16px",
+      borderRadius: "var(--radius-sm)",
+      background: "var(--grey-100)"
+    }
+  })))) : previewState === "error" ? /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+    colSpan: 11,
+    style: {
+      padding: "56px 16px",
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement(LSIcon, {
+    name: "alert-triangle",
+    size: 26,
+    color: "var(--negative)"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "15px",
+      fontWeight: 700,
+      margin: "12px 0 4px"
+    }
+  }, "Couldn't load the inventory"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "13px",
+      color: "var(--text-muted)",
+      marginBottom: "16px"
+    }
+  }, "A network error interrupted the request. Nothing was changed."), /*#__PURE__*/React.createElement(LSButton, {
+    variant: "outline",
+    onClick: () => setPreviewState(null)
+  }, "Retry"))) : paged.length === 0 ? /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+    colSpan: 11,
+    style: {
+      padding: "56px 16px",
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement(LSIcon, {
+    name: "search",
+    size: 26,
+    color: "var(--text-muted)"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "15px",
+      fontWeight: 700,
+      margin: "12px 0 4px"
+    }
+  }, "No listings match these filters"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "13px",
+      color: "var(--text-muted)",
+      marginBottom: "16px"
+    }
+  }, "Try a different search term or reset your filters."), /*#__PURE__*/React.createElement(LSButton, {
+    variant: "outline",
+    onClick: resetAll
+  }, "Reset filters"))) : paged.map(l => {
+    const broker = window.PA_BROKERS[l.broker];
+    const inconsistent = l.warnings.includes("inconsistent_state");
+    return /*#__PURE__*/React.createElement("tr", {
+      key: l.id,
+      className: "pa-row",
+      onClick: () => setEditorId(l.id),
+      style: {
+        borderBottom: "1px solid var(--border)"
+      }
+    }, /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "12px 8px 12px 12px"
+      },
+      onClick: e => e.stopPropagation()
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "checkbox",
+      checked: selected.has(l.id),
+      onChange: () => toggleSelect(l.id),
+      style: {
+        width: "15px",
+        height: "15px"
+      }
+    })), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "10px 14px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: "10px"
+      }
+    }, /*#__PURE__*/React.createElement(window.PL_Thumb, {
+      photos: l.photos
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        minWidth: 0
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: "13.5px",
+        fontWeight: 700,
+        color: "var(--text-strong)",
+        lineHeight: 1.3,
+        display: "-webkit-box",
+        WebkitLineClamp: 2,
+        WebkitBoxOrient: "vertical",
+        overflow: "hidden"
+      }
+    }, l.title), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: "11px",
+        fontFamily: "var(--font-mono)",
+        color: "var(--text-muted)",
+        margin: "2px 0 3px"
+      }
+    }, l.id), /*#__PURE__*/React.createElement(window.PL_WarningInline, {
+      warnings: l.warnings
+    })))), /*#__PURE__*/React.createElement("td", {
+      className: "pa-col-broker",
+      style: {
+        padding: "12px 14px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: "13px",
+        fontWeight: 600
+      }
+    }, broker.name), /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: "3px"
+      }
+    }, /*#__PURE__*/React.createElement(window.PA_VerificationBadge, {
+      tier: broker.verification,
+      size: "sm"
+    }))), /*#__PURE__*/React.createElement("td", {
+      className: "pa-col-type",
+      style: {
+        padding: "12px 14px"
+      }
+    }, /*#__PURE__*/React.createElement(window.PA_TypeLabel, {
+      type: l.propertyType
+    })), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "12px 14px",
+        fontSize: "13px",
+        color: "var(--text-body)"
+      }
+    }, l.locality), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "12px 14px",
+        fontSize: "13px",
+        fontFamily: "var(--font-mono)",
+        fontWeight: 700
+      }
+    }, window.PA_formatPrice(l.price)), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "12px 14px"
+      }
+    }, /*#__PURE__*/React.createElement(window.PL_LifecycleBadge, {
+      status: l.status
+    })), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "12px 14px"
+      }
+    }, /*#__PURE__*/React.createElement(window.PL_CompletenessCell, {
+      pct: l.completeness,
+      missing: l.missingFields
+    })), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "12px 14px"
+      }
+    }, /*#__PURE__*/React.createElement(window.PL_VisibilityBadge, {
+      visible: l.visible,
+      inconsistent: inconsistent
+    })), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "12px 14px",
+        fontSize: "12.5px",
+        color: "var(--text-muted)"
+      }
+    }, window.PA_formatAge(l.updatedAt)), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "12px 12px",
+        position: "relative"
+      },
+      onClick: e => e.stopPropagation()
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: "6px",
+        alignItems: "center"
+      }
+    }, /*#__PURE__*/React.createElement(LSButton, {
+      variant: "outline",
+      size: "sm",
+      onClick: () => setEditorId(l.id)
+    }, "Open"), /*#__PURE__*/React.createElement("button", {
+      "aria-label": "More actions for " + l.title,
+      onClick: () => setOpenMenuId(openMenuId === l.id ? null : l.id),
+      style: {
+        background: "transparent",
+        border: "1px solid var(--border-strong)",
+        borderRadius: "var(--radius-sm)",
+        width: "30px",
+        height: "30px",
+        cursor: "pointer",
+        color: "var(--text-muted)",
+        fontSize: "16px",
+        lineHeight: 1
+      }
+    }, "\u22ef")), openMenuId === l.id && /*#__PURE__*/React.createElement("div", {
+      onMouseLeave: () => setOpenMenuId(null),
+      style: {
+        position: "absolute",
+        right: "12px",
+        top: "44px",
+        zIndex: 10,
+        width: "200px",
+        background: "var(--paper)",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-md)",
+        boxShadow: "var(--shadow-lg)",
+        overflow: "hidden"
+      }
+    }, [["Preview public listing", () => {
+      pushInfo("Opens the public listing in a new tab.");
+      setOpenMenuId(null);
+    }], ["View on map", () => {
+      pushInfo("Opens this listing on the map.");
+      setOpenMenuId(null);
+    }], ["Duplicate", () => doDuplicate(l)], ["View activity", () => {
+      setEditorId(l.id);
+      setOpenMenuId(null);
+    }]].map(([label, fn]) => /*#__PURE__*/React.createElement("button", {
+      key: label,
+      onClick: fn,
+      style: {
+        display: "block",
+        width: "100%",
+        textAlign: "left",
+        padding: "9px 12px",
+        background: "transparent",
+        border: "none",
+        fontSize: "13px",
+        cursor: "pointer",
+        color: "var(--text-body)"
+      }
+    }, label)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        borderTop: "1px solid var(--border)"
+      }
+    }), window.PL_TRANSITIONS[l.status].map(t => /*#__PURE__*/React.createElement("button", {
+      key: t,
+      onClick: () => {
+        requestAction(t, [l.id]);
+        setOpenMenuId(null);
+      },
+      style: {
+        display: "block",
+        width: "100%",
+        textAlign: "left",
+        padding: "9px 12px",
+        background: "transparent",
+        border: "none",
+        fontSize: "13px",
+        cursor: "pointer",
+        color: window.PL_ACTION_META[t].color,
+        fontWeight: 600
+      }
+    }, window.PL_ACTION_META[t].label)))));
+  }))))), !previewState && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginTop: "14px"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "13px",
+      color: "var(--text-muted)"
+    }
+  }, sorted.length === 0 ? "0" : (pageClamped - 1) * pageSize + 1 + "\u2013" + Math.min(pageClamped * pageSize, sorted.length), " of ", sorted.length), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "6px"
+    }
+  }, /*#__PURE__*/React.createElement(LSButton, {
+    variant: "outline",
+    size: "sm",
+    disabled: pageClamped <= 1,
+    onClick: () => setPage(p => p - 1)
+  }, "Previous"), /*#__PURE__*/React.createElement(LSButton, {
+    variant: "outline",
+    size: "sm",
+    disabled: pageClamped >= totalPages,
+    onClick: () => setPage(p => p + 1)
+  }, "Next"))))), editor && /*#__PURE__*/React.createElement(window.ListingsEditor, {
+    listing: editor,
+    onClose: () => setEditorId(null),
+    onRequestAction: requestAction,
+    onSave: doSave
+  }), confirmAction && /*#__PURE__*/React.createElement(window.PL_ConfirmDialog, {
+    action: confirmAction.action,
+    count: confirmAction.ids.length,
+    onConfirm: confirmYes,
+    onCancel: () => setConfirmAction(null)
+  }), toast && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      bottom: "24px",
+      left: "50%",
+      transform: "translateX(-50%)",
+      zIndex: 80,
+      display: "flex",
+      alignItems: "center",
+      gap: "16px",
+      background: "var(--navy-800)",
+      color: "#fff",
+      padding: "12px 20px",
+      borderRadius: "var(--radius-md)",
+      boxShadow: "var(--shadow-xl)"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "13.5px",
+      fontWeight: 600
+    }
+  }, toast.message), /*#__PURE__*/React.createElement("button", {
+    onClick: undoLast,
+    style: {
+      background: "transparent",
+      border: "none",
+      color: "#fff",
+      fontWeight: 700,
+      textDecoration: "underline",
+      cursor: "pointer",
+      fontSize: "13px",
+      padding: 0
+    }
+  }, "Undo")), infoToast && !toast && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      bottom: "24px",
+      left: "50%",
+      transform: "translateX(-50%)",
+      zIndex: 80,
+      background: "var(--navy-800)",
+      color: "#fff",
+      padding: "12px 20px",
+      borderRadius: "var(--radius-md)",
+      boxShadow: "var(--shadow-xl)",
+      fontSize: "13.5px",
+      fontWeight: 600
+    }
+  }, infoToast), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: "none",
+      display: "flex",
+      justifyContent: "flex-end",
+      alignItems: "center",
+      gap: "8px",
+      padding: "8px 16px",
+      borderTop: "1px solid var(--border)",
+      background: "var(--paper)"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "10.5px",
+      fontWeight: 700,
+      color: "var(--text-muted)",
+      textTransform: "uppercase",
+      letterSpacing: "0.03em"
+    }
+  }, "Design preview"), /*#__PURE__*/React.createElement("select", {
+    value: scenario,
+    onChange: e => setScenario(e.target.value),
+    style: {
+      fontSize: "12px",
+      fontFamily: "var(--font-sans)",
+      border: "1px solid var(--border-strong)",
+      borderRadius: "var(--radius-sm)",
+      padding: "4px 6px"
+    }
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "default"
+  }, "Default inventory"), /*#__PURE__*/React.createElement("option", {
+    value: "filtered"
+  }, "Filtered results"), /*#__PURE__*/React.createElement("option", {
+    value: "needs-attention"
+  }, "Needs attention tab"), /*#__PURE__*/React.createElement("option", {
+    value: "editor-open"
+  }, "Editor open"), /*#__PURE__*/React.createElement("option", {
+    value: "location-warning"
+  }, "Location validation warning"), /*#__PURE__*/React.createElement("option", {
+    value: "missing-photos"
+  }, "Missing photo data"), /*#__PURE__*/React.createElement("option", {
+    value: "archive-confirm"
+  }, "Archive confirmation"), /*#__PURE__*/React.createElement("option", {
+    value: "empty"
+  }, "Empty results"), /*#__PURE__*/React.createElement("option", {
+    value: "loading"
+  }, "Loading"), /*#__PURE__*/React.createElement("option", {
+    value: "error"
+  }, "Server error"))));
+}
+Object.assign(window, {
+  ListingsScreen
+});
+})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/admin/ListingsScreen.jsx", error: String((e && e.message) || e) }); }
+
+// ui_kits/admin/PA_Shared.jsx
+try { (() => {
+// Shared small UI atoms for the Pending Approvals workspace.
+const {
+  Icon: PAIcon,
+  Badge: PABadge
+} = window.ReTrendsDesignSystem_f37966;
+function PA_VerificationBadge({
+  tier,
+  size
+}) {
+  const m = {
+    verified: {
+      tone: "verified",
+      icon: "shield-check",
+      label: "Verified broker"
+    },
+    unverified: {
+      tone: "caution",
+      icon: "shield",
+      label: "Unverified broker"
+    },
+    new: {
+      tone: "neutral",
+      icon: "users",
+      label: "New broker"
+    }
+  }[tier] || {
+    tone: "neutral",
+    icon: "shield",
+    label: tier
+  };
+  return /*#__PURE__*/React.createElement(PABadge, {
+    tone: m.tone,
+    style: size === "sm" ? {
+      fontSize: "11px",
+      padding: "2px 7px"
+    } : undefined
+  }, /*#__PURE__*/React.createElement(PAIcon, {
+    name: m.icon,
+    size: 11
+  }), " ", m.label);
+}
+function PA_FlagList({
+  flags,
+  max
+}) {
+  if (!flags || flags.length === 0) {
+    return /*#__PURE__*/React.createElement(PABadge, {
+      tone: "positive",
+      style: {
+        whiteSpace: "normal"
+      }
+    }, /*#__PURE__*/React.createElement(PAIcon, {
+      name: "check",
+      size: 11
+    }), " No issues detected");
+  }
+  const shown = max ? flags.slice(0, max) : flags;
+  const extra = flags.length - shown.length;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: "4px",
+      alignItems: "flex-start",
+      width: "100%"
+    }
+  }, shown.map(f => {
+    const m = window.PA_FLAG_META[f];
+    return /*#__PURE__*/React.createElement(PABadge, {
+      key: f,
+      tone: m.tone,
+      style: {
+        whiteSpace: "normal",
+        maxWidth: "100%",
+        boxSizing: "border-box"
+      }
+    }, /*#__PURE__*/React.createElement(PAIcon, {
+      name: m.icon,
+      size: 11,
+      style: {
+        flex: "none"
+      }
+    }), " ", m.label);
+  }), extra > 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "11px",
+      color: "var(--text-muted)",
+      fontWeight: 600
+    }
+  }, "+", extra, " more"));
+}
+function PA_AgeCell({
+  iso
+}) {
+  const days = window.PA_ageDays(iso);
+  const label = window.PA_formatAge(iso);
+  const isNew = label === "Today";
+  const isOld = days > 7;
+  return /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "6px"
+    },
+    title: window.PA_formatDateTime(iso)
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: "6px",
+      height: "6px",
+      borderRadius: "50%",
+      flex: "none",
+      background: isOld ? "var(--caution)" : isNew ? "var(--accent)" : "var(--grey-300)"
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "13px",
+      color: isOld ? "var(--caution)" : "var(--text-body)",
+      fontWeight: isOld || isNew ? 700 : 500
+    }
+  }, label));
+}
+function PA_SectionTitle({
+  icon,
+  children,
+  right
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      padding: "0 0 10px",
+      borderBottom: "1px solid var(--border)",
+      marginBottom: "14px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "8px"
+    }
+  }, /*#__PURE__*/React.createElement(PAIcon, {
+    name: icon,
+    size: 15,
+    color: "var(--text-muted)"
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "13px",
+      fontWeight: 700,
+      color: "var(--text-strong)",
+      textTransform: "uppercase",
+      letterSpacing: "0.04em"
+    }
+  }, children)), right);
+}
+function PA_TypeLabel({
+  type
+}) {
+  return /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "13px",
+      color: "var(--text-body)"
+    }
+  }, window.PA_PROPERTY_TYPES[type] || type);
+}
+Object.assign(window, {
+  PA_VerificationBadge,
+  PA_FlagList,
+  PA_AgeCell,
+  PA_SectionTitle,
+  PA_TypeLabel
+});
+})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/admin/PA_Shared.jsx", error: String((e && e.message) || e) }); }
+
+// ui_kits/admin/PL_Shared.jsx
+try { (() => {
+// Shared atoms for the Listings inventory page.
+const {
+  Icon: PLIcon,
+  Badge: PLBadge,
+  Button: PLButton
+} = window.ReTrendsDesignSystem_f37966;
+function PL_LifecycleBadge({
+  status
+}) {
+  const m = window.PL_LIFECYCLE_META[status];
+  return /*#__PURE__*/React.createElement(PLBadge, {
+    tone: m.tone,
+    solid: !!m.solid,
+    style: {
+      whiteSpace: "normal",
+      maxWidth: "100%",
+      boxSizing: "border-box"
+    }
+  }, m.label);
+}
+function PL_VisibilityBadge({
+  visible,
+  inconsistent
+}) {
+  const wrapStyle = {
+    whiteSpace: "normal",
+    maxWidth: "100%",
+    boxSizing: "border-box"
+  };
+  if (inconsistent) return /*#__PURE__*/React.createElement(PLBadge, {
+    tone: "negative",
+    style: wrapStyle
+  }, /*#__PURE__*/React.createElement(PLIcon, {
+    name: "alert-triangle",
+    size: 11,
+    style: {
+      flex: "none"
+    }
+  }), " Inconsistent state");
+  return visible ? /*#__PURE__*/React.createElement(PLBadge, {
+    tone: "positive",
+    style: wrapStyle
+  }, /*#__PURE__*/React.createElement(PLIcon, {
+    name: "check",
+    size: 11,
+    style: {
+      flex: "none"
+    }
+  }), " Visible on PropertySignal") : /*#__PURE__*/React.createElement(PLBadge, {
+    tone: "neutral",
+    style: wrapStyle
+  }, "Not visible");
+}
+function PL_CompletenessCell({
+  pct,
+  missing
+}) {
+  const color = pct >= 90 ? "var(--positive)" : pct >= 60 ? "var(--caution)" : "var(--negative)";
+  const title = missing && missing.length ? "Missing: " + missing.join(", ") : undefined;
+  return /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "6px"
+    },
+    title: title
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: "6px",
+      height: "6px",
+      borderRadius: "50%",
+      flex: "none",
+      background: color
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "13px",
+      fontWeight: 600,
+      color: "var(--text-body)"
+    }
+  }, pct, "% complete"));
+}
+function PL_WarningInline({
+  warnings
+}) {
+  if (!warnings || warnings.length === 0) return /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "12px",
+      color: "var(--positive)",
+      fontWeight: 600,
+      display: "flex",
+      alignItems: "center",
+      gap: "4px"
+    }
+  }, /*#__PURE__*/React.createElement(PLIcon, {
+    name: "check",
+    size: 11
+  }), " No issues");
+  const worst = warnings.includes("inconsistent_state") ? "negative" : "caution";
+  const color = worst === "negative" ? "var(--negative)" : "var(--caution)";
+  const label = warnings.map(w => window.PL_WARNING_META[w].label).join(" \u00b7 ");
+  return /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "flex",
+      alignItems: "flex-start",
+      gap: "5px",
+      fontSize: "12px",
+      fontWeight: 600,
+      color
+    },
+    title: label
+  }, /*#__PURE__*/React.createElement(PLIcon, {
+    name: "alert-triangle",
+    size: 12,
+    style: {
+      flex: "none",
+      marginTop: "1px"
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "-webkit-box",
+      WebkitLineClamp: 2,
+      WebkitBoxOrient: "vertical",
+      overflow: "hidden"
+    }
+  }, warnings.length, " issue", warnings.length === 1 ? "" : "s", ": ", label));
+}
+function PL_Thumb({
+  photos
+}) {
+  return photos && photos.length ? /*#__PURE__*/React.createElement("img", {
+    src: photos[0],
+    alt: "",
+    style: {
+      width: "44px",
+      height: "44px",
+      objectFit: "cover",
+      borderRadius: "var(--radius-sm)",
+      border: "1px solid var(--border)",
+      flex: "none"
+    }
+  }) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "44px",
+      height: "44px",
+      borderRadius: "var(--radius-sm)",
+      border: "1px dashed var(--border-strong)",
+      background: "var(--surface-subtle)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      flex: "none"
+    }
+  }, /*#__PURE__*/React.createElement(PLIcon, {
+    name: "camera",
+    size: 16,
+    color: "var(--text-muted)"
+  }));
+}
+const PL_ACTION_META = {
+  publish: {
+    label: "Publish",
+    verb: "publish",
+    body: n => "This will make " + n + " listing" + (n === 1 ? "" : "s") + " visible to users and on the public map.",
+    color: "var(--positive)"
+  },
+  unpublish: {
+    label: "Unpublish",
+    verb: "unpublish",
+    body: n => "This removes " + n + " listing" + (n === 1 ? "" : "s") + " from public surfaces without deleting " + (n === 1 ? "it" : "them") + ". It can be republished later.",
+    color: "var(--caution)"
+  },
+  archive: {
+    label: "Archive",
+    verb: "archive",
+    body: n => "This removes " + n + " listing" + (n === 1 ? "" : "s") + " from active inventory and preserves the record. It can be restored later.",
+    color: "var(--navy-800)"
+  },
+  restore: {
+    label: "Restore",
+    verb: "restore",
+    body: n => "This returns " + n + " archived listing" + (n === 1 ? "" : "s") + " to an unpublished state for review before republishing.",
+    color: "var(--navy-800)"
+  }
+};
+function PL_ConfirmDialog({
+  action,
+  count,
+  onConfirm,
+  onCancel
+}) {
+  const m = PL_ACTION_META[action];
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      zIndex: 90,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    onClick: onCancel,
+    style: {
+      position: "absolute",
+      inset: 0,
+      background: "rgba(14,22,38,0.42)"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "relative",
+      width: "420px",
+      background: "var(--paper)",
+      borderRadius: "var(--radius-lg)",
+      boxShadow: "var(--shadow-xl)",
+      padding: "22px 24px"
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontSize: "17px",
+      fontWeight: 700,
+      margin: "0 0 8px"
+    }
+  }, m.label, " ", count, " listing", count === 1 ? "" : "s", "?"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "13.5px",
+      color: "var(--text-muted)",
+      lineHeight: 1.6,
+      margin: "0 0 20px"
+    }
+  }, m.body(count)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "10px",
+      justifyContent: "flex-end"
+    }
+  }, /*#__PURE__*/React.createElement(PLButton, {
+    variant: "outline",
+    onClick: onCancel
+  }, "Cancel"), /*#__PURE__*/React.createElement(PLButton, {
+    style: {
+      background: m.color
+    },
+    onClick: onConfirm
+  }, m.label))));
+}
+Object.assign(window, {
+  PL_LifecycleBadge,
+  PL_VisibilityBadge,
+  PL_CompletenessCell,
+  PL_WarningInline,
+  PL_Thumb,
+  PL_ConfirmDialog,
+  PL_ACTION_META
+});
+})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/admin/PL_Shared.jsx", error: String((e && e.message) || e) }); }
+
+// ui_kits/admin/PendingApprovalsScreen.jsx
+try { (() => {
+// Pending Approvals — admin moderation queue. Search/filter/sort a real table, select
+// rows for restricted bulk approval, and open a wide review drawer per listing.
+const {
+  Icon: PA_Icon,
+  Badge: PA_Badge,
+  Button: PA_Button,
+  Input: PA_Input,
+  Select: PA_Select
+} = window.ReTrendsDesignSystem_f37966;
+const DEFAULT_FILTERS = {
+  types: [],
+  localities: [],
+  brokers: [],
+  age: "any",
+  flags: []
+};
+const AGE_OPTIONS = [["any", "Any age"], ["today", "Today"], ["3plus", "3+ days"], ["7plus", "7+ days"], ["21plus", "21+ days"]];
+function PA_StatChip({
+  label,
+  value,
+  warn
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "right"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "var(--font-mono)",
+      fontSize: "19px",
+      fontWeight: 800,
+      lineHeight: 1,
+      color: warn && value > 0 ? "var(--caution)" : "var(--text-strong)"
+    }
+  }, value), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "10.5px",
+      fontWeight: 600,
+      color: "var(--text-muted)",
+      textTransform: "uppercase",
+      letterSpacing: "0.03em",
+      marginTop: "2px"
+    }
+  }, label));
+}
+function PA_Chip({
+  children,
+  onRemove
+}) {
+  return /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "6px",
+      padding: "4px 6px 4px 10px",
+      borderRadius: "var(--radius-full)",
+      background: "var(--navy-100)",
+      color: "var(--navy-800)",
+      fontSize: "12px",
+      fontWeight: 600
+    }
+  }, children, /*#__PURE__*/React.createElement("button", {
+    onClick: onRemove,
+    style: {
+      display: "flex",
+      background: "transparent",
+      border: "none",
+      padding: "2px",
+      cursor: "pointer",
+      color: "var(--navy-800)"
+    }
+  }, /*#__PURE__*/React.createElement(PA_Icon, {
+    name: "x",
+    size: 11
+  })));
+}
+function PA_ToggleChip({
+  active,
+  onClick,
+  children
+}) {
+  return /*#__PURE__*/React.createElement("button", {
+    onClick: onClick,
+    style: {
+      padding: "5px 12px",
+      borderRadius: "var(--radius-full)",
+      fontSize: "12.5px",
+      fontWeight: 600,
+      cursor: "pointer",
+      border: "1px solid " + (active ? "var(--navy-800)" : "var(--border-strong)"),
+      background: active ? "var(--navy-800)" : "var(--paper)",
+      color: active ? "#fff" : "var(--text-body)"
+    }
+  }, children);
+}
+function PA_FiltersPanel({
+  filters,
+  setFilters,
+  localities,
+  brokerIds,
+  onClose
+}) {
+  const toggle = (key, value) => setFilters(f => ({
+    ...f,
+    [key]: f[key].includes(value) ? f[key].filter(v => v !== value) : [...f[key], value]
+  }));
+  const group = (title, key, options) => /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: "16px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "11.5px",
+      fontWeight: 700,
+      color: "var(--text-muted)",
+      textTransform: "uppercase",
+      letterSpacing: "0.03em",
+      marginBottom: "8px"
+    }
+  }, title), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: "6px"
+    }
+  }, options.map(([value, label]) => /*#__PURE__*/React.createElement(PA_ToggleChip, {
+    key: value,
+    active: filters[key].includes(value),
+    onClick: () => toggle(key, value)
+  }, label))));
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      top: "46px",
+      left: 0,
+      zIndex: 30,
+      width: "560px",
+      background: "var(--paper)",
+      border: "1px solid var(--border)",
+      borderRadius: "var(--radius-lg)",
+      boxShadow: "var(--shadow-lg)",
+      padding: "18px 20px"
+    }
+  }, group("Property type", "types", Object.entries(window.PA_PROPERTY_TYPES)), group("Locality", "localities", localities.map(l => [l, l])), group("Broker", "brokers", brokerIds.map(b => [b, window.PA_BROKERS[b].name])), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: "16px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "11.5px",
+      fontWeight: 700,
+      color: "var(--text-muted)",
+      textTransform: "uppercase",
+      letterSpacing: "0.03em",
+      marginBottom: "8px"
+    }
+  }, "Submission age"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: "6px"
+    }
+  }, AGE_OPTIONS.map(([value, label]) => /*#__PURE__*/React.createElement(PA_ToggleChip, {
+    key: value,
+    active: filters.age === value,
+    onClick: () => setFilters(f => ({
+      ...f,
+      age: value
+    }))
+  }, label)))), group("Review flags", "flags", Object.entries(window.PA_FLAG_META).map(([k, m]) => [k, m.label])), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "flex-end"
+    }
+  }, /*#__PURE__*/React.createElement(PA_Button, {
+    size: "sm",
+    onClick: onClose
+  }, "Done")));
+}
+function PA_Screen() {
+  const [listings, setListings] = React.useState(() => window.PA_LISTINGS.map(l => ({
+    ...l
+  })));
+  const [search, setSearch] = React.useState("");
+  const [filters, setFilters] = React.useState(DEFAULT_FILTERS);
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const [sortKey, setSortKey] = React.useState("submittedAt");
+  const [sortDir, setSortDir] = React.useState("asc");
+  const [page, setPage] = React.useState(1);
+  const pageSize = 10;
+  const [selected, setSelected] = React.useState(() => new Set());
+  const [drawer, setDrawer] = React.useState(null);
+  const [toast, setToast] = React.useState(null);
+  const [previewState, setPreviewState] = React.useState(null);
+  const [scenario, setScenario] = React.useState("default");
+  const toastTimer = React.useRef(null);
+  React.useEffect(() => {
+    setDrawer(null);
+    setPreviewState(null);
+    setSelected(new Set());
+    setSearch("");
+    setFilters(DEFAULT_FILTERS);
+    setPage(1);
+    setFiltersOpen(false);
+    if (scenario === "filtered") {
+      setFilters({
+        ...DEFAULT_FILTERS,
+        types: ["agricultural_land"],
+        flags: ["possible_duplicate"]
+      });
+      setFiltersOpen(true);
+    } else if (scenario === "empty") setSearch("zzz-no-match-xk9");else if (scenario === "loading") setPreviewState("loading");else if (scenario === "error") setPreviewState("error");else if (scenario === "drawer-duplicate") setDrawer({
+      id: "PS-24631",
+      initialView: "review"
+    });else if (scenario === "drawer-return") setDrawer({
+      id: "PS-24675",
+      initialView: "return"
+    });
+  }, [scenario]);
+  const pending = listings.filter(l => l.status === "pending");
+  const newToday = pending.filter(l => window.PA_formatAge(l.submittedAt) === "Today");
+  const over7 = pending.filter(l => window.PA_ageDays(l.submittedAt) > 7);
+  const needsAttention = pending.filter(l => l.flags.length > 0);
+  const localities = [...new Set(listings.map(l => l.locality))].sort();
+  const brokerIds = [...new Set(listings.map(l => l.broker))];
+  const matchesSearch = l => {
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return l.title.toLowerCase().includes(q) || l.id.toLowerCase().includes(q) || window.PA_BROKERS[l.broker].name.toLowerCase().includes(q) || l.locality.toLowerCase().includes(q);
+  };
+  const matchesFilters = l => {
+    if (filters.types.length && !filters.types.includes(l.propertyType)) return false;
+    if (filters.localities.length && !filters.localities.includes(l.locality)) return false;
+    if (filters.brokers.length && !filters.brokers.includes(l.broker)) return false;
+    if (filters.flags.length && !filters.flags.some(f => l.flags.includes(f))) return false;
+    if (filters.age !== "any") {
+      const d = window.PA_ageDays(l.submittedAt);
+      if (filters.age === "today" && window.PA_formatAge(l.submittedAt) !== "Today") return false;
+      if (filters.age === "3plus" && d < 3) return false;
+      if (filters.age === "7plus" && d <= 7) return false;
+      if (filters.age === "21plus" && d < 21) return false;
+    }
+    return true;
+  };
+  const filtered = pending.filter(l => matchesSearch(l) && matchesFilters(l));
+  const sorted = [...filtered].sort((a, b) => {
+    let av, bv;
+    if (sortKey === "price") {
+      av = a.price;
+      bv = b.price;
+    } else if (sortKey === "locality") {
+      av = a.locality;
+      bv = b.locality;
+    } else if (sortKey === "title") {
+      av = a.title;
+      bv = b.title;
+    } else {
+      av = new Date(a.submittedAt).getTime();
+      bv = new Date(b.submittedAt).getTime();
+    }
+    const cmp = typeof av === "string" ? av.localeCompare(bv) : av - bv;
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const pageClamped = Math.min(page, totalPages);
+  const paged = sorted.slice((pageClamped - 1) * pageSize, pageClamped * pageSize);
+  const activeFilterCount = filters.types.length + filters.localities.length + filters.brokers.length + filters.flags.length + (filters.age !== "any" ? 1 : 0);
+  const hasActiveFilters = activeFilterCount > 0 || !!search.trim();
+  const resetFilters = () => {
+    setFilters(DEFAULT_FILTERS);
+    setSearch("");
+    setPage(1);
+  };
+  const toggleHeaderSort = key => {
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+  const sortArrow = key => sortKey === key ? sortDir === "asc" ? " \u2191" : " \u2193" : "";
+  const toggleSelect = id => setSelected(s => {
+    const n = new Set(s);
+    n.has(id) ? n.delete(id) : n.add(id);
+    return n;
+  });
+  const toggleSelectPage = () => setSelected(s => {
+    const ids = paged.map(l => l.id);
+    const allSel = ids.every(id => s.has(id));
+    const n = new Set(s);
+    ids.forEach(id => allSel ? n.delete(id) : n.add(id));
+    return n;
+  });
+  const pushToast = (ids, message) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({
+      ids,
+      message
+    });
+    toastTimer.current = setTimeout(() => setToast(null), 6000);
+  };
+  const applyStatus = (ids, status) => setListings(ls => ls.map(l => ids.includes(l.id) ? {
+    ...l,
+    status
+  } : l));
+  const findNext = afterId => {
+    const idx = sorted.findIndex(l => l.id === afterId);
+    for (let i = idx + 1; i < sorted.length; i++) if (sorted[i].id !== afterId) return sorted[i];
+    for (let i = 0; i < idx; i++) if (sorted[i].id !== afterId) return sorted[i];
+    return null;
+  };
+  const doApprove = id => {
+    const next = findNext(id);
+    applyStatus([id], "approved");
+    setSelected(s => {
+      const n = new Set(s);
+      n.delete(id);
+      return n;
+    });
+    pushToast([id], "Listing approved and published.");
+    setDrawer(next ? {
+      id: next.id,
+      initialView: "review"
+    } : null);
+  };
+  const doReturn = id => {
+    const next = findNext(id);
+    applyStatus([id], "returned");
+    pushToast([id], "Returned to broker for edits.");
+    setDrawer(next ? {
+      id: next.id,
+      initialView: "review"
+    } : null);
+  };
+  const doReject = id => {
+    const next = findNext(id);
+    applyStatus([id], "rejected");
+    pushToast([id], "Listing rejected.");
+    setDrawer(next ? {
+      id: next.id,
+      initialView: "review"
+    } : null);
+  };
+  const eligibleSelected = [...selected].filter(id => {
+    const l = listings.find(x => x.id === id);
+    return l && l.flags.length === 0;
+  });
+  const doBulkApprove = () => {
+    applyStatus(eligibleSelected, "approved");
+    setSelected(new Set());
+    pushToast(eligibleSelected, eligibleSelected.length + " listing" + (eligibleSelected.length === 1 ? "" : "s") + " approved and published.");
+  };
+  const undoLast = () => {
+    if (toast) {
+      applyStatus(toast.ids, "pending");
+      setToast(null);
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    }
+  };
+  const drawerListing = drawer && listings.find(l => l.id === drawer.id);
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      height: "100vh",
+      minHeight: 0
+    }
+  }, /*#__PURE__*/React.createElement(window.RTA_Header, {
+    active: "Listings"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "upt-scroll",
+    style: {
+      flex: 1,
+      minHeight: 0,
+      overflowY: "auto",
+      background: "var(--background)"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxWidth: "1360px",
+      margin: "0 auto",
+      padding: "26px 28px 60px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      flexWrap: "wrap",
+      gap: "18px",
+      marginBottom: "22px"
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "10px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "32px",
+      height: "32px",
+      borderRadius: "var(--radius-md)",
+      background: "var(--navy-800)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      flex: "none"
+    }
+  }, /*#__PURE__*/React.createElement(PA_Icon, {
+    name: "file-check",
+    size: 17,
+    color: "#fff"
+  })), /*#__PURE__*/React.createElement("h1", {
+    style: {
+      fontSize: "23px",
+      fontWeight: 700,
+      margin: 0,
+      color: "var(--text-strong)"
+    }
+  }, "Pending approvals"), /*#__PURE__*/React.createElement(PA_Badge, {
+    tone: "navy",
+    pill: true
+  }, pending.length, " pending")), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "13.5px",
+      color: "var(--text-muted)",
+      margin: "5px 0 0 42px"
+    }
+  }, "Review broker-submitted listings")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "20px",
+      padding: "4px 0"
+    }
+  }, /*#__PURE__*/React.createElement(PA_StatChip, {
+    label: "New today",
+    value: newToday.length
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "1px",
+      background: "var(--border)"
+    }
+  }), /*#__PURE__*/React.createElement(PA_StatChip, {
+    label: "Over 7 days old",
+    value: over7.length,
+    warn: true
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "1px",
+      background: "var(--border)"
+    }
+  }), /*#__PURE__*/React.createElement(PA_StatChip, {
+    label: "Needs attention",
+    value: needsAttention.length,
+    warn: true
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "relative",
+      display: "flex",
+      alignItems: "center",
+      gap: "10px",
+      marginBottom: "10px",
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: "1 1 300px",
+      maxWidth: "420px"
+    }
+  }, /*#__PURE__*/React.createElement(PA_Input, {
+    placeholder: "Search title, listing ID, broker or locality",
+    leadingIcon: /*#__PURE__*/React.createElement(PA_Icon, {
+      name: "search",
+      size: 16
+    }),
+    value: search,
+    onChange: e => {
+      setSearch(e.target.value);
+      setPage(1);
+    }
+  })), /*#__PURE__*/React.createElement(PA_Button, {
+    variant: "outline",
+    onClick: () => setFiltersOpen(o => !o)
+  }, /*#__PURE__*/React.createElement(PA_Icon, {
+    name: "sliders-horizontal",
+    size: 15
+  }), " Filters", activeFilterCount > 0 ? " (" + activeFilterCount + ")" : ""), hasActiveFilters && /*#__PURE__*/React.createElement(PA_Button, {
+    variant: "ghost",
+    onClick: resetFilters
+  }, "Reset filters"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginLeft: "auto",
+      display: "flex",
+      alignItems: "center",
+      gap: "12px"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "13px",
+      color: "var(--text-muted)"
+    }
+  }, filtered.length, " result", filtered.length === 1 ? "" : "s"), /*#__PURE__*/React.createElement(PA_Select, {
+    size: "sm",
+    value: sortKey + ":" + sortDir,
+    onChange: e => {
+      const [k, d] = e.target.value.split(":");
+      setSortKey(k);
+      setSortDir(d);
+    },
+    options: [{
+      value: "submittedAt:asc",
+      label: "Oldest first"
+    }, {
+      value: "submittedAt:desc",
+      label: "Newest first"
+    }, {
+      value: "price:desc",
+      label: "Price: high to low"
+    }, {
+      value: "price:asc",
+      label: "Price: low to high"
+    }, {
+      value: "locality:asc",
+      label: "Locality A\u2013Z"
+    }]
+  })), filtersOpen && /*#__PURE__*/React.createElement(PA_FiltersPanel, {
+    filters: filters,
+    setFilters: f => {
+      setFilters(f);
+      setPage(1);
+    },
+    localities: localities,
+    brokerIds: brokerIds,
+    onClose: () => setFiltersOpen(false)
+  })), activeFilterCount > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: "6px",
+      marginBottom: "16px"
+    }
+  }, filters.types.map(t => /*#__PURE__*/React.createElement(PA_Chip, {
+    key: t,
+    onRemove: () => setFilters(f => ({
+      ...f,
+      types: f.types.filter(x => x !== t)
+    }))
+  }, window.PA_PROPERTY_TYPES[t])), filters.localities.map(t => /*#__PURE__*/React.createElement(PA_Chip, {
+    key: t,
+    onRemove: () => setFilters(f => ({
+      ...f,
+      localities: f.localities.filter(x => x !== t)
+    }))
+  }, t)), filters.brokers.map(t => /*#__PURE__*/React.createElement(PA_Chip, {
+    key: t,
+    onRemove: () => setFilters(f => ({
+      ...f,
+      brokers: f.brokers.filter(x => x !== t)
+    }))
+  }, window.PA_BROKERS[t].name)), filters.age !== "any" && /*#__PURE__*/React.createElement(PA_Chip, {
+    onRemove: () => setFilters(f => ({
+      ...f,
+      age: "any"
+    }))
+  }, AGE_OPTIONS.find(a => a[0] === filters.age)[1]), filters.flags.map(t => /*#__PURE__*/React.createElement(PA_Chip, {
+    key: t,
+    onRemove: () => setFilters(f => ({
+      ...f,
+      flags: f.flags.filter(x => x !== t)
+    }))
+  }, window.PA_FLAG_META[t].label))), selected.size > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "12px",
+      padding: "11px 16px",
+      background: "var(--navy-100)",
+      borderRadius: "var(--radius-md)",
+      marginBottom: "12px",
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "13.5px",
+      color: "var(--navy-800)"
+    }
+  }, /*#__PURE__*/React.createElement("b", null, selected.size, " selected"), selected.size !== eligibleSelected.length && /*#__PURE__*/React.createElement("span", {
+    style: {
+      marginLeft: "8px",
+      color: "var(--caution)"
+    }
+  }, "\xB7 ", selected.size - eligibleSelected.length, " flagged, excluded from bulk approval")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "8px"
+    }
+  }, /*#__PURE__*/React.createElement(PA_Button, {
+    variant: "ghost",
+    size: "sm",
+    onClick: () => setSelected(new Set())
+  }, "Clear selection"), /*#__PURE__*/React.createElement(PA_Button, {
+    size: "sm",
+    disabled: !eligibleSelected.length,
+    style: {
+      background: "var(--positive)"
+    },
+    onClick: doBulkApprove
+  }, "Approve ", eligibleSelected.length, " eligible"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "var(--paper)",
+      border: "1px solid var(--border)",
+      borderRadius: "var(--radius-lg)",
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("table", {
+    style: {
+      width: "100%",
+      borderCollapse: "collapse",
+      fontFamily: "var(--font-sans)"
+    }
+  }, /*#__PURE__*/React.createElement("colgroup", null, /*#__PURE__*/React.createElement("col", {
+    className: "pa-c-check",
+    style: {
+      width: "3%"
+    }
+  }), /*#__PURE__*/React.createElement("col", {
+    className: "pa-c-listing",
+    style: {
+      width: "20%"
+    }
+  }), /*#__PURE__*/React.createElement("col", {
+    className: "pa-col-broker pa-c-broker",
+    style: {
+      width: "13%"
+    }
+  }), /*#__PURE__*/React.createElement("col", {
+    className: "pa-col-type pa-c-type",
+    style: {
+      width: "10%"
+    }
+  }), /*#__PURE__*/React.createElement("col", {
+    className: "pa-c-locality",
+    style: {
+      width: "9%"
+    }
+  }), /*#__PURE__*/React.createElement("col", {
+    className: "pa-c-price",
+    style: {
+      width: "9%"
+    }
+  }), /*#__PURE__*/React.createElement("col", {
+    className: "pa-c-submitted",
+    style: {
+      width: "11%"
+    }
+  }), /*#__PURE__*/React.createElement("col", {
+    className: "pa-c-status",
+    style: {
+      width: "15%"
+    }
+  }), /*#__PURE__*/React.createElement("col", {
+    className: "pa-c-review",
+    style: {
+      width: "10%"
+    }
+  })), /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", {
+    style: {
+      background: "var(--surface-subtle)",
+      borderBottom: "1px solid var(--border)"
+    }
+  }, /*#__PURE__*/React.createElement("th", {
+    style: {
+      width: "40px",
+      padding: "10px 8px 10px 16px"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: paged.length > 0 && paged.every(l => selected.has(l.id)),
+    onChange: toggleSelectPage,
+    style: {
+      width: "15px",
+      height: "15px"
+    }
+  })), /*#__PURE__*/React.createElement("th", {
+    onClick: () => toggleHeaderSort("title"),
+    style: thStyle
+  }, "Listing", sortArrow("title")), /*#__PURE__*/React.createElement("th", {
+    className: "pa-col-broker",
+    style: thStyle
+  }, "Broker"), /*#__PURE__*/React.createElement("th", {
+    className: "pa-col-type",
+    style: thStyle
+  }, "Type"), /*#__PURE__*/React.createElement("th", {
+    style: thStyle
+  }, "Locality"), /*#__PURE__*/React.createElement("th", {
+    onClick: () => toggleHeaderSort("price"),
+    style: thStyle
+  }, "Price", sortArrow("price")), /*#__PURE__*/React.createElement("th", {
+    onClick: () => toggleHeaderSort("submittedAt"),
+    style: thStyle
+  }, "Submitted", sortArrow("submittedAt")), /*#__PURE__*/React.createElement("th", {
+    style: thStyle
+  }, "Status"), /*#__PURE__*/React.createElement("th", {
+    style: {
+      ...thStyle,
+      cursor: "default"
+    }
+  }))), /*#__PURE__*/React.createElement("tbody", null, previewState === "loading" ? Array.from({
+    length: 6
+  }).map((_, i) => /*#__PURE__*/React.createElement("tr", {
+    key: i,
+    style: {
+      borderBottom: "1px solid var(--border)"
+    }
+  }, /*#__PURE__*/React.createElement("td", {
+    colSpan: 9,
+    style: {
+      padding: "14px 16px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "upt-shimmer",
+    style: {
+      height: "16px",
+      borderRadius: "var(--radius-sm)",
+      background: "var(--grey-100)"
+    }
+  })))) : previewState === "error" ? /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+    colSpan: 9,
+    style: {
+      padding: "56px 16px",
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement(PA_Icon, {
+    name: "alert-triangle",
+    size: 26,
+    color: "var(--negative)"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "15px",
+      fontWeight: 700,
+      color: "var(--text-strong)",
+      margin: "12px 0 4px"
+    }
+  }, "Couldn't load the queue"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "13px",
+      color: "var(--text-muted)",
+      marginBottom: "16px"
+    }
+  }, "A network error interrupted the request. Nothing was changed."), /*#__PURE__*/React.createElement(PA_Button, {
+    variant: "outline",
+    onClick: () => setPreviewState(null)
+  }, "Retry"))) : paged.length === 0 ? /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+    colSpan: 9,
+    style: {
+      padding: "56px 16px",
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement(PA_Icon, {
+    name: "search",
+    size: 26,
+    color: "var(--text-muted)"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "15px",
+      fontWeight: 700,
+      color: "var(--text-strong)",
+      margin: "12px 0 4px"
+    }
+  }, "No listings match these filters"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "13px",
+      color: "var(--text-muted)",
+      marginBottom: "16px"
+    }
+  }, "Try a different search term or reset your filters."), /*#__PURE__*/React.createElement(PA_Button, {
+    variant: "outline",
+    onClick: resetFilters
+  }, "Reset filters"))) : paged.map(l => {
+    const broker = window.PA_BROKERS[l.broker];
+    return /*#__PURE__*/React.createElement("tr", {
+      key: l.id,
+      className: "pa-row",
+      onClick: () => setDrawer({
+        id: l.id
+      }),
+      style: {
+        borderBottom: "1px solid var(--border)"
+      }
+    }, /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "12px 8px 12px 16px"
+      },
+      onClick: e => e.stopPropagation()
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "checkbox",
+      checked: selected.has(l.id),
+      onChange: () => toggleSelect(l.id),
+      style: {
+        width: "15px",
+        height: "15px"
+      }
+    })), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "12px 14px",
+        maxWidth: "260px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: "13.5px",
+        fontWeight: 700,
+        color: "var(--text-strong)",
+        lineHeight: 1.35,
+        display: "-webkit-box",
+        WebkitLineClamp: 2,
+        WebkitBoxOrient: "vertical",
+        overflow: "hidden"
+      }
+    }, l.title), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: "11.5px",
+        fontFamily: "var(--font-mono)",
+        color: "var(--text-muted)",
+        marginTop: "3px"
+      }
+    }, l.id)), /*#__PURE__*/React.createElement("td", {
+      className: "pa-col-broker",
+      style: {
+        padding: "12px 14px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: "13px",
+        fontWeight: 600,
+        color: "var(--text-strong)"
+      }
+    }, broker.name), /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: "3px"
+      }
+    }, /*#__PURE__*/React.createElement(window.PA_VerificationBadge, {
+      tier: broker.verification,
+      size: "sm"
+    }))), /*#__PURE__*/React.createElement("td", {
+      className: "pa-col-type",
+      style: {
+        padding: "12px 14px"
+      }
+    }, /*#__PURE__*/React.createElement(window.PA_TypeLabel, {
+      type: l.propertyType
+    })), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "12px 14px",
+        fontSize: "13px",
+        color: "var(--text-body)"
+      }
+    }, l.locality), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "12px 14px",
+        fontSize: "13px",
+        fontFamily: "var(--font-mono)",
+        fontWeight: 700,
+        color: "var(--text-strong)"
+      }
+    }, window.PA_formatPrice(l.price)), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "12px 14px"
+      }
+    }, /*#__PURE__*/React.createElement(window.PA_AgeCell, {
+      iso: l.submittedAt
+    })), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "12px 14px"
+      }
+    }, /*#__PURE__*/React.createElement(window.PA_FlagList, {
+      flags: l.flags,
+      max: 2
+    })), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "12px 16px 12px 8px",
+        textAlign: "right"
+      },
+      onClick: e => e.stopPropagation()
+    }, /*#__PURE__*/React.createElement(PA_Button, {
+      variant: "outline",
+      size: "sm",
+      onClick: () => setDrawer({
+        id: l.id
+      })
+    }, "Review")));
+  })))), !previewState && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginTop: "14px"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "13px",
+      color: "var(--text-muted)"
+    }
+  }, sorted.length === 0 ? "0" : (pageClamped - 1) * pageSize + 1 + "\u2013" + Math.min(pageClamped * pageSize, sorted.length), " of ", sorted.length), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "6px"
+    }
+  }, /*#__PURE__*/React.createElement(PA_Button, {
+    variant: "outline",
+    size: "sm",
+    disabled: pageClamped <= 1,
+    onClick: () => setPage(p => p - 1)
+  }, "Previous"), /*#__PURE__*/React.createElement(PA_Button, {
+    variant: "outline",
+    size: "sm",
+    disabled: pageClamped >= totalPages,
+    onClick: () => setPage(p => p + 1)
+  }, "Next"))))), drawerListing && /*#__PURE__*/React.createElement(window.PA_ReviewDrawer, {
+    listing: drawerListing,
+    initialView: drawer.initialView,
+    onClose: () => setDrawer(null),
+    onApprove: doApprove,
+    onReturn: doReturn,
+    onReject: doReject
+  }), toast && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      bottom: "24px",
+      left: "50%",
+      transform: "translateX(-50%)",
+      zIndex: 80,
+      display: "flex",
+      alignItems: "center",
+      gap: "16px",
+      background: "var(--navy-800)",
+      color: "#fff",
+      padding: "12px 20px",
+      borderRadius: "var(--radius-md)",
+      boxShadow: "var(--shadow-xl)"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "13.5px",
+      fontWeight: 600
+    }
+  }, toast.message), /*#__PURE__*/React.createElement("button", {
+    onClick: undoLast,
+    style: {
+      background: "transparent",
+      border: "none",
+      color: "#fff",
+      fontWeight: 700,
+      textDecoration: "underline",
+      cursor: "pointer",
+      fontSize: "13px",
+      padding: 0
+    }
+  }, "Undo")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: "none",
+      display: "flex",
+      justifyContent: "flex-end",
+      alignItems: "center",
+      gap: "8px",
+      padding: "8px 16px",
+      borderTop: "1px solid var(--border)",
+      background: "var(--paper)"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "10.5px",
+      fontWeight: 700,
+      color: "var(--text-muted)",
+      textTransform: "uppercase",
+      letterSpacing: "0.03em"
+    }
+  }, "Design preview"), /*#__PURE__*/React.createElement("select", {
+    value: scenario,
+    onChange: e => setScenario(e.target.value),
+    style: {
+      fontSize: "12px",
+      fontFamily: "var(--font-sans)",
+      border: "1px solid var(--border-strong)",
+      borderRadius: "var(--radius-sm)",
+      padding: "4px 6px",
+      background: "var(--paper)"
+    }
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "default"
+  }, "Default queue"), /*#__PURE__*/React.createElement("option", {
+    value: "filtered"
+  }, "Filters applied"), /*#__PURE__*/React.createElement("option", {
+    value: "empty"
+  }, "Empty results"), /*#__PURE__*/React.createElement("option", {
+    value: "loading"
+  }, "Loading"), /*#__PURE__*/React.createElement("option", {
+    value: "error"
+  }, "Error"), /*#__PURE__*/React.createElement("option", {
+    value: "drawer-duplicate"
+  }, "Drawer \u2014 duplicate warning"), /*#__PURE__*/React.createElement("option", {
+    value: "drawer-return"
+  }, "Drawer \u2014 return for edits"))));
+}
+const thStyle = {
+  padding: "10px 14px",
+  textAlign: "left",
+  fontSize: "11.5px",
+  fontWeight: 700,
+  color: "var(--text-muted)",
+  textTransform: "uppercase",
+  letterSpacing: "0.03em",
+  cursor: "pointer",
+  userSelect: "none"
+};
+Object.assign(window, {
+  PA_Screen
+});
+})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/admin/PendingApprovalsScreen.jsx", error: String((e && e.message) || e) }); }
 
 // ui_kits/admin/PrepareCityScreen.jsx
 try { (() => {
@@ -3280,6 +6704,795 @@ function RTA_PreviewValidate({
 window.RTA_PreviewValidate = RTA_PreviewValidate;
 })(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/admin/PreviewValidateScreen.jsx", error: String((e && e.message) || e) }); }
 
+// ui_kits/admin/ReviewDrawer.jsx
+try { (() => {
+// Right-hand review drawer: full submission evidence + a persistent decision bar.
+// No tabs — one scannable scroll. Approve / Return / Reject are the only exit paths,
+// each with its own confirmation so an admin can never act without seeing consequences.
+const {
+  Icon: DrIcon,
+  Badge: DrBadge,
+  Button: DrButton
+} = window.ReTrendsDesignSystem_f37966;
+const PA_RETURN_REASONS = ["Incorrect or incomplete details", "Better photos required", "Price needs verification", "Location needs correction", "Duplicate listing", "Other"];
+const PA_REJECT_REASONS = ["Fraudulent or scam listing", "Fake or stolen photos", "Broker impersonation", "Duplicate / spam listing", "Outside PropertySignal coverage", "Other"];
+function PA_Fact({
+  label,
+  value
+}) {
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "11px",
+      fontWeight: 700,
+      color: "var(--text-muted)",
+      textTransform: "uppercase",
+      letterSpacing: "0.04em",
+      marginBottom: "3px"
+    }
+  }, label), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "14px",
+      color: "var(--text-strong)",
+      fontWeight: 600
+    }
+  }, value));
+}
+function PA_CheckRow({
+  ok,
+  label,
+  note
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "flex-start",
+      gap: "9px",
+      padding: "7px 0"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: "none",
+      marginTop: "1px",
+      width: "18px",
+      height: "18px",
+      borderRadius: "50%",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: ok ? "var(--positive-bg)" : "var(--caution-bg)",
+      color: ok ? "var(--positive)" : "var(--caution)"
+    }
+  }, /*#__PURE__*/React.createElement(DrIcon, {
+    name: ok ? "check" : "alert-triangle",
+    size: 11,
+    strokeWidth: 2.5
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "13.5px",
+      fontWeight: 600,
+      color: "var(--text-strong)"
+    }
+  }, label), note && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "12px",
+      color: "var(--text-muted)",
+      marginTop: "1px"
+    }
+  }, note)));
+}
+function PA_ReviewDrawer({
+  listing,
+  initialView,
+  onClose,
+  onApprove,
+  onReturn,
+  onReject
+}) {
+  const [view, setView] = React.useState(initialView || "review");
+  const [previewNote, setPreviewNote] = React.useState(false);
+  const [returnReasons, setReturnReasons] = React.useState([]);
+  const [returnNote, setReturnNote] = React.useState("");
+  const [rejectReason, setRejectReason] = React.useState("");
+  const [rejectNote, setRejectNote] = React.useState("");
+  React.useEffect(() => {
+    setView(initialView || "review");
+    setReturnReasons([]);
+    setReturnNote("");
+    setRejectReason("");
+    setRejectNote("");
+  }, [listing.id, initialView]);
+  const broker = window.PA_BROKERS[listing.broker];
+  const hasFlag = f => listing.flags.includes(f);
+  const toggleReason = r => setReturnReasons(rs => rs.includes(r) ? rs.filter(x => x !== r) : [...rs, r]);
+  const returnMessage = returnReasons.length || returnNote ? [...returnReasons.map(r => "• " + r), returnNote ? "\n" + returnNote : ""].join("\n").trim() : "";
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      zIndex: 60,
+      display: "flex",
+      justifyContent: "flex-end"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    onClick: onClose,
+    style: {
+      position: "absolute",
+      inset: 0,
+      background: "rgba(14,22,38,0.38)"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "relative",
+      width: "min(680px, 94vw)",
+      height: "100%",
+      background: "var(--paper)",
+      boxShadow: "var(--shadow-xl)",
+      display: "flex",
+      flexDirection: "column"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: "none",
+      display: "flex",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: "12px",
+      padding: "20px 24px 16px",
+      borderBottom: "1px solid var(--border)"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      minWidth: 0
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "18px",
+      fontWeight: 700,
+      color: "var(--text-strong)",
+      lineHeight: 1.3
+    }
+  }, listing.title), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "12.5px",
+      fontFamily: "var(--font-mono)",
+      color: "var(--text-muted)",
+      marginTop: "3px"
+    }
+  }, listing.id)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+      flex: "none"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "relative"
+    }
+  }, /*#__PURE__*/React.createElement(DrButton, {
+    variant: "outline",
+    size: "sm",
+    onClick: () => {
+      setPreviewNote(true);
+      setTimeout(() => setPreviewNote(false), 1800);
+    }
+  }, /*#__PURE__*/React.createElement(DrIcon, {
+    name: "arrow-up-right",
+    size: 14
+  }), " Preview public listing"), previewNote && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      top: "40px",
+      right: 0,
+      background: "var(--navy-800)",
+      color: "#fff",
+      fontSize: "11.5px",
+      padding: "6px 10px",
+      borderRadius: "var(--radius-sm)",
+      whiteSpace: "nowrap",
+      boxShadow: "var(--shadow-md)"
+    }
+  }, "Opens the public listing in a new tab")), /*#__PURE__*/React.createElement(DrButton, {
+    variant: "ghost",
+    size: "icon",
+    onClick: onClose,
+    "aria-label": "Close review drawer"
+  }, /*#__PURE__*/React.createElement(DrIcon, {
+    name: "x",
+    size: 18
+  })))), /*#__PURE__*/React.createElement("div", {
+    className: "upt-scroll",
+    style: {
+      flex: 1,
+      minHeight: 0,
+      overflowY: "auto",
+      padding: "20px 24px"
+    }
+  }, view === "review" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("section", {
+    style: {
+      marginBottom: "26px"
+    }
+  }, /*#__PURE__*/React.createElement(window.PA_SectionTitle, {
+    icon: "users"
+  }, "Broker"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      flexWrap: "wrap",
+      gap: "10px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "10px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "36px",
+      height: "36px",
+      borderRadius: "50%",
+      background: "var(--navy-100)",
+      color: "var(--navy-800)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontWeight: 700,
+      fontSize: "13px"
+    }
+  }, broker.name.split(" ").map(s => s[0]).slice(0, 2).join("")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "14.5px",
+      fontWeight: 700,
+      color: "var(--text-strong)"
+    }
+  }, broker.name), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "12px",
+      color: "var(--text-muted)"
+    }
+  }, "Member since ", broker.memberSince, " \xB7 ", broker.totalSubmissions, " submissions"))), /*#__PURE__*/React.createElement(window.PA_VerificationBadge, {
+    tier: broker.verification
+  }))), /*#__PURE__*/React.createElement("section", {
+    style: {
+      marginBottom: "26px"
+    }
+  }, /*#__PURE__*/React.createElement(window.PA_SectionTitle, {
+    icon: "camera",
+    right: /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: "12px",
+        color: "var(--text-muted)"
+      }
+    }, listing.photos.length, " photo", listing.photos.length === 1 ? "" : "s")
+  }, "Photos"), listing.photos.length ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
+      gap: "8px"
+    }
+  }, listing.photos.map((p, i) => /*#__PURE__*/React.createElement("img", {
+    key: i,
+    src: p,
+    alt: "",
+    style: {
+      width: "100%",
+      height: "88px",
+      objectFit: "cover",
+      borderRadius: "var(--radius-sm)",
+      border: "1px solid var(--border)"
+    }
+  }))) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: "6px",
+      padding: "28px 0",
+      background: "var(--surface-subtle)",
+      borderRadius: "var(--radius-md)",
+      border: "1px dashed var(--border-strong)"
+    }
+  }, /*#__PURE__*/React.createElement(DrIcon, {
+    name: "camera",
+    size: 22,
+    color: "var(--text-muted)"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "13px",
+      fontWeight: 600,
+      color: "var(--text-muted)"
+    }
+  }, "No photos submitted"))), /*#__PURE__*/React.createElement("section", {
+    style: {
+      marginBottom: "26px"
+    }
+  }, /*#__PURE__*/React.createElement(window.PA_SectionTitle, {
+    icon: "building"
+  }, "Key facts"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: "16px 20px"
+    }
+  }, /*#__PURE__*/React.createElement(PA_Fact, {
+    label: "Price",
+    value: window.PA_formatPrice(listing.price)
+  }), /*#__PURE__*/React.createElement(PA_Fact, {
+    label: "Property type",
+    value: window.PA_PROPERTY_TYPES[listing.propertyType]
+  }), /*#__PURE__*/React.createElement(PA_Fact, {
+    label: "Area",
+    value: listing.area
+  }), /*#__PURE__*/React.createElement(PA_Fact, {
+    label: "Locality",
+    value: listing.locality
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: "16px"
+    }
+  }, /*#__PURE__*/React.createElement(PA_Fact, {
+    label: "Full address",
+    value: listing.address
+  }))), /*#__PURE__*/React.createElement("section", {
+    style: {
+      marginBottom: "26px"
+    }
+  }, /*#__PURE__*/React.createElement(window.PA_SectionTitle, {
+    icon: "map-pin",
+    right: /*#__PURE__*/React.createElement(DrBadge, {
+      tone: listing.locationConfidence === "high" ? "positive" : listing.locationConfidence === "medium" ? "caution" : "negative"
+    }, listing.locationConfidence[0].toUpperCase() + listing.locationConfidence.slice(1), " confidence")
+  }, "Location"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      height: "120px",
+      borderRadius: "var(--radius-md)",
+      border: "1px solid var(--border)",
+      background: "repeating-linear-gradient(45deg, var(--surface-subtle) 0 10px, var(--stone-300) 10px 20px)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      position: "relative"
+    }
+  }, /*#__PURE__*/React.createElement(DrIcon, {
+    name: "map-pin",
+    size: 26,
+    color: "var(--navy-800)"
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "12px",
+      fontFamily: "var(--font-mono)",
+      color: "var(--text-muted)",
+      marginTop: "6px"
+    }
+  }, listing.lat.toFixed(4), ", ", listing.lon.toFixed(4))), /*#__PURE__*/React.createElement("section", {
+    style: {
+      marginBottom: "26px"
+    }
+  }, /*#__PURE__*/React.createElement(window.PA_SectionTitle, {
+    icon: "file-check"
+  }, "Description & amenities"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "13.5px",
+      color: "var(--text-body)",
+      lineHeight: 1.6,
+      margin: "0 0 12px"
+    }
+  }, listing.description), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: "6px"
+    }
+  }, listing.amenities.map(a => /*#__PURE__*/React.createElement("span", {
+    key: a,
+    style: {
+      fontSize: "12px",
+      fontWeight: 600,
+      padding: "4px 10px",
+      borderRadius: "var(--radius-full)",
+      background: "var(--surface-subtle)",
+      color: "var(--text-body)"
+    }
+  }, a)))), /*#__PURE__*/React.createElement("section", {
+    style: {
+      marginBottom: "26px"
+    }
+  }, /*#__PURE__*/React.createElement(window.PA_SectionTitle, {
+    icon: "shield-check"
+  }, "Automated quality & risk checks"), /*#__PURE__*/React.createElement(PA_CheckRow, {
+    ok: !hasFlag("missing_info"),
+    label: "Listing details complete",
+    note: hasFlag("missing_info") ? "Missing: " + (listing.missingFields || []).join(", ") : "Title, price, area and address all present."
+  }), /*#__PURE__*/React.createElement(PA_CheckRow, {
+    ok: !hasFlag("suspicious_price"),
+    label: "Price within expected range",
+    note: hasFlag("suspicious_price") ? listing.priceNote : "Consistent with recent comparable sales."
+  }), /*#__PURE__*/React.createElement(PA_CheckRow, {
+    ok: !hasFlag("location_unverified"),
+    label: "Location verified",
+    note: hasFlag("location_unverified") ? "Coordinates could not be matched to the stated address with confidence." : "Coordinates match the stated address."
+  }), /*#__PURE__*/React.createElement(PA_CheckRow, {
+    ok: listing.photos.length > 0,
+    label: "Photos submitted",
+    note: listing.photos.length === 0 ? "No photos were attached to this submission." : listing.photos.length + " photo(s) attached."
+  }), /*#__PURE__*/React.createElement(PA_CheckRow, {
+    ok: !hasFlag("possible_duplicate"),
+    label: "No duplicate detected",
+    note: hasFlag("possible_duplicate") ? "Similar to an existing submission — see below." : "No matching listings found."
+  }), /*#__PURE__*/React.createElement(PA_CheckRow, {
+    ok: !hasFlag("broker_unverified"),
+    label: "Broker identity verified",
+    note: hasFlag("broker_unverified") ? "This broker's identity has not yet been verified." : "Broker verification is up to date."
+  })), listing.duplicateMatches && /*#__PURE__*/React.createElement("section", {
+    style: {
+      marginBottom: "26px"
+    }
+  }, /*#__PURE__*/React.createElement(window.PA_SectionTitle, {
+    icon: "layers"
+  }, "Possible duplicate matches"), listing.duplicateMatches.map(m => /*#__PURE__*/React.createElement("div", {
+    key: m.id,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "12px",
+      padding: "12px",
+      borderRadius: "var(--radius-md)",
+      border: "1px solid var(--border-strong)",
+      background: "var(--caution-bg)"
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "13.5px",
+      fontWeight: 700,
+      color: "var(--text-strong)"
+    }
+  }, m.title), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "12px",
+      fontFamily: "var(--font-mono)",
+      color: "var(--text-muted)"
+    }
+  }, m.id, " \xB7 ", m.similarity, "% match")), /*#__PURE__*/React.createElement(DrButton, {
+    variant: "outline",
+    size: "sm"
+  }, "Compare")))), /*#__PURE__*/React.createElement("section", {
+    style: {
+      marginBottom: "26px"
+    }
+  }, /*#__PURE__*/React.createElement(window.PA_SectionTitle, {
+    icon: "message-circle"
+  }, "Contact details"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: "16px 20px"
+    }
+  }, /*#__PURE__*/React.createElement(PA_Fact, {
+    label: "Contact name",
+    value: listing.contact.name
+  }), /*#__PURE__*/React.createElement(PA_Fact, {
+    label: "Phone",
+    value: listing.contact.phone
+  }))), /*#__PURE__*/React.createElement("section", null, /*#__PURE__*/React.createElement(window.PA_SectionTitle, {
+    icon: "calendar"
+  }, "Submission & activity"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "13px",
+      color: "var(--text-body)",
+      marginBottom: "10px"
+    }
+  }, "Submitted ", window.PA_formatDateTime(listing.submittedAt)), listing.history.map((h, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      display: "flex",
+      gap: "10px",
+      padding: "6px 0",
+      fontSize: "12.5px"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: "none",
+      color: "var(--text-muted)",
+      fontFamily: "var(--font-mono)",
+      width: "84px"
+    }
+  }, window.PA_formatDateTime(h.ts).split(",")[0]), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "var(--text-body)"
+    }
+  }, /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--text-strong)"
+    }
+  }, h.actor, ": "), h.action))))), view === "approve" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "8px 0"
+    }
+  }, /*#__PURE__*/React.createElement(DrIcon, {
+    name: "shield-check",
+    size: 26,
+    color: "var(--positive)"
+  }), /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontSize: "18px",
+      fontWeight: 700,
+      margin: "12px 0 6px"
+    }
+  }, "Approve and publish this listing?"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "13.5px",
+      color: "var(--text-muted)",
+      margin: "0 0 18px",
+      lineHeight: 1.6
+    }
+  }, "It will immediately become visible to buyers on PropertySignal."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      border: "1px solid var(--border)",
+      borderRadius: "var(--radius-md)",
+      padding: "14px 16px",
+      display: "flex",
+      flexDirection: "column",
+      gap: "8px",
+      marginBottom: "20px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "14.5px",
+      fontWeight: 700
+    }
+  }, listing.title), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "13px",
+      color: "var(--text-muted)"
+    }
+  }, listing.id, " \xB7 ", listing.locality, " \xB7 ", window.PA_formatPrice(listing.price), " \xB7 ", broker.name)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "10px"
+    }
+  }, /*#__PURE__*/React.createElement(DrButton, {
+    variant: "outline",
+    onClick: () => setView("review")
+  }, "Cancel"), /*#__PURE__*/React.createElement(DrButton, {
+    style: {
+      background: "var(--positive)"
+    },
+    onClick: () => onApprove(listing.id)
+  }, "Confirm & publish"))), view === "return" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "8px 0"
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontSize: "18px",
+      fontWeight: 700,
+      margin: "0 0 4px"
+    }
+  }, "Return for edits"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "13.5px",
+      color: "var(--text-muted)",
+      margin: "0 0 16px"
+    }
+  }, "The broker can revise and resubmit. Select what needs to change."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: "8px",
+      marginBottom: "16px"
+    }
+  }, PA_RETURN_REASONS.map(r => /*#__PURE__*/React.createElement("label", {
+    key: r,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "9px",
+      fontSize: "13.5px",
+      color: "var(--text-strong)",
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: returnReasons.includes(r),
+    onChange: () => toggleReason(r),
+    style: {
+      width: "16px",
+      height: "16px",
+      accentColor: "var(--caution)"
+    }
+  }), r))), /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: "13px",
+      fontWeight: 600,
+      display: "block",
+      marginBottom: "6px"
+    }
+  }, "Note to broker (optional)"), /*#__PURE__*/React.createElement("textarea", {
+    value: returnNote,
+    onChange: e => setReturnNote(e.target.value),
+    rows: 3,
+    placeholder: "Add any specific detail\u2026",
+    style: {
+      width: "100%",
+      resize: "vertical",
+      padding: "10px 12px",
+      fontFamily: "var(--font-sans)",
+      fontSize: "13.5px",
+      border: "1px solid var(--border-strong)",
+      borderRadius: "var(--radius-md)",
+      background: "var(--input-bg)",
+      marginBottom: "16px",
+      boxSizing: "border-box"
+    }
+  }), returnMessage && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: "18px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "11px",
+      fontWeight: 700,
+      color: "var(--text-muted)",
+      textTransform: "uppercase",
+      letterSpacing: "0.04em",
+      marginBottom: "6px"
+    }
+  }, "Exact message the broker will see"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      whiteSpace: "pre-line",
+      fontSize: "13px",
+      color: "var(--text-body)",
+      background: "var(--surface-subtle)",
+      borderRadius: "var(--radius-md)",
+      padding: "12px 14px",
+      lineHeight: 1.6
+    }
+  }, returnMessage)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "10px"
+    }
+  }, /*#__PURE__*/React.createElement(DrButton, {
+    variant: "outline",
+    onClick: () => setView("review")
+  }, "Cancel"), /*#__PURE__*/React.createElement(DrButton, {
+    disabled: !returnReasons.length,
+    style: {
+      background: "var(--caution)"
+    },
+    onClick: () => onReturn(listing.id, returnReasons, returnNote)
+  }, "Send back to broker"))), view === "reject" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "8px 0"
+    }
+  }, /*#__PURE__*/React.createElement(DrIcon, {
+    name: "alert-triangle",
+    size: 24,
+    color: "var(--negative)"
+  }), /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontSize: "18px",
+      fontWeight: 700,
+      margin: "10px 0 4px"
+    }
+  }, "Reject this listing"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "13.5px",
+      color: "var(--negative)",
+      margin: "0 0 16px",
+      lineHeight: 1.6
+    }
+  }, "This is different from returning for edits \u2014 the broker cannot correct and resubmit. The listing will not be published."), /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: "13px",
+      fontWeight: 600,
+      display: "block",
+      marginBottom: "6px"
+    }
+  }, "Reason (required)"), /*#__PURE__*/React.createElement("select", {
+    value: rejectReason,
+    onChange: e => setRejectReason(e.target.value),
+    style: {
+      width: "100%",
+      height: "36px",
+      padding: "0 12px",
+      fontFamily: "var(--font-sans)",
+      fontSize: "13.5px",
+      border: "1px solid var(--border-strong)",
+      borderRadius: "var(--radius-md)",
+      background: "var(--input-bg)",
+      marginBottom: "14px",
+      boxSizing: "border-box"
+    }
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "Select a reason\u2026"), PA_REJECT_REASONS.map(r => /*#__PURE__*/React.createElement("option", {
+    key: r,
+    value: r
+  }, r))), /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: "13px",
+      fontWeight: 600,
+      display: "block",
+      marginBottom: "6px"
+    }
+  }, "Note (required)"), /*#__PURE__*/React.createElement("textarea", {
+    value: rejectNote,
+    onChange: e => setRejectNote(e.target.value),
+    rows: 3,
+    placeholder: "Explain why this listing is rejected\u2026",
+    style: {
+      width: "100%",
+      resize: "vertical",
+      padding: "10px 12px",
+      fontFamily: "var(--font-sans)",
+      fontSize: "13.5px",
+      border: "1px solid var(--border-strong)",
+      borderRadius: "var(--radius-md)",
+      background: "var(--input-bg)",
+      marginBottom: "18px",
+      boxSizing: "border-box"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "10px"
+    }
+  }, /*#__PURE__*/React.createElement(DrButton, {
+    variant: "outline",
+    onClick: () => setView("review")
+  }, "Cancel"), /*#__PURE__*/React.createElement(DrButton, {
+    disabled: !rejectReason || !rejectNote.trim(),
+    style: {
+      background: "var(--negative)"
+    },
+    onClick: () => onReject(listing.id, rejectReason, rejectNote)
+  }, "Confirm rejection")))), view === "review" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: "none",
+      display: "flex",
+      alignItems: "center",
+      gap: "10px",
+      padding: "16px 24px",
+      borderTop: "1px solid var(--border)",
+      background: "var(--paper)"
+    }
+  }, /*#__PURE__*/React.createElement(DrButton, {
+    style: {
+      background: "var(--positive)",
+      flex: 1
+    },
+    onClick: () => setView("approve")
+  }, /*#__PURE__*/React.createElement(DrIcon, {
+    name: "check",
+    size: 15
+  }), " Approve"), /*#__PURE__*/React.createElement(DrButton, {
+    variant: "outline",
+    style: {
+      borderColor: "var(--caution)",
+      color: "var(--caution)",
+      flex: 1
+    },
+    onClick: () => setView("return")
+  }, /*#__PURE__*/React.createElement(DrIcon, {
+    name: "pencil",
+    size: 15
+  }), " Return for edits"), /*#__PURE__*/React.createElement(DrButton, {
+    variant: "ghost",
+    style: {
+      color: "var(--text-muted)"
+    },
+    onClick: () => setView("reject")
+  }, "Reject"))));
+}
+Object.assign(window, {
+  PA_ReviewDrawer
+});
+})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/admin/ReviewDrawer.jsx", error: String((e && e.message) || e) }); }
+
 // ui_kits/admin/SelectCityScreen.jsx
 try { (() => {
 // ReTrends Admin — STEP 1: Select city. The launch queue table. The only place a
@@ -3819,6 +8032,1138 @@ window.RTA_STATUS = {
   }
 };
 })(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/admin/admin-data.js", error: String((e && e.message) || e) }); }
+
+// ui_kits/admin/listings-data.js
+try { (() => {
+// ReTrends Admin — Listings inventory mock data. Reuses PA_PROPERTY_TYPES / PA_BROKERS /
+// PA_formatPrice / PA_NOW from pending-data.js (load that file first). No backend; stubs only.
+
+window.PL_LOCALITIES = ["Manipal", "Udupi", "Kaup", "Malpe", "Brahmavar", "Padubidri", "Kalyanpura"];
+window.PL_LIFECYCLE_META = {
+  draft: {
+    label: "Draft",
+    tone: "neutral"
+  },
+  pending_approval: {
+    label: "Pending approval",
+    tone: "accent"
+  },
+  published: {
+    label: "Published",
+    tone: "positive"
+  },
+  unpublished: {
+    label: "Unpublished",
+    tone: "neutral"
+  },
+  returned_for_edits: {
+    label: "Returned for edits",
+    tone: "caution"
+  },
+  rejected: {
+    label: "Rejected",
+    tone: "negative",
+    solid: true
+  },
+  archived: {
+    label: "Archived",
+    tone: "neutral",
+    solid: true
+  }
+};
+
+// Every warning is "needs a look" except inconsistent_state, which is a genuine data
+// problem — the one warning allowed to read as red, per the brief.
+window.PL_WARNING_META = {
+  missing_photos: {
+    label: "Missing photos",
+    tone: "caution",
+    icon: "camera"
+  },
+  incomplete_fields: {
+    label: "Incomplete required fields",
+    tone: "caution",
+    icon: "file-check"
+  },
+  location_unverified: {
+    label: "Location needs verification",
+    tone: "caution",
+    icon: "map-pin"
+  },
+  possible_duplicate: {
+    label: "Possible duplicate",
+    tone: "caution",
+    icon: "layers"
+  },
+  suspicious_price: {
+    label: "Suspicious price",
+    tone: "caution",
+    icon: "trending-up"
+  },
+  broker_unverified: {
+    label: "Unverified broker",
+    tone: "neutral",
+    icon: "shield"
+  },
+  stale_listing: {
+    label: "Stale listing",
+    tone: "caution",
+    icon: "calendar"
+  },
+  inconsistent_state: {
+    label: "Inconsistent lifecycle / visibility state",
+    tone: "negative",
+    icon: "alert-triangle"
+  }
+};
+
+// What each current status may legally transition to. Archived/rejected can never go
+// straight to published — they must pass through "unpublished" first (Restore).
+window.PL_TRANSITIONS = {
+  draft: ["archive"],
+  pending_approval: ["archive"],
+  published: ["unpublish", "archive"],
+  unpublished: ["publish", "archive"],
+  returned_for_edits: ["archive"],
+  rejected: ["archive"],
+  archived: ["restore"]
+};
+const upd = (days, hours = 0) => new Date(window.PA_NOW - (days * 24 + hours) * 3600000).toISOString();
+const PHOTOS2 = ["https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=480&h=320&fit=crop", "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=480&h=320&fit=crop", "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=480&h=320&fit=crop", "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=480&h=320&fit=crop"];
+const ph = n => PHOTOS2.slice(0, n);
+window.PL_LISTINGS = [{
+  id: "PS-L-3001",
+  title: "3 BHK Apartment, Bejai Layout, Manipal",
+  propertyType: "apartment",
+  locality: "Manipal",
+  area: "1,450 sq ft",
+  price: 6800000,
+  status: "published",
+  visible: true,
+  completeness: 100,
+  warnings: [],
+  broker: "sudarshan",
+  updatedAt: upd(1),
+  updatedBy: "admin:Divya",
+  photos: ph(6),
+  lat: 13.3492,
+  lon: 74.786,
+  locationConfidence: "high",
+  address: "Tiger Circle Road, Manipal, Karnataka 576104",
+  description: "Well-ventilated 3 BHK, 4th floor, near Manipal University.",
+  amenities: ["Lift", "Power backup", "Covered parking"],
+  contact: {
+    name: "Sudarshan Rao",
+    phone: "+91 98450 11234"
+  }
+}, {
+  id: "PS-L-3002",
+  title: "3 BHK Villa with Garden, Brahmavar",
+  propertyType: "villa",
+  locality: "Brahmavar",
+  area: "2,600 sq ft",
+  price: 9800000,
+  status: "published",
+  visible: true,
+  completeness: 88,
+  warnings: ["stale_listing"],
+  broker: "prakash",
+  updatedAt: upd(96),
+  updatedBy: "broker",
+  photos: ph(4),
+  lat: 13.4167,
+  lon: 74.7333,
+  locationConfidence: "medium",
+  address: "Near Brahmavar Bus Stand, Brahmavar, Karnataka 576213",
+  description: "Independent villa with a private garden.",
+  amenities: ["Private garden", "Two-car garage"],
+  contact: {
+    name: "Prakash Naik",
+    phone: "+91 93430 77890"
+  }
+}, {
+  id: "PS-L-3003",
+  title: "Commercial Land Fronting NH66, Kaup Junction",
+  propertyType: "commercial_land",
+  locality: "Kaup",
+  area: "18 cents",
+  price: 18000000,
+  status: "published",
+  visible: true,
+  completeness: 100,
+  warnings: [],
+  broker: "ramesh",
+  updatedAt: upd(3),
+  updatedBy: "admin:Arjun",
+  photos: ph(3),
+  lat: 13.2167,
+  lon: 74.75,
+  locationConfidence: "high",
+  address: "NH66, Kaup Junction, Karnataka 574106",
+  description: "Highway-fronting commercial land.",
+  amenities: ["Highway frontage"],
+  contact: {
+    name: "Ramesh Shetty",
+    phone: "+91 99000 45521"
+  }
+}, {
+  id: "PS-L-3004",
+  title: "Sea-view Residential Plot, Malpe Beach Road",
+  propertyType: "plot_residential",
+  locality: "Malpe",
+  area: "2,400 sq ft",
+  price: 7200000,
+  status: "published",
+  visible: true,
+  completeness: 95,
+  warnings: [],
+  broker: "ganesh",
+  updatedAt: upd(6),
+  updatedBy: "admin:Divya",
+  photos: ph(3),
+  lat: 13.3499,
+  lon: 74.7051,
+  locationConfidence: "high",
+  address: "Malpe Beach Road, Udupi, Karnataka 576108",
+  description: "Residential plot with a partial sea view.",
+  amenities: ["Sea view"],
+  contact: {
+    name: "Ganesh Kamath",
+    phone: "+91 94480 22015"
+  }
+}, {
+  id: "PS-L-3005",
+  title: "1,000 sq ft Warehouse, Udupi Industrial Estate",
+  propertyType: "warehouse",
+  locality: "Udupi",
+  area: "1,000 sq ft",
+  price: 8000000,
+  status: "published",
+  visible: true,
+  completeness: 92,
+  warnings: ["broker_unverified"],
+  broker: "vikram",
+  updatedAt: upd(10),
+  updatedBy: "admin:Arjun",
+  photos: ph(2),
+  lat: 13.3409,
+  lon: 74.7421,
+  locationConfidence: "high",
+  address: "Plot 14, Udupi Industrial Estate, Karnataka 576101",
+  description: "Single-unit warehouse with a loading bay.",
+  amenities: ["Loading bay", "3-phase power"],
+  contact: {
+    name: "Vikram Hegde",
+    phone: "+91 97400 65123"
+  }
+}, {
+  id: "PS-L-3010",
+  title: "Furnished 2 BHK Apartment, Near KMC Greens, Manipal",
+  propertyType: "apartment",
+  locality: "Manipal",
+  area: "1,120 sq ft",
+  price: 5600000,
+  status: "unpublished",
+  visible: false,
+  completeness: 100,
+  warnings: [],
+  broker: "ramesh",
+  updatedAt: upd(2),
+  updatedBy: "admin:Divya",
+  photos: ph(5),
+  lat: 13.352,
+  lon: 74.7823,
+  locationConfidence: "high",
+  address: "Near KMC Greens, Madhav Nagar, Manipal, Karnataka 576104",
+  description: "Fully furnished 2 BHK, popular with visiting faculty.",
+  amenities: ["Furnished", "Lift", "Clubhouse"],
+  contact: {
+    name: "Ramesh Shetty",
+    phone: "+91 99000 45521"
+  }
+}, {
+  id: "PS-L-3011",
+  title: "500 sq ft Retail Shop, Court Road Manipal",
+  propertyType: "commercial_shop",
+  locality: "Manipal",
+  area: "500 sq ft",
+  price: 5000000,
+  status: "unpublished",
+  visible: false,
+  completeness: 70,
+  warnings: ["suspicious_price"],
+  broker: "anitha",
+  updatedAt: upd(5),
+  updatedBy: "admin:Arjun",
+  photos: ph(4),
+  lat: 13.3505,
+  lon: 74.7889,
+  locationConfidence: "high",
+  address: "Court Road, Manipal, Karnataka 576104",
+  description: "Ground-floor retail shop with rolling shutter.",
+  amenities: ["Rolling shutter"],
+  contact: {
+    name: "Anitha D'Souza",
+    phone: "+91 90360 88712"
+  },
+  priceNote: "42% above the median for Court Road shops this size."
+}, {
+  id: "PS-L-3012",
+  title: "2 BHK Independent House, Kalyanpura",
+  propertyType: "independent_house",
+  locality: "Kalyanpura",
+  area: "1,800 sq ft",
+  price: 4500000,
+  status: "unpublished",
+  visible: false,
+  completeness: 40,
+  warnings: ["missing_photos", "incomplete_fields"],
+  broker: "vikram",
+  updatedAt: upd(14),
+  updatedBy: "broker",
+  photos: [],
+  lat: 13.34,
+  lon: 74.75,
+  locationConfidence: "low",
+  address: "Kalyanpura Village, Karnataka 576102",
+  description: "",
+  amenities: [],
+  contact: {
+    name: "Vikram Hegde",
+    phone: "+91 97400 65123"
+  },
+  missingFields: ["Photos", "Description", "Amenities"]
+}, {
+  id: "PS-L-3020",
+  title: "10 Cents Commercial Land on NH66, Near Manipal Lake",
+  propertyType: "commercial_land",
+  locality: "Manipal",
+  area: "10 cents",
+  price: 12000000,
+  status: "pending_approval",
+  visible: false,
+  completeness: 78,
+  warnings: ["broker_unverified"],
+  broker: "anitha",
+  updatedAt: upd(0, 6),
+  updatedBy: "broker",
+  photos: ph(3),
+  lat: 13.353,
+  lon: 74.789,
+  locationConfidence: "medium",
+  address: "NH66, Near Manipal Lake, Manipal, Karnataka 576104",
+  description: "Highway-fronting commercial plot on NH66.",
+  amenities: ["Highway frontage"],
+  contact: {
+    name: "Anitha D'Souza",
+    phone: "+91 90360 88712"
+  }
+}, {
+  id: "PS-L-3021",
+  title: "Agricultural Land, 2 Acres, Padubidri Village",
+  propertyType: "agricultural_land",
+  locality: "Padubidri",
+  area: "2 acres",
+  price: 2500000,
+  status: "pending_approval",
+  visible: false,
+  completeness: 100,
+  warnings: [],
+  broker: "ganesh",
+  updatedAt: upd(12),
+  updatedBy: "broker",
+  photos: ph(4),
+  lat: 13.1167,
+  lon: 74.75,
+  locationConfidence: "high",
+  address: "Survey No. 114/1, Padubidri Village, Karnataka 574203",
+  description: "Two acres of cultivable land with an existing borewell.",
+  amenities: ["Borewell", "Road access"],
+  contact: {
+    name: "Ganesh Kamath",
+    phone: "+91 94480 22015"
+  }
+}, {
+  id: "PS-L-3022",
+  title: "Agricultural Land, 2 Acres, Padubidri Village (Survey No. 114/2)",
+  propertyType: "agricultural_land",
+  locality: "Padubidri",
+  area: "2 acres",
+  price: 2600000,
+  status: "pending_approval",
+  visible: false,
+  completeness: 85,
+  warnings: ["possible_duplicate", "broker_unverified"],
+  broker: "vikram",
+  updatedAt: upd(12, 3),
+  updatedBy: "broker",
+  photos: ph(2),
+  lat: 13.1169,
+  lon: 74.7503,
+  locationConfidence: "medium",
+  address: "Survey No. 114/2, Padubidri Village, Karnataka 574203",
+  description: "Adjacent two-acre agricultural parcel.",
+  amenities: ["Road access"],
+  contact: {
+    name: "Vikram Hegde",
+    phone: "+91 97400 65123"
+  }
+}, {
+  id: "PS-L-3023",
+  title: "1 BHK Studio Apartment, Student Housing near MIT Manipal",
+  propertyType: "apartment",
+  locality: "Manipal",
+  area: "480 sq ft",
+  price: 3200000,
+  status: "pending_approval",
+  visible: false,
+  completeness: 100,
+  warnings: [],
+  broker: "sudarshan",
+  updatedAt: upd(21, 4),
+  updatedBy: "broker",
+  photos: ph(6),
+  lat: 13.3557,
+  lon: 74.7929,
+  locationConfidence: "high",
+  address: "Student Housing Block C, Near MIT Manipal, Karnataka 576104",
+  description: "Compact studio apartment aimed at the student-housing market.",
+  amenities: ["Lift", "Common laundry"],
+  contact: {
+    name: "Sudarshan Rao",
+    phone: "+91 98450 11234"
+  }
+}, {
+  id: "PS-L-3030",
+  title: "Compact Office Space, Overseas Road, Manipal",
+  propertyType: "commercial_shop",
+  locality: "Manipal",
+  area: "380 sq ft",
+  price: 4500000,
+  status: "returned_for_edits",
+  visible: false,
+  completeness: 55,
+  warnings: ["incomplete_fields"],
+  broker: "prakash",
+  updatedAt: upd(9),
+  updatedBy: "admin:Divya",
+  photos: ph(2),
+  lat: 13.3486,
+  lon: 74.7911,
+  locationConfidence: "medium",
+  address: "Overseas Road, Manipal, Karnataka 576104",
+  description: "Small ground-floor office unit.",
+  amenities: [],
+  contact: {
+    name: "Prakash Naik",
+    phone: "+91 93430 77890"
+  },
+  missingFields: ["Floor plan", "Property tax receipt"]
+}, {
+  id: "PS-L-3031",
+  title: "2 BHK Independent House, Kalyanpura, Udupi",
+  propertyType: "independent_house",
+  locality: "Kalyanpura",
+  area: "1,800 sq ft",
+  price: 4500000,
+  status: "returned_for_edits",
+  visible: false,
+  completeness: 60,
+  warnings: ["location_unverified"],
+  broker: "sudarshan",
+  updatedAt: upd(15),
+  updatedBy: "admin:Arjun",
+  photos: ph(5),
+  lat: 13.4,
+  lon: 74.82,
+  locationConfidence: "low",
+  address: "Kalyanpura Village, Udupi Taluk, Karnataka 576102",
+  description: "Standalone 2 BHK house with a small front yard.",
+  amenities: ["Front yard", "Borewell"],
+  contact: {
+    name: "Sudarshan Rao",
+    phone: "+91 98450 11234"
+  },
+  locationOutOfBounds: true
+}, {
+  id: "PS-L-3040",
+  title: "Large Warehouse & Yard, Kalyanpura Industrial Layout",
+  propertyType: "warehouse",
+  locality: "Kalyanpura",
+  area: "6,000 sq ft",
+  price: 15000000,
+  status: "rejected",
+  visible: false,
+  completeness: 65,
+  warnings: ["broker_unverified"],
+  broker: "vikram",
+  updatedAt: upd(30),
+  updatedBy: "admin:Divya",
+  photos: ph(3),
+  lat: 13.3378,
+  lon: 74.7466,
+  locationConfidence: "low",
+  address: "Plot 7, Kalyanpura Industrial Layout, Karnataka 576102",
+  description: "Large warehouse with an open storage yard.",
+  amenities: ["Open yard", "Truck access"],
+  contact: {
+    name: "Vikram Hegde",
+    phone: "+91 97400 65123"
+  },
+  rejectionReason: "Broker impersonation"
+}, {
+  id: "PS-L-3041",
+  title: "Residential Plot, Malpe Beach Road, Udupi",
+  propertyType: "plot_residential",
+  locality: "Malpe",
+  area: "2,400 sq ft",
+  price: 6900000,
+  status: "rejected",
+  visible: false,
+  completeness: 70,
+  warnings: ["possible_duplicate"],
+  broker: "prakash",
+  updatedAt: upd(21, 8),
+  updatedBy: "admin:Arjun",
+  photos: ph(2),
+  lat: 13.3497,
+  lon: 74.705,
+  locationConfidence: "medium",
+  address: "Malpe Beach Road, Udupi, Karnataka 576108",
+  description: "Residential plot on Malpe Beach Road.",
+  amenities: [],
+  contact: {
+    name: "Prakash Naik",
+    phone: "+91 93430 77890"
+  },
+  rejectionReason: "Duplicate / spam listing"
+}, {
+  id: "PS-L-3050",
+  title: "1,000 sqft Warehouse in Manipal Industrial Layout",
+  propertyType: "warehouse",
+  locality: "Manipal",
+  area: "1,000 sq ft",
+  price: 8000000,
+  status: "archived",
+  visible: false,
+  completeness: 100,
+  warnings: [],
+  broker: "ganesh",
+  updatedAt: upd(45),
+  updatedBy: "admin:Divya",
+  photos: ph(3),
+  lat: 13.35,
+  lon: 74.79,
+  locationConfidence: "high",
+  address: "Manipal Industrial Layout, Karnataka 576104",
+  description: "Archived after the broker withdrew the listing.",
+  amenities: ["Loading bay"],
+  contact: {
+    name: "Ganesh Kamath",
+    phone: "+91 94480 22015"
+  }
+}, {
+  id: "PS-L-3051",
+  title: "500 sqft Shop in Manipal Town",
+  propertyType: "commercial_shop",
+  locality: "Manipal",
+  area: "500 sq ft",
+  price: 5000000,
+  status: "archived",
+  visible: false,
+  completeness: 100,
+  warnings: [],
+  broker: "ramesh",
+  updatedAt: upd(60),
+  updatedBy: "admin:Arjun",
+  photos: ph(2),
+  lat: 13.349,
+  lon: 74.788,
+  locationConfidence: "high",
+  address: "Manipal Town, Karnataka 576104",
+  description: "Archived — sold outside the platform.",
+  amenities: [],
+  contact: {
+    name: "Ramesh Shetty",
+    phone: "+91 99000 45521"
+  }
+}, {
+  id: "PS-L-3052",
+  title: "Test Building Repro 2341",
+  propertyType: "commercial_building",
+  locality: "Manipal",
+  area: "4,200 sq ft",
+  price: 9000000,
+  status: "archived",
+  visible: false,
+  completeness: 100,
+  warnings: [],
+  broker: "ramesh",
+  updatedAt: upd(75),
+  updatedBy: "admin:Divya",
+  photos: ph(1),
+  lat: 13.3467,
+  lon: 74.7842,
+  locationConfidence: "high",
+  address: "Kalsanka Junction, Manipal, Karnataka 576104",
+  description: "Archived internal test record retained for audit.",
+  amenities: [],
+  contact: {
+    name: "Ramesh Shetty",
+    phone: "+91 99000 45521"
+  }
+},
+// Intentionally inconsistent legacy record: archived, but still flagged publicly visible.
+// This is the one case the page should surface as a warning, never a silently-enabled toggle.
+{
+  id: "PS-L-3053",
+  title: "10 Cents Commercial Land, Manipal (legacy import)",
+  propertyType: "commercial_land",
+  locality: "Manipal",
+  area: "10 cents",
+  price: 12000000,
+  status: "archived",
+  visible: true,
+  completeness: 100,
+  warnings: ["inconsistent_state"],
+  broker: "anitha",
+  updatedAt: upd(120),
+  updatedBy: "system:legacy-import",
+  photos: ph(1),
+  lat: 13.353,
+  lon: 74.789,
+  locationConfidence: "medium",
+  address: "NH66, Near Manipal Lake, Manipal, Karnataka 576104",
+  description: "Migrated from the legacy CMS in 2025; visibility flag was never cleared on archive.",
+  amenities: [],
+  contact: {
+    name: "Anitha D'Souza",
+    phone: "+91 90360 88712"
+  }
+}, {
+  id: "PS-L-3054",
+  title: "Agricultural Land, 1.5 Acres, Kaup",
+  propertyType: "agricultural_land",
+  locality: "Kaup",
+  area: "1.5 acres",
+  price: 1800000,
+  status: "archived",
+  visible: false,
+  completeness: 100,
+  warnings: [],
+  broker: "ganesh",
+  updatedAt: upd(200),
+  updatedBy: "admin:Arjun",
+  photos: ph(2),
+  lat: 13.22,
+  lon: 74.75,
+  locationConfidence: "high",
+  address: "Kaup, Karnataka 574106",
+  description: "Archived after the parcel was sold privately.",
+  amenities: [],
+  contact: {
+    name: "Ganesh Kamath",
+    phone: "+91 94480 22015"
+  }
+}].map(l => ({
+  ...l,
+  createdAt: new Date(new Date(l.updatedAt) - l.id.charCodeAt(l.id.length - 1) * 7 % 40 * 86400000).toISOString(),
+  history: l.history || [{
+    ts: l.updatedAt,
+    actor: l.updatedBy,
+    action: "Record last updated"
+  }]
+}));
+})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/admin/listings-data.js", error: String((e && e.message) || e) }); }
+
+// ui_kits/admin/pending-data.js
+try { (() => {
+// ReTrends Admin — Pending Approvals mock data. No backend; all values are stubs.
+// Anchor "now" so relative ages ("2 days ago", "3 weeks ago") stay stable across renders.
+window.PA_NOW = new Date("2026-08-28T10:00:00");
+window.PA_PROPERTY_TYPES = {
+  apartment: "Apartment",
+  villa: "Villa",
+  independent_house: "Independent House",
+  plot_residential: "Residential Plot",
+  commercial_shop: "Retail Shop",
+  commercial_building: "Commercial Building",
+  warehouse: "Warehouse",
+  commercial_land: "Commercial Land",
+  agricultural_land: "Agricultural Land"
+};
+
+// Flags never rely on red alone — red is reserved for Reject / genuine destructive
+// actions. Every review flag here is "needs a human look", not "confirmed fraud".
+window.PA_FLAG_META = {
+  missing_info: {
+    label: "Missing information",
+    tone: "caution",
+    icon: "file-check"
+  },
+  possible_duplicate: {
+    label: "Possible duplicate",
+    tone: "caution",
+    icon: "layers"
+  },
+  suspicious_price: {
+    label: "Suspicious price",
+    tone: "caution",
+    icon: "trending-up"
+  },
+  location_unverified: {
+    label: "Location needs verification",
+    tone: "caution",
+    icon: "map-pin"
+  },
+  broker_unverified: {
+    label: "Unverified broker",
+    tone: "neutral",
+    icon: "shield"
+  }
+};
+window.PA_BROKERS = {
+  sudarshan: {
+    name: "Sudarshan Rao",
+    verification: "verified",
+    memberSince: "Mar 2023",
+    totalSubmissions: 42,
+    phone: "+91 98450 11234",
+    email: "sudarshan.rao@psbrokers.in"
+  },
+  anitha: {
+    name: "Anitha D'Souza",
+    verification: "new",
+    memberSince: "Aug 2026",
+    totalSubmissions: 2,
+    phone: "+91 90360 88712",
+    email: "anitha.dsouza@psbrokers.in"
+  },
+  ganesh: {
+    name: "Ganesh Kamath",
+    verification: "verified",
+    memberSince: "Jan 2022",
+    totalSubmissions: 67,
+    phone: "+91 94480 22015",
+    email: "ganesh.kamath@psbrokers.in"
+  },
+  ramesh: {
+    name: "Ramesh Shetty",
+    verification: "verified",
+    memberSince: "Jun 2024",
+    totalSubmissions: 19,
+    phone: "+91 99000 45521",
+    email: "ramesh.shetty@psbrokers.in"
+  },
+  prakash: {
+    name: "Prakash Naik",
+    verification: "unverified",
+    memberSince: "Feb 2025",
+    totalSubmissions: 5,
+    phone: "+91 93430 77890",
+    email: "prakash.naik@psbrokers.in"
+  },
+  vikram: {
+    name: "Vikram Hegde",
+    verification: "new",
+    memberSince: "Jul 2026",
+    totalSubmissions: 1,
+    phone: "+91 97400 65123",
+    email: "vikram.hegde@psbrokers.in"
+  }
+};
+const PHOTOS = ["https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=480&h=320&fit=crop", "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=480&h=320&fit=crop", "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=480&h=320&fit=crop", "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=480&h=320&fit=crop", "https://images.unsplash.com/photo-1494526585095-c41746248156?w=480&h=320&fit=crop", "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=480&h=320&fit=crop", "https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=480&h=320&fit=crop"];
+const ago = (days, hours = 0) => new Date(window.PA_NOW - (days * 24 + hours) * 3600000).toISOString();
+const photos = n => PHOTOS.slice(0, n);
+window.PA_LISTINGS = [{
+  id: "PS-24681",
+  title: "3 BHK Apartment near Manipal University, Tiger Circle",
+  propertyType: "apartment",
+  locality: "Manipal",
+  area: "1,450 sq ft",
+  price: 6800000,
+  submittedAt: ago(0, 3),
+  broker: "sudarshan",
+  flags: [],
+  photos: photos(6),
+  description: "Well-ventilated 3 BHK on the 4th floor, walking distance to Manipal University and Tiger Circle. South-facing, vaastu compliant, ready to move in.",
+  amenities: ["Lift", "Power backup", "Covered parking", "Gated security"],
+  address: "Tiger Circle Road, Manipal, Udupi District, Karnataka 576104",
+  lat: 13.3492,
+  lon: 74.786,
+  locationConfidence: "high",
+  contact: {
+    name: "Sudarshan Rao",
+    phone: "+91 98450 11234"
+  }
+}, {
+  id: "PS-24680",
+  title: "10 Cents Commercial Land on NH66, Near Manipal Lake",
+  propertyType: "commercial_land",
+  locality: "Manipal",
+  area: "10 cents",
+  price: 12000000,
+  submittedAt: ago(0, 6),
+  broker: "anitha",
+  flags: ["broker_unverified"],
+  photos: photos(3),
+  description: "Highway-fronting commercial plot on NH66, high visibility, suited for showroom or fuel outlet.",
+  amenities: ["Highway frontage", "Corner plot"],
+  address: "NH66, Near Manipal Lake, Manipal, Karnataka 576104",
+  lat: 13.353,
+  lon: 74.789,
+  locationConfidence: "medium",
+  contact: {
+    name: "Anitha D'Souza",
+    phone: "+91 90360 88712"
+  }
+}, {
+  id: "PS-24675",
+  title: "1,000 sq ft Warehouse, Udupi Industrial Estate",
+  propertyType: "warehouse",
+  locality: "Udupi",
+  area: "1,000 sq ft",
+  price: 8000000,
+  submittedAt: ago(1),
+  broker: "ganesh",
+  flags: ["missing_info"],
+  photos: photos(1),
+  description: "Single-unit warehouse with loading bay inside the Udupi Industrial Estate.",
+  amenities: ["Loading bay", "3-phase power"],
+  address: "Plot 14, Udupi Industrial Estate, Udupi, Karnataka 576101",
+  lat: 13.3409,
+  lon: 74.7421,
+  locationConfidence: "high",
+  contact: {
+    name: "Ganesh Kamath",
+    phone: "+91 94480 22015"
+  },
+  missingFields: ["Floor plan", "Property tax receipt"]
+}, {
+  id: "PS-24672",
+  title: "500 sq ft Retail Shop, Court Road Manipal",
+  propertyType: "commercial_shop",
+  locality: "Manipal",
+  area: "500 sq ft",
+  price: 5000000,
+  submittedAt: ago(2),
+  broker: "anitha",
+  flags: ["broker_unverified", "suspicious_price"],
+  photos: photos(4),
+  description: "Ground-floor retail shop on Court Road with existing rolling shutter and signage frontage.",
+  amenities: ["Rolling shutter", "Signage frontage"],
+  address: "Court Road, Manipal, Karnataka 576104",
+  lat: 13.3505,
+  lon: 74.7889,
+  locationConfidence: "high",
+  contact: {
+    name: "Anitha D'Souza",
+    phone: "+91 90360 88712"
+  },
+  priceNote: "42% above the median for Court Road retail shops this size."
+}, {
+  id: "PS-24671",
+  title: "Independent Commercial Building, Kalsanka Manipal",
+  propertyType: "commercial_building",
+  locality: "Manipal",
+  area: "4,200 sq ft",
+  price: 9000000,
+  submittedAt: ago(2),
+  broker: "ramesh",
+  flags: [],
+  photos: photos(5),
+  description: "Three-floor independent commercial building near Kalsanka junction, currently tenanted on the ground floor.",
+  amenities: ["Lift", "Terrace", "Two-wheeler parking"],
+  address: "Kalsanka Junction, Manipal, Karnataka 576104",
+  lat: 13.3467,
+  lon: 74.7842,
+  locationConfidence: "high",
+  contact: {
+    name: "Ramesh Shetty",
+    phone: "+91 99000 45521"
+  }
+}, {
+  id: "PS-24669",
+  title: "2 BHK Independent House, Kalyanpura, Udupi",
+  propertyType: "independent_house",
+  locality: "Kalyanpura",
+  area: "1,800 sq ft",
+  price: 4500000,
+  submittedAt: ago(2, 6),
+  broker: "sudarshan",
+  flags: ["location_unverified"],
+  photos: photos(5),
+  description: "Standalone 2 BHK house with a small front yard in Kalyanpura, close to the bypass road.",
+  amenities: ["Front yard", "Borewell"],
+  address: "Kalyanpura Village, Udupi Taluk, Karnataka 576102",
+  lat: 13.34,
+  lon: 74.75,
+  locationConfidence: "low",
+  contact: {
+    name: "Sudarshan Rao",
+    phone: "+91 98450 11234"
+  }
+}, {
+  id: "PS-24660",
+  title: "Compact Office Space for Sale, Overseas Road, Manipal",
+  propertyType: "commercial_shop",
+  locality: "Manipal",
+  area: "380 sq ft",
+  price: 4500000,
+  submittedAt: ago(4),
+  broker: "prakash",
+  flags: ["broker_unverified"],
+  photos: photos(2),
+  description: "Small ground-floor office unit facing Overseas Road, suited for a consultancy or agent office.",
+  amenities: ["Attached washroom"],
+  address: "Overseas Road, Manipal, Karnataka 576104",
+  lat: 13.3486,
+  lon: 74.7911,
+  locationConfidence: "medium",
+  contact: {
+    name: "Prakash Naik",
+    phone: "+91 93430 77890"
+  }
+}, {
+  id: "PS-24658",
+  title: "Furnished 2 BHK Apartment, Near KMC Greens, Manipal",
+  propertyType: "apartment",
+  locality: "Manipal",
+  area: "1,120 sq ft",
+  price: 5600000,
+  submittedAt: ago(4, 4),
+  broker: "ramesh",
+  flags: [],
+  photos: photos(7),
+  description: "Fully furnished 2 BHK on the 2nd floor of KMC Greens, popular with visiting faculty and staff.",
+  amenities: ["Furnished", "Lift", "Power backup", "Clubhouse"],
+  address: "Near KMC Greens, Madhav Nagar, Manipal, Karnataka 576104",
+  lat: 13.352,
+  lon: 74.7823,
+  locationConfidence: "high",
+  contact: {
+    name: "Ramesh Shetty",
+    phone: "+91 99000 45521"
+  }
+}, {
+  id: "PS-24631",
+  title: "Sea-view Residential Plot, Malpe Beach Road, Udupi",
+  propertyType: "plot_residential",
+  locality: "Malpe",
+  area: "2,400 sq ft",
+  price: 7200000,
+  submittedAt: ago(8),
+  broker: "ganesh",
+  flags: ["possible_duplicate"],
+  photos: photos(3),
+  description: "Residential plot with a partial sea view, five minutes from Malpe Beach Road.",
+  amenities: ["Sea view", "Approach road"],
+  address: "Malpe Beach Road, Udupi, Karnataka 576108",
+  lat: 13.3499,
+  lon: 74.7051,
+  locationConfidence: "high",
+  contact: {
+    name: "Ganesh Kamath",
+    phone: "+91 94480 22015"
+  },
+  duplicateMatches: [{
+    id: "PS-24501",
+    title: "Residential Plot, Malpe Beach Road, Udupi",
+    similarity: 92
+  }]
+}, {
+  id: "PS-24629",
+  title: "3 BHK Villa with Garden, Brahmavar",
+  propertyType: "villa",
+  locality: "Brahmavar",
+  area: "2,600 sq ft",
+  price: 9800000,
+  submittedAt: ago(8, 5),
+  broker: "prakash",
+  flags: ["broker_unverified", "missing_info"],
+  photos: [],
+  description: "Independent villa with a private garden on the outskirts of Brahmavar town.",
+  amenities: ["Private garden", "Two-car garage"],
+  address: "Near Brahmavar Bus Stand, Brahmavar, Karnataka 576213",
+  lat: 13.4167,
+  lon: 74.7333,
+  locationConfidence: "medium",
+  contact: {
+    name: "Prakash Naik",
+    phone: "+91 93430 77890"
+  },
+  missingFields: ["Photos", "Floor plan"],
+  history: [{
+    ts: ago(6),
+    actor: "admin:Divya",
+    action: "Requested photos and a floor plan over WhatsApp."
+  }]
+}, {
+  id: "PS-24590",
+  title: "Agricultural Land, 2 Acres, Padubidri Village",
+  propertyType: "agricultural_land",
+  locality: "Padubidri",
+  area: "2 acres",
+  price: 2500000,
+  submittedAt: ago(12),
+  broker: "ganesh",
+  flags: [],
+  photos: photos(4),
+  description: "Two acres of cultivable agricultural land with an existing borewell, Survey No. 114/1, Padubidri village.",
+  amenities: ["Borewell", "Road access"],
+  address: "Survey No. 114/1, Padubidri Village, Udupi Taluk, Karnataka 574203",
+  lat: 13.1167,
+  lon: 74.75,
+  locationConfidence: "high",
+  contact: {
+    name: "Ganesh Kamath",
+    phone: "+91 94480 22015"
+  }
+}, {
+  id: "PS-24588",
+  title: "Agricultural Land, 2 Acres, Padubidri Village (Survey No. 114/2)",
+  propertyType: "agricultural_land",
+  locality: "Padubidri",
+  area: "2 acres",
+  price: 2600000,
+  submittedAt: ago(12, 3),
+  broker: "vikram",
+  flags: ["possible_duplicate", "broker_unverified"],
+  photos: photos(2),
+  description: "Adjacent two-acre agricultural parcel, Survey No. 114/2, Padubidri village.",
+  amenities: ["Road access"],
+  address: "Survey No. 114/2, Padubidri Village, Udupi Taluk, Karnataka 574203",
+  lat: 13.1169,
+  lon: 74.7503,
+  locationConfidence: "medium",
+  contact: {
+    name: "Vikram Hegde",
+    phone: "+91 97400 65123"
+  },
+  duplicateMatches: [{
+    id: "PS-24590",
+    title: "Agricultural Land, 2 Acres, Padubidri Village",
+    similarity: 96
+  }]
+}, {
+  id: "PS-24512",
+  title: "Commercial Land Fronting NH66, Kaup Junction",
+  propertyType: "commercial_land",
+  locality: "Kaup",
+  area: "18 cents",
+  price: 18000000,
+  submittedAt: ago(21),
+  broker: "ramesh",
+  flags: ["suspicious_price"],
+  photos: photos(3),
+  description: "Highway-fronting commercial land at Kaup Junction, listed for outright sale.",
+  amenities: ["Highway frontage"],
+  address: "NH66, Kaup Junction, Udupi District, Karnataka 574106",
+  lat: 13.2167,
+  lon: 74.75,
+  locationConfidence: "high",
+  contact: {
+    name: "Ramesh Shetty",
+    phone: "+91 99000 45521"
+  },
+  priceNote: "58% above comparable NH66 frontage sales in Kaup this year."
+}, {
+  id: "PS-24505",
+  title: "1 BHK Studio Apartment, Student Housing near MIT Manipal",
+  propertyType: "apartment",
+  locality: "Manipal",
+  area: "480 sq ft",
+  price: 3200000,
+  submittedAt: ago(21, 4),
+  broker: "sudarshan",
+  flags: [],
+  photos: photos(6),
+  description: "Compact studio apartment aimed at the student-housing market near MIT Manipal.",
+  amenities: ["Lift", "Wi-Fi ready", "Common laundry"],
+  address: "Student Housing Block C, Near MIT Manipal, Karnataka 576104",
+  lat: 13.3557,
+  lon: 74.7929,
+  locationConfidence: "high",
+  contact: {
+    name: "Sudarshan Rao",
+    phone: "+91 98450 11234"
+  }
+}, {
+  id: "PS-24501",
+  title: "Residential Plot, Malpe Beach Road, Udupi",
+  propertyType: "plot_residential",
+  locality: "Malpe",
+  area: "2,400 sq ft",
+  price: 6900000,
+  submittedAt: ago(21, 8),
+  broker: "prakash",
+  flags: ["broker_unverified"],
+  photos: photos(2),
+  description: "Residential plot on Malpe Beach Road, five minutes from the beach.",
+  amenities: ["Approach road"],
+  address: "Malpe Beach Road, Udupi, Karnataka 576108",
+  lat: 13.3497,
+  lon: 74.705,
+  locationConfidence: "medium",
+  contact: {
+    name: "Prakash Naik",
+    phone: "+91 93430 77890"
+  }
+}, {
+  id: "PS-24470",
+  title: "Large Warehouse & Yard, Kalyanpura Industrial Layout",
+  propertyType: "warehouse",
+  locality: "Kalyanpura",
+  area: "6,000 sq ft",
+  price: 15000000,
+  submittedAt: ago(30),
+  broker: "vikram",
+  flags: ["broker_unverified", "location_unverified"],
+  photos: photos(3),
+  description: "Large warehouse with an open storage yard in Kalyanpura Industrial Layout.",
+  amenities: ["Open yard", "3-phase power", "Truck access"],
+  address: "Plot 7, Kalyanpura Industrial Layout, Udupi Taluk, Karnataka 576102",
+  lat: 13.3378,
+  lon: 74.7466,
+  locationConfidence: "low",
+  contact: {
+    name: "Vikram Hegde",
+    phone: "+91 97400 65123"
+  }
+}].map(l => ({
+  ...l,
+  status: "pending",
+  history: l.history || [{
+    ts: l.submittedAt,
+    actor: "broker",
+    action: "Submitted listing"
+  }]
+}));
+window.PA_formatPrice = n => {
+  if (n >= 1e7) return "\u20B9" + (n / 1e7).toFixed(2).replace(/\.00$/, "") + " Cr";
+  const l = (n / 1e5).toFixed(1).replace(/\.0$/, "");
+  return "\u20B9" + l + " L";
+};
+window.PA_ageDays = iso => Math.floor((window.PA_NOW - new Date(iso)) / 86400000);
+window.PA_formatAge = iso => {
+  const d = window.PA_ageDays(iso);
+  const hrs = (window.PA_NOW - new Date(iso)) / 3600000;
+  if (hrs < 20) return "Today";
+  if (d === 1) return "Yesterday";
+  if (d < 7) return d + " days ago";
+  if (d < 14) return "1 week ago";
+  if (d < 21) return "2 weeks ago";
+  if (d < 30) return "3 weeks ago";
+  return Math.round(d / 30) + " month" + (Math.round(d / 30) > 1 ? "s" : "") + " ago";
+};
+window.PA_formatDateTime = iso => new Date(iso).toLocaleString("en-IN", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit"
+});
+})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/admin/pending-data.js", error: String((e && e.message) || e) }); }
 
 // ui_kits/agri-discovery/AgriDiscovery.jsx
 try { (() => {
@@ -44642,46 +49987,104 @@ try { (() => {
 // grammar as ui_kits/new_discover (directional card, area pill, price pin) plus
 // the dashed visual-cluster chip and the drawn-boundary layer.
 // The map owns no product state: everything it draws comes from `view`.
-const EM = window.EXP;
+/* Lazy view of window.EXP: the design-system bundle evaluates this file
+// before EXP exists, so a value capture here would be undefined forever in that copy.
+// A Proxy resolves each property at access time instead. */
+// ---- coordinate fence -------------------------------------------------------
+// ExpMap feeds roughly a dozen Leaflet consumers (markers, clusters, polygons,
+// circles, rectangles, polylines, container-point maths). EVERY one of them throws
+// "Invalid LatLng object: (NaN, NaN)" on a single non-finite value, and because they
+// run inside commit effects React responds by unmounting the entire shell. Rather
+// than guard each consumer, coordinates are screened at the choke points: EXP_OK
+// rejects a bad point, EXP_PTS filters a list, and safeLL (defined per-effect, since
+// it needs the map for its fallback) sanitises an individual pair.
+const EXP_OK = o => !!o && Number.isFinite(o.lat) && Number.isFinite(o.lon);
+const EXP_PTS = list => (list || []).filter(EXP_OK);
+const EXP_CENTRED = list => (list || []).filter(x => x && EXP_OK(x.center));
+const EM = new Proxy({}, {
+  get: (_t, k) => window.EXP ? window.EXP[k] : undefined,
+  has: (_t, k) => !!window.EXP && k in window.EXP
+});
 const MG = {
   zoom: c => `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M20 20l-3.5-3.5"/></svg>`,
-  pin: c => `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`
+  pin: c => `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`,
+  // "Explore" identity glyph — compass, distinct from the magnifier (Zoom) and home (View homes)
+  compass: c => `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15.2 8.8-1.8 4.6-4.6 1.8 1.8-4.6z" fill="${c}" stroke="none"/></svg>`,
+  home: c => `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-9"/><path d="M9.5 20v-5.5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1V20"/></svg>`,
+  cap: c => `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 10-10-5L2 10l10 5 10-5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg>`
 };
 
-// Top-level directional region/local-cluster card — same connected "Option B" component as
-// regionalClusterCardHTML: navy info card (rounded top) flush against a white "Zoom in" footer
-// (rounded bottom), one shared shadow/border, rust tail. Reuses the regional-cluster-marker
-// design-component tag so it inherits the same hover/press/focus CSS.
-function destCardHTML(o) {
-  const w = Math.round(132 + Math.min(1, o.n / 240) * 38);
-  const cf = Math.round(22 + Math.min(1, o.n / 240) * 9);
-  // singular/plural: "1 LISTING" / "126 LISTINGS", "1 SCHOOL" / "9 SCHOOLS"
-  const nounPlural = o.noun || "listings";
-  const noun = o.n === 1 ? nounPlural.replace(/s$/, "") : nounPlural;
+// ---- Unified navigation-marker shell ("Explore" / "Zoom in") ----------------------------
+// One connected component throughout: an identity half (rounded top) flush against an
+// attached action footer (rounded bottom), a single shared shadow/border, and a centred
+// tail. Two variants share this shell but are never distinguished by colour alone:
+//  - "explore"  → real hierarchy destination (Direction / Local Destination). Dark navy
+//                 identity half + a SOLID accent footer in white text — the loud, dark
+//                 marker signals a real move into the hierarchy (node/breadcrumb change).
+//  - "zoom"     → temporary combined destinations, grouped only because every marker
+//                 can't fit. Warm cream (schools: lavender) identity half + a WHITE
+//                 footer in accent text — a deliberately lighter, lower-commitment mark.
+//                 Never changes node/breadcrumb; only pans/zooms until members separate.
+// domain: "homes" (copper accent) | "schools" (plum accent) — see VISUAL_RULES §Areas vs
+// Schools palette mapping. Reused by destCardHTML / regionalClusterCardHTML / clusterChipHTML.
+function navMarkerHTML(actionKind, o) {
+  const schools = o.domain === "schools";
+  const accent = schools ? "var(--plum-600)" : "var(--copper-500)";
+  const accentText = schools ? "var(--plum-600)" : "var(--copper-600)";
+  const accentTint = schools ? "var(--plum-tint)" : "var(--copper-100)";
   const sel = !!o.sel;
-  const label = o.ariaLabel || o.names + ". " + o.n + " " + noun.toLowerCase() + (o.areasLine ? ". " + o.areasLine : "") + ". Activate to zoom in.";
-  return `<div class="nd-nav${o.hov ? " nd-nav-on" : ""}${sel ? " nd-nav-sel" : ""}" data-design-component="regional-cluster-marker" tabindex="0" role="button" aria-label="${label}" style="position:relative;width:${w}px;margin-left:-${w / 2}px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;outline:none;">
-    <div class="rc-shell" style="border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-lg);border:1.5px solid rgba(27,42,69,${sel ? 0.4 : 0.24});transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s;${sel ? "outline:2px solid var(--navy-800);outline-offset:2px;" : ""}">
-      <div style="padding:9px 14px 9px;background:var(--navy-800);color:#fff;display:flex;flex-direction:column;align-items:center;gap:2px;">
+  const isZoom = actionKind === "zoom";
+  const w = o.w,
+    cf = o.cf;
+  const bodyBg = isZoom ? accentTint : "var(--navy-800)";
+  const bodyFg = isZoom ? "var(--navy-800)" : "#fff";
+  const mutedFg = isZoom ? "var(--text-muted)" : "rgba(255,255,255,.72)";
+  const pillBg = isZoom ? "rgba(27,42,69,0.08)" : "rgba(255,255,255,0.14)";
+  const pillFg = isZoom ? "var(--text-body)" : `rgba(255,255,255,${o.zero ? 0.78 : 0.9})`;
+  const borderColor = isZoom ? accent : `rgba(27,42,69,${sel ? 0.4 : 0.24})`;
+  const footerBg = isZoom ? "#fff" : accent;
+  const footerFg = isZoom ? accentText : "#fff";
+  const icon = isZoom ? MG.zoom(footerFg) : MG.compass(footerFg);
+  const actionLabel = isZoom ? "Zoom in" : "Explore";
+  const kindClass = (isZoom ? "mk-zoom" : "mk-explore") + (schools ? " mk-schools" : "");
+  return `<div class="nd-nav ${kindClass}${o.hov ? " nd-nav-on" : ""}${sel ? " nd-nav-sel" : ""}" data-design-component="regional-cluster-marker" data-action-kind="${actionKind}" tabindex="0" role="button" aria-label="${o.ariaLabel}" style="position:relative;width:${w}px;margin-left:-${w / 2}px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;outline:none;">
+    <div class="rc-shell" style="border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-lg);border:1.5px solid ${borderColor};transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s;${sel ? `outline:2px solid ${isZoom ? accent : "var(--navy-800)"};outline-offset:2px;` : ""}">
+      <div style="padding:9px 14px 9px;background:${bodyBg};color:${bodyFg};display:flex;flex-direction:column;align-items:center;gap:2px;">
         <span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;line-height:1.25;text-wrap:balance;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:${w - 28}px;">${o.names}</span>
         ${o.zero ? "" : `<span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
           <span style="font-family:var(--font-mono);font-size:${cf}px;font-weight:800;line-height:1;letter-spacing:-0.02em;">${o.n.toLocaleString("en-IN")}</span>
-          <span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.72);">${noun}</span>
+          <span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${mutedFg};">${o.noun}</span>
         </span>`}
-        ${o.areasLine ? `<span style="margin-top:${o.zero ? 4 : 3}px;padding:1px 9px;border-radius:var(--radius-full);background:rgba(255,255,255,0.14);font-size:10px;font-weight:600;color:rgba(255,255,255,${o.zero ? .78 : .9});white-space:nowrap;">${o.areasLine}</span>` : ""}
+        ${o.pillText ? `<span style="margin-top:${o.zero ? 4 : 3}px;padding:1px 9px;border-radius:var(--radius-full);background:${pillBg};font-size:10px;font-weight:600;color:${pillFg};white-space:nowrap;">${o.pillText}</span>` : ""}
       </div>
-      <div class="rc-footer" style="background:#fff;padding:7px 10px;display:flex;align-items:center;justify-content:center;gap:5px;transition:background .15s ease;">
-        ${MG.zoom("var(--copper-600)")}
-        <span style="font-size:11.5px;font-weight:700;color:var(--copper-600);">Zoom in</span>
-        <span style="font-size:13px;font-weight:700;color:var(--copper-600);line-height:1;">&#8250;</span>
+      <div class="rc-footer" style="background:${footerBg};padding:7px 10px;display:flex;align-items:center;justify-content:center;gap:5px;transition:background .15s ease,filter .15s ease;">
+        ${icon}
+        <span style="font-size:11.5px;font-weight:700;color:${footerFg};">${actionLabel}</span>
+        <span style="font-size:13px;font-weight:700;color:${footerFg};line-height:1;">&#8250;</span>
       </div>
     </div>
-    <div class="rc-tail" style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid var(--copper-600);margin:0 auto;"></div>
+    <div class="rc-tail" style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid ${accent};margin:0 auto;"></div>
   </div>`;
 }
-// Visual AREA cluster — presentation only. Deliberately a DIFFERENT SHAPE from a
-// structural Direction card: dashed light chip + magnifier + "Tap to zoom", never the
-// solid navy navigation card, so the difference is never carried by colour alone.
+// Real hierarchy destination (Direction / Local Destination) — "Explore". Clicking updates
+// node=, breadcrumb, and pans/fits the destination's children.
+function destCardHTML(o) {
+  const w = Math.round(132 + Math.min(1, o.n / 240) * 38);
+  const cf = Math.round(22 + Math.min(1, o.n / 240) * 9);
+  const nounPlural = o.noun || "listings";
+  const noun = o.n === 1 ? nounPlural.replace(/s$/, "") : nounPlural;
+  const label = o.ariaLabel || o.names + ". " + o.n + " " + noun.toLowerCase() + (o.areasLine ? ". " + o.areasLine : "") + ". Activate to explore.";
+  return navMarkerHTML("explore", {
+    ...o,
+    noun,
+    w,
+    cf,
+    pillText: o.areasLine,
+    ariaLabel: label
+  });
+}
+// Visual AREA cluster (dense markers grouped only for legibility) — "Zoom in". Same shell
+// as the local-destination cluster below; activating only pans/zooms until members separate.
 function clusterChipHTML(o) {
   const w = Math.min(206, Math.max(150, Math.round(132 + Math.min(1, o.n / 240) * 38)));
   const cf = Math.round(20 + Math.min(1, o.n / 240) * 8);
@@ -44690,64 +50093,57 @@ function clusterChipHTML(o) {
   const areasLine = exact + (exact === 1 ? " area with " : " areas with ") + (schools ? "schools" : "matches");
   const nounPlural = schools ? "schools" : o.noun || "listings";
   const noun = o.n === 1 ? nounPlural.replace(/s$/, "") : nounPlural;
-  const iconColor = schools ? "var(--plum-600)" : "var(--copper-600)";
-  return `<div class="nd-nav${o.hov ? " nd-nav-on" : ""}" data-design-component="regional-cluster-marker" tabindex="0" role="button" aria-label="Zoom into the ${o.names} areas" style="position:relative;width:${w}px;margin-left:-${w / 2}px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;outline:none;">
-    <div class="rc-shell" style="border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-lg);border:1.5px solid rgba(27,42,69,0.24);transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s;">
-      <div style="padding:9px 14px 9px;background:var(--navy-800);color:#fff;display:flex;flex-direction:column;align-items:center;gap:2px;">
-        <span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;line-height:1.25;text-wrap:balance;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:${w - 28}px;">${o.names}</span>
-        <span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
-          <span style="font-family:var(--font-mono);font-size:${cf}px;font-weight:800;line-height:1;letter-spacing:-0.02em;">${o.n.toLocaleString("en-IN")}</span>
-          <span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.72);">${noun}</span>
-        </span>
-        <span style="margin-top:3px;padding:1px 9px;border-radius:var(--radius-full);background:rgba(255,255,255,0.14);font-size:10px;font-weight:600;color:rgba(255,255,255,.9);white-space:nowrap;">${areasLine}</span>
-      </div>
-      <div class="rc-footer" style="background:#fff;padding:7px 10px;display:flex;align-items:center;justify-content:center;gap:5px;transition:background .15s ease;">
-        ${MG.zoom(iconColor)}
-        <span style="font-size:11.5px;font-weight:700;color:${iconColor};">Zoom in</span>
-        <span style="font-size:13px;font-weight:700;color:${iconColor};line-height:1;">&#8250;</span>
-      </div>
-    </div>
-    <div class="rc-tail" style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid ${iconColor};margin:0 auto;"></div>
-  </div>`;
+  return navMarkerHTML("zoom", {
+    names: o.names,
+    n: o.n,
+    noun,
+    hov: o.hov,
+    domain: schools ? "schools" : "homes",
+    w,
+    cf,
+    pillText: areasLine,
+    ariaLabel: "Zoom into the " + o.names + " areas"
+  });
 }
-// Regional cluster marker (Option B) — one connected component: a navy info card with
-// rounded TOP corners, flush against a white "Zoom in" footer with rounded BOTTOM
-// corners, a single unified shadow/border around both, and a small rust-orange tail
-// pointing at the cluster's map position. Distinct component from destCardHTML
-// (top-level directional regions), which keeps its existing floating-pill caption.
+// Local destination — 2+ nearby destinations temporarily grouped because every marker
+// can't fit. Same connected shell as clusterChipHTML, at the local-destination scale.
+// "Zoom in" only pans/zooms until members separate; it never changes node/breadcrumb.
 function regionalClusterCardHTML(o) {
   const w = Math.min(206, Math.max(150, Math.round(132 + Math.min(1, o.n / 240) * 38)));
   const cf = Math.round(20 + Math.min(1, o.n / 240) * 8);
   const nounPlural = o.noun || "listings";
   const noun = o.n === 1 ? nounPlural.replace(/s$/, "") : nounPlural;
   const areasLine = (o.exact || 0) + ((o.exact || 0) === 1 ? " area with matches" : " areas with matches");
-  const sel = !!o.sel;
   const label = o.ariaLabel || "Zoom into the " + o.names + " areas";
-  return `<div class="nd-nav${o.hov ? " nd-nav-on" : ""}${sel ? " nd-nav-sel" : ""}" data-design-component="regional-cluster-marker" tabindex="0" role="button" aria-label="${label}" style="position:relative;width:${w}px;margin-left:-${w / 2}px;transform:translateY(-50%);font-family:var(--font-sans);text-align:center;outline:none;">
-    <div class="rc-shell" style="border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-lg);border:1.5px solid rgba(27,42,69,${sel ? 0.4 : 0.24});transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s;${sel ? "outline:2px solid var(--navy-800);outline-offset:2px;" : ""}">
-      <div style="padding:9px 14px 9px;background:var(--navy-800);color:#fff;display:flex;flex-direction:column;align-items:center;gap:2px;">
-        <span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;line-height:1.25;text-wrap:balance;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:${w - 28}px;">${o.names}</span>
-        <span style="display:flex;align-items:baseline;gap:5px;margin-top:2px;">
-          <span style="font-family:var(--font-mono);font-size:${cf}px;font-weight:800;line-height:1;letter-spacing:-0.02em;">${o.n.toLocaleString("en-IN")}</span>
-          <span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.72);">${noun}</span>
-        </span>
-        <span style="margin-top:3px;padding:1px 9px;border-radius:var(--radius-full);background:rgba(255,255,255,0.14);font-size:10px;font-weight:600;color:rgba(255,255,255,.9);white-space:nowrap;">${areasLine}</span>
-      </div>
-      <div class="rc-footer" style="background:#fff;padding:7px 10px;display:flex;align-items:center;justify-content:center;gap:5px;transition:background .15s ease;">
-        ${MG.zoom("var(--copper-600)")}
-        <span style="font-size:11.5px;font-weight:700;color:var(--copper-600);">Zoom in</span>
-        <span style="font-size:13px;font-weight:700;color:var(--copper-600);line-height:1;">&#8250;</span>
-      </div>
-    </div>
-    <div class="rc-tail" style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid var(--copper-600);margin:0 auto;"></div>
-  </div>`;
+  return navMarkerHTML("zoom", {
+    ...o,
+    noun,
+    w,
+    cf,
+    pillText: areasLine,
+    ariaLabel: label
+  });
 }
+// Terminal AREA-leaf marker — "View homes" / "View schools". Represents ONE real area;
+// activating it selects the area and opens its listings/schools directly — never a further
+// zoom. Deliberately the INVERSE construction of "Explore": a light/white identity half
+// (this is a leaf, not a hub) flush against a SOLID dark action footer in white text — the
+// footer, not the body, now carries the strong colour, since the footer is the one and only
+// thing this marker does. domain "schools" swaps navy → plum throughout (icon, border,
+// footer, tail) per VISUAL_RULES §Areas vs Schools palette mapping; body stays white in both.
+// Terminal AREA-leaf marker — "View homes" / "View schools". Represents ONE real area;
+// activating it selects the area and opens its listings/schools directly — never a further
+// zoom. Same VERTICAL connected-card family as Explore/Zoom (identity section stacked above
+// an attached full-width footer, no gap, one shared shell/shadow/border, centred downward
+// tail) — never the rejected horizontal split-capsule. White identity (this is a leaf, not a
+// hub) + a SOLID dark action footer in white text: the footer, not the body, carries the
+// strong colour, since the footer is the one and only thing this marker does. The listing/
+// school COUNT lives in the identity section as the hero metric — never folded into the
+// footer's action label. domain "schools" swaps navy → plum throughout (icon, border,
+// footer, tail) per VISUAL_RULES §Areas vs Schools palette mapping; body stays white in both.
 function areaPinHTML(o) {
   const sel = o.sel,
     cand = o.candidate;
-  const bg = "var(--navy-800)",
-    fg = "#fff";
-  const bd = `1.5px solid rgba(255,255,255,${sel ? 0.9 : 0.42})`;
   // draft candidate: a subtle dashed LABEL — must never read as a committed search area
   if (cand) {
     return `<div data-design-component="area-candidate-label" style="position:relative;width:210px;margin-left:-105px;transform:translateY(-100%);text-align:center;font-family:var(--font-sans);">
@@ -44756,64 +50152,53 @@ function areaPinHTML(o) {
       </span>
     </div>`;
   }
-  // SCHOOLS journey: the primary metric is schools located inside the area, listings are
-  // secondary context, and the caption names the action the tap actually performs.
-  if (o.schoolsMode) {
-    // Schools-journey leaf marker — same connected split-capsule family as the homes area
-    // marker (am-leaf), plum-accented: identity half (icon + name + listings count stacked)
-    // flush against a "View N schools" action half. One shell/shadow/tail. Kept at the same
-    // compact scale as the homes marker — areas in a schools cluster sit at real, often close,
-    // map coordinates, so an oversized capsule here collides with neighbours / clips the map.
-    const schoolNoun = o.n === 1 ? "school" : "schools";
-    const listingNoun = o.listings === 1 ? "listing" : "listings";
-    const actionText = `View ${o.n} ${schoolNoun}`;
-    const nameBoxW = Math.min(130, Math.max(50, Math.round(o.name.length * 8.1)));
-    const leftW = nameBoxW + 42;
-    const actionW = Math.round(actionText.length * 7.4) + 42;
-    const w = leftW + actionW;
-    const label = o.ariaLabel || `View ${o.n} ${schoolNoun} in ${o.name}`;
-    return `<div class="nd-nav am-leaf am-leaf-school${o.hov ? " nd-nav-on" : ""}" data-design-component="area-marker" tabindex="0" role="button" aria-label="${label}" style="position:relative;width:${w}px;margin-left:-${Math.round(w / 2)}px;transform:translateY(-100%);font-family:var(--font-sans);outline:none;">
-      <div class="am-shell" style="display:flex;align-items:stretch;border-radius:var(--radius-full);overflow:hidden;box-shadow:${sel ? "var(--shadow-lg)" : "var(--shadow-md)"};border:1.5px solid rgba(94,82,134,${sel ? 0.4 : 0.26});transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s ease;">
-        <div style="flex:none;display:flex;align-items:center;gap:7px;padding:8px 12px 8px 12px;background:var(--plum-600);color:#fff;min-width:0;">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;"><path d="m22 10-10-5L2 10l10 5 10-5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg>
-          <span style="display:flex;flex-direction:column;gap:1px;min-width:0;">
-            <span style="font-size:13.5px;font-weight:800;letter-spacing:-0.01em;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${nameBoxW}px;">${o.name}</span>
-            <span style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.68);white-space:nowrap;">${o.listings} ${listingNoun}</span>
-          </span>
-        </div>
-        <div class="am-action" style="flex:none;display:flex;align-items:center;gap:4px;padding:9px 14px;background:var(--canvas-100);color:var(--plum-600);white-space:nowrap;transition:background .15s ease;">
-          <span style="font-size:12.5px;font-weight:800;letter-spacing:-0.01em;">${actionText}</span>
-          <span style="font-size:14px;font-weight:800;line-height:1;">&#8250;</span>
-        </div>
+  const schools = !!o.schoolsMode;
+  const primary = schools ? "var(--plum-600)" : "var(--navy-800)";
+  const borderRGB = schools ? "94,82,134" : "27,42,69";
+  const identityIcon = schools ? MG.cap(primary) : MG.pin(primary);
+  const footerIcon = schools ? MG.cap("#fff") : MG.home("#fff");
+  const heroNoun = schools ? o.n === 1 ? "SCHOOL" : "SCHOOLS" : o.n === 1 ? "LISTING" : "LISTINGS";
+  // secondary metric: listings count on the schools variant, schools count on the homes
+  // variant — shown only when the server actually supplied it (undefined ⇒ omit the line,
+  // 0 ⇒ show "0 schools"/"0 listings" per spec).
+  const secondary = schools ? o.listings : o.schools;
+  const secondaryNoun = schools ? secondary === 1 ? "listing" : "listings" : secondary === 1 ? "school" : "schools";
+  const w = 172;
+  const label = o.ariaLabel || `View ${o.n} ${heroNoun.toLowerCase()} in ${o.name}` + (secondary != null ? `, ${secondary} ${secondaryNoun}` : "");
+  const kindClass = schools ? "am-leaf-school" : "am-leaf-home";
+  return `<div class="nd-nav am-leaf ${kindClass}${o.hov ? " nd-nav-on" : ""}" data-design-component="area-marker" data-action-kind="view-homes" tabindex="0" role="button" aria-label="${label}" style="position:relative;width:${w}px;margin-left:-${w / 2}px;transform:translateY(-100%);font-family:var(--font-sans);text-align:center;outline:none;">
+    <div class="am-shell" style="border-radius:var(--radius-lg);overflow:hidden;box-shadow:${sel ? "var(--shadow-lg)" : "var(--shadow-md)"};border:1.5px solid rgba(${borderRGB},${sel ? 0.5 : 0.28});background:#fff;transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s ease;${sel ? `outline:2px solid ${primary};outline-offset:2px;` : ""}">
+      <div style="padding:10px 13px 9px;display:flex;flex-direction:column;align-items:flex-start;text-align:left;background:#fff;color:var(--navy-800);">
+        <span style="display:flex;align-items:center;gap:6px;max-width:100%;">
+          ${identityIcon}
+          <span style="font-size:13.5px;font-weight:800;letter-spacing:-0.01em;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${o.name}</span>
+        </span>
+        <span style="display:flex;align-items:baseline;gap:5px;margin-top:6px;font-family:var(--font-mono);">
+          <b style="font-size:22px;font-weight:800;letter-spacing:-0.02em;line-height:1;">${o.n}</b>
+          <span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted);">${heroNoun}</span>
+        </span>
+        ${secondary != null ? `<span style="margin-top:3px;font-size:11px;font-weight:600;color:var(--text-muted);">${secondary} ${secondaryNoun}</span>` : ""}
       </div>
-      <div class="am-tail" style="width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:8px solid var(--plum-600);margin:-1px auto 0;"></div>
-    </div>`;
-  }
-  // leaf-level individual area marker — one connected split capsule: navy identity (left) +
-  // rust "View N homes" action (right), flush together, single border/shadow, tail below.
-  // Distinct from cluster markers: activating this opens listings directly, never a further zoom.
-  const noun = o.n === 1 ? "home" : "homes";
-  const actionText = `View ${o.n} ${noun}`;
-  const nameBoxW = Math.min(150, Math.max(56, Math.round(o.name.length * 8.2)));
-  const leftW = nameBoxW + 46;
-  const actionW = Math.round(actionText.length * 7.3) + 50;
-  const w = leftW + actionW;
-  const label = o.ariaLabel || `View ${o.n} ${noun} in ${o.name}`;
-  return `<div class="nd-nav am-leaf${o.hov ? " nd-nav-on" : ""}" data-design-component="area-marker" tabindex="0" role="button" aria-label="${label}" style="position:relative;width:${w}px;margin-left:-${Math.round(w / 2)}px;transform:translateY(-100%);font-family:var(--font-sans);outline:none;">
-    <div class="am-shell" style="display:flex;align-items:stretch;border-radius:var(--radius-full);overflow:hidden;box-shadow:${sel ? "var(--shadow-lg)" : "var(--shadow-md)"};border:1.5px solid rgba(27,42,69,${sel ? 0.42 : 0.24});transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s ease;">
-      <div style="flex:none;display:flex;align-items:center;gap:7px;padding:9px 12px 9px 13px;background:${bg};color:#fff;min-width:0;">
-        ${MG.pin("#fff")}
-        <span style="font-size:14px;font-weight:700;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${nameBoxW}px;">${o.name}</span>
-      </div>
-      <div class="am-action" style="flex:none;display:flex;align-items:center;gap:4px;padding:9px 15px;background:var(--canvas-100);color:var(--copper-600);white-space:nowrap;transition:background .15s ease;">
-        <span style="font-size:12.5px;font-weight:700;">${actionText}</span>
-        <span style="font-size:14px;font-weight:700;line-height:1;">&#8250;</span>
+      <div class="am-action" style="background:${primary};padding:9px 13px;display:flex;align-items:center;justify-content:center;gap:6px;transition:filter .15s ease;">
+        ${footerIcon}
+        <span style="font-size:12.5px;font-weight:700;color:#fff;">View ${schools ? "schools" : "homes"}</span>
+        <span style="font-size:14px;font-weight:700;line-height:1;color:#fff;">&#8250;</span>
       </div>
     </div>
-    <div class="am-tail" style="width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:8px solid ${bg};margin:-1px auto 0;"></div>
+    <div class="am-tail" style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid ${primary};margin:0 auto;"></div>
   </div>`;
 }
+// Commercial identity on the map: the SAME leaf pin, carrying the subtype label
+// instead of a price — nothing price-gated ever reaches the map layer. Footprint,
+// tail, selected treatment, clustering and camera behaviour are unchanged.
 function pricePinHTML(l, on, f) {
+  if (l.kind === "commercial") {
+    const gold = "#8A6A22";
+    return `<div style="transform:translate(-50%,-100%);font-family:var(--font-sans);text-align:center;">
+      <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:var(--radius-full);background:${on ? gold : "var(--paper)"};color:${on ? "#fff" : "var(--navy-800)"};border:1px solid ${on ? gold : "rgba(138,106,34,0.32)"};box-shadow:${on ? "var(--shadow-lg)" : "var(--shadow-sm)"};font-size:11.5px;font-weight:700;white-space:nowrap;">
+        <span style="width:7px;height:7px;border-radius:50%;background:${on ? "#fff" : gold};flex:none;"></span>${EM.comLabel(l.comSub)}</span>
+    </div>`;
+  }
   return `<div style="transform:translate(-50%,-100%);font-family:var(--font-sans);">
     <span style="display:inline-block;padding:5px 10px;border-radius:var(--radius-full);background:${on ? "var(--accent)" : "var(--paper)"};color:${on ? "#fff" : "var(--navy-800)"};border:${on ? "none" : "1px solid var(--border)"};box-shadow:${on ? "var(--shadow-lg)" : "var(--shadow-sm)"};font-family:var(--font-mono);font-size:11.5px;font-weight:700;white-space:nowrap;">${EM.priceText(l, f)}</span>
   </div>`;
@@ -44829,7 +50214,7 @@ function discHTML(n) {
 function clusterBubbleHTML(count, tone) {
   const size = Math.round(42 + Math.min(count, 24) * 0.8);
   const bg = tone === "agri" ? "var(--evergreen-600)" : "var(--navy-800)";
-  const cap = tone === "agri" ? "parcels" : "homes";
+  const cap = tone === "agri" ? "parcels" : tone === "commercial" ? "listings" : tone === "plot" ? "plots" : "homes";
   return `<div class="nd-cluster" data-design-component="listing-cluster" style="transform:translate(-50%,-50%);font-family:var(--font-sans);text-align:center;cursor:pointer;">
     <div class="nd-cluster-disc" style="width:${size}px;height:${size}px;border-radius:var(--radius-full);background:${bg};color:#fff;box-shadow:var(--shadow-lg);border:3px solid rgba(255,255,255,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;margin:0 auto;transition:transform .18s cubic-bezier(.4,0,.2,1);">
       <span style="font-family:var(--font-mono);font-size:17px;font-weight:700;">${count}</span>
@@ -44837,7 +50222,10 @@ function clusterBubbleHTML(count, tone) {
     </div></div>`;
 }
 function clusterLeaves(items, map, px) {
-  const pts = items.map(it => ({
+  // latLngToContainerPoint throws "Invalid LatLng object" on a non-finite pair, from
+  // inside a commit effect, which React answers by discarding the whole tree. Every
+  // item is screened here so no caller has to remember to.
+  const pts = (items || []).filter(EXP_OK).map(it => ({
     it,
     p: map.latLngToContainerPoint([it.lat, it.lon])
   }));
@@ -44909,6 +50297,7 @@ function originPinHTML(name) {
 }
 const CLUSTER_PX = 46;
 function ExpMap({
+  lead,
   view,
   isMobile,
   onPick,
@@ -44964,8 +50353,9 @@ function ExpMap({
       preferCanvas: false
     });
     map.setView([EM.city.lat, EM.city.lon], 11);
-    L.tileLayer("https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
       maxZoom: 19,
+      subdomains: "abcd",
       attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
     }).addTo(map);
     L.control.zoom({
@@ -45004,6 +50394,38 @@ function ExpMap({
   React.useEffect(() => {
     const map = mapRef.current;
     if (!map || !view.fitBounds || fitRef.current === view.fitKey) return;
+    // Leaflet's isValid() only rejects NaN, so ±Infinity bounds pass validation and
+    // then throw "Invalid LatLng object: (NaN, NaN)" from inside this commit effect.
+    // Producers are guarded at source; this refuses to move the camera rather than
+    // take the whole shell down if a non-finite pair ever reaches it.
+    const flat = [].concat.apply([], view.fitBounds);
+    if (flat.length !== 4 || !flat.every(Number.isFinite)) {
+      console.warn("ExpMap: ignoring non-finite fitBounds", view.fitBounds);
+      return;
+    }
+    // The bounds are finite, but flyToBounds DIVIDES BY the container size when it
+    // computes its target centre, so a 0×0 container (cold load, before this flex
+    // chain has been laid out) makes Leaflet itself produce (NaN, NaN) and throw from
+    // inside this commit effect. Input validation cannot reach that — the geometry is
+    // the problem — so the guard is on the container. fitRef is deliberately left
+    // unset so the next render retries this same fitKey once the size resolves.
+    // (fitBounds is safe at 0×0; only the animated flyToBounds is not.)
+    let sz = map.getSize();
+    if (!sz.x || !sz.y) {
+      map.invalidateSize();
+      sz = map.getSize();
+    }
+    if (!sz.x || !sz.y) {
+      fitRef.current = null;
+      setTimeout(() => {
+        const m = mapRef.current;
+        if (m) {
+          m.invalidateSize();
+          setTick(t => t + 1);
+        }
+      }, 120);
+      return;
+    }
     fitRef.current = view.fitKey;
     progRef.current = true;
     map.flyToBounds(view.fitBounds, {
@@ -45014,7 +50436,7 @@ function ExpMap({
       maxZoom: view.maxZoom || 15
     });
     // eslint-disable-next-line
-  }, [view.fitKey]);
+  }, [view.fitKey, tick]);
 
   // markers — rebuilt only when the marker SET changes (hover is a class toggle below,
   // so the element under the cursor is never replaced mid-click)
@@ -45029,6 +50451,19 @@ function ExpMap({
     g.clearLayers();
     lg.clearLayers();
     markersRef.current = {};
+    // Sanitises a single pair; falls back to the map centre so a marker is still
+    // placed (visibly wrong beats a dead shell) rather than throwing.
+    const safeLL = (lat, lon) => Number.isFinite(lat) && Number.isFinite(lon) ? L.latLng(lat, lon) : map.getCenter();
+    // Average of a cluster group — a reduce over an empty group yields NaN.
+    const groupLL = grp => {
+      const ok = (grp || []).filter(x => EXP_OK(x.it));
+      if (!ok.length) return map.getCenter();
+      return L.latLng(ok.reduce((a, x) => a + x.it.lat, 0) / ok.length, ok.reduce((a, x) => a + x.it.lon, 0) / ok.length);
+    };
+    const safeBounds = pairsIn => {
+      const good = (pairsIn || []).filter(p => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+      return good.length ? L.latLngBounds(good) : map.getBounds();
+    };
     const icon = (html, cls) => L.divIcon({
       html,
       className: "upt-pin " + (cls || ""),
@@ -45060,17 +50495,27 @@ function ExpMap({
       W: [0.17, 0.46],
       C: [0.5, 0.5]
     };
+    // Every coordinate handed to Leaflet passes through here. A non-finite value
+    // (a letter bearing reaching the numeric branch, an unresolved container size,
+    // an empty bounds list) makes Leaflet throw from inside a commit effect, which
+    // React answers by discarding the whole tree — a blank artifact. So the synthesis
+    // is fenced: anything not finite falls back to the map centre.
     const compassAt = (d, i, total) => {
       let fx, fy;
       if (d.slot && SLOT[d.slot]) {
         fx = SLOT[d.slot][0];
         fy = SLOT[d.slot][1];
       } else {
-        const b = (d.bearing != null ? d.bearing : 360 / total * i) * Math.PI / 180;
+        const raw = d.bearing != null && Number.isFinite(+d.bearing) ? +d.bearing : 360 / (total || 1) * i;
+        const b = raw * Math.PI / 180;
         fx = 0.5 + Math.sin(b) * 0.3;
         fy = 0.5 - Math.cos(b) * 0.31;
       }
-      return map.containerPointToLatLng([fx * size.x, fy * size.y]);
+      const px = fx * size.x,
+        py = fy * size.y;
+      if (!Number.isFinite(px) || !Number.isFinite(py)) return map.getCenter();
+      const ll = map.containerPointToLatLng([px, py]);
+      return ll && Number.isFinite(ll.lat) && Number.isFinite(ll.lng) ? ll : map.getCenter();
     };
     // dense-map collision handling: nodes without a fixed compass slot (regional
     // clusters, e.g. Hebbal · Yelahanka / Devanahalli · Airport / Hennur · Thanisandra)
@@ -45081,7 +50526,7 @@ function ExpMap({
       const MIN_GAP = 30;
       const order = noSlot.map(d => ({
         d,
-        b: ((d.bearing || 0) % 360 + 360) % 360
+        b: ((Number.isFinite(+d.bearing) ? +d.bearing : 0) % 360 + 360) % 360
       })).sort((a, b) => a.b - b.b);
       for (let k = 1; k < order.length; k++) {
         const gap = order[k].b - order[k - 1].b;
@@ -45095,14 +50540,15 @@ function ExpMap({
       const ll = v.compass ? compassAt({
         ...d,
         bearing: d.__bearing != null ? d.__bearing : d.bearing
-      }, i, v.destinations.length) : L.latLng(d.center.lat, d.center.lon);
+      }, i, v.destinations.length) : safeLL(d.center && d.center.lat, d.center && d.center.lon);
       const schoolsJ = v.journey === "schools";
       if (d.kind === "local") {
         const mk = L.marker(ll, {
           icon: icon(regionalClusterCardHTML({
             names: d.names.join(" · "),
             n: d.n,
-            noun: v.noun || "listings",
+            noun: schoolsJ ? "schools" : v.noun || "listings",
+            domain: schoolsJ ? "schools" : "homes",
             exact: d.matchAreas || 0,
             sel: !!d.sel
           })),
@@ -45122,6 +50568,7 @@ function ExpMap({
           names: d.names.join(" · "),
           n: d.n,
           noun: schoolsJ ? "schools" : v.noun || "listings",
+          domain: schoolsJ ? "schools" : "homes",
           areasLine,
           zero: d.n === 0,
           sel: !!d.sel
@@ -45134,8 +50581,8 @@ function ExpMap({
       mk.addTo(g);
       wireKeyboard(mk, () => cb.onPick(d));
     });
-    (v.mapClusters || []).forEach(c => {
-      const mk = L.marker([c.center.lat, c.center.lon], {
+    EXP_CENTRED(v.mapClusters).forEach(c => {
+      const mk = L.marker(safeLL(c.center.lat, c.center.lon), {
         icon: icon(clusterChipHTML({
           names: c.names.join(" · "),
           more: c.more,
@@ -45153,12 +50600,13 @@ function ExpMap({
       mk.addTo(g);
       wireKeyboard(mk, () => cb.onCluster(c));
     });
-    (v.areaMarkers || []).forEach(a => {
-      const mk = L.marker([a.center.lat, a.center.lon], {
+    EXP_CENTRED(v.areaMarkers).forEach(a => {
+      const mk = L.marker(safeLL(a.center.lat, a.center.lon), {
         icon: icon(areaPinHTML({
           name: a.label,
           n: a.n,
           listings: a.listings,
+          schools: a.schools,
           schoolsMode: v.journey === "schools" && !a.candidate,
           sel: a.selected,
           candidate: a.candidate
@@ -45171,17 +50619,17 @@ function ExpMap({
       mk.addTo(g);
       if (!a.candidate) wireKeyboard(mk, () => cb.onArea(a.key));
     });
-    (v.discs || []).forEach(d => {
-      const mk = L.marker([d.center.lat, d.center.lon], {
+    EXP_CENTRED(v.discs).forEach(d => {
+      const mk = L.marker(safeLL(d.center.lat, d.center.lon), {
         icon: icon(discHTML(d.n)),
         zIndexOffset: 250
       });
       mk.on("click", () => d.areaKey ? cb.onArea(d.areaKey) : null);
       mk.addTo(g);
     });
-    (v.schoolPins || []).forEach(s => {
+    EXP_PTS(v.schoolPins).forEach(s => {
       const interactive = !!cb.onSchool;
-      const mk = L.marker([s.lat, s.lon], {
+      const mk = L.marker(safeLL(s.lat, s.lon), {
         icon: icon(schoolPinHTML(s, !!(v.school && v.school.id === s.id), schoolHover === s.id)),
         zIndexOffset: schoolHover === s.id ? 900 : 500,
         interactive
@@ -45195,8 +50643,8 @@ function ExpMap({
       mk.addTo(g);
     });
     // agri: outbound-direction cards, town discs, parcel pins, origin marker
-    (v.navCards || []).forEach(c => {
-      const mk = L.marker([c.center.lat, c.center.lon], {
+    EXP_CENTRED(v.navCards).forEach(c => {
+      const mk = L.marker(safeLL(c.center.lat, c.center.lon), {
         icon: icon(agriCardHTML({
           label: c.label,
           n: c.n,
@@ -45208,8 +50656,8 @@ function ExpMap({
       wire(mk, c.key);
       mk.addTo(g);
     });
-    (v.townDiscs || []).forEach(t => {
-      const mk = L.marker([t.center.lat, t.center.lon], {
+    EXP_CENTRED(v.townDiscs).forEach(t => {
+      const mk = L.marker(safeLL(t.center.lat, t.center.lon), {
         icon: icon(townDiscHTML({
           name: t.name,
           n: t.n
@@ -45220,15 +50668,15 @@ function ExpMap({
       wire(mk, t.key);
       mk.addTo(g);
     });
-    if (v.originMarker) L.marker([v.originMarker.lat, v.originMarker.lon], {
+    if (EXP_OK(v.originMarker)) L.marker(safeLL(v.originMarker.lat, v.originMarker.lon), {
       icon: icon(originPinHTML(v.originMarker.name)),
       zIndexOffset: 150,
       interactive: false
     }).addTo(g);
-    (v.parcelPins || []).length && clusterLeaves(v.parcelPins, map, CLUSTER_PX).forEach(grp => {
+    EXP_PTS(v.parcelPins).length && clusterLeaves(v.parcelPins, map, CLUSTER_PX).forEach(grp => {
       if (grp.length === 1) {
         const p = grp[0].it;
-        const mk = L.marker([p.lat, p.lon], {
+        const mk = L.marker(safeLL(p.lat, p.lon), {
           icon: icon(parcelPinHTML(p, p.id === agriActive)),
           zIndexOffset: p.id === agriActive ? 900 : 100
         });
@@ -45236,25 +50684,23 @@ function ExpMap({
         mk.addTo(lg);
         return;
       }
-      const lat = grp.reduce((s, x) => s + x.it.lat, 0) / grp.length;
-      const lon = grp.reduce((s, x) => s + x.it.lon, 0) / grp.length;
-      const mk = L.marker([lat, lon], {
+      const mk = L.marker(groupLL(grp), {
         icon: icon(clusterBubbleHTML(grp.length, "agri")),
         zIndexOffset: 60
       });
       mk.on("click", () => {
         progRef.current = true;
-        map.flyToBounds(L.latLngBounds(grp.map(x => [x.it.lat, x.it.lon])).pad(0.25), {
+        map.flyToBounds(safeBounds(grp.map(x => [x.it.lat, x.it.lon])).pad(0.25), {
           duration: 0.55,
           maxZoom: 16
         });
       });
       mk.addTo(lg);
     });
-    (v.pins || []).length && clusterLeaves(v.pins, map, CLUSTER_PX).forEach(grp => {
+    EXP_PTS(v.pins).length && clusterLeaves(v.pins, map, CLUSTER_PX).forEach(grp => {
       if (grp.length === 1) {
         const l = grp[0].it;
-        const mk = L.marker([l.lat, l.lon], {
+        const mk = L.marker(safeLL(l.lat, l.lon), {
           icon: icon(pricePinHTML(l, false, v.filters)),
           zIndexOffset: 100
         });
@@ -45263,15 +50709,13 @@ function ExpMap({
         mk.addTo(lg);
         return;
       }
-      const lat = grp.reduce((s, g) => s + g.it.lat, 0) / grp.length;
-      const lon = grp.reduce((s, g) => s + g.it.lon, 0) / grp.length;
-      const mk = L.marker([lat, lon], {
-        icon: icon(clusterBubbleHTML(grp.length)),
+      const mk = L.marker(groupLL(grp), {
+        icon: icon(clusterBubbleHTML(grp.length, v.filters && v.filters.family === "Commercial" ? "commercial" : v.filters && v.filters.ptype === "Plot" ? "plot" : null)),
         zIndexOffset: 60
       });
       mk.on("click", () => {
         progRef.current = true;
-        map.flyToBounds(L.latLngBounds(grp.map(g => [g.it.lat, g.it.lon])).pad(0.25), {
+        map.flyToBounds(safeBounds(grp.map(g => [g.it.lat, g.it.lon])).pad(0.25), {
           duration: 0.55,
           maxZoom: 17
         });
@@ -45305,7 +50749,10 @@ function ExpMap({
     const g = shapeG.current;
     if (!g) return;
     g.clearLayers();
-    if (view.poly) {
+    // Shapes are the remaining Leaflet consumers; same fence as the markers.
+    const finPair = p => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]);
+    const finPairs = l => Array.isArray(l) && l.length > 0 && l.every(finPair);
+    if (finPairs(view.poly)) {
       L.polygon(view.poly, view.polyDraft ? {
         color: "#1B2A45",
         weight: 2,
@@ -45319,13 +50766,13 @@ function ExpMap({
         fillOpacity: 0.1
       }).addTo(g);
     }
-    if (view.scopeRect) L.rectangle(view.scopeRect, {
+    if (finPairs(view.scopeRect)) L.rectangle(view.scopeRect, {
       color: "#1B2A45",
       weight: 1.5,
       dashArray: "5 4",
       fill: false
     }).addTo(g);
-    if (view.radiusRing) L.circle([view.radiusRing.lat, view.radiusRing.lon], {
+    if (EXP_OK(view.radiusRing) && Number.isFinite(view.radiusRing.km)) L.circle([view.radiusRing.lat, view.radiusRing.lon], {
       radius: view.radiusRing.km * 1000,
       color: "#5E5286",
       weight: 1.6,
@@ -45340,7 +50787,7 @@ function ExpMap({
         const pts = [];
         for (let a = -w.half; a <= w.half; a += 6) {
           const p = window.EXJ.offsetPt(w.origin, w.bearing + a, km);
-          pts.push([p.lat, p.lon]);
+          if (EXP_OK(p)) pts.push([p.lat, p.lon]);
         }
         return pts;
       };
@@ -45362,6 +50809,7 @@ function ExpMap({
   const navFade = view.level === "city" || view.level === "direction" || view.level === "agri-corridors" || view.level === "schools-nav" && !(view.areaList || []).length;
   return /*#__PURE__*/React.createElement("div", {
     "data-design-component": "map-surface",
+    className: navFade ? "nd-navmode" : "",
     style: {
       position: "relative",
       height: "100%",
@@ -45370,7 +50818,6 @@ function ExpMap({
     }
   }, /*#__PURE__*/React.createElement("div", {
     ref: elRef,
-    className: navFade ? "nd-navmode" : "",
     style: {
       position: "absolute",
       inset: 0
@@ -45453,7 +50900,30 @@ function ExpMap({
       fontSize: "11.5px",
       fontWeight: 700
     }
-  }, "Show all areas")), view.scopeKind === "AREA_SET" && view.committed.length > 1 && /*#__PURE__*/React.createElement("button", {
+  }, "Show all areas")), lead && /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "map-top-row",
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+      flexWrap: "wrap"
+    }
+  }, lead, view.scopeKind === "AREA_SET" && view.committed.length > 1 && /*#__PURE__*/React.createElement("button", {
+    onClick: onFitAll,
+    style: {
+      minHeight: "44px",
+      padding: "0 13px",
+      borderRadius: "var(--radius-full)",
+      border: "1px solid var(--border-strong)",
+      background: "var(--paper)",
+      cursor: "pointer",
+      fontFamily: "var(--font-sans)",
+      fontSize: "12.5px",
+      fontWeight: 600,
+      color: "var(--text-strong)",
+      boxShadow: "var(--shadow-sm)"
+    }
+  }, "Fit all ", view.committed.length, " areas")), !lead && view.scopeKind === "AREA_SET" && view.committed.length > 1 && /*#__PURE__*/React.createElement("button", {
     onClick: onFitAll,
     style: {
       padding: "7px 12px",
@@ -45472,7 +50942,11 @@ function ExpMap({
       position: "absolute",
       left: "50%",
       transform: "translateX(-50%)",
-      bottom: isMobile ? "128px" : "22px",
+      ...(isMobile ? {
+        top: "70px"
+      } : {
+        bottom: "22px"
+      }),
       zIndex: 500,
       transition: "opacity var(--dur-normal), transform var(--dur-normal)"
     }
@@ -45521,6 +50995,583 @@ Object.assign(window, {
 });
 })(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/new_discover/src/ExpMap.jsx", error: String((e && e.message) || e) }); }
 
+// ui_kits/new_discover/src/ExpMapFilters.jsx
+try { (() => {
+// #2627 — mobile Map filter experience. Design artifact for #2628.
+// Owns NO filter state: the sheet edits a staged COPY of st.filters (st.mfSheet.draft)
+// and Apply writes it back through the same canonical filters the List uses.
+// Controls are the existing EPFilters groups, rendered expanded, never a second taxonomy.
+const MF = new Proxy({}, {
+  get: (_t, k) => window.EXP ? window.EXP[k] : undefined
+});
+
+// Refinements = everything the shopper narrowed beyond intent (Buy/Rent) and family.
+function mfRefinements(f) {
+  const l = MF.filterLabels(f);
+  return f.family === "Commercial" ? l.slice(2) : l.slice(1);
+}
+function mfCount(st, f) {
+  // Schools → Homes near <school>: the same property filters over the SAME school + radius.
+  // School, radius and board/level are Schools-journey state and are never touched here.
+  if (st.journey === "schools") {
+    const sel = st.sch && st.sch.selId && window.EXJ ? window.EXJ.schoolById(st.sch.selId) : null;
+    return sel ? window.EXJ.homesNear(sel, st.sch.radiusKm, f).length : 0;
+  }
+  const sc = st.scope;
+  if (!sc) return 0;
+  let list = [];
+  if (sc.kind === "AREA_SET" || sc.kind === "HIERARCHY") list = MF.inAreas(sc.areaKeys, f);else if (sc.kind === "CITY") list = MF.listings.filter(l => MF.passes(l, f));else if (sc.kind === "POLYGON") list = MF.inPoly(sc.poly, f);else if (sc.kind === "VIEWPORT") list = MF.inBounds(sc.bounds, f);
+  return (st.query ? MF.searchWithin(list, st.query) : list).length;
+}
+function mfUnits(f, n) {
+  const nn = MF.nounsOf(f);
+  return n === 1 ? nn.deal(1).replace(/ (for sale|to rent)$/, "") : nn.unitPlural;
+}
+const mfSame = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const mfCleared = f => ({
+  ...MF.DEFAULT_FILTERS,
+  purpose: f.purpose,
+  family: f.family
+});
+// Buy/Rent: the exact rule the List control bar applies (ExpModeBar)
+const mfPurposePatch = (f, v) => ({
+  purpose: v,
+  maxPrice: 0,
+  comMaxPrice: 0,
+  ptype: v === "Rent" && f.ptype === "Plot" ? "Any type" : f.ptype
+});
+// Same property result set → same property-filter capability in List and Map:
+// Areas listing results, and Schools "Homes near <school>".
+function mfAvailable(st, view) {
+  if (st.journey === "schools") return view.level === "schools-homes";
+  return st.journey === "areas" && ["city", "direction", "local"].indexOf(view.level) === -1 && !st.draft;
+}
+// Intent + family are never counted as refinements, but are ALWAYS stated.
+function mfIntent(f, n) {
+  return n + " " + MF.nounsOf(f).deal(n) + " · " + (f.family === "Commercial" ? "Commercial" : "Residential");
+}
+
+// ---- entry point ------------------------------------------------------------
+function ExpMapFilterButton({
+  st,
+  act,
+  focusDemo
+}) {
+  const {
+    Icon
+  } = window.ReTrendsDesignSystem_f37966;
+  const n = mfRefinements(st.filters).length;
+  const on = n > 0;
+  const open = !!st.mfSheet;
+  return /*#__PURE__*/React.createElement("button", {
+    id: "mf-entry",
+    "data-design-component": "map-filter-entry",
+    onClick: act.openMapFilters,
+    "aria-haspopup": "dialog",
+    "aria-expanded": open,
+    "aria-controls": "mf-sheet",
+    "aria-label": (on ? "Filters, " + n + " active" : "Filters, no refinements") + ". Showing " + MF.nounsOf(st.filters).dealPlural + ", " + st.filters.family + ".",
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "8px",
+      minHeight: "44px",
+      padding: on ? "0 8px 0 14px" : "0 16px 0 14px",
+      borderRadius: "var(--radius-full)",
+      cursor: "pointer",
+      fontFamily: "var(--font-sans)",
+      fontSize: "13.5px",
+      fontWeight: 700,
+      border: "1px solid " + (on ? "var(--navy-800)" : "var(--border-strong)"),
+      background: on ? "var(--navy-800)" : "var(--paper)",
+      color: on ? "#fff" : "var(--text-strong)",
+      boxShadow: focusDemo ? "0 0 0 3px var(--paper), 0 0 0 5px var(--accent), var(--shadow-md)" : "var(--shadow-md)"
+    }
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "sliders-horizontal",
+    size: 17,
+    color: on ? "#fff" : "var(--navy-800)"
+  }), /*#__PURE__*/React.createElement("span", null, "Filters"), on && /*#__PURE__*/React.createElement("span", {
+    "aria-hidden": "true",
+    style: {
+      minWidth: "24px",
+      height: "24px",
+      padding: "0 7px",
+      borderRadius: "var(--radius-full)",
+      background: "var(--accent)",
+      color: "#fff",
+      display: "inline-grid",
+      placeItems: "center",
+      fontFamily: "var(--font-mono)",
+      fontSize: "12px",
+      fontWeight: 700
+    }
+  }, n));
+}
+
+// ---- "the markers you see are filtered" — one line in the results sheet --------
+function ExpMapFilterSummary({
+  st,
+  act
+}) {
+  const r = mfRefinements(st.filters);
+  if (!r.length) return null;
+  return /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "map-filter-summary",
+    style: {
+      marginTop: "7px",
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+      minHeight: "32px",
+      padding: "0 4px 0 10px",
+      borderRadius: "var(--radius-sm)",
+      background: "var(--navy-100)",
+      color: "var(--navy-800)"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1,
+      minWidth: 0,
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      fontSize: "12px",
+      fontWeight: 600
+    }
+  }, /*#__PURE__*/React.createElement("b", {
+    style: {
+      fontWeight: 700
+    }
+  }, "Filtered:"), " ", r.join(" · ")), /*#__PURE__*/React.createElement("button", {
+    onClick: act.openMapFilters,
+    style: {
+      flex: "none",
+      minHeight: "32px",
+      padding: "0 10px",
+      border: "none",
+      background: "transparent",
+      cursor: "pointer",
+      fontFamily: "var(--font-sans)",
+      fontSize: "12.5px",
+      fontWeight: 700,
+      color: "var(--accent)"
+    }
+  }, "Edit"));
+}
+
+// ---- honest zero-result state on Map ----------------------------------------------
+function ExpMapZero({
+  st,
+  act,
+  view
+}) {
+  const n = mfRefinements(st.filters).length;
+  const units = mfUnits(st.filters, 0);
+  const canReturn = st.journey === "areas" && st.prevScope && view.scopeKind !== "AREA_SET";
+  const sch = st.journey === "schools";
+  return /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "map-zero-results",
+    role: "status",
+    style: {
+      padding: "4px 0 2px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "16px",
+      fontWeight: 700,
+      color: "var(--text-strong)"
+    }
+  }, "0 matching ", mfIntent(st.filters, 0).replace(/^0 /, "")), /*#__PURE__*/React.createElement("p", {
+    style: {
+      margin: "5px 0 0",
+      fontSize: "12.5px",
+      lineHeight: 1.45,
+      color: "var(--text-body)",
+      textWrap: "pretty"
+    }
+  }, sch ? view.scopeLabel.replace(/^Homes/, "No " + units) : "Nothing in " + view.scopeLabel, " matches ", n ? n === 1 ? "your filter" : "your " + n + " filters" : "this search", ". ", sch ? "The school and radius were not changed, and filters were not widened for you." : "Filters were not widened for you."), n > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: "6px",
+      fontSize: "11.5px",
+      color: "var(--text-muted)",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap"
+    }
+  }, mfRefinements(st.filters).join(" · ")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "8px",
+      marginTop: "11px"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: act.openMapFilters,
+    style: {
+      flex: 1,
+      minHeight: "44px",
+      borderRadius: "var(--radius-md)",
+      border: "none",
+      background: "var(--accent)",
+      color: "#fff",
+      fontFamily: "var(--font-sans)",
+      fontSize: "13.5px",
+      fontWeight: 700,
+      cursor: "pointer"
+    }
+  }, "Edit filters"), n > 0 && /*#__PURE__*/React.createElement("button", {
+    onClick: act.mapClearFilters,
+    style: {
+      flex: 1,
+      minHeight: "44px",
+      borderRadius: "var(--radius-md)",
+      border: "1px solid var(--border-strong)",
+      background: "var(--paper)",
+      color: "var(--text-strong)",
+      fontFamily: "var(--font-sans)",
+      fontSize: "13.5px",
+      fontWeight: 600,
+      cursor: "pointer"
+    }
+  }, "Clear filters")), canReturn && /*#__PURE__*/React.createElement("button", {
+    onClick: act.returnToAreas,
+    style: {
+      marginTop: "8px",
+      width: "100%",
+      minHeight: "40px",
+      border: "none",
+      background: "transparent",
+      cursor: "pointer",
+      fontFamily: "var(--font-sans)",
+      fontSize: "12.5px",
+      fontWeight: 700,
+      color: "var(--accent)"
+    }
+  }, "Return to previous scope"));
+}
+
+// ---- the filter sheet (modal bottom sheet, staged) ---------------------------------
+function ExpMapFilterSheet({
+  st,
+  act,
+  view
+}) {
+  const d = st.mfSheet.draft;
+  const applied = st.filters;
+  const dirty = !mfSame(d, applied);
+  const n = mfCount(st, d);
+  const nowN = mfCount(st, applied);
+  const refs = mfRefinements(d).length;
+  const canClear = !mfSame(d, mfCleared(d));
+  const sheetRef = React.useRef(null),
+    headRef = React.useRef(null);
+  const [dy, setDy] = React.useState(0);
+  const drag = React.useRef(null);
+
+  // focus: into the dialog heading on open, back to the Filters entry on close
+  React.useEffect(() => {
+    const prev = document.activeElement;
+    if (headRef.current) headRef.current.focus({
+      preventScroll: true
+    });
+    return () => {
+      const b = document.getElementById("mf-entry");
+      if (b) b.focus({
+        preventScroll: true
+      });else if (prev && prev.focus) prev.focus({
+        preventScroll: true
+      });
+    };
+  }, []);
+  const onKey = e => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      act.mfCancel();
+      return;
+    }
+    if (e.key !== "Tab" || !sheetRef.current) return;
+    const f = [...sheetRef.current.querySelectorAll("button:not([disabled]),[tabindex='0']")];
+    if (!f.length) return;
+    const first = f[0],
+      last = f[f.length - 1];
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === headRef.current)) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+  // swipe-down = Cancel. Only the grab zone (handle + header) drags; the body scrolls.
+  const down = e => {
+    if (e.target.closest("button")) return;
+    drag.current = {
+      y: e.clientY
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const move = e => {
+    if (drag.current) setDy(Math.max(0, e.clientY - drag.current.y));
+  };
+  const up = () => {
+    if (!drag.current) return;
+    drag.current = null;
+    if (dy > 90) act.mfCancel();
+    setDy(0);
+  };
+
+  // staged editing: EPFilters is handed the DRAFT and a draft-writing act
+  const dst = {
+    ...st,
+    filters: d
+  };
+  const dact = {
+    ...act,
+    setFilters: p => act.mfEdit(p),
+    setFamily: fam => act.mfEdit({
+      family: fam
+    }),
+    resetFilters: () => act.mfEdit(mfCleared(d))
+  };
+  const EPChip = window.EPChip,
+    EPToolLabel = window.EPToolLabel;
+  const units = mfUnits(d, n);
+  return /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "map-filter-layer",
+    style: {
+      position: "absolute",
+      inset: 0,
+      zIndex: 1200,
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "flex-end"
+    },
+    onKeyDown: onKey
+  }, /*#__PURE__*/React.createElement("div", {
+    onClick: act.mfCancel,
+    "aria-hidden": "true",
+    style: {
+      position: "absolute",
+      inset: 0,
+      background: "rgba(18,24,38,0.42)"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    ref: sheetRef,
+    id: "mf-sheet",
+    role: "dialog",
+    "aria-modal": "true",
+    "aria-labelledby": "mf-title",
+    "data-design-component": "map-filter-sheet",
+    style: {
+      position: "relative",
+      maxHeight: "calc(100% - 88px)",
+      display: "flex",
+      flexDirection: "column",
+      background: "var(--paper)",
+      borderRadius: "18px 18px 0 0",
+      boxShadow: "0 -12px 36px rgba(18,24,38,0.28)",
+      transform: "translateY(" + dy + "px)",
+      transition: drag.current ? "none" : "transform var(--dur-normal) var(--ease-out)"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    onPointerDown: down,
+    onPointerMove: move,
+    onPointerUp: up,
+    onPointerCancel: up,
+    style: {
+      flex: "none",
+      touchAction: "none",
+      cursor: "grab",
+      padding: "8px 8px 10px 18px",
+      borderBottom: "1px solid var(--border)"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "38px",
+      height: "4px",
+      borderRadius: "999px",
+      background: "var(--stone-400)",
+      margin: "0 auto 8px"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "10px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      minWidth: 0
+    }
+  }, /*#__PURE__*/React.createElement("h2", {
+    id: "mf-title",
+    ref: headRef,
+    tabIndex: -1,
+    style: {
+      margin: 0,
+      outline: "none",
+      fontFamily: "var(--font-serif)",
+      fontSize: "21px",
+      fontWeight: 600,
+      letterSpacing: "-0.01em",
+      color: "var(--text-strong)",
+      display: "flex",
+      alignItems: "center",
+      gap: "8px"
+    }
+  }, "Filters", refs > 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: "var(--font-mono)",
+      fontSize: "12px",
+      fontWeight: 700,
+      padding: "2px 8px",
+      borderRadius: "var(--radius-full)",
+      background: "var(--navy-100)",
+      color: "var(--navy-800)",
+      whiteSpace: "nowrap",
+      letterSpacing: 0
+    }
+  }, refs, " set")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: "2px",
+      fontSize: "12px",
+      color: "var(--text-muted)",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap"
+    }
+  }, view.scopeLabel), st.journey === "schools" && /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "schools-scope-note",
+    style: {
+      marginTop: "2px",
+      fontSize: "11.5px",
+      color: "var(--plum-600)",
+      fontWeight: 600
+    }
+  }, "Property filters only \xB7 school and radius stay on the map")), /*#__PURE__*/React.createElement("button", {
+    onClick: act.mfCancel,
+    style: {
+      flex: "none",
+      minHeight: "44px",
+      padding: "0 12px",
+      border: "none",
+      background: "transparent",
+      cursor: "pointer",
+      fontFamily: "var(--font-sans)",
+      fontSize: "14px",
+      fontWeight: 700,
+      color: "var(--accent)"
+    }
+  }, "Cancel"))), /*#__PURE__*/React.createElement("div", {
+    className: "upt-scroll",
+    style: {
+      flex: 1,
+      minHeight: 0,
+      overflowY: "auto",
+      overscrollBehavior: "contain",
+      padding: "14px 18px 18px",
+      display: "flex",
+      flexDirection: "column",
+      gap: "11px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "purpose-group",
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: "7px"
+    }
+  }, /*#__PURE__*/React.createElement(EPToolLabel, null, "Buy or rent"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "6px",
+      flexWrap: "wrap"
+    }
+  }, ["Buy", "Rent"].map(p => /*#__PURE__*/React.createElement(EPChip, {
+    key: p,
+    mob: true,
+    label: p,
+    on: d.purpose === p,
+    onClick: () => act.mfEdit(mfPurposePatch(d, p))
+  })))), /*#__PURE__*/React.createElement(window.EPFilters, {
+    st: dst,
+    act: dact,
+    isMobile: true,
+    expanded: true
+  })), /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "map-filter-footer",
+    style: {
+      flex: "none",
+      padding: "10px 18px calc(14px + env(safe-area-inset-bottom))",
+      borderTop: "1px solid var(--border)",
+      background: "var(--paper)",
+      boxShadow: "0 -6px 16px rgba(18,24,38,0.06)"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    "aria-live": "polite",
+    style: {
+      minHeight: "18px",
+      marginBottom: "8px",
+      fontSize: "12px",
+      fontWeight: 600,
+      color: n === 0 ? "var(--brick-600)" : "var(--text-muted)"
+    }
+  }, n === 0 ? st.journey === "schools" ? "No " + mfUnits(d, 0) + " match these filters within " + st.sch.radiusKm + " km." : "No " + mfUnits(d, 0) + " match these filters in " + view.scopeLabel + "." : dirty ? "Not applied yet — the map still shows " + nowN + " " + mfUnits(applied, nowN) + "." : "These filters are on the map now."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "8px"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: act.mfClear,
+    disabled: !canClear,
+    style: {
+      flex: "none",
+      minHeight: "48px",
+      padding: "0 16px",
+      borderRadius: "var(--radius-md)",
+      border: "1px solid var(--border-strong)",
+      background: "var(--paper)",
+      cursor: canClear ? "pointer" : "default",
+      fontFamily: "var(--font-sans)",
+      fontSize: "14px",
+      fontWeight: 600,
+      color: canClear ? "var(--text-strong)" : "var(--text-disabled, var(--grey-400))",
+      opacity: canClear ? 1 : 0.6
+    }
+  }, "Clear all"), /*#__PURE__*/React.createElement("button", {
+    "data-design-component": "map-filter-apply",
+    onClick: act.mfApply,
+    style: {
+      flex: 1,
+      minHeight: "48px",
+      borderRadius: "var(--radius-md)",
+      border: "none",
+      background: "var(--accent)",
+      color: "#fff",
+      cursor: "pointer",
+      fontFamily: "var(--font-sans)",
+      fontSize: "14.5px",
+      fontWeight: 700
+    }
+  }, "Show ", n, " ", units)))));
+}
+Object.assign(window, {
+  ExpMapFilterButton,
+  ExpMapFilterSheet,
+  ExpMapFilterSummary,
+  ExpMapZero,
+  MFX: {
+    intent: mfIntent,
+    refinements: mfRefinements,
+    count: mfCount,
+    cleared: mfCleared,
+    available: mfAvailable,
+    same: mfSame
+  }
+});
+})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/new_discover/src/ExpMapFilters.jsx", error: String((e && e.message) || e) }); }
+
 // ui_kits/new_discover/src/ExpModeBar.jsx
 try { (() => {
 // Discover experience — shell control bar + journey (mode) selector.
@@ -45544,17 +51595,23 @@ const MB_BG = {
 const MB_MODES = [{
   k: "areas",
   label: "Areas",
+  pill: "Explore by area",
+  short: "By area",
   icon: "map-pin",
   sub: "Explore by neighbourhood",
   recommended: true
 }, {
   k: "schools",
   label: "Schools",
+  pill: "Search near a school",
+  short: "Near a school",
   icon: "building",
   sub: "Find homes near a school"
 }, {
   k: "agri",
   label: "Agricultural",
+  pill: "Find agricultural land",
+  short: "Agricultural land",
   icon: "sprout",
   sub: "Explore farmland beyond the city"
 }];
@@ -45683,6 +51740,59 @@ function MBModeCard({
   })));
 }
 
+// global search never shrinks below this in the one-row desktop header
+const HDR_SEARCH_MIN = 300;
+// inline journey pill — desktop listing skin; same tab semantics as MBModeCard
+function MBModePill({
+  m,
+  on,
+  onSelect,
+  h: ht,
+  short
+}) {
+  const [h, setH] = React.useState(false);
+  const [f, setF] = React.useState(false);
+  const tint = MB_TINT[m.k];
+  return /*#__PURE__*/React.createElement("button", {
+    role: "tab",
+    "aria-selected": on,
+    onClick: onSelect,
+    "data-design-component": "journey-card",
+    "data-journey": m.k,
+    "aria-label": m.pill,
+    title: short ? m.pill : undefined,
+    onMouseEnter: () => setH(true),
+    onMouseLeave: () => setH(false),
+    onFocus: () => setF(true),
+    onBlur: () => setF(false),
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "7px",
+      height: ht || "42px",
+      padding: short ? "0 12px" : "0 14px",
+      flex: "none",
+      borderRadius: "var(--radius-full)",
+      cursor: "pointer",
+      whiteSpace: "nowrap",
+      fontFamily: "var(--font-sans)",
+      fontSize: "13px",
+      fontWeight: 600,
+      border: "1px solid " + (on ? "var(--navy-800)" : "var(--border)"),
+      background: on ? "var(--navy-800)" : "var(--surface-card)",
+      color: on ? "#fff" : "var(--text-strong)",
+      boxShadow: (h || f) && !on ? "var(--shadow-sm)" : "var(--shadow-xs)",
+      outline: f ? "2px solid " + tint : "2px solid transparent",
+      outlineOffset: "2px",
+      transition: "background var(--dur-fast), box-shadow var(--dur-fast)"
+    }
+  }, /*#__PURE__*/React.createElement(MBIcon, {
+    name: m.icon,
+    size: 16,
+    color: on ? "#fff" : tint
+  }), short ? m.short : m.pill);
+}
+
 // capability cues — change with the selected journey (journey roots only)
 function MBCues({
   journey
@@ -45711,7 +51821,7 @@ function MBCues({
     t: EXd.areas.length + " areas"
   }, {
     icon: "building",
-    t: EXd.listings.length + " listings"
+    t: EXd.residentialCount + " listings"
   }, {
     icon: "trending-up",
     t: "Up to 3 selected areas"
@@ -45763,7 +51873,7 @@ function MBCityPill({
   React.useEffect(() => {
     if (!open) return;
     const f = e => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target)) cancelRef.current();
     };
     document.addEventListener("mousedown", f);
     return () => document.removeEventListener("mousedown", f);
@@ -45898,9 +52008,16 @@ function MBCityPill({
     }, "Soon"));
   })));
 }
+
+// Buy / Rent — the existing two-value intent model, unchanged. In Commercial the Rent
+// option is labelled "Rent / Lease" because Commercial stock carries both For Rent and
+// For Lease, and both are served by this one existing intent. IMPLEMENTATION NOTE: the
+// label is presentation only — Lease must map to the transaction value the record
+// already carries and must never be inferred from other fields.
 function MBBuyRent({
   value,
-  onChange
+  onChange,
+  com
 }) {
   return /*#__PURE__*/React.createElement("div", {
     "data-design-component": "buy-rent-toggle",
@@ -45914,6 +52031,7 @@ function MBBuyRent({
     }
   }, ["Buy", "Rent"].map(o => {
     const on = value === o;
+    const label = com && o === "Rent" ? "Rent / Lease" : o;
     return /*#__PURE__*/React.createElement("button", {
       key: o,
       onClick: () => onChange(o),
@@ -45927,35 +52045,70 @@ function MBBuyRent({
         fontWeight: 600,
         background: on ? "var(--navy-800)" : "transparent",
         color: on ? "#fff" : "var(--text-muted)",
+        whiteSpace: "nowrap",
         transition: "background var(--dur-fast)"
       }
-    }, o);
+    }, label);
   }));
 }
 
 // direct search — journey-aware. Schools also matches school NAMES (city-wide).
+// Desktop header: when a view is passed, the field mirrors the CANONICAL scope
+// (view.scopeLabel for an area set / hierarchy result) whenever the user is not
+// editing — so it is right however the area was reached (search, marker, panel,
+// breadcrumb, back/forward). Focusing selects it; typing replaces it. Picking or
+// leaving without a pick never touches scope — semantics unchanged.
+// Local state is ONLY an edit session: when a committed ctx exists, Escape, blur
+// and outside-click all cancel it (draft discarded, shown = ctx). Only picking a
+// result commits, through the existing act.* navigation. With no ctx (Discover)
+// the previous behaviour is kept.
+function mbContext(view, journey) {
+  if (!view || journey !== "areas" || !view.scopeLabel) return "";
+  return view.scopeKind === "AREA_SET" || view.scopeKind === "HIERARCHY" ? view.scopeLabel : "";
+}
 function MBSearch({
   st,
-  act
+  act,
+  minW,
+  view
 }) {
   const EXd = window.EXP;
   const journey = st.journey;
+  const ctx = mbContext(view, journey);
   const [q, setQ] = React.useState("");
+  const [editing, setEditing] = React.useState(false);
+  const inRef = React.useRef(null);
   const [open, setOpen] = React.useState(false);
   const [hi, setHi] = React.useState(0);
   const ref = React.useRef(null);
   const tint = MB_TINT[journey];
   React.useEffect(() => {
     const f = e => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target)) cancelRef.current();
     };
     document.addEventListener("mousedown", f);
     return () => document.removeEventListener("mousedown", f);
   }, []);
+  const ctxRef = React.useRef(ctx);
+  ctxRef.current = ctx;
+  // abandon the edit session: with a committed ctx, discard the draft entirely
+  const cancel = () => {
+    setOpen(false);
+    if (ctxRef.current) {
+      setQ("");
+      setEditing(false);
+    }
+  };
+  const cancelRef = React.useRef(cancel);
+  cancelRef.current = cancel;
+  React.useEffect(() => {
+    setEditing(false);
+    setQ("");
+  }, [ctx]);
   React.useEffect(() => setHi(0), [q, journey]);
   const results = React.useMemo(() => {
     const t = q.trim();
-    if (!t) return [];
+    if (!t || ctx && t === ctx) return [];
     if (journey === "schools") {
       const schools = window.EXJ.searchSchools(t).map(s => ({
         kind: "school",
@@ -45985,12 +52138,20 @@ function MBSearch({
     if (!r) return;
     setQ("");
     setOpen(false);
+    setEditing(false);
+    if (inRef.current) inRef.current.blur();
     if (r.kind === "school") return act.jumpSchool(r.id);
     if (journey === "agri") return act.setAgriOrigin(r.id);
     if (journey === "schools") return act.pickSchoolArea(r.id);
     act.pickArea(r.id);
   };
   const onKey = e => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      cancel();
+      if (ctxRef.current && inRef.current) inRef.current.blur();
+      return;
+    }
     if (!open || !results.length) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -46001,7 +52162,17 @@ function MBSearch({
     } else if (e.key === "Enter") {
       e.preventDefault();
       pick(results[hi]);
-    } else if (e.key === "Escape") setOpen(false);
+    }
+  };
+  const shown = editing || q ? q : ctx;
+  const onFocus = e => {
+    if (ctx && !q) {
+      setQ(ctx);
+      const el = e.target;
+      requestAnimationFrame(() => el.select());
+    }
+    setEditing(true);
+    setOpen(true);
   };
   const placeholder = journey === "schools" ? "Search a school or an area…" : journey === "agri" ? "Jump to a farmland search origin…" : "Search an area — try Hebbal";
   return /*#__PURE__*/React.createElement("div", {
@@ -46010,7 +52181,7 @@ function MBSearch({
     style: {
       position: "relative",
       flex: "1 1 200px",
-      minWidth: "150px",
+      minWidth: minW || "120px",
       display: "flex",
       alignItems: "center"
     }
@@ -46028,28 +52199,37 @@ function MBSearch({
     name: "search",
     size: 16
   })), /*#__PURE__*/React.createElement("input", {
-    value: q,
+    ref: inRef,
+    value: shown,
     onChange: e => {
       setQ(e.target.value);
+      setEditing(true);
       setOpen(true);
     },
-    onFocus: () => setOpen(true),
+    onFocus: onFocus,
+    onBlur: () => {
+      if (ctx) cancel();
+    },
     onKeyDown: onKey,
     placeholder: placeholder,
-    "aria-label": "Search",
+    "aria-label": ctx && !editing ? "Search — currently " + ctx : "Search",
+    title: shown || undefined,
+    "data-context": ctx && !editing ? "scope" : undefined,
     style: {
       width: "100%",
       padding: "0 32px 0 35px",
       height: "100%",
-      minHeight: "42px",
+      minHeight: "38px",
       border: "none",
       background: "transparent",
       fontFamily: "var(--font-sans)",
       fontSize: "13.5px",
+      textOverflow: "ellipsis",
       color: "var(--text-strong)",
       outline: "none"
     }
-  }), q && /*#__PURE__*/React.createElement("button", {
+  }), q && q !== ctx && /*#__PURE__*/React.createElement("button", {
+    onMouseDown: e => e.preventDefault(),
     onClick: () => {
       setQ("");
       setOpen(false);
@@ -46099,6 +52279,7 @@ function MBSearch({
     key: r.kind + r.id,
     role: "option",
     "aria-selected": i === hi,
+    onMouseDown: e => e.preventDefault(),
     onClick: () => pick(r),
     onMouseEnter: () => setHi(i),
     style: {
@@ -46168,9 +52349,198 @@ function ExpModeBar({
   st,
   act,
   view,
-  isMobile
+  isMobile,
+  inline,
+  part,
+  tight
 }) {
   const showCues = !isMobile && view.journeyRoot;
+  // Desktop one-row header: the global controls render inside ExpTopNav; the panel
+  // keeps only the contextual cues + Browse all listings at journey roots.
+  if (part === "header") return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "global-control-bar",
+    style: {
+      flex: "1 1 auto",
+      minWidth: "min-content",
+      maxWidth: "760px",
+      display: "flex",
+      alignItems: "stretch",
+      border: "1px solid var(--border)",
+      borderRadius: "var(--radius-md)",
+      background: "var(--surface-card)",
+      boxShadow: "var(--shadow-xs)",
+      height: "40px"
+    }
+  }, /*#__PURE__*/React.createElement(MBCityPill, {
+    city: st.city,
+    onCity: act.setCity
+  }), st.journey !== "agri" && /*#__PURE__*/React.createElement(MBBuyRent, {
+    value: st.filters.purpose,
+    com: st.filters.family === "Commercial",
+    onChange: v => act.setFilters({
+      purpose: v,
+      maxPrice: 0,
+      comMaxPrice: 0,
+      ptype: v === "Rent" && st.filters.ptype === "Plot" ? "Any type" : st.filters.ptype
+    })
+  }), /*#__PURE__*/React.createElement(MBSearch, {
+    st: st,
+    act: act,
+    view: view,
+    minW: HDR_SEARCH_MIN + "px"
+  })), /*#__PURE__*/React.createElement("div", {
+    role: "tablist",
+    "data-design-component": "mode-selector",
+    "aria-label": "Search journey",
+    style: {
+      flex: "none",
+      display: "flex",
+      alignItems: "center",
+      gap: tight ? "4px" : "6px"
+    }
+  }, MB_MODES.map(m => /*#__PURE__*/React.createElement(MBModePill, {
+    key: m.k,
+    m: m,
+    h: "38px",
+    short: true,
+    on: st.journey === m.k,
+    onSelect: () => act.setJourney(m.k)
+  }))));
+  if (part === "cues") return showCues ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "10px",
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1,
+      minWidth: "180px"
+    }
+  }, /*#__PURE__*/React.createElement(MBCues, {
+    journey: st.journey
+  })), st.journey !== "agri" && /*#__PURE__*/React.createElement("button", {
+    onClick: act.browseAll,
+    style: {
+      flex: "none",
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "5px",
+      border: "none",
+      background: "transparent",
+      cursor: "pointer",
+      padding: 0,
+      fontFamily: "var(--font-sans)",
+      fontSize: "12.5px",
+      fontWeight: 600,
+      color: "var(--text-muted)"
+    },
+    onMouseEnter: e => e.currentTarget.style.color = "var(--text-strong)",
+    onMouseLeave: e => e.currentTarget.style.color = "var(--text-muted)"
+  }, "Browse all listings ", /*#__PURE__*/React.createElement(MBIcon, {
+    name: "arrow-right",
+    size: 14
+  }))) : null;
+  // desktop listing skin splits the bar: journeys live in the global header centre,
+  // city + Buy/Rent + search keep the second row. Same components, same handlers.
+  if (part === "journeys") return /*#__PURE__*/React.createElement("div", {
+    role: "tablist",
+    "data-design-component": "mode-selector",
+    "aria-label": "Search journey",
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "8px"
+    }
+  }, MB_MODES.map(m => /*#__PURE__*/React.createElement(MBModePill, {
+    key: m.k,
+    m: m,
+    h: "38px",
+    on: st.journey === m.k,
+    onSelect: () => act.setJourney(m.k)
+  })));
+  if (part === "controls") return /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "global-control-bar",
+    style: {
+      display: "flex",
+      alignItems: "stretch",
+      maxWidth: "860px",
+      border: "1px solid var(--border)",
+      borderRadius: "var(--radius-md)",
+      background: "var(--surface-card)",
+      boxShadow: "var(--shadow-xs)",
+      minHeight: "42px"
+    }
+  }, /*#__PURE__*/React.createElement(MBCityPill, {
+    city: st.city,
+    onCity: act.setCity
+  }), st.journey !== "agri" && /*#__PURE__*/React.createElement(MBBuyRent, {
+    value: st.filters.purpose,
+    com: st.filters.family === "Commercial",
+    onChange: v => act.setFilters({
+      purpose: v,
+      maxPrice: 0,
+      comMaxPrice: 0,
+      ptype: v === "Rent" && st.filters.ptype === "Plot" ? "Any type" : st.filters.ptype
+    })
+  }), /*#__PURE__*/React.createElement(MBSearch, {
+    st: st,
+    act: act
+  }));
+  if (inline) return /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "global-control-row",
+    style: {
+      display: "flex",
+      alignItems: "stretch",
+      gap: "10px",
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "global-control-bar",
+    style: {
+      flex: "1 1 520px",
+      minWidth: 0,
+      display: "flex",
+      alignItems: "stretch",
+      border: "1px solid var(--border)",
+      borderRadius: "var(--radius-md)",
+      background: "var(--surface-card)",
+      boxShadow: "var(--shadow-xs)",
+      minHeight: "42px"
+    }
+  }, /*#__PURE__*/React.createElement(MBCityPill, {
+    city: st.city,
+    onCity: act.setCity
+  }), st.journey !== "agri" && /*#__PURE__*/React.createElement(MBBuyRent, {
+    value: st.filters.purpose,
+    com: st.filters.family === "Commercial",
+    onChange: v => act.setFilters({
+      purpose: v,
+      maxPrice: 0,
+      comMaxPrice: 0,
+      ptype: v === "Rent" && st.filters.ptype === "Plot" ? "Any type" : st.filters.ptype
+    })
+  }), /*#__PURE__*/React.createElement(MBSearch, {
+    st: st,
+    act: act
+  })), /*#__PURE__*/React.createElement("div", {
+    role: "tablist",
+    "data-design-component": "mode-selector",
+    "aria-label": "Search journey",
+    style: {
+      flex: "none",
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+      flexWrap: "wrap"
+    }
+  }, MB_MODES.map(m => /*#__PURE__*/React.createElement(MBModePill, {
+    key: m.k,
+    m: m,
+    on: st.journey === m.k,
+    onSelect: () => act.setJourney(m.k)
+  }))));
   return /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -46194,9 +52564,11 @@ function ExpModeBar({
     onCity: act.setCity
   }), st.journey !== "agri" && /*#__PURE__*/React.createElement(MBBuyRent, {
     value: st.filters.purpose,
+    com: st.filters.family === "Commercial",
     onChange: v => act.setFilters({
       purpose: v,
       maxPrice: 0,
+      comMaxPrice: 0,
       ptype: v === "Rent" && st.filters.ptype === "Plot" ? "Any type" : st.filters.ptype
     })
   }), /*#__PURE__*/React.createElement(MBSearch, {
@@ -46261,6 +52633,7 @@ Object.assign(window, {
 
 // ui_kits/new_discover/src/ExpPanel.jsx
 try { (() => {
+function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 // Discover experience — panel. One shell body for all three journeys:
 // the shared header (control bar + journey cards), then the journey's own body.
 // Density: in a results state the scope label, the area title and the listing
@@ -46270,7 +52643,13 @@ const {
   Icon: EIcon,
   Badge: EBadge
 } = window.ReTrendsDesignSystem_f37966;
-const EP = window.EXP;
+/* Lazy view of window.EXP: the design-system bundle evaluates this file
+// before EXP exists, so a value capture here would be undefined forever in that copy.
+// A Proxy resolves each property at access time instead. */
+const EP = new Proxy({}, {
+  get: (_t, k) => window.EXP ? window.EXP[k] : undefined,
+  has: (_t, k) => !!window.EXP && k in window.EXP
+});
 const SCOPE_TITLE = {
   AREA_SET: "Selected areas",
   CITY: "All listings",
@@ -46284,6 +52663,7 @@ function EPToolLabel({
   return /*#__PURE__*/React.createElement("span", {
     style: {
       flex: "none",
+      whiteSpace: "nowrap",
       fontSize: "10.5px",
       fontWeight: 700,
       letterSpacing: "var(--tracking-caps)",
@@ -46296,13 +52676,37 @@ function EPChip({
   label,
   on,
   onClick,
-  tone
+  tone,
+  mob
 }) {
   const acc = tone || "var(--accent)";
+  // flex:none + nowrap so a chip never shrinks or breaks its label mid-word; on
+  // mobile the chips wrap onto more lines instead, and grow to a 44px tap target.
+  if (mob) return /*#__PURE__*/React.createElement("button", {
+    onClick: onClick,
+    "aria-pressed": !!on,
+    style: {
+      flex: "none",
+      whiteSpace: "nowrap",
+      minHeight: "44px",
+      padding: "0 14px",
+      borderRadius: "var(--radius-full)",
+      cursor: "pointer",
+      fontFamily: "var(--font-sans)",
+      fontSize: "13px",
+      fontWeight: 600,
+      border: "1px solid " + (on ? acc : "var(--border)"),
+      background: on ? acc : "var(--surface-card)",
+      color: on ? "#fff" : "var(--text-body)",
+      transition: "background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast)"
+    }
+  }, label);
   return /*#__PURE__*/React.createElement("button", {
     onClick: onClick,
     "aria-pressed": !!on,
     style: {
+      flex: "none",
+      whiteSpace: "nowrap",
       padding: "6px 12px",
       borderRadius: "var(--radius-full)",
       cursor: "pointer",
@@ -46319,7 +52723,8 @@ function EPChip({
 function EPGhost({
   children,
   onClick,
-  strong
+  strong,
+  mob
 }) {
   const [h, setH] = React.useState(false);
   return /*#__PURE__*/React.createElement("button", {
@@ -46327,7 +52732,8 @@ function EPGhost({
     onMouseEnter: () => setH(true),
     onMouseLeave: () => setH(false),
     style: {
-      padding: "6px 11px",
+      minHeight: mob ? "44px" : undefined,
+      padding: mob ? "0 13px" : "6px 11px",
       borderRadius: "var(--radius-md)",
       cursor: "pointer",
       fontFamily: "var(--font-sans)",
@@ -46434,116 +52840,1397 @@ function EPNote({
   }, action));
 }
 
-// ---- filters (areas journey results) ---------------------------------------
-function EPFilters({
-  st,
-  act
+// ---- Commercial: one more option in the existing property-type filter -------
+// Identity colour is --gold-600, the one brand hue Discover had not claimed
+// (Areas copper, Schools plum, Agricultural evergreen).
+const COM_GOLD = "var(--gold-600)";
+function EPComTag({
+  sub,
+  small
 }) {
-  const f = st.filters;
-  const rent = f.purpose === "Rent";
-  const budgets = rent ? [{
-    k: 0,
-    l: "Any rent"
-  }, {
-    k: 20000,
-    l: "≤ ₹20k/mo"
-  }, {
-    k: 35000,
-    l: "≤ ₹35k/mo"
-  }, {
-    k: 60000,
-    l: "≤ ₹60k/mo"
-  }] : [{
-    k: 0,
-    l: "Any price"
-  }, {
-    k: 5000000,
-    l: "≤ ₹50 L"
-  }, {
-    k: 8000000,
-    l: "≤ ₹80 L"
-  }, {
-    k: 12000000,
-    l: "≤ ₹1.2 Cr"
-  }];
-  if (f.maxPrice && !budgets.some(b => b.k === f.maxPrice)) budgets.push({
-    k: f.maxPrice,
-    l: "≤ " + (rent ? EP.rentShort(f.maxPrice) : EP.inrShort(f.maxPrice))
-  });
-  return /*#__PURE__*/React.createElement("div", {
-    "data-design-component": "filter-toolbar",
+  return /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: small ? "5px" : "6px",
+      padding: small ? "3px 8px" : "4px 10px",
+      borderRadius: "var(--radius-full)",
+      background: "var(--gold-100)",
+      color: "var(--text-strong)",
+      fontSize: small ? "11px" : "12px",
+      fontWeight: 700,
+      letterSpacing: "-0.01em",
+      whiteSpace: "nowrap"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: "7px",
+      height: "7px",
+      borderRadius: "50%",
+      background: COM_GOLD,
+      flex: "none"
+    }
+  }), EP.comLabel(sub));
+}
+// the three price presentations — the only place anonymity is decided
+function EPComPrice({
+  l,
+  signedIn,
+  big
+}) {
+  const txt = EP.comPriceText(l, signedIn);
+  if (signedIn) return /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: "var(--font-mono)",
+      fontSize: big ? "26px" : "18px",
+      fontWeight: big ? 700 : 600,
+      color: "var(--text-strong)",
+      letterSpacing: "-0.01em"
+    }
+  }, txt);
+  if (txt) return /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "inline-flex",
+      alignItems: "baseline",
+      gap: "7px",
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: "var(--font-mono)",
+      fontSize: big ? "24px" : "17px",
+      fontWeight: 600,
+      color: "var(--text-strong)"
+    }
+  }, txt), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: big ? "12px" : "10.5px",
+      fontWeight: 700,
+      letterSpacing: "var(--tracking-caps)",
+      textTransform: "uppercase",
+      color: "var(--text-muted)"
+    }
+  }, "Price band"));
+  return /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "7px",
+      padding: big ? "7px 12px" : "5px 10px",
+      borderRadius: "var(--radius-md)",
+      background: "var(--surface-subtle)",
+      border: "1px solid var(--border)",
+      color: "var(--text-body)",
+      fontSize: big ? "14px" : "12.5px",
+      fontWeight: 600,
+      whiteSpace: "nowrap"
+    }
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: big ? 15 : 13,
+    height: big ? 15 : 13,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "var(--grey-500)",
+    strokeWidth: "2",
+    strokeLinecap: "round"
+  }, /*#__PURE__*/React.createElement("rect", {
+    x: "4",
+    y: "11",
+    width: "16",
+    height: "10",
+    rx: "2"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M8 11V7a4 4 0 0 1 8 0v4"
+  })), "Sign in to view price");
+}
+
+// ---- filters (areas journey results) ---------------------------------------
+// ONE filter group per row, label in a fixed left column so every heading owns
+// the chips beside it and no heading is ever pushed into another group's
+// leftover horizontal space. Order is always:
+//   TYPE               — the property FAMILY: Residential | Commercial
+//   <FAMILY> TYPE      — that family's own subtypes, and only that family's
+//   attributes         — one group per refinement that applies to what is selected
+// Attribute groups by context — area is available to EVERY Residential subtype:
+//   Apartment / Villa / House   Bedrooms · Carpet area · Budget
+//   Plots                       Plot size · Budget                  (never bedrooms)
+//   All residential (mixed)     Home bedrooms · Home carpet area · Plot size · Budget
+//   Commercial                  Area · Budget                       (never bedrooms)
+// Units live on the chips (`600+ sq ft`), so group labels stay short and the
+// label column never has to widen: CARPET AREA, PLOT SIZE, BUILT-UP AREA.
+function EPGroup({
+  label,
+  dc,
+  children,
+  isMobile,
+  rowStyle
+}) {
+  // Mobile is a genuinely different layout, not a squeezed desktop one: the label
+  // sits ON TOP of its own chips so it can never scroll away from them or read as
+  // belonging to a neighbouring group, and the chips wrap onto as many lines as
+  // they need at a 44px tap height. Nothing scrolls sideways.
+  if (isMobile) return /*#__PURE__*/React.createElement("div", {
+    "data-design-component": dc,
     style: {
       display: "flex",
       flexDirection: "column",
-      gap: "6px"
+      gap: "7px"
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(EPToolLabel, null, label), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
+      flexWrap: "wrap",
       alignItems: "center",
-      gap: "6px",
-      flexWrap: "wrap"
-    }
-  }, /*#__PURE__*/React.createElement(EPToolLabel, null, "Type"), (rent ? ["Any type", "Apartment", "Villa"] : ["Any type", "Apartment", "Villa", "Plot"]).map(t => /*#__PURE__*/React.createElement(EPChip, {
-    key: t,
-    label: t === "Any type" ? "All" : t + "s",
-    on: f.ptype === t,
-    onClick: () => act.setFilters({
-      ptype: t
-    })
-  })), /*#__PURE__*/React.createElement("span", {
-    style: {
-      marginLeft: "auto",
-      display: "flex",
       gap: "6px"
     }
-  }, /*#__PURE__*/React.createElement(EPChip, {
-    label: rent ? "Available now" : "Ready to move",
-    on: f.ready,
+  }, React.Children.map(children, c => React.isValidElement(c) ? React.cloneElement(c, {
+    mob: true
+  }) : c)));
+  return /*#__PURE__*/React.createElement("div", {
+    "data-design-component": dc,
+    style: {
+      display: "grid",
+      gridTemplateColumns: "96px minmax(0,1fr)",
+      columnGap: "9px",
+      alignItems: "start"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      paddingTop: "8px",
+      fontSize: "10.5px",
+      fontWeight: 700,
+      lineHeight: 1.25,
+      letterSpacing: "var(--tracking-caps)",
+      textTransform: "uppercase",
+      color: "var(--text-muted)"
+    }
+  }, label), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      alignItems: "center",
+      gap: "6px"
+    }
+  }, children));
+}
+const epShortArea = s => String(s || "").replace(" (sq ft)", "");
+function EPFilters({
+  st,
+  act,
+  isMobile,
+  expanded
+}) {
+  const f = st.filters;
+  const rent = f.purpose === "Rent";
+  const com = f.family === "Commercial";
+  const subs = f.comSubs || [];
+  const resTypes = rent ? ["Any type", "Apartment", "Villa"] : ["Any type", "Apartment", "Villa", "Plot"];
+  // Shared with filterLabels and the scope chips, so the row, the chips and the alert
+  // summary can never disagree about which controls apply.
+  const homes = EP.showsHomes(f),
+    plots = EP.showsPlots(f);
+  const plotOnly = plots && !homes;
+  const mixedRes = plots && homes;
+  const budgets = EP.budgetsFor(f);
+  const budgetVal = com ? f.comMaxPrice : f.maxPrice;
+  const setBudget = k => act.setFilters(com ? {
+    comMaxPrice: k
+  } : {
+    maxPrice: k
+  });
+  const budgetList = budgets.slice();
+  if (budgetVal && !budgetList.some(b => b.k === budgetVal)) budgetList.push({
+    k: budgetVal,
+    l: EP.budgetLabel(f, budgetVal)
+  });
+  const rowStyle = {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    flexWrap: "wrap"
+  };
+  const grp = {
+    isMobile,
+    rowStyle
+  };
+  // one hairline between the TYPE/subtype block and the attribute groups, so the
+  // panel reads as two intentional blocks rather than a stack of similar rows
+  const divider = isMobile ? null : /*#__PURE__*/React.createElement("span", {
+    style: {
+      height: "1px",
+      background: "var(--border)",
+      margin: "3px 0 4px"
+    }
+  });
+  const budgetGroup = /*#__PURE__*/React.createElement(EPGroup, _extends({}, grp, {
+    dc: "budget-group",
+    label: rent ? "Monthly rent" : "Budget"
+  }), budgetList.map(b => /*#__PURE__*/React.createElement(EPChip, {
+    key: "p" + b.k,
+    label: b.l,
+    on: budgetVal === b.k,
+    onClick: () => setBudget(b.k)
+  })));
+  const attrGroups = com ?
+  /*#__PURE__*/
+  // Area and Budget are separate groups: independent of each other, of the
+  // subtype selection and of the geography. Clearing subtypes never clears
+  // either — Reset commercial filters does.
+  React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(EPGroup, _extends({}, grp, {
+    dc: "commercial-area-group",
+    label: epShortArea(EP.comAreaLabel(f))
+  }), EP.COM_AREAS.map(a => /*#__PURE__*/React.createElement(EPChip, {
+    key: "a" + a.k,
+    label: a.l,
+    on: (f.comArea || 0) === a.k,
     onClick: () => act.setFilters({
-      ready: !f.ready
-    })
-  }), /*#__PURE__*/React.createElement(EPChip, {
-    label: "Verified only",
-    on: f.verified,
-    onClick: () => act.setFilters({
-      verified: !f.verified
+      comArea: a.k
     }),
-    tone: "var(--evergreen-600)"
-  }))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: "6px",
-      flexWrap: "wrap"
+    tone: COM_GOLD
+  }))), budgetGroup, (f.comMaxPrice || f.comArea || subs.length > 0 || f.verified) && /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "commercial-reset-row",
+    style: isMobile ? rowStyle : {
+      display: "grid",
+      gridTemplateColumns: "96px minmax(0,1fr)",
+      columnGap: "9px"
     }
-  }, /*#__PURE__*/React.createElement(EPToolLabel, null, "Beds"), [0, 1, 2, 3].map(b => /*#__PURE__*/React.createElement(EPChip, {
+  }, !isMobile && /*#__PURE__*/React.createElement("span", null), /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "flex"
+    }
+  }, /*#__PURE__*/React.createElement(EPGhost, {
+    mob: isMobile,
+    onClick: () => act.setFilters({
+      comSubs: [],
+      comMaxPrice: 0,
+      comArea: 0,
+      verified: false
+    })
+  }, "Reset commercial filters")))) :
+  /*#__PURE__*/
+  // Every Residential subtype gets an area filter; what changes is which one.
+  // Carpet area and plot size are separate fields and separate groups — in the
+  // mixed state each label names the inventory it governs.
+  React.createElement(React.Fragment, null, homes && /*#__PURE__*/React.createElement(EPGroup, _extends({}, grp, {
+    dc: "residential-beds-group",
+    label: mixedRes ? "Home bedrooms" : "Bedrooms"
+  }), [0, 1, 2, 3].map(b => /*#__PURE__*/React.createElement(EPChip, {
     key: b,
     label: b === 0 ? "Any" : b === 3 ? "3+" : String(b),
     on: f.beds === b,
     onClick: () => act.setFilters({
       beds: b
     })
-  })), /*#__PURE__*/React.createElement("span", {
-    style: {
-      width: "10px"
-    }
-  }), /*#__PURE__*/React.createElement(EPToolLabel, null, rent ? "Monthly rent" : "Budget"), budgets.map(b => /*#__PURE__*/React.createElement(EPChip, {
-    key: b.k,
-    label: b.l,
-    on: f.maxPrice === b.k,
+  }))), homes && /*#__PURE__*/React.createElement(EPGroup, _extends({}, grp, {
+    dc: "residential-carpet-group",
+    label: mixedRes ? "Home carpet area" : "Carpet area"
+  }), EP.CARPET_AREAS.map(a => /*#__PURE__*/React.createElement(EPChip, {
+    key: "c" + a.k,
+    label: a.l,
+    on: f.carpetArea === a.k,
     onClick: () => act.setFilters({
-      maxPrice: b.k
+      carpetArea: a.k
     })
-  }))));
+  }))), plots && /*#__PURE__*/React.createElement(EPGroup, _extends({}, grp, {
+    dc: "residential-plot-group",
+    label: "Plot size"
+  }), EP.PLOT_AREAS.map(a => /*#__PURE__*/React.createElement(EPChip, {
+    key: a.k,
+    label: a.l,
+    on: f.plotArea === a.k,
+    onClick: () => act.setFilters({
+      plotArea: a.k
+    })
+  }))), budgetGroup);
+  const activeAttrs = (com ? [f.comArea, f.comMaxPrice] : [f.beds, homes && f.carpetArea, plots && f.plotArea, f.maxPrice]).concat([f.ready, f.verified]).filter(Boolean).length;
+  const [open, setOpen] = React.useState(false);
+  // Collapsed is the default even with refinements set: what is currently applied
+  // is already stated by the active-filter chips in the result header below, so
+  // nothing is hidden — the count on the button only says how much is in there.
+  return /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "filter-toolbar",
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: isMobile ? "11px" : "5px"
+    }
+  }, /*#__PURE__*/React.createElement(EPGroup, _extends({}, grp, {
+    dc: "property-family-row",
+    label: "Type"
+  }), /*#__PURE__*/React.createElement(EPChip, {
+    label: "Residential",
+    on: !com,
+    onClick: () => act.setFamily("Residential")
+  }), /*#__PURE__*/React.createElement(EPChip, {
+    label: "Commercial",
+    on: com,
+    onClick: () => act.setFamily("Commercial"),
+    tone: COM_GOLD
+  }), !isMobile && /*#__PURE__*/React.createElement(EPChip, {
+    label: rent ? "Available now" : com ? "Ready to occupy" : "Ready to move",
+    on: f.ready,
+    onClick: () => act.setFilters({
+      ready: !f.ready
+    })
+  }), !isMobile && /*#__PURE__*/React.createElement(EPChip, {
+    label: "Broker identity verified",
+    on: f.verified,
+    onClick: () => act.setFilters({
+      verified: !f.verified
+    }),
+    tone: "var(--evergreen-600)"
+  })), com ?
+  /*#__PURE__*/
+  // five subtypes wrap onto a second line inside their own group rather than
+  // squeezing unrelated controls onto fewer rows
+  React.createElement(EPGroup, _extends({}, grp, {
+    dc: "commercial-subtype-row",
+    label: "Commercial type"
+  }), /*#__PURE__*/React.createElement(EPChip, {
+    label: "All commercial",
+    on: subs.length === 0,
+    onClick: () => act.setFilters({
+      comSubs: []
+    }),
+    tone: COM_GOLD
+  }), EP.com.SUBTYPES.map(s => /*#__PURE__*/React.createElement(EPChip, {
+    key: s.k,
+    label: s.label,
+    on: subs.indexOf(s.k) !== -1,
+    onClick: () => act.setFilters({
+      comSubs: subs.indexOf(s.k) !== -1 ? subs.filter(x => x !== s.k) : subs.concat(s.k)
+    }),
+    tone: COM_GOLD
+  })), subs.length > 0 && /*#__PURE__*/React.createElement(EPGhost, {
+    onClick: () => act.setFilters({
+      comSubs: []
+    })
+  }, "Clear commercial types")) : /*#__PURE__*/React.createElement(EPGroup, _extends({}, grp, {
+    dc: "residential-subtype-row",
+    label: "Residential type"
+  }), resTypes.map(t => /*#__PURE__*/React.createElement(EPChip, {
+    key: t,
+    label: t === "Any type" ? "All residential" : t + "s",
+    on: f.ptype === t,
+    onClick: () => act.setFilters({
+      ptype: t
+    })
+  })), f.ptype !== "Any type" && /*#__PURE__*/React.createElement(EPGhost, {
+    onClick: () => act.setFilters({
+      ptype: "Any type"
+    })
+  }, "Clear residential types")), divider, isMobile && expanded ?
+  /*#__PURE__*/
+  // #2627 — inside the mobile Map filter sheet every group is already one scroll
+  // away, so there is no disclosure: the same groups, in the same order, all open.
+  React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    style: {
+      height: "1px",
+      background: "var(--border)"
+    }
+  }), attrGroups, /*#__PURE__*/React.createElement(EPGroup, _extends({}, grp, {
+    dc: "standing-toggles-group",
+    label: "Only show"
+  }), /*#__PURE__*/React.createElement(EPChip, {
+    label: rent ? "Available now" : com ? "Ready to occupy" : "Ready to move",
+    on: f.ready,
+    onClick: () => act.setFilters({
+      ready: !f.ready
+    })
+  }), /*#__PURE__*/React.createElement(EPChip, {
+    label: "Broker identity verified",
+    on: f.verified,
+    onClick: () => act.setFilters({
+      verified: !f.verified
+    }),
+    tone: "var(--evergreen-600)"
+  }))) : isMobile ?
+  /*#__PURE__*/
+  // 390px cannot show six full-height groups and any results at the same time.
+  // Rather than shrinking the groups back into label-less sideways strips, the
+  // refinements sit behind one disclosure: the two decisions that change which
+  // inventory you are looking at (family, subtype) stay open, refinements are
+  // one tap away with a count of how many are set, and what is applied is
+  // always legible in the active-filter chips under the result heading.
+  React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setOpen(!open),
+    "aria-expanded": open,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "8px",
+      width: "100%",
+      minHeight: "44px",
+      padding: "0 13px",
+      borderRadius: "var(--radius-md)",
+      cursor: "pointer",
+      fontFamily: "var(--font-sans)",
+      fontSize: "13px",
+      fontWeight: 700,
+      color: "var(--text-strong)",
+      border: "1px solid var(--border-strong)",
+      background: "var(--paper)"
+    }
+  }, /*#__PURE__*/React.createElement("span", null, open ? "Fewer filters" : "More filters"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+      fontWeight: 600,
+      color: "var(--text-muted)"
+    }
+  }, !open && activeAttrs > 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: "var(--font-mono)",
+      fontSize: "11.5px"
+    }
+  }, activeAttrs, " set"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "11px"
+    }
+  }, open ? "\u2303" : "\u2304"))), open && /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "mobile-attribute-groups",
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: "11px"
+    }
+  }, /*#__PURE__*/React.createElement(EPGroup, _extends({}, grp, {
+    dc: "standing-toggles-group",
+    label: "Only show"
+  }), /*#__PURE__*/React.createElement(EPChip, {
+    label: rent ? "Available now" : com ? "Ready to occupy" : "Ready to move",
+    on: f.ready,
+    onClick: () => act.setFilters({
+      ready: !f.ready
+    })
+  }), /*#__PURE__*/React.createElement(EPChip, {
+    label: "Broker identity verified",
+    on: f.verified,
+    onClick: () => act.setFilters({
+      verified: !f.verified
+    }),
+    tone: "var(--evergreen-600)"
+  })), attrGroups)) : attrGroups);
+}
+// ---- desktop listing skin: compact sticky filter row --------------------------
+// Same filter state, same setters, same chips as EPFilters — each group collapses
+// into one dropdown pill so the row stays one line and pins while results scroll.
+function expListingSkin(st, view) {
+  return st.device !== "mobile" && view.journey === "areas" && NAV_LEVELS.indexOf(view.level) === -1 && !st.draft;
+}
+function EPDrop({
+  label,
+  active,
+  filled,
+  tone,
+  tint,
+  icon,
+  count,
+  align,
+  dc,
+  style,
+  children
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [h, setH] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const f = e => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    const k = e => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", f);
+    document.addEventListener("keydown", k);
+    return () => {
+      document.removeEventListener("mousedown", f);
+      document.removeEventListener("keydown", k);
+    };
+  }, [open]);
+  const acc = tone || "var(--accent)";
+  const fg = filled ? "#fff" : "var(--text-strong)";
+  return /*#__PURE__*/React.createElement("div", {
+    ref: ref,
+    "data-design-component": dc,
+    style: {
+      position: "relative",
+      flex: "none",
+      ...(style || {})
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setOpen(o => !o),
+    "aria-haspopup": "true",
+    "aria-expanded": open,
+    onMouseEnter: () => setH(true),
+    onMouseLeave: () => setH(false),
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "7px",
+      height: "34px",
+      padding: "0 9px 0 12px",
+      borderRadius: "var(--radius-full)",
+      cursor: "pointer",
+      whiteSpace: "nowrap",
+      fontFamily: "var(--font-sans)",
+      fontSize: "12.5px",
+      fontWeight: 600,
+      color: fg,
+      border: "1px solid " + (filled || active || open ? acc : "var(--border-strong)"),
+      background: filled ? acc : active ? tint || "var(--accent-tint)" : "var(--surface-card)",
+      boxShadow: h && !filled ? "var(--shadow-xs)" : "none",
+      filter: h && filled ? "brightness(1.06)" : "none",
+      transition: "border-color var(--dur-fast), background var(--dur-fast), box-shadow var(--dur-fast)"
+    }
+  }, icon && /*#__PURE__*/React.createElement(EIcon, {
+    name: icon,
+    size: 15,
+    color: fg
+  }), /*#__PURE__*/React.createElement("span", null, label), count > 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      minWidth: "18px",
+      height: "18px",
+      padding: "0 5px",
+      borderRadius: "var(--radius-full)",
+      background: "var(--navy-800)",
+      color: "#fff",
+      fontFamily: "var(--font-mono)",
+      fontSize: "10.5px",
+      fontWeight: 700,
+      display: "inline-grid",
+      placeItems: "center"
+    }
+  }, count), /*#__PURE__*/React.createElement(EIcon, {
+    name: "chevron-down",
+    size: 14,
+    color: filled ? "#fff" : "var(--grey-500)",
+    style: {
+      transform: open ? "rotate(180deg)" : "none",
+      transition: "transform var(--dur-fast)"
+    }
+  })), open && /*#__PURE__*/React.createElement("div", {
+    role: "dialog",
+    style: {
+      position: "absolute",
+      top: "calc(100% + 6px)",
+      [align === "right" ? "right" : "left"]: 0,
+      zIndex: 45,
+      minWidth: "250px",
+      maxWidth: "360px",
+      padding: "13px 14px",
+      display: "flex",
+      flexDirection: "column",
+      gap: "12px",
+      background: "var(--surface-card)",
+      border: "1px solid var(--border)",
+      borderRadius: "var(--radius-lg)",
+      boxShadow: "var(--shadow-lg)"
+    }
+  }, children));
+}
+function EPPop({
+  label,
+  children
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: "7px"
+    }
+  }, /*#__PURE__*/React.createElement(EPToolLabel, null, label), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: "6px"
+    }
+  }, children));
+}
+function EPFiltersCompact({
+  st,
+  act
+}) {
+  const f = st.filters;
+  const rent = f.purpose === "Rent";
+  const com = f.family === "Commercial";
+  const subs = f.comSubs || [];
+  const resTypes = rent ? ["Any type", "Apartment", "Villa"] : ["Any type", "Apartment", "Villa", "Plot"];
+  const homes = EP.showsHomes(f),
+    plots = EP.showsPlots(f);
+  const mixedRes = plots && homes;
+  const budgets = EP.budgetsFor(f);
+  const budgetVal = com ? f.comMaxPrice : f.maxPrice;
+  const setBudget = k => act.setFilters(com ? {
+    comMaxPrice: k
+  } : {
+    maxPrice: k
+  });
+  const budgetList = budgets.slice();
+  if (budgetVal && !budgetList.some(b => b.k === budgetVal)) budgetList.push({
+    k: budgetVal,
+    l: EP.budgetLabel(f, budgetVal)
+  });
+  const readyLabel = rent ? "Available now" : com ? "Ready to occupy" : "Ready to move";
+  const tone = com ? COM_GOLD : undefined;
+  const tint = com ? "var(--gold-100)" : undefined;
+  const sqft = n => n.toLocaleString("en-IN") + "+ sq ft";
+  const typeLabel = com ? subs.length === 0 ? "All types" : subs.length === 1 ? EP.comLabel(subs[0]) : subs.length + " types" : f.ptype === "Any type" ? "All types" : f.ptype + "s";
+  // Every group, in the same order as before. `drop` = collapse priority: when the row
+  // would overflow, the highest drop value moves into More filters first. Family and
+  // Budget never collapse.
+  const groups = [];
+  groups.push({
+    k: "type",
+    drop: 1,
+    active: com ? subs.length > 0 : f.ptype !== "Any type",
+    dc: com ? "commercial-subtype-row" : "residential-subtype-row",
+    label: typeLabel,
+    pop: /*#__PURE__*/React.createElement(React.Fragment, null, com ? /*#__PURE__*/React.createElement(EPPop, {
+      label: "Commercial type"
+    }, /*#__PURE__*/React.createElement(EPChip, {
+      label: "All commercial",
+      on: subs.length === 0,
+      onClick: () => act.setFilters({
+        comSubs: []
+      }),
+      tone: COM_GOLD
+    }), EP.com.SUBTYPES.map(s => /*#__PURE__*/React.createElement(EPChip, {
+      key: s.k,
+      label: s.label,
+      on: subs.indexOf(s.k) !== -1,
+      onClick: () => act.setFilters({
+        comSubs: subs.indexOf(s.k) !== -1 ? subs.filter(x => x !== s.k) : subs.concat(s.k)
+      }),
+      tone: COM_GOLD
+    }))) : /*#__PURE__*/React.createElement(EPPop, {
+      label: "Residential type"
+    }, resTypes.map(t => /*#__PURE__*/React.createElement(EPChip, {
+      key: t,
+      label: t === "Any type" ? "All residential" : t + "s",
+      on: f.ptype === t,
+      onClick: () => act.setFilters({
+        ptype: t
+      })
+    }))), com && subs.length > 0 && /*#__PURE__*/React.createElement("span", {
+      style: {
+        display: "flex"
+      }
+    }, /*#__PURE__*/React.createElement(EPGhost, {
+      onClick: () => act.setFilters({
+        comSubs: []
+      })
+    }, "Clear commercial types")), !com && f.ptype !== "Any type" && /*#__PURE__*/React.createElement("span", {
+      style: {
+        display: "flex"
+      }
+    }, /*#__PURE__*/React.createElement(EPGhost, {
+      onClick: () => act.setFilters({
+        ptype: "Any type"
+      })
+    }, "Clear residential types")))
+  });
+  if (!com && homes) groups.push({
+    k: "beds",
+    drop: 2,
+    active: f.beds > 0,
+    dc: "residential-beds-group",
+    label: f.beds ? f.beds + "+ BHK" : "BHK",
+    pop: /*#__PURE__*/React.createElement(EPPop, {
+      label: mixedRes ? "Home bedrooms" : "Bedrooms"
+    }, [0, 1, 2, 3].map(b => /*#__PURE__*/React.createElement(EPChip, {
+      key: b,
+      label: b === 0 ? "Any" : b === 3 ? "3+" : String(b),
+      on: f.beds === b,
+      onClick: () => act.setFilters({
+        beds: b
+      })
+    })))
+  });
+  if (!com && homes) groups.push({
+    k: "carpet",
+    drop: 4,
+    active: f.carpetArea > 0,
+    dc: "residential-carpet-group",
+    label: f.carpetArea ? sqft(f.carpetArea) : "Carpet area",
+    pop: /*#__PURE__*/React.createElement(EPPop, {
+      label: mixedRes ? "Home carpet area" : "Carpet area"
+    }, EP.CARPET_AREAS.map(a => /*#__PURE__*/React.createElement(EPChip, {
+      key: "c" + a.k,
+      label: a.l,
+      on: f.carpetArea === a.k,
+      onClick: () => act.setFilters({
+        carpetArea: a.k
+      })
+    })))
+  });
+  if (!com && plots) groups.push({
+    k: "plot",
+    drop: 5,
+    active: f.plotArea > 0,
+    dc: "residential-plot-group",
+    label: f.plotArea ? sqft(f.plotArea) + " plot" : "Plot size",
+    pop: /*#__PURE__*/React.createElement(EPPop, {
+      label: "Plot size"
+    }, EP.PLOT_AREAS.map(a => /*#__PURE__*/React.createElement(EPChip, {
+      key: a.k,
+      label: a.l,
+      on: f.plotArea === a.k,
+      onClick: () => act.setFilters({
+        plotArea: a.k
+      })
+    })))
+  });
+  if (com) groups.push({
+    k: "comArea",
+    drop: 3,
+    active: f.comArea > 0,
+    dc: "commercial-area-group",
+    label: f.comArea ? sqft(f.comArea) : epShortArea(EP.comAreaLabel(f)),
+    pop: /*#__PURE__*/React.createElement(EPPop, {
+      label: epShortArea(EP.comAreaLabel(f))
+    }, EP.COM_AREAS.map(a => /*#__PURE__*/React.createElement(EPChip, {
+      key: "a" + a.k,
+      label: a.l,
+      on: (f.comArea || 0) === a.k,
+      onClick: () => act.setFilters({
+        comArea: a.k
+      }),
+      tone: COM_GOLD
+    })))
+  });
+  groups.push({
+    k: "budget",
+    drop: 0,
+    active: budgetVal > 0,
+    dc: "budget-group",
+    label: budgetVal ? EP.budgetLabel(f, budgetVal) : rent ? "Monthly rent" : "Budget",
+    pop: /*#__PURE__*/React.createElement(EPPop, {
+      label: rent ? "Monthly rent" : "Budget"
+    }, budgetList.map(b => /*#__PURE__*/React.createElement(EPChip, {
+      key: "p" + b.k,
+      label: b.l,
+      on: budgetVal === b.k,
+      onClick: () => setBudget(b.k)
+    })))
+  });
+  // collapse loop: measured, never guessed. Reset on any width change or when the
+  // group set changes; each layout pass that still overflows moves one more group.
+  const rowRef = React.useRef(null);
+  const [nHide, setNHide] = React.useState(0);
+  const sig = groups.map(g => g.k + ":" + g.label).join("|");
+  const collapsible = groups.filter(g => g.drop > 0).sort((a, b) => b.drop - a.drop);
+  const hidden = collapsible.slice(0, nHide).map(g => g.k);
+  React.useLayoutEffect(() => {
+    setNHide(0);
+  }, [sig]);
+  React.useLayoutEffect(() => {
+    const el = rowRef.current;
+    if (el && el.scrollWidth > el.clientWidth + 1 && nHide < collapsible.length) setNHide(nHide + 1);
+  });
+  React.useEffect(() => {
+    const el = rowRef.current;
+    if (!el || !window.ResizeObserver) return;
+    let w = el.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (Math.abs(el.clientWidth - w) > 1) {
+        w = el.clientWidth;
+        setNHide(0);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const moved = groups.filter(g => hidden.indexOf(g.k) !== -1);
+  const more = (f.ready ? 1 : 0) + (f.verified ? 1 : 0) + moved.filter(g => g.active).length;
+  return /*#__PURE__*/React.createElement("div", {
+    ref: rowRef,
+    "data-design-component": "filter-toolbar",
+    role: "toolbar",
+    "aria-label": "Property filters",
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "6px",
+      flexWrap: "nowrap",
+      minWidth: 0
+    }
+  }, /*#__PURE__*/React.createElement(EPDrop, {
+    dc: "property-family-row",
+    label: com ? "Commercial" : "Residential",
+    filled: true,
+    tone: com ? COM_GOLD : "var(--accent)"
+  }, /*#__PURE__*/React.createElement(EPPop, {
+    label: "Property family"
+  }, /*#__PURE__*/React.createElement(EPChip, {
+    label: "Residential",
+    on: !com,
+    onClick: () => act.setFamily("Residential")
+  }), /*#__PURE__*/React.createElement(EPChip, {
+    label: "Commercial",
+    on: com,
+    onClick: () => act.setFamily("Commercial"),
+    tone: COM_GOLD
+  }))), groups.filter(g => hidden.indexOf(g.k) === -1).map(g => /*#__PURE__*/React.createElement(EPDrop, {
+    key: g.k,
+    dc: g.dc,
+    label: g.label,
+    active: g.active,
+    tone: tone,
+    tint: tint
+  }, g.pop)), /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: "1 0 0px"
+    }
+  }), /*#__PURE__*/React.createElement(EPDrop, {
+    dc: "standing-toggles-group",
+    label: "More filters",
+    icon: "sliders-horizontal",
+    count: more,
+    align: "right"
+  }, moved.map(g => /*#__PURE__*/React.createElement(React.Fragment, {
+    key: g.k
+  }, g.pop)), /*#__PURE__*/React.createElement(EPPop, {
+    label: "Only show"
+  }, /*#__PURE__*/React.createElement(EPChip, {
+    label: readyLabel,
+    on: f.ready,
+    onClick: () => act.setFilters({
+      ready: !f.ready
+    })
+  }), /*#__PURE__*/React.createElement(EPChip, {
+    label: "Broker identity verified",
+    on: f.verified,
+    onClick: () => act.setFilters({
+      verified: !f.verified
+    }),
+    tone: "var(--evergreen-600)"
+  })), com && (f.comMaxPrice || f.comArea || subs.length > 0 || f.verified) && /*#__PURE__*/React.createElement("span", {
+    "data-design-component": "commercial-reset-row",
+    style: {
+      display: "flex"
+    }
+  }, /*#__PURE__*/React.createElement(EPGhost, {
+    onClick: () => act.setFilters({
+      comSubs: [],
+      comMaxPrice: 0,
+      comArea: 0,
+      verified: false
+    })
+  }, "Reset commercial filters"))));
+}
+// menu of scope operations — every action the old chip row had, one click deeper
+function EPMenu({
+  label,
+  items,
+  dc
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [h, setH] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const f = e => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    const k = e => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", f);
+    document.addEventListener("keydown", k);
+    return () => {
+      document.removeEventListener("mousedown", f);
+      document.removeEventListener("keydown", k);
+    };
+  }, [open]);
+  return /*#__PURE__*/React.createElement("span", {
+    ref: ref,
+    "data-design-component": dc,
+    style: {
+      position: "relative",
+      display: "inline-flex",
+      flex: "none"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setOpen(o => !o),
+    "aria-haspopup": "menu",
+    "aria-expanded": open,
+    onMouseEnter: () => setH(true),
+    onMouseLeave: () => setH(false),
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "4px",
+      height: "26px",
+      padding: "0 8px",
+      borderRadius: "var(--radius-sm)",
+      border: "1px solid " + (open ? "var(--border-strong)" : "transparent"),
+      background: h || open ? "var(--surface-subtle)" : "transparent",
+      cursor: "pointer",
+      fontFamily: "var(--font-sans)",
+      fontSize: "12.5px",
+      fontWeight: 600,
+      color: "var(--text-strong)",
+      whiteSpace: "nowrap"
+    }
+  }, label, /*#__PURE__*/React.createElement(EIcon, {
+    name: "chevron-down",
+    size: 13,
+    color: "var(--grey-500)",
+    style: {
+      transform: open ? "rotate(180deg)" : "none",
+      transition: "transform var(--dur-fast)"
+    }
+  })), open && /*#__PURE__*/React.createElement("div", {
+    role: "menu",
+    style: {
+      position: "absolute",
+      top: "calc(100% + 5px)",
+      left: 0,
+      zIndex: 46,
+      minWidth: "210px",
+      padding: "5px",
+      background: "var(--surface-card)",
+      border: "1px solid var(--border)",
+      borderRadius: "var(--radius-lg)",
+      boxShadow: "var(--shadow-lg)"
+    }
+  }, items.filter(Boolean).map(it => /*#__PURE__*/React.createElement("button", {
+    key: it.label,
+    role: "menuitem",
+    onClick: () => {
+      setOpen(false);
+      it.onClick();
+    },
+    onMouseEnter: e => e.currentTarget.style.background = "var(--surface-subtle)",
+    onMouseLeave: e => e.currentTarget.style.background = "transparent",
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "9px",
+      width: "100%",
+      textAlign: "left",
+      padding: "8px 10px",
+      border: "none",
+      borderRadius: "var(--radius-md)",
+      background: "transparent",
+      cursor: "pointer",
+      fontFamily: "var(--font-sans)",
+      fontSize: "13px",
+      fontWeight: it.strong ? 700 : 600,
+      color: "var(--text-strong)"
+    }
+  }, /*#__PURE__*/React.createElement(EIcon, {
+    name: it.icon,
+    size: 15,
+    color: "var(--grey-500)"
+  }), it.label))));
+}
+// in-scope listing search, collapsed to one pill until used; same act.setQuery
+function EPSearchPill({
+  label,
+  st,
+  act
+}) {
+  const [q, setQ] = React.useState(st.query || "");
+  const [open, setOpen] = React.useState(!!st.query);
+  const inRef = React.useRef(null);
+  React.useEffect(() => {
+    setQ(st.query || "");
+    if (st.query) setOpen(true);
+  }, [st.query, label]);
+  React.useEffect(() => {
+    if (open && inRef.current && !q) inRef.current.focus();
+  }, [open]);
+  if (!open) return /*#__PURE__*/React.createElement("button", {
+    "data-design-component": "property-search",
+    onClick: () => setOpen(true),
+    title: "Search " + label + " by road, project or landmark",
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "7px",
+      height: "36px",
+      padding: "0 12px",
+      borderRadius: "var(--radius-md)",
+      border: "1px solid var(--border-strong)",
+      background: "var(--surface-card)",
+      cursor: "pointer",
+      fontFamily: "var(--font-sans)",
+      fontSize: "13px",
+      fontWeight: 600,
+      color: "var(--text-strong)",
+      whiteSpace: "nowrap"
+    }
+  }, /*#__PURE__*/React.createElement(EIcon, {
+    name: "search",
+    size: 15,
+    color: "var(--grey-500)"
+  }), "Search ", label);
+  return /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "property-search",
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "7px",
+      width: "250px",
+      maxWidth: "100%",
+      height: "36px",
+      padding: "0 10px",
+      background: "var(--surface-card)",
+      border: "1px solid var(--accent)",
+      borderRadius: "var(--radius-md)"
+    }
+  }, /*#__PURE__*/React.createElement(EIcon, {
+    name: "search",
+    size: 15,
+    color: "var(--accent)"
+  }), /*#__PURE__*/React.createElement("input", {
+    ref: inRef,
+    value: q,
+    onChange: e => {
+      setQ(e.target.value);
+      act.setQuery(e.target.value);
+    },
+    onBlur: () => {
+      if (!q) setOpen(false);
+    },
+    onKeyDown: e => {
+      if (e.key === "Escape" && !q) setOpen(false);
+    },
+    placeholder: "Road, project or landmark…",
+    "aria-label": "Search " + label + " by road, project or landmark",
+    style: {
+      flex: 1,
+      minWidth: 0,
+      border: "none",
+      outline: "none",
+      background: "transparent",
+      fontFamily: "var(--font-sans)",
+      fontSize: "13px",
+      color: "var(--text-strong)"
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    onMouseDown: e => e.preventDefault(),
+    onClick: () => {
+      setQ("");
+      act.setQuery("");
+      setOpen(false);
+    },
+    "aria-label": "Close search",
+    style: {
+      border: "none",
+      background: "var(--surface-subtle)",
+      cursor: "pointer",
+      borderRadius: "var(--radius-full)",
+      width: "20px",
+      height: "20px",
+      display: "grid",
+      placeItems: "center",
+      padding: 0
+    }
+  }, /*#__PURE__*/React.createElement(EIcon, {
+    name: "x",
+    size: 12,
+    color: "var(--text-muted)"
+  })));
+}
+// Desktop listing header: title + search + sort on one line; count, scope chips
+// and the scope-operations menu on the second. Replaces the full-width chip row.
+function EPResultHeadSkin({
+  view,
+  st,
+  act,
+  sort,
+  onSort
+}) {
+  const kind = view.scopeKind;
+  const keys = view.committed;
+  const h = view.heading;
+  const total = view.scopeTotal;
+  const searchLabel = kind === "HIERARCHY" ? view.scopeLabel : view.areaActions && keys[0] ? EP.byKey[keys[0]].name : null;
+  const chip = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "5px",
+    padding: "3px 8px",
+    borderRadius: "var(--radius-xs)",
+    background: "var(--surface-subtle)",
+    border: "1px solid var(--border)",
+    fontSize: "12.5px",
+    fontWeight: 600,
+    color: "var(--text-strong)",
+    whiteSpace: "nowrap"
+  };
+  const x = {
+    border: "none",
+    background: "transparent",
+    padding: 0,
+    cursor: "pointer",
+    color: "inherit",
+    opacity: 0.6,
+    fontSize: "14px",
+    lineHeight: 1
+  };
+  const back = (kind === "VIEWPORT" || kind === "POLYGON") && st.prevScope;
+  const menu = kind === "AREA_SET" ? {
+    label: "Edit areas",
+    items: [{
+      label: "Add or remove areas",
+      icon: "pencil",
+      onClick: act.openDraft,
+      strong: true
+    }, {
+      label: "Draw search area",
+      icon: "route",
+      onClick: act.drawArea
+    }, {
+      label: "Clear selected areas",
+      icon: "x",
+      onClick: act.clearScope
+    }, {
+      label: "Create alert",
+      icon: "alert-triangle",
+      onClick: act.openAlertForm
+    }]
+  } : kind === "CITY" ? {
+    label: "Options",
+    items: [{
+      label: "Draw search area",
+      icon: "route",
+      onClick: act.drawArea
+    }, {
+      label: "Create alert",
+      icon: "alert-triangle",
+      onClick: act.openAlertForm
+    }]
+  } : kind ? {
+    label: "Options",
+    items: [{
+      label: "Create alert",
+      icon: "alert-triangle",
+      onClick: act.openAlertForm
+    }]
+  } : null;
+  return /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "scope-bar",
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: "5px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "results-header",
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "10px 14px",
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("h2", {
+    style: {
+      margin: 0,
+      flex: "1 1 200px",
+      minWidth: 0,
+      fontFamily: "var(--font-serif)",
+      fontSize: "24px",
+      fontWeight: 600,
+      letterSpacing: "-0.02em",
+      color: "var(--text-strong)",
+      lineHeight: 1.15,
+      textWrap: "pretty"
+    }
+  }, h.title), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: "none",
+      display: "flex",
+      alignItems: "center",
+      gap: "8px"
+    }
+  }, searchLabel && /*#__PURE__*/React.createElement(EPSearchPill, {
+    label: searchLabel,
+    st: st,
+    act: act
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      position: "relative",
+      display: "inline-flex"
+    }
+  }, /*#__PURE__*/React.createElement("select", {
+    value: sort,
+    onChange: e => onSort(e.target.value),
+    "data-design-component": "sort-select",
+    "aria-label": "Sort by",
+    style: {
+      appearance: "none",
+      WebkitAppearance: "none",
+      height: "36px",
+      padding: "0 32px 0 12px",
+      borderRadius: "var(--radius-md)",
+      border: "1px solid var(--border-strong)",
+      background: "var(--surface-card)",
+      fontFamily: "var(--font-sans)",
+      fontSize: "13px",
+      fontWeight: 600,
+      color: "var(--text-strong)",
+      cursor: "pointer"
+    }
+  }, EP_SORTS.map(o => /*#__PURE__*/React.createElement("option", {
+    key: o.k,
+    value: o.k
+  }, o.k === "rel" ? "Sort: Relevance" : o.l))), /*#__PURE__*/React.createElement("span", {
+    style: {
+      position: "absolute",
+      right: "10px",
+      top: "50%",
+      transform: "translateY(-50%)",
+      display: "flex",
+      pointerEvents: "none"
+    }
+  }, /*#__PURE__*/React.createElement(EIcon, {
+    name: "chevron-down",
+    size: 14,
+    color: "var(--grey-500)"
+  }))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "6px",
+      flexWrap: "wrap",
+      minHeight: "26px"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "13px",
+      color: "var(--text-muted)",
+      whiteSpace: "nowrap",
+      marginRight: "4px"
+    }
+  }, st.phase === "loading" ? "loading…" : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: "var(--font-mono)",
+      fontWeight: 600,
+      color: total === 0 ? "var(--brick-600)" : "var(--text-strong)"
+    }
+  }, total), " ", h.stat ? h.stat.l : "listings")), kind === "AREA_SET" && keys.length > 1 && keys.map(k => {
+    const on = view.focusChip === k;
+    return /*#__PURE__*/React.createElement("span", {
+      key: k,
+      style: {
+        ...chip,
+        background: on ? "var(--navy-800)" : chip.background,
+        color: on ? "#fff" : chip.color
+      }
+    }, /*#__PURE__*/React.createElement(EIcon, {
+      name: "map-pin",
+      size: 12,
+      color: on ? "#fff" : "var(--copper-500)"
+    }), /*#__PURE__*/React.createElement("button", {
+      onClick: () => act.focusChip(k),
+      style: {
+        border: "none",
+        background: "transparent",
+        padding: 0,
+        cursor: "pointer",
+        fontFamily: "var(--font-sans)",
+        fontSize: "12.5px",
+        fontWeight: 600,
+        color: "inherit"
+      }
+    }, EP.byKey[k].name), /*#__PURE__*/React.createElement("button", {
+      onClick: () => act.removeCommitted(k),
+      "aria-label": "Remove " + EP.byKey[k].name,
+      style: x
+    }, "\xD7"));
+  }), kind === "HIERARCHY" && view.hierarchyAreas.map(a => /*#__PURE__*/React.createElement("span", {
+    key: a.key,
+    style: {
+      ...chip,
+      color: "var(--text-body)"
+    }
+  }, /*#__PURE__*/React.createElement(EIcon, {
+    name: "map-pin",
+    size: 11,
+    color: "var(--copper-500)"
+  }), a.name)), kind === "CITY" && /*#__PURE__*/React.createElement("span", {
+    style: chip
+  }, /*#__PURE__*/React.createElement(EIcon, {
+    name: "layers",
+    size: 12,
+    color: "var(--copper-500)"
+  }), "Every area in Bangalore"), kind === "POLYGON" && /*#__PURE__*/React.createElement("span", {
+    style: {
+      ...chip,
+      background: "var(--accent-tint)",
+      border: "1px solid var(--accent)",
+      fontWeight: 700,
+      color: "var(--copper-600)"
+    }
+  }, "Drawn area", /*#__PURE__*/React.createElement("button", {
+    onClick: act.returnToAreas,
+    style: {
+      ...x,
+      opacity: 1
+    }
+  }, "\xD7")), kind === "VIEWPORT" && /*#__PURE__*/React.createElement("span", {
+    style: {
+      ...chip,
+      background: "var(--navy-100)",
+      border: "1px solid var(--navy-600)",
+      fontWeight: 700,
+      color: "var(--navy-700)"
+    }
+  }, "Visible map area"), back && /*#__PURE__*/React.createElement(EPGhost, {
+    strong: true,
+    onClick: act.returnToAreas
+  }, "Return to ", st.prevScope.kind === "AREA_SET" ? st.prevScope.areaKeys.map(k => EP.byKey[k].name).join(" + ") : "all listings"), menu && /*#__PURE__*/React.createElement(EPMenu, {
+    dc: "scope-actions-menu",
+    label: menu.label,
+    items: menu.items
+  })));
+}
+const EP_SORTS = [{
+  k: "rel",
+  l: "Relevance"
+}, {
+  k: "pa",
+  l: "Price: low to high"
+}, {
+  k: "pd",
+  l: "Price: high to low"
+}, {
+  k: "sz",
+  l: "Size: largest first"
+}];
+function epSorted(list, sort, f) {
+  if (!sort || sort === "rel") return list;
+  const rent = f.purpose === "Rent";
+  const p = l => (rent ? l.rent != null ? l.rent : l.price : l.price) || 0;
+  const out = list.slice();
+  if (sort === "pa") out.sort((a, b) => p(a) - p(b));else if (sort === "pd") out.sort((a, b) => p(b) - p(a));else if (sort === "sz") out.sort((a, b) => (b.sqft || 0) - (a.sqft || 0));
+  return out;
 }
 
 // ---- ONE result header: scope · title · count · scope controls ---------------
 function EPResultHead({
   view,
   st,
-  act
+  act,
+  skin,
+  sort,
+  onSort
 }) {
+  if (skin && !st.draft) return /*#__PURE__*/React.createElement(EPResultHeadSkin, {
+    view: view,
+    st: st,
+    act: act,
+    sort: sort,
+    onSort: onSort
+  });
   const draft = !!st.draft;
   const kind = draft ? "AREA_SET" : view.scopeKind;
   const keys = draft ? st.draft : view.committed;
@@ -46736,7 +54423,255 @@ function EPResultHead({
       fontWeight: 700,
       color: "var(--navy-700)"
     }
-  }, "Visible map area"), !draft && kind === "AREA_SET" && /*#__PURE__*/React.createElement(EPGhost, {
+  }, "Visible map area"), st.filters.family === "Commercial" && (st.filters.comSubs || []).map(k => /*#__PURE__*/React.createElement("span", {
+    key: k,
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "6px",
+      padding: "5px 8px",
+      borderRadius: "var(--radius-xs)",
+      background: "var(--surface-subtle)",
+      border: "1px solid var(--border)",
+      fontSize: "12.5px",
+      fontWeight: 600,
+      color: "var(--text-strong)"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: "7px",
+      height: "7px",
+      borderRadius: "50%",
+      background: COM_GOLD
+    }
+  }), EP.comLabel(k), /*#__PURE__*/React.createElement("button", {
+    onClick: () => act.setFilters({
+      comSubs: st.filters.comSubs.filter(x => x !== k)
+    }),
+    "aria-label": "Remove " + EP.comLabel(k),
+    style: {
+      border: "none",
+      background: "transparent",
+      padding: 0,
+      cursor: "pointer",
+      color: "inherit",
+      opacity: 0.6,
+      fontSize: "14px",
+      lineHeight: 1
+    }
+  }, "\xD7"))), st.filters.family === "Commercial" && !(st.filters.comSubs || []).length && /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "6px",
+      padding: "5px 8px",
+      borderRadius: "var(--radius-xs)",
+      background: "var(--gold-100)",
+      border: "1px solid rgba(138,106,34,0.28)",
+      fontSize: "12.5px",
+      fontWeight: 700,
+      color: "var(--text-strong)"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: "7px",
+      height: "7px",
+      borderRadius: "50%",
+      background: COM_GOLD
+    }
+  }), "All commercial"), st.filters.family === "Commercial" && (st.filters.comSubs || []).length > 0 && /*#__PURE__*/React.createElement(EPGhost, {
+    onClick: () => act.setFilters({
+      comSubs: []
+    })
+  }, "Clear commercial types"), st.filters.family === "Commercial" && st.filters.comArea > 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "6px",
+      padding: "5px 8px",
+      borderRadius: "var(--radius-xs)",
+      background: "var(--surface-subtle)",
+      border: "1px solid var(--border)",
+      fontSize: "12.5px",
+      fontWeight: 600,
+      color: "var(--text-strong)"
+    }
+  }, /*#__PURE__*/React.createElement(EIcon, {
+    name: "maximize",
+    size: 12,
+    color: "var(--navy-700)"
+  }), st.filters.comArea.toLocaleString("en-IN"), "+ sq ft", /*#__PURE__*/React.createElement("button", {
+    onClick: () => act.setFilters({
+      comArea: 0
+    }),
+    "aria-label": "Remove area",
+    style: {
+      border: "none",
+      background: "transparent",
+      padding: 0,
+      cursor: "pointer",
+      color: "inherit",
+      opacity: 0.6,
+      fontSize: "14px",
+      lineHeight: 1
+    }
+  }, "\xD7")), st.filters.family === "Commercial" && st.filters.comMaxPrice > 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "6px",
+      padding: "5px 8px",
+      borderRadius: "var(--radius-xs)",
+      background: "var(--surface-subtle)",
+      border: "1px solid var(--border)",
+      fontSize: "12.5px",
+      fontWeight: 600,
+      color: "var(--text-strong)"
+    }
+  }, EP.budgetLabel(st.filters, st.filters.comMaxPrice), /*#__PURE__*/React.createElement("button", {
+    onClick: () => act.setFilters({
+      comMaxPrice: 0
+    }),
+    "aria-label": "Remove budget",
+    style: {
+      border: "none",
+      background: "transparent",
+      padding: 0,
+      cursor: "pointer",
+      color: "inherit",
+      opacity: 0.6,
+      fontSize: "14px",
+      lineHeight: 1
+    }
+  }, "\xD7")), st.filters.family !== "Commercial" && EP.showsPlots(st.filters) && st.filters.plotArea > 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "6px",
+      padding: "5px 8px",
+      borderRadius: "var(--radius-xs)",
+      background: "var(--surface-subtle)",
+      border: "1px solid var(--border)",
+      fontSize: "12.5px",
+      fontWeight: 600,
+      color: "var(--text-strong)"
+    }
+  }, /*#__PURE__*/React.createElement(EIcon, {
+    name: "maximize",
+    size: 12,
+    color: "var(--navy-700)"
+  }), st.filters.plotArea.toLocaleString("en-IN"), "+ sq ft plot", /*#__PURE__*/React.createElement("button", {
+    onClick: () => act.setFilters({
+      plotArea: 0
+    }),
+    "aria-label": "Remove plot size",
+    style: {
+      border: "none",
+      background: "transparent",
+      padding: 0,
+      cursor: "pointer",
+      color: "inherit",
+      opacity: 0.6,
+      fontSize: "14px",
+      lineHeight: 1
+    }
+  }, "\xD7")), st.filters.family !== "Commercial" && EP.showsHomes(st.filters) && st.filters.carpetArea > 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "6px",
+      padding: "5px 8px",
+      borderRadius: "var(--radius-xs)",
+      background: "var(--surface-subtle)",
+      border: "1px solid var(--border)",
+      fontSize: "12.5px",
+      fontWeight: 600,
+      color: "var(--text-strong)"
+    }
+  }, /*#__PURE__*/React.createElement(EIcon, {
+    name: "maximize",
+    size: 12,
+    color: "var(--navy-700)"
+  }), st.filters.carpetArea.toLocaleString("en-IN"), "+ sq ft carpet", /*#__PURE__*/React.createElement("button", {
+    onClick: () => act.setFilters({
+      carpetArea: 0
+    }),
+    "aria-label": "Remove carpet area",
+    style: {
+      border: "none",
+      background: "transparent",
+      padding: 0,
+      cursor: "pointer",
+      color: "inherit",
+      opacity: 0.6,
+      fontSize: "14px",
+      lineHeight: 1
+    }
+  }, "\xD7")), st.filters.family !== "Commercial" && EP.showsHomes(st.filters) && st.filters.beds > 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "6px",
+      padding: "5px 8px",
+      borderRadius: "var(--radius-xs)",
+      background: "var(--surface-subtle)",
+      border: "1px solid var(--border)",
+      fontSize: "12.5px",
+      fontWeight: 600,
+      color: "var(--text-strong)"
+    }
+  }, /*#__PURE__*/React.createElement(EIcon, {
+    name: "bed",
+    size: 12,
+    color: "var(--navy-700)"
+  }), st.filters.beds, "+ BHK", /*#__PURE__*/React.createElement("button", {
+    onClick: () => act.setFilters({
+      beds: 0
+    }),
+    "aria-label": "Remove bedrooms",
+    style: {
+      border: "none",
+      background: "transparent",
+      padding: 0,
+      cursor: "pointer",
+      color: "inherit",
+      opacity: 0.6,
+      fontSize: "14px",
+      lineHeight: 1
+    }
+  }, "\xD7")), st.filters.family !== "Commercial" && st.filters.ptype !== "Any type" && /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "6px",
+      padding: "5px 8px",
+      borderRadius: "var(--radius-xs)",
+      background: "var(--surface-subtle)",
+      border: "1px solid var(--border)",
+      fontSize: "12.5px",
+      fontWeight: 600,
+      color: "var(--text-strong)"
+    }
+  }, /*#__PURE__*/React.createElement(EIcon, {
+    name: "building",
+    size: 12,
+    color: "var(--navy-700)"
+  }), st.filters.ptype + "s", /*#__PURE__*/React.createElement("button", {
+    onClick: () => act.setFilters({
+      ptype: "Any type"
+    }),
+    "aria-label": "Remove " + st.filters.ptype,
+    style: {
+      border: "none",
+      background: "transparent",
+      padding: 0,
+      cursor: "pointer",
+      color: "inherit",
+      opacity: 0.6,
+      fontSize: "14px",
+      lineHeight: 1
+    }
+  }, "\xD7")), !draft && kind === "AREA_SET" && /*#__PURE__*/React.createElement(EPGhost, {
     onClick: act.openDraft
   }, "Edit areas"), !draft && kind === "AREA_SET" && /*#__PURE__*/React.createElement(EPGhost, {
     onClick: act.clearScope
@@ -46814,8 +54749,25 @@ function EPHierarchySearch({
 function EPAreaActions({
   view,
   st,
-  act
+  act,
+  skin
 }) {
+  const pad = skin ? "10px 13px" : "9px 11px",
+    ic = skin ? "36px" : "30px",
+    tsz = skin ? "14px" : "13px",
+    ssz = skin ? "12px" : "11.5px";
+  const chev = c => skin ? /*#__PURE__*/React.createElement(EIcon, {
+    name: "chevron-right",
+    size: 17,
+    color: c
+  }) : /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: "none",
+      fontSize: "14px",
+      fontWeight: 700,
+      color: c
+    }
+  }, "\u203A");
   const key = view.committed[0];
   const name = EP.byKey[key].name;
   const schoolN = EP.byKey[key].schools;
@@ -46827,7 +54779,7 @@ function EPAreaActions({
       flexDirection: "column",
       gap: "8px"
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, !skin && /*#__PURE__*/React.createElement("div", {
     "data-design-component": "property-search",
     style: {
       display: "flex",
@@ -46878,8 +54830,8 @@ function EPAreaActions({
   }, "\xD7")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
-      gridTemplateColumns: "1fr 1fr",
-      gap: "8px"
+      gridTemplateColumns: "repeat(2, minmax(0,1fr))",
+      gap: skin ? "10px" : "8px"
     }
   }, /*#__PURE__*/React.createElement("button", {
     "data-design-component": "school-shortcut",
@@ -46887,9 +54839,9 @@ function EPAreaActions({
     style: {
       display: "flex",
       alignItems: "center",
-      gap: "9px",
-      padding: "9px 11px",
-      borderRadius: "var(--radius-md)",
+      gap: skin ? "12px" : "9px",
+      padding: pad,
+      borderRadius: skin ? "var(--radius-lg)" : "var(--radius-md)",
       cursor: "pointer",
       textAlign: "left",
       background: "var(--plum-tint)",
@@ -46898,8 +54850,8 @@ function EPAreaActions({
   }, /*#__PURE__*/React.createElement("span", {
     style: {
       flex: "none",
-      width: "30px",
-      height: "30px",
+      width: ic,
+      height: ic,
       borderRadius: "var(--radius-md)",
       background: "var(--plum-600)",
       display: "grid",
@@ -46907,7 +54859,7 @@ function EPAreaActions({
     }
   }, /*#__PURE__*/React.createElement(EIcon, {
     name: "building",
-    size: 16,
+    size: skin ? 18 : 16,
     color: "#fff"
   })), /*#__PURE__*/React.createElement("span", {
     style: {
@@ -46917,7 +54869,7 @@ function EPAreaActions({
   }, /*#__PURE__*/React.createElement("span", {
     style: {
       display: "block",
-      fontSize: "13px",
+      fontSize: tsz,
       fontWeight: 700,
       color: "var(--text-strong)"
     }
@@ -46925,24 +54877,19 @@ function EPAreaActions({
     style: {
       display: "block",
       fontFamily: "var(--font-mono)",
-      fontSize: "11.5px",
-      color: "var(--plum-600)"
+      fontSize: ssz,
+      color: "var(--plum-600)",
+      marginTop: skin ? "2px" : 0
     }
-  }, schoolN, " schools \xB7 keeps this area")), /*#__PURE__*/React.createElement("span", {
-    style: {
-      flex: "none",
-      fontSize: "14px",
-      fontWeight: 700,
-      color: "var(--plum-600)"
-    }
-  }, "\u203A")), /*#__PURE__*/React.createElement("button", {
+  }, schoolN, " schools \xB7 keeps this area")), chev("var(--plum-600)")), /*#__PURE__*/React.createElement("button", {
+    "data-design-component": "nearby-shortcut",
     onClick: act.openDraft,
     style: {
       display: "flex",
       alignItems: "center",
-      gap: "9px",
-      padding: "9px 11px",
-      borderRadius: "var(--radius-md)",
+      gap: skin ? "12px" : "9px",
+      padding: pad,
+      borderRadius: skin ? "var(--radius-lg)" : "var(--radius-md)",
       cursor: "pointer",
       textAlign: "left",
       background: "var(--surface-card)",
@@ -46951,8 +54898,8 @@ function EPAreaActions({
   }, /*#__PURE__*/React.createElement("span", {
     style: {
       flex: "none",
-      width: "30px",
-      height: "30px",
+      width: ic,
+      height: ic,
       borderRadius: "var(--radius-md)",
       background: "var(--accent-tint)",
       display: "grid",
@@ -46960,7 +54907,7 @@ function EPAreaActions({
     }
   }, /*#__PURE__*/React.createElement(EIcon, {
     name: "map-pin",
-    size: 15,
+    size: skin ? 17 : 15,
     color: "var(--copper-600)"
   })), /*#__PURE__*/React.createElement("span", {
     style: {
@@ -46970,24 +54917,18 @@ function EPAreaActions({
   }, /*#__PURE__*/React.createElement("span", {
     style: {
       display: "block",
-      fontSize: "13px",
+      fontSize: tsz,
       fontWeight: 700,
       color: "var(--text-strong)"
     }
   }, "Add nearby areas"), /*#__PURE__*/React.createElement("span", {
     style: {
       display: "block",
-      fontSize: "11.5px",
-      color: "var(--text-muted)"
+      fontSize: ssz,
+      color: "var(--text-muted)",
+      marginTop: skin ? "2px" : 0
     }
-  }, "Add up to 2 nearby areas")), /*#__PURE__*/React.createElement("span", {
-    style: {
-      flex: "none",
-      fontSize: "14px",
-      fontWeight: 700,
-      color: "var(--accent)"
-    }
-  }, "\u203A"))));
+  }, "Add up to 2 nearby areas")), chev("var(--accent)"))));
 }
 
 // ---- rows ------------------------------------------------------------------
@@ -47318,8 +55259,15 @@ function EPZero({
   const kind = view.scopeKind;
   const keys = view.zeroKeys && view.zeroKeys.length ? view.zeroKeys : view.committed;
   const relax = EP.relaxations(keys, st.filters);
+  const com = st.filters.family === "Commercial";
   const areaScope = kind === "AREA_SET" || kind === "CITY";
-  const nearby = areaScope ? EP.nearbyFor(view.committed, st.filters).filter(n => n.n > 0).slice(0, 3) : [];
+  // In Commercial the recovery order is deliberate: stay inside Commercial first
+  // (subtype, then budget, then area), and only then offer the other family. Nearby
+  // areas are not offered here — they change the geography, which is a bigger move
+  // than relaxing a Commercial attribute.
+  const nearby = !com && areaScope ? EP.nearbyFor(view.committed, st.filters).filter(n => n.n > 0).slice(0, 3) : [];
+  const primary = relax.filter(r => !r.secondary);
+  const secondary = relax.filter(r => r.secondary);
   const returnKeys = (view.returnAreaKeys || []).filter(k => EP.byKey[k]);
   const scopeLine = view.zeroScopeNames ? view.zeroScopeNames.join(" · ") : view.scopeLabel;
   return /*#__PURE__*/React.createElement("div", {
@@ -47394,7 +55342,7 @@ function EPZero({
       fontSize: "11.5px",
       color: "var(--text-muted)"
     }
-  }, "Expanding keeps this a visible-map search. Replacing it with selected areas is confirmed first.")), areaScope && nearby.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(EPToolLabel, null, "Nearby areas with matches \u2014 your filters"), /*#__PURE__*/React.createElement("div", {
+  }, "Expanding keeps this a visible-map search. Replacing it with selected areas is confirmed first.")), areaScope && !com && nearby.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(EPToolLabel, null, "Nearby areas with matches \u2014 your filters"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
@@ -47457,16 +55405,16 @@ function EPZero({
       fontSize: "11.5px",
       color: "var(--text-muted)"
     }
-  }, "Add opens your selected areas as a draft \u2014 the search only changes when you show the listings.")), areaScope && nearby.length === 0 && /*#__PURE__*/React.createElement(EPNote, {
+  }, "Add opens your selected areas as a draft \u2014 the search only changes when you show the listings.")), areaScope && !com && nearby.length === 0 && /*#__PURE__*/React.createElement(EPNote, {
     tone: "muted"
-  }, "No nearby area has matches with these filters either. A filter change below is the honest next step."), relax.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(EPToolLabel, null, "Change one filter"), /*#__PURE__*/React.createElement("div", {
+  }, "No nearby area has matches with these filters either. A filter change below is the honest next step."), primary.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(EPToolLabel, null, com ? "Stay in Commercial — change one filter" : "Change one filter"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
       gap: "7px",
       marginTop: "7px"
     }
-  }, relax.map(r => /*#__PURE__*/React.createElement("button", {
+  }, primary.map(r => /*#__PURE__*/React.createElement("button", {
     key: r.label,
     onClick: () => act.applyRelax(r.patch),
     style: {
@@ -47495,18 +55443,58 @@ function EPZero({
       fontWeight: 700,
       color: "var(--accent)"
     }
-  }, r.n, " listings"))))), /*#__PURE__*/React.createElement("div", {
+  }, r.n, " ", view.nouns ? view.nouns.count(r.n) : "listings"))))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: "8px",
-      flexWrap: "wrap"
+      flexWrap: "wrap",
+      alignItems: "center"
     }
   }, /*#__PURE__*/React.createElement(EPGhost, {
     strong: true,
     onClick: act.openAlertForm
-  }, "Create alert for this search"), /*#__PURE__*/React.createElement(EPGhost, {
-    onClick: act.simulateError
-  }, "Simulate a backend failure")));
+  }, "Create alert for this search")), secondary.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      paddingTop: "10px",
+      borderTop: "1px solid var(--border)"
+    }
+  }, /*#__PURE__*/React.createElement(EPToolLabel, null, "Or leave Commercial"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: "7px",
+      marginTop: "7px"
+    }
+  }, secondary.map(r => /*#__PURE__*/React.createElement("button", {
+    key: r.label,
+    onClick: () => act.applyRelax(r.patch),
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "12px",
+      padding: "10px 12px",
+      background: "var(--surface-subtle)",
+      border: "1px solid var(--border)",
+      borderRadius: "var(--radius-md)",
+      cursor: "pointer",
+      textAlign: "left",
+      fontFamily: "var(--font-sans)"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "13px",
+      fontWeight: 600,
+      color: "var(--text-body)"
+    }
+  }, r.label), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: "var(--font-mono)",
+      fontSize: "12px",
+      fontWeight: 700,
+      color: "var(--text-muted)"
+    }
+  }, r.n))))));
 }
 
 // ---- alerts ----------------------------------------------------------------
@@ -47679,17 +55667,22 @@ function EPAlertList({
 }
 
 // ---- listings / detail ------------------------------------------------------
+// Dense = desktop listing skin: as many ≥250px columns as the panel allows (2 at
+// 1366, 3 on wider screens) — never a forced column count.
+const epCols = (isMobile, dense) => isMobile ? "1fr" : dense ? "repeat(auto-fill, minmax(250px, 1fr))" : "repeat(2, minmax(0,1fr))";
 function EPListings({
   view,
   st,
   act,
-  isMobile
+  isMobile,
+  dense,
+  sort
 }) {
   if (st.phase === "loading") return /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
-      gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0,1fr))",
-      gap: "16px"
+      gridTemplateColumns: epCols(isMobile, dense),
+      gap: dense ? "14px" : "16px"
     }
   }, [0, 1, 2, 3].map(i => /*#__PURE__*/React.createElement("div", {
     key: i,
@@ -47701,10 +55694,11 @@ function EPListings({
     }
   })));
   return /*#__PURE__*/React.createElement(window.ExpListingsGrid, {
-    homes: view.results.slice(0, st.shown),
+    homes: epSorted(view.results, sort, st.filters).slice(0, st.shown),
     st: st,
     act: act,
-    isMobile: isMobile
+    isMobile: isMobile,
+    dense: dense
   });
 }
 function ExpListingsGrid({
@@ -47712,13 +55706,14 @@ function ExpListingsGrid({
   st,
   act,
   isMobile,
-  distFrom
+  distFrom,
+  dense
 }) {
   return /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
-      gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0,1fr))",
-      gap: "16px"
+      gridTemplateColumns: epCols(isMobile, dense),
+      gap: dense ? "14px" : "16px"
     }
   }, homes.map(l => /*#__PURE__*/React.createElement(window.DPListingCard, {
     key: l.id,
@@ -47727,9 +55722,448 @@ function ExpListingsGrid({
     onToggleSave: act.toggleSave,
     onHover: act.hover,
     onOpen: act.openListing,
+    signedIn: st.signedIn,
     priceText: EP.priceText(l, st.filters),
     distanceKm: distFrom ? window.BLR_DIST(distFrom, l) : null
   })));
+}
+
+// ---- Commercial detail: the SAME detail view, made subtype-aware -------------
+// Absent fields are omitted outright. Broker-entered claims sit inside a labelled
+// block. Anonymous and authenticated differ only in the price treatment, the
+// location precision and the contact block.
+function EPComRows({
+  rows
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column"
+    }
+  }, rows.map((r, i) => /*#__PURE__*/React.createElement("div", {
+    key: r[0],
+    style: {
+      display: "flex",
+      alignItems: "baseline",
+      justifyContent: "space-between",
+      gap: "16px",
+      padding: "7px 0",
+      borderTop: i ? "1px solid var(--border)" : "none"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "12.5px",
+      color: "var(--text-muted)"
+    }
+  }, r[0]), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "12.5px",
+      fontWeight: 600,
+      color: "var(--text-strong)",
+      textAlign: "right"
+    }
+  }, r[1]))));
+}
+function EPComSection({
+  s
+}) {
+  if (s.broker) {
+    return /*#__PURE__*/React.createElement("div", {
+      "data-design-component": "broker-disclosure",
+      style: {
+        borderRadius: "var(--radius-md)",
+        background: "var(--ochre-50)",
+        border: "1px solid rgba(169,116,28,0.24)",
+        padding: "12px 14px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: "7px",
+        marginBottom: "9px"
+      }
+    }, /*#__PURE__*/React.createElement(EIcon, {
+      name: "info",
+      size: 14,
+      color: "var(--ochre-600)"
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: "10.5px",
+        fontWeight: 700,
+        letterSpacing: "var(--tracking-caps)",
+        textTransform: "uppercase",
+        color: "var(--ochre-600)"
+      }
+    }, "Broker-provided information \u2014 ", s.title.toLowerCase())), /*#__PURE__*/React.createElement(EPComRows, {
+      rows: s.rows
+    }), /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "9px 0 0",
+        fontSize: "11.5px",
+        lineHeight: 1.45,
+        color: "var(--text-muted)",
+        textWrap: "pretty"
+      }
+    }, "Entered by the listing broker. ReTrends has not independently checked these details."));
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: "8px"
+    }
+  }, /*#__PURE__*/React.createElement(EPToolLabel, null, s.title), /*#__PURE__*/React.createElement(EPComRows, {
+    rows: s.rows
+  }));
+}
+function EPComDetail({
+  l,
+  st,
+  act,
+  view
+}) {
+  const signedIn = !!st.signedIn;
+  return /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "commercial-detail",
+    "data-subtype": l.comSub,
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: "13px"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: act.backToResults,
+    style: {
+      alignSelf: "flex-start",
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "6px",
+      border: "none",
+      background: "transparent",
+      cursor: "pointer",
+      fontFamily: "var(--font-sans)",
+      fontSize: "13px",
+      fontWeight: 700,
+      color: "var(--accent)"
+    }
+  }, "\u2039 Back to results"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      borderRadius: "var(--radius-lg)",
+      overflow: "hidden",
+      background: "var(--surface-card)",
+      border: "1px solid var(--border)",
+      boxShadow: "var(--shadow-sm)"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "relative"
+    }
+  }, /*#__PURE__*/React.createElement("img", {
+    src: l.image,
+    alt: l.title,
+    style: {
+      width: "100%",
+      height: "210px",
+      objectFit: "cover",
+      display: "block"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      top: "11px",
+      left: "11px"
+    }
+  }, /*#__PURE__*/React.createElement(EPComTag, {
+    sub: l.comSub
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "16px 18px 18px",
+      display: "flex",
+      flexDirection: "column",
+      gap: "10px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: "12px",
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      minWidth: 0
+    }
+  }, /*#__PURE__*/React.createElement(EPComPrice, {
+    l: l,
+    signedIn: signedIn,
+    big: true
+  }), /*#__PURE__*/React.createElement("h3", {
+    style: {
+      margin: "8px 0 4px",
+      fontSize: "17px",
+      fontWeight: 700,
+      color: "var(--text-strong)",
+      lineHeight: 1.3,
+      letterSpacing: "-0.01em"
+    }
+  }, l.title), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "6px",
+      fontSize: "13px",
+      color: "var(--text-muted)",
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement(EIcon, {
+    name: "map-pin",
+    size: 13,
+    color: "var(--grey-400)"
+  }), signedIn ? l.locality + ", " + l.area : l.coarse, !signedIn && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "10.5px",
+      fontWeight: 700,
+      letterSpacing: "0.04em",
+      textTransform: "uppercase",
+      color: "var(--text-muted)"
+    }
+  }, "Approximate"))), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "12px",
+      fontWeight: 600,
+      color: "var(--text-muted)",
+      whiteSpace: "nowrap"
+    }
+  }, l.deal)))), l.comSub !== "shop" && l.comSub !== "office" && l.comSub !== "building" && l.comSub !== "warehouse" && l.comSub !== "land" && /*#__PURE__*/React.createElement(EPNote, {
+    tone: "warn"
+  }, "This listing has no recorded Commercial subtype, so it is shown as Commercial with generic details only."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: "9px"
+    }
+  }, /*#__PURE__*/React.createElement(EPToolLabel, null, "Summary"), /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "commercial-summary",
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(3, minmax(0,1fr))",
+      gap: "8px"
+    }
+  }, l.summary.map(it => /*#__PURE__*/React.createElement("div", {
+    key: it.label,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "9px",
+      padding: "9px 11px",
+      background: "var(--surface-subtle)",
+      borderRadius: "var(--radius-md)",
+      minWidth: 0
+    }
+  }, /*#__PURE__*/React.createElement(EIcon, {
+    name: it.icon,
+    size: 15,
+    color: "var(--grey-500)"
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      minWidth: 0
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "block",
+      fontSize: "10px",
+      fontWeight: 700,
+      letterSpacing: "var(--tracking-caps)",
+      textTransform: "uppercase",
+      color: "var(--text-muted)"
+    }
+  }, it.label), /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "block",
+      fontFamily: "var(--font-mono)",
+      fontSize: "12.5px",
+      fontWeight: 600,
+      color: "var(--text-strong)",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap"
+    }
+  }, it.value)))))), l.sections.map(s => /*#__PURE__*/React.createElement(EPComSection, {
+    key: s.title,
+    s: s
+  })), /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "trust-scope",
+    style: {
+      borderRadius: "var(--radius-md)",
+      background: "var(--surface-subtle)",
+      border: "1px solid var(--border)",
+      padding: "12px 14px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+      marginBottom: "6px"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: "7px",
+      height: "7px",
+      borderRadius: "50%",
+      background: l.trustTier === "verified" ? "var(--evergreen-600)" : l.trustTier === "trusted" ? "var(--ochre-600)" : "var(--grey-400)",
+      flex: "none"
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "12.5px",
+      fontWeight: 700,
+      color: "var(--text-strong)"
+    }
+  }, EP.com ? EP.com.tierText(l.trustTier) : "Broker-submitted listing")), /*#__PURE__*/React.createElement("p", {
+    style: {
+      margin: 0,
+      fontSize: "11.5px",
+      lineHeight: 1.45,
+      color: "var(--text-muted)",
+      textWrap: "pretty"
+    }
+  }, EP.com ? EP.com.tierNote(l.trustTier) : "", " Ownership, approvals, zoning and legal status are not checked by ReTrends.")), signedIn ? /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "contact-block",
+    style: {
+      borderRadius: "var(--radius-lg)",
+      border: "1px solid var(--border)",
+      background: "var(--surface-card)",
+      boxShadow: "var(--shadow-xs)",
+      padding: "15px 16px",
+      display: "flex",
+      flexDirection: "column",
+      gap: "10px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "9px"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: "none",
+      width: "32px",
+      height: "32px",
+      borderRadius: "var(--radius-md)",
+      background: "var(--navy-100)",
+      display: "grid",
+      placeItems: "center"
+    }
+  }, /*#__PURE__*/React.createElement(EIcon, {
+    name: "message-circle",
+    size: 16,
+    color: "var(--navy-800)"
+  })), /*#__PURE__*/React.createElement("span", {
+    style: {
+      minWidth: 0
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "block",
+      fontSize: "14px",
+      fontWeight: 700,
+      color: "var(--text-strong)"
+    }
+  }, "Contact the listing broker"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "block",
+      fontSize: "11.5px",
+      color: "var(--text-muted)"
+    }
+  }, "Listed by a ReTrends broker"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "8px",
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement(EPPrimary, {
+    onClick: () => {}
+  }, "Request a callback"), /*#__PURE__*/React.createElement(EPGhost, {
+    onClick: () => {}
+  }, "Send a message")), /*#__PURE__*/React.createElement("p", {
+    style: {
+      margin: 0,
+      fontSize: "11.5px",
+      lineHeight: 1.45,
+      color: "var(--text-muted)"
+    }
+  }, "Enquiries go through ReTrends. The broker's phone number and email are not shown here.")) : /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "price-gate",
+    style: {
+      borderRadius: "var(--radius-lg)",
+      border: "1px solid rgba(138,106,34,0.32)",
+      background: "var(--gold-100)",
+      padding: "15px 16px",
+      display: "flex",
+      flexDirection: "column",
+      gap: "10px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "9px"
+    }
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "17",
+    height: "17",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: COM_GOLD,
+    strokeWidth: "2",
+    strokeLinecap: "round"
+  }, /*#__PURE__*/React.createElement("rect", {
+    x: "4",
+    y: "11",
+    width: "16",
+    height: "10",
+    rx: "2"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M8 11V7a4 4 0 0 1 8 0v4"
+  })), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "14.5px",
+      fontWeight: 700,
+      color: "var(--text-strong)",
+      letterSpacing: "-0.01em"
+    }
+  }, l.band ? "Sign in for the exact " + (l.deal === "For Sale" ? "price" : "rent") : "Sign in to view the price")), /*#__PURE__*/React.createElement("p", {
+    style: {
+      margin: 0,
+      fontSize: "12.5px",
+      lineHeight: 1.5,
+      color: "var(--text-body)",
+      textWrap: "pretty"
+    }
+  }, l.band ? "You are seeing a price band and an approximate location. Signing in shows the exact figure, the street-level location and a way to reach the broker." : "Signing in shows the exact figure, the street-level location and a way to reach the broker."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "8px",
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement(EPPrimary, {
+    onClick: act.toggleSignedIn
+  }, "Sign in"), /*#__PURE__*/React.createElement(EPGhost, {
+    onClick: act.toggleSignedIn
+  }, "Create an account")), /*#__PURE__*/React.createElement("p", {
+    style: {
+      margin: 0,
+      fontSize: "11.5px",
+      lineHeight: 1.45,
+      color: "var(--text-muted)"
+    }
+  }, "Phone numbers and email addresses are never shown in Discover. Enquiries go through ReTrends. Signing in reveals the figures the broker supplied \u2014 it does not verify them.")), /*#__PURE__*/React.createElement(EPNote, {
+    tone: "muted"
+  }, "Your search, filters and map view are restored when you go back", view.scopeKind === "AREA_SET" ? " — " + view.committed.map(k => EP.byKey[k].name).join(" + ") : view.scopeKind ? " — " + (SCOPE_TITLE[view.scopeKind] || "your results") : "", ", along with the place you had reached in the list."));
 }
 function EPDetail({
   st,
@@ -47738,6 +56172,12 @@ function EPDetail({
 }) {
   const l = EP.listings.find(x => x.id === st.detail);
   if (!l) return null;
+  if (EP.isCom(l)) return /*#__PURE__*/React.createElement(EPComDetail, {
+    l: l,
+    st: st,
+    act: act,
+    view: view
+  });
   return /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -47817,7 +56257,7 @@ function EPDetail({
       fontSize: "13px",
       color: "var(--text-body)"
     }
-  }, /*#__PURE__*/React.createElement("span", null, l.beds, " BHK"), /*#__PURE__*/React.createElement("span", null, l.baths, " baths"), /*#__PURE__*/React.createElement("span", null, l.sqft, " sq.ft"), /*#__PURE__*/React.createElement("span", null, l.ready ? "Ready to move" : "Under construction")), /*#__PURE__*/React.createElement("div", {
+  }, l.propType === "Plot" ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", null, l.sqft.toLocaleString("en-IN"), " sq.ft plot"), /*#__PURE__*/React.createElement("span", null, "Land"), /*#__PURE__*/React.createElement("span", null, l.ready ? "Ready to register" : "Documentation in progress")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", null, l.beds, " BHK"), /*#__PURE__*/React.createElement("span", null, l.baths, " baths"), /*#__PURE__*/React.createElement("span", null, l.sqft, " sq.ft"), /*#__PURE__*/React.createElement("span", null, l.ready ? "Ready to move" : "Under construction"))), /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: "16px",
       padding: "12px",
@@ -47955,6 +56395,25 @@ function ExpPanel({
   const showFilters = journey === "areas" && !navLevel || journey === "schools" && view.level === "schools-homes";
   const heading = view.heading;
   const tint = JOURNEY_TINT[journey];
+  // desktop listing skin: control bar moves to the full-width row above map + panel
+  // (ExpDesktop), filters collapse into one sticky dropdown row inside the scroller.
+  const skin = !isMobile && expListingSkin(st, view);
+  const [sort, setSort] = React.useState("rel");
+  const stickyFilters = skin && showFilters ? /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "sticky-filter-row",
+    style: {
+      position: "sticky",
+      top: "-12px",
+      zIndex: 20,
+      margin: "0 -20px",
+      padding: "8px 20px",
+      background: "var(--background)",
+      borderBottom: "1px solid var(--border)"
+    }
+  }, /*#__PURE__*/React.createElement(EPFiltersCompact, {
+    st: st,
+    act: act
+  })) : null;
   // the list keeps its place across a detail round trip: the offset is stored against the
   // result state it belongs to, and restored only when that same state comes back.
   const scRef = React.useRef(null);
@@ -47997,10 +56456,10 @@ function ExpPanel({
       minHeight: 0,
       background: "var(--background)"
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, isMobile ? /*#__PURE__*/React.createElement("div", {
     style: {
       flex: "none",
-      padding: isMobile ? "10px 14px" : "12px 20px",
+      padding: "10px 14px",
       borderBottom: "1px solid var(--border)",
       display: "flex",
       flexDirection: "column",
@@ -48010,10 +56469,26 @@ function ExpPanel({
     st: st,
     act: act,
     view: view,
-    isMobile: isMobile
-  }), showFilters && /*#__PURE__*/React.createElement(EPFilters, {
+    isMobile: true
+  })) : (view.journeyRoot || showFilters && !skin) && /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: "none",
+      padding: "10px 20px",
+      borderBottom: "1px solid var(--border)",
+      display: "flex",
+      flexDirection: "column",
+      gap: "9px"
+    }
+  }, /*#__PURE__*/React.createElement(window.ExpModeBar, {
     st: st,
-    act: act
+    act: act,
+    view: view,
+    isMobile: false,
+    part: "cues"
+  }), showFilters && !skin && /*#__PURE__*/React.createElement(EPFilters, {
+    st: st,
+    act: act,
+    isMobile: false
   })), /*#__PURE__*/React.createElement("div", {
     className: "upt-scroll",
     ref: scRef,
@@ -48023,13 +56498,23 @@ function ExpPanel({
       flex: 1,
       minHeight: 0,
       overflowY: "auto",
-      padding: isMobile ? "12px 14px 108px" : "14px 20px 26px",
+      padding: isMobile ? "12px 14px 108px" : skin ? "12px 20px 26px" : "14px 20px 26px",
       display: "flex",
       flexDirection: "column",
-      gap: "12px",
+      gap: skin ? "10px" : "12px",
       animation: "expFade var(--dur-normal) var(--ease-out)"
     }
-  }, st.detail ? /*#__PURE__*/React.createElement(EPDetail, {
+  }, showFilters && isMobile && !st.detail && !st.alertDraft && st.view !== "alerts" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      paddingBottom: "12px",
+      marginBottom: "1px",
+      borderBottom: "1px solid var(--border)"
+    }
+  }, /*#__PURE__*/React.createElement(EPFilters, {
+    st: st,
+    act: act,
+    isMobile: true
+  })), st.detail ? /*#__PURE__*/React.createElement(EPDetail, {
     st: st,
     act: act,
     view: view
@@ -48095,8 +56580,11 @@ function ExpPanel({
   }) : /*#__PURE__*/React.createElement(EPResultHead, {
     view: view,
     st: st,
-    act: act
-  }), view.notes.map((n, i) => /*#__PURE__*/React.createElement(EPNote, {
+    act: act,
+    skin: skin,
+    sort: sort,
+    onSort: setSort
+  }), stickyFilters, view.notes.map((n, i) => /*#__PURE__*/React.createElement(EPNote, {
     key: i,
     tone: n.tone,
     action: n.action,
@@ -48181,14 +56669,15 @@ function ExpPanel({
     view: view,
     st: st,
     act: act
-  }) : /*#__PURE__*/React.createElement(React.Fragment, null, view.scopeKind === "HIERARCHY" && /*#__PURE__*/React.createElement(EPHierarchySearch, {
+  }) : /*#__PURE__*/React.createElement(React.Fragment, null, view.scopeKind === "HIERARCHY" && !skin && /*#__PURE__*/React.createElement(EPHierarchySearch, {
     view: view,
     st: st,
     act: act
   }), view.areaActions && /*#__PURE__*/React.createElement(EPAreaActions, {
     view: view,
     st: st,
-    act: act
+    act: act,
+    skin: skin
   }), view.schoolsBlock && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -48241,7 +56730,9 @@ function ExpPanel({
     view: view,
     st: st,
     act: act,
-    isMobile: isMobile
+    isMobile: isMobile,
+    dense: skin,
+    sort: skin ? sort : "rel"
   }), view.results.length > st.shown && /*#__PURE__*/React.createElement(EPGhost, {
     onClick: act.showMore
   }, "Show more of ", view.results.length, " ", view.noun || "listings")))), isMobile && view.stickyCta && /*#__PURE__*/React.createElement("div", {
@@ -48263,7 +56754,13 @@ function ExpPanel({
 }
 Object.assign(window, {
   ExpPanel,
-  ExpListingsGrid
+  ExpListingsGrid,
+  EPFilters,
+  EPFiltersCompact,
+  EPChip,
+  EPGroup,
+  EPToolLabel,
+  expListingSkin
 });
 })(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/new_discover/src/ExpPanel.jsx", error: String((e && e.message) || e) }); }
 
@@ -49037,7 +57534,13 @@ function _extends() { return _extends = Object.assign ? Object.assign.bind() : f
 // Switching journeys never writes into another journey's state. Map and panel are
 // two renderings of the same `st`; committed transitions push browser history,
 // presentation-only changes (cluster zoom, chip focus, pan, Map/List) never do.
-const EX = window.EXP;
+/* Lazy view of window.EXP: the design-system bundle evaluates this file
+// before EXP exists, so a value capture here would be undefined forever in that copy.
+// A Proxy resolves each property at access time instead. */
+const EX = new Proxy({}, {
+  get: (_t, k) => window.EXP ? window.EXP[k] : undefined,
+  has: (_t, k) => !!window.EXP && k in window.EXP
+});
 const SCENARIOS = [{
   id: "guided-areas",
   label: "Areas-first"
@@ -49068,8 +57571,275 @@ const SCENARIOS = [{
 }, {
   id: "mobile",
   label: "Mobile"
+},
+// Commercial — additive states, each one the existing shell with the property
+// FAMILY set to Commercial. No scenario below introduces a screen, a hierarchy or
+// a component that the baseline does not already have.
+{
+  id: "com-broad",
+  label: "All commercial",
+  group: "com"
+}, {
+  id: "com-shop",
+  label: "Shop",
+  group: "com"
+}, {
+  id: "com-office",
+  label: "Office",
+  group: "com"
+}, {
+  id: "com-multi",
+  label: "Multi-subtype",
+  group: "com"
+}, {
+  id: "com-cleared-subs",
+  label: "Subtypes cleared",
+  group: "com"
+}, {
+  id: "com-zero",
+  label: "Com. zero",
+  group: "com"
+}, {
+  id: "com-detail",
+  label: "Com. detail",
+  group: "com"
+}, {
+  id: "com-mobile",
+  label: "Com. mobile",
+  group: "com"
+},
+// Family switching — the same canonical context on both sides; only the family,
+// its subtype row, the result membership, the cards and the markers change.
+{
+  id: "fam-res-all",
+  label: "Res: all",
+  group: "fam"
+}, {
+  id: "fam-res-sub",
+  label: "Res: Villas",
+  group: "fam"
+}, {
+  id: "fam-res-to-com",
+  label: "Res → Com",
+  group: "fam"
+}, {
+  id: "fam-com-to-res",
+  label: "Com → Res",
+  group: "fam"
+},
+// Context-sensitive attribute filters — bedrooms, plot area and budget each
+// appear only where they actually apply.
+{
+  id: "attr-dwelling",
+  label: "Beds + Carpet",
+  group: "attr"
+}, {
+  id: "attr-plot",
+  label: "Plot size",
+  group: "attr"
+}, {
+  id: "attr-plot-to-dwelling",
+  label: "Plot → dwelling",
+  group: "attr"
+}, {
+  id: "attr-com-buy",
+  label: "Com. Buy budget",
+  group: "attr"
+}, {
+  id: "attr-com-rent",
+  label: "Com. Rent budget",
+  group: "attr"
+}, {
+  id: "attr-com-sub-budget",
+  label: "Budget retained",
+  group: "attr"
+}, {
+  id: "attr-plot-mobile",
+  label: "Plot mobile",
+  group: "attr"
+}, {
+  id: "attr-res-mobile",
+  label: "Res. mobile",
+  group: "attr"
+},
+// Commercial area + budget refinement frames — one canonical context throughout,
+// so a pair differs only by the filter under review.
+{
+  id: "ca-all",
+  label: "All + Area",
+  group: "carea"
+}, {
+  id: "ca-shop",
+  label: "Shop built-up",
+  group: "carea"
+}, {
+  id: "ca-office",
+  label: "Office built-up",
+  group: "carea"
+}, {
+  id: "ca-building",
+  label: "Building built-up",
+  group: "carea"
+}, {
+  id: "ca-warehouse",
+  label: "Warehouse area",
+  group: "carea"
+}, {
+  id: "ca-land",
+  label: "Land plot size",
+  group: "carea"
+}, {
+  id: "ca-multi",
+  label: "Multi → generic area",
+  group: "carea"
+}, {
+  id: "ca-lease",
+  label: "Rent / Lease budget",
+  group: "carea"
+}, {
+  id: "ca-anon",
+  label: "Anonymous",
+  group: "carea"
+}, {
+  id: "ca-zero",
+  label: "Zero results",
+  group: "carea"
+}, {
+  id: "ca-one",
+  label: "Singular copy",
+  group: "carea"
+}, {
+  id: "ca-mobile",
+  label: "Mobile filters",
+  group: "carea"
+},
+// Preserved — the non-regression set: the original behaviour, reached through the
+// original components, with the Residential family selected.
+{
+  id: "pre-default",
+  label: "Baseline",
+  group: "pre"
+}, {
+  id: "pre-hierarchy",
+  label: "Hierarchy",
+  group: "pre"
+}, {
+  id: "pre-residential",
+  label: "Residential",
+  group: "pre"
+}, {
+  id: "pre-schools",
+  label: "Schools",
+  group: "pre"
+}, {
+  id: "pre-agri",
+  label: "Agricultural",
+  group: "pre"
+}, {
+  id: "pre-listmap",
+  label: "List / Map",
+  group: "pre"
+}, {
+  id: "pre-marker",
+  label: "Marker",
+  group: "pre"
+}, {
+  id: "pre-cleared",
+  label: "Com. cleared",
+  group: "pre"
+},
+// #2627 — mobile Map filtering. One canonical filter state; the sheet stages a copy.
+{
+  id: "mf-01",
+  label: "01 No filters",
+  group: "mf"
+}, {
+  id: "mf-02",
+  label: "02 Entry",
+  group: "mf"
+}, {
+  id: "mf-03",
+  label: "03 Sheet · Res.",
+  group: "mf"
+}, {
+  id: "mf-04",
+  label: "04 Edited, not applied",
+  group: "mf"
+}, {
+  id: "mf-05",
+  label: "05 Applied",
+  group: "mf"
+}, {
+  id: "mf-06",
+  label: "06 Reopened",
+  group: "mf"
+}, {
+  id: "mf-07",
+  label: "07 Clear all",
+  group: "mf"
+}, {
+  id: "mf-08",
+  label: "08 Zero results",
+  group: "mf"
+}, {
+  id: "mf-09",
+  label: "09 Sheet · Com.",
+  group: "mf"
+}, {
+  id: "mf-10",
+  label: "10 Com. applied",
+  group: "mf"
+}, {
+  id: "mf-11",
+  label: "11 Marker + filter",
+  group: "mf"
+}, {
+  id: "mf-12",
+  label: "12 375 × 667",
+  group: "mf"
+}, {
+  id: "mf-13",
+  label: "13 Rent only",
+  group: "mf"
+}, {
+  id: "mf-14",
+  label: "14 Schools · homes",
+  group: "mf"
+}, {
+  id: "mf-15",
+  label: "15 Schools · sheet",
+  group: "mf"
+}, {
+  id: "mf-16",
+  label: "16 Schools · applied",
+  group: "mf"
+}];
+const SCENARIO_GROUPS = [{
+  key: null,
+  label: "Existing Discover"
+}, {
+  key: "com",
+  label: "Commercial — added"
+}, {
+  key: "fam",
+  label: "Family switching"
+}, {
+  key: "attr",
+  label: "Contextual attributes"
+}, {
+  key: "carea",
+  label: "Commercial area & budget"
+}, {
+  key: "pre",
+  label: "Preserved behaviour"
+}, {
+  key: "mf",
+  label: "Map filters · #2627"
 }];
 const TRIO = ["hebbal", "nagawara", "jakkur"];
+// Commercial review scopes — real areas from the canonical catalogue, chosen because
+// they actually carry the subtype being demonstrated.
+const COM_TRIO = ["indiranagar", "whitefield", "jpnagar"];
 const AGRI_DEFAULT_KM = () => window.BLR_DATA.agri.defaultMaxKm;
 function schBase() {
   return {
@@ -49137,6 +57907,11 @@ function baseState() {
     hover: null,
     device: "desktop",
     note: null,
+    // Commercial listings are price-gated for anonymous buyers; this is the only
+    // state Commercial adds to the shell, and it changes nothing for residential.
+    signedIn: false,
+    // review-only design state: which account type the header is rendered for
+    role: "buyer",
     sch: schBase(),
     ag: agBase()
   };
@@ -49193,9 +57968,371 @@ function scenarioState(id) {
   });else if (id === "agri") Object.assign(s, {
     journey: "agri"
   });
+  // ---- Commercial / family switching -----------------------------------------
+  // Every scenario below shares ONE canonical context — the same city, the same
+  // three committed areas, the same scope mode, camera and breadcrumb — so a pair
+  // of them isolates exactly the family delta and nothing else.
+  else if (id.indexOf("com-") === 0 || id.indexOf("fam-") === 0 || id.indexOf("attr-") === 0 || id.indexOf("ca-") === 0) {
+    const ctx = {
+      nodeKey: "indiranagar",
+      scope: {
+        kind: "AREA_SET",
+        areaKeys: COM_TRIO.slice()
+      },
+      committed: COM_TRIO.slice()
+    };
+    // both families' subtype state travels together; `family` picks which is live
+    const ff = patch => ({
+      ...EX.DEFAULT_FILTERS,
+      family: "Commercial",
+      comSubs: [],
+      ...patch
+    });
+    Object.assign(s, ctx, {
+      filters: ff()
+    });
+    if (id === "com-shop") s.filters = ff({
+      comSubs: ["shop"]
+    });else if (id === "com-office") s.filters = ff({
+      comSubs: ["office"]
+    });else if (id === "com-multi") s.filters = ff({
+      comSubs: ["shop", "office", "warehouse"]
+    });else if (id === "com-cleared-subs") s.filters = ff({
+      comSubs: []
+    });else if (id === "com-zero") Object.assign(s, {
+      nodeKey: "hebbal",
+      scope: {
+        kind: "AREA_SET",
+        areaKeys: TRIO.slice()
+      },
+      committed: TRIO.slice(),
+      filters: ff({
+        comSubs: ["warehouse"]
+      })
+    });else if (id === "com-detail") {
+      const first = EX.inAreas(COM_TRIO, s.filters)[0];
+      if (first) s.detail = first.id;
+    } else if (id === "com-mobile") Object.assign(s, {
+      device: "mobile",
+      filters: ff({
+        comSubs: ["shop"]
+      })
+    });
+    // family-switch pairs: identical context, identical retained subtype state on
+    // BOTH sides — only `family` differs, which is the whole point of the pair.
+    else if (id === "fam-res-all") s.filters = ff({
+      family: "Residential",
+      ptype: "Any type"
+    });else if (id === "fam-res-sub") s.filters = ff({
+      family: "Residential",
+      ptype: "Villa"
+    });else if (id === "fam-res-to-com") s.filters = ff({
+      family: "Commercial",
+      ptype: "Villa",
+      comSubs: ["shop", "office"]
+    });else if (id === "fam-com-to-res") s.filters = ff({
+      family: "Residential",
+      ptype: "Villa",
+      comSubs: ["shop", "office"]
+    });
+    // contextual attributes — same context throughout, so only the attribute row moves
+    else if (id === "attr-dwelling") s.filters = ff({
+      family: "Residential",
+      ptype: "Apartment",
+      beds: 2,
+      carpetArea: 1000,
+      maxPrice: 12000000
+    });else if (id === "attr-plot") s.filters = ff({
+      family: "Residential",
+      ptype: "Plot",
+      plotArea: 1200,
+      maxPrice: 12000000,
+      beds: 2,
+      carpetArea: 1000
+    });else if (id === "attr-plot-to-dwelling") s.filters = ff({
+      family: "Residential",
+      ptype: "Apartment",
+      beds: 2,
+      carpetArea: 1000,
+      plotArea: 1200,
+      maxPrice: 12000000
+    });else if (id === "attr-com-buy") s.filters = ff({
+      family: "Commercial",
+      purpose: "Buy",
+      comMaxPrice: 25000000,
+      maxPrice: 12000000
+    });else if (id === "attr-com-rent") s.filters = ff({
+      family: "Commercial",
+      purpose: "Rent",
+      comMaxPrice: 150000,
+      maxPrice: 35000
+    });else if (id === "attr-com-sub-budget") s.filters = ff({
+      family: "Commercial",
+      purpose: "Rent",
+      comSubs: ["office"],
+      comMaxPrice: 150000
+    });else if (id === "attr-plot-mobile") Object.assign(s, {
+      device: "mobile",
+      filters: ff({
+        family: "Residential",
+        ptype: "Plot",
+        plotArea: 600
+      })
+    });else if (id === "attr-res-mobile") Object.assign(s, {
+      device: "mobile",
+      filters: ff({
+        family: "Residential",
+        ptype: "Apartment",
+        beds: 2,
+        carpetArea: 900
+      })
+    });
+    // ---- Commercial area & budget ------------------------------------------
+    else if (id === "ca-all") s.filters = ff({
+      comArea: 1000,
+      comMaxPrice: 25000000
+    });else if (id === "ca-shop") s.filters = ff({
+      comSubs: ["shop"],
+      comArea: 1000
+    });else if (id === "ca-office") s.filters = ff({
+      comSubs: ["office"],
+      comArea: 1000
+    });else if (id === "ca-building") s.filters = ff({
+      comSubs: ["building"],
+      comArea: 5000
+    });else if (id === "ca-warehouse") s.filters = ff({
+      comSubs: ["warehouse"],
+      comArea: 2500,
+      purpose: "Rent"
+    });else if (id === "ca-land") {
+      // Commercial land genuinely sits on the city edge, not in the central trio, so
+      // this one frame carries its own areas rather than showing an empty result set.
+      // It is a demonstration frame, not one half of a comparison pair.
+      Object.assign(s, {
+        nodeKey: "hebbal",
+        scope: {
+          kind: "AREA_SET",
+          areaKeys: ["hebbal", "krpuram", "budigere"]
+        },
+        committed: ["hebbal", "krpuram", "budigere"]
+      });
+      s.filters = ff({
+        comSubs: ["land"],
+        comArea: 1000
+      });
+    } else if (id === "ca-multi") s.filters = ff({
+      comSubs: ["shop", "office", "warehouse"],
+      comArea: 1000
+    });else if (id === "ca-lease") s.filters = ff({
+      purpose: "Rent",
+      comMaxPrice: 100000,
+      comArea: 1000
+    });else if (id === "ca-anon") Object.assign(s, {
+      signedIn: false,
+      filters: ff({
+        comSubs: ["office"]
+      })
+    });else if (id === "ca-zero") s.filters = ff({
+      comSubs: ["building"],
+      comArea: 2500,
+      comMaxPrice: 10000000
+    });else if (id === "ca-one") s.filters = ff({
+      comSubs: ["shop"],
+      comArea: 1000
+    });else if (id === "ca-mobile") Object.assign(s, {
+      device: "mobile",
+      filters: ff({
+        comSubs: ["shop"],
+        comArea: 1000,
+        comMaxPrice: 50000000
+      })
+    });
+  }
+  // ---- Preserved: original behaviour, reached through the original components
+  else if (id === "pre-hierarchy") Object.assign(s, {
+    nodeKey: "north"
+  });else if (id === "pre-schools") Object.assign(s, {
+    journey: "schools"
+  });else if (id === "pre-residential") Object.assign(s, {
+    nodeKey: "hebbal",
+    scope: {
+      kind: "AREA_SET",
+      areaKeys: TRIO.slice()
+    },
+    committed: TRIO.slice(),
+    filters: {
+      ...EX.DEFAULT_FILTERS,
+      ptype: "Apartment",
+      beds: 2
+    }
+  });else if (id === "pre-agri") Object.assign(s, {
+    journey: "agri"
+  });else if (id === "pre-listmap") Object.assign(s, {
+    device: "mobile",
+    presentation: "map",
+    nodeKey: "hebbal",
+    scope: {
+      kind: "AREA_SET",
+      areaKeys: TRIO.slice()
+    },
+    committed: TRIO.slice()
+  });else if (id === "pre-marker") Object.assign(s, {
+    nodeKey: "hebbal",
+    scope: {
+      kind: "AREA_SET",
+      areaKeys: ["hebbal"]
+    },
+    committed: ["hebbal"]
+  });else if (id === "pre-cleared") Object.assign(s, {
+    nodeKey: "indiranagar",
+    scope: {
+      kind: "AREA_SET",
+      areaKeys: COM_TRIO.slice()
+    },
+    committed: COM_TRIO.slice(),
+    filters: {
+      ...EX.DEFAULT_FILTERS,
+      comSubs: ["shop", "office"]
+    }
+  });
+  if (id.indexOf("mf-") === 0) {
+    const D = EX.DEFAULT_FILTERS;
+    const bud = f => {
+      const b = EX.budgetsFor(f).filter(x => x.k);
+      return b.length ? b[Math.min(2, b.length - 1)].k : 0;
+    };
+    const resEd = {
+      ...D,
+      ptype: "Apartment",
+      beds: 2
+    };
+    resEd.maxPrice = bud(resEd);
+    const res = {
+      device: "mobile",
+      vp: id === "mf-12" ? "375" : "390",
+      presentation: "map",
+      nodeKey: "hebbal",
+      scope: {
+        kind: "AREA_SET",
+        areaKeys: TRIO.slice()
+      },
+      committed: TRIO.slice()
+    };
+    const com = {
+      ...res,
+      nodeKey: "indiranagar",
+      scope: {
+        kind: "AREA_SET",
+        areaKeys: COM_TRIO.slice()
+      },
+      committed: COM_TRIO.slice()
+    };
+    const comD = {
+      ...D,
+      family: "Commercial",
+      comSubs: []
+    };
+    Object.assign(s, id === "mf-09" || id === "mf-10" ? com : res);
+    if (id === "mf-02") s.mfFocusDemo = true;else if (id === "mf-03") s.mfSheet = {
+      draft: {
+        ...D
+      }
+    };else if (id === "mf-04" || id === "mf-12") s.mfSheet = {
+      draft: {
+        ...resEd
+      }
+    };else if (id === "mf-05") s.filters = {
+      ...resEd
+    };else if (id === "mf-06") {
+      s.filters = {
+        ...resEd
+      };
+      s.mfSheet = {
+        draft: {
+          ...resEd
+        }
+      };
+    } else if (id === "mf-07") {
+      s.filters = {
+        ...resEd
+      };
+      s.mfSheet = {
+        draft: {
+          ...D,
+          purpose: resEd.purpose,
+          family: resEd.family
+        }
+      };
+    } else if (id === "mf-08") s.filters = {
+      ...D,
+      beds: 3,
+      maxPrice: 5000000,
+      ready: true
+    };else if (id === "mf-09") {
+      s.filters = {
+        ...comD
+      };
+      s.mfSheet = {
+        draft: {
+          ...comD,
+          comSubs: ["shop"]
+        }
+      };
+    } else if (id === "mf-10") s.filters = {
+      ...comD,
+      comSubs: ["shop"]
+    };else if (id === "mf-13") s.filters = {
+      ...D,
+      purpose: "Rent"
+    };else if (id === "mf-14" || id === "mf-15" || id === "mf-16") {
+      const sel = window.EXJ.schoolsIn("hebbal")[0];
+      Object.assign(s, {
+        journey: "schools",
+        sch: {
+          ...schBase(),
+          nodeKey: sel.areaKey,
+          areaKey: sel.areaKey,
+          areaKeys: [sel.areaKey],
+          selId: sel.id,
+          radiusKm: 5
+        }
+      });
+      const schEd = {
+        ...D,
+        ptype: "Apartment",
+        beds: 2
+      };
+      if (id === "mf-15") s.mfSheet = {
+        draft: schEd
+      };
+      if (id === "mf-16") s.filters = schEd;
+    } else if (id === "mf-11") {
+      s.filters = {
+        ...resEd
+      };
+      const first = EX.inAreas(TRIO, resEd)[0];
+      s.peek = first ? first.id : null;
+    }
+  }
   return s;
 }
 const HINTS = {
+  "mf-01": () => "Map, no filters: Filters leads the top-left row — outlined, labelled, 44px, clear of zoom and the results sheet. Tap it.",
+  "mf-02": () => "Keyboard focus on the entry. Its accessible name states the count: “Filters, none active”. Enter opens the sheet and focus moves to its heading.",
+  "mf-03": () => "Modal bottom sheet over a dimmed, inert map. The same List groups, all open. Buy/Rent sits first because the List control bar is not on Map.",
+  "mf-04": () => "Staged: chips change, the map behind does not. The footer states the gap — not applied yet — and the button carries the live count for the draft.",
+  "mf-05": () => "Applied: the entry turns navy with a count, the results sheet says Filtered: … with Edit, and the markers, sheet and List all show the same result set.",
+  "mf-06": () => "Reopening restores the applied selections exactly — the draft is seeded from the canonical filters every time. Nothing to apply until something changes.",
+  "mf-07": () => "Clear all resets the DRAFT (Buy/Rent and family kept, like the List reset). The map still shows the filtered set until Show is tapped; Cancel keeps the old filters.",
+  "mf-08": () => "Honest zero: 0 matching homes, the filters named, nothing widened. Edit filters reopens the sheet; Clear filters applies the reset at once.",
+  "mf-09": () => "Commercial in the same sheet: family, Commercial type, contextual area and budget — no bedrooms. The draft adds Shops; the count updates before Apply.",
+  "mf-10": () => "Commercial subtype applied: pins, sheet title and the Filtered line agree. The entry counts refinements only (the family is said by the result noun).",
+  "mf-11": () => "A marker preview replaces the results sheet at the bottom; Filters stays top-left and usable. Opening Filters closes the preview first.",
+  "mf-13": () => "Buy → Rent only: the badge shows no count (intent is not a refinement), but the heading says homes to rent · Residential, so the Rent context is never lost.",
+  "mf-14": () => "Schools → Homes near a school, on Map: the same Filters entry. The heading states intent + family; school and radius stay owned by Schools (ring, pin, breadcrumb).",
+  "mf-15": () => "Same sheet, property filters only — no school, radius, board or level controls. The count is homes within the SAME school radius for the draft.",
+  "mf-16": () => "Applied in Schools: entry shows ②, Filtered: 2+ BHK · Apartment. Radius, selected school and Back to schools are unchanged.",
+  "mf-12": () => "375 × 667: the sheet stops 88px below the top edge (app bar stays visible, dimmed), the body scrolls, the footer with Show stays pinned. Switch 390/412 in the bar above to compare.",
   "guided-areas": (st, v) => st.detail ? "Press Back to results — the scope, filters and camera come back unchanged." : v.scopeKind === "HIERARCHY" ? "Browse all is the full " + (st.scope.level === "direction" ? "Direction" : "Local destination") + " — Back restores the exact hierarchy screen, camera and cluster focus." : v.scopeKind === "CITY" ? "Browse all listings is city-wide. Back returns to the directional Areas root." : v.level === "city" ? "Three journeys, one shell. Tap the North card on the map — or its row in the panel." : v.level === "direction" ? "Continue into Hebbal · Yelahanka." : v.level === "local" ? st.clusterFocus ? "Breadcrumb is unchanged — this was a camera move. Now tap the Hebbal marker." : "Tap the dashed Hebbal · Nagawara cluster: it zooms, it does not navigate." : "Open a listing, then use Back to results.",
   "schools-first": st => st.sch.selId ? "Radius is a school-centred query. 3 / 5 / 10 km, distance-sorted." : st.sch.areaKey ? "Board and Level filters narrow the rows and the map pins together. View homes opens the radius state." : "Pick a direction — or search a school by name in the bar above and skip the funnel entirely.",
   "area-schools": st => st.sch.selId ? "Back to properties in Hebbal returns to the Areas journey with Hebbal still selected." : "You arrived from Hebbal: the area is kept, and Areas still holds the Hebbal property state.",
@@ -49205,7 +58342,52 @@ const HINTS = {
   viewport: st => st.scope && st.scope.kind === "VIEWPORT" ? "Return to Hebbal + Nagawara + Jakkur when you are done." : "Pan or zoom the map: results stay. Then press Search this area.",
   "zero-results": () => "Nothing widened itself. The recovery offered matches the scope you are actually in.",
   alert: st => st.alertDraft ? "Check the scope and filters, pick a frequency, then Create alert. Tick the failure box to see the honest failure path." : st.view === "alerts" ? "Pause, resume, delete or open a saved alert." : "Press Create alert in the scope bar.",
-  mobile: st => st.presentation === "map" ? "Tap the cluster to zoom — the breadcrumb does not change. List returns to the same state." : "Journeys, list and map all switch at 390 × 844."
+  mobile: st => st.presentation === "map" ? "Tap the cluster to zoom — the breadcrumb does not change. List returns to the same state." : "Journeys, list and map all switch at 390 × 844.",
+  // ---- Commercial — additive states -----------------------------------------
+  "com-broad": st => st.filters.family !== "Commercial" ? "Residential is selected again — this is the untouched baseline. Press Commercial in the Type row to switch family." : "Type holds the property FAMILY — Residential or Commercial, nothing else. Choosing Commercial swapped the subtype row beneath it; the city, the areas, the breadcrumb and the map are exactly as they were.",
+  "com-shop": () => "Shop selected inside the Commercial family. Card facts are built-up area and floor or hub; the pin carries the label, never a gated price.",
+  "com-office": () => "Office selected. Shop and Office are told apart by label, not by colour — both read in greyscale.",
+  "com-multi": () => "Three subtypes at once. Each chip in the scope bar removes only itself.",
+  "com-cleared-subs": () => "Subtypes cleared, still in Commercial: All commercial is a family-LOCAL state. Clearing subtypes never leaves the family, the geography or the search behind.",
+  "com-zero": () => "Zero results keeps the selection and claims no count. Widening never switches family on its own — that offer is explicit and labelled.",
+  "com-detail": () => "Subtype-aware detail in the existing detail view. Broker-entered claims are boxed and labelled; absent fields are omitted, never stubbed.",
+  "com-mobile": st => st.presentation === "map" ? "Commercial pins and popovers at 390 × 844 — the existing map behaviour, unchanged." : "Residential | Commercial stays at the top; the commercial subtype chips sit directly below it and wrap over two rows. Refinements are one tap away under More filters.",
+  // ---- family switching — subtype state is scoped per family ------------------
+  "fam-res-all": () => "Residential family, All residential. Beds and budget belong to this family and are offered only here.",
+  "fam-res-sub": () => "Residential + Villas. Now press Commercial — this Villas selection is remembered, not carried across.",
+  "fam-res-to-com": () => "Switched to Commercial with Shop + Office. The Villas selection still exists, parked in the Residential family. Same city, areas, breadcrumb, camera and Buy/Rent as the Residential frame.",
+  "fam-com-to-res": () => "Switched back: Villas is restored exactly as it was, and Shop + Office are parked in Commercial. Neither family ever reinterprets the other's subtypes.",
+  // ---- Commercial area & budget ----------------------------------------------
+  "ca-all": () => "All Commercial with both attribute filters: AREA (SQ FT) because the selection spans subtypes, plus the Buy budget on the Commercial ladder. Illustrative thresholds, not market data.",
+  "ca-shop": () => "One subtype selected, so the area label names what it measures: BUILT-UP AREA (SQ FT). The number in the field is unchanged — only the label follows the subtype.",
+  "ca-office": () => "Office keeps BUILT-UP AREA. Same field, same value, subtype-appropriate label.",
+  "ca-building": () => "Commercial Building keeps BUILT-UP AREA at a larger threshold.",
+  "ca-warehouse": () => "Warehouse / Godown reads WAREHOUSE AREA, on Rent / Lease with monthly budget bands.",
+  "ca-land": () => "Commercial Land reads PLOT SIZE. This frame uses Hebbal · KR Puram · Budigere Cross because commercial land really does sit on the city edge — showing an empty central result set would prove nothing. Note the imagery: a cleared development plot, never green farmland, which belongs to Agricultural.",
+  "ca-multi": () => "Three subtypes selected, so the label falls back to the generic AREA (SQ FT): one number cannot mean built-up and plot size at once.",
+  "ca-lease": () => "Rent / Lease: the budget switches to explicit monthly bands (≤ ₹50K / month …). Purchase bands are never reused here. Cards still show each listing's own For Rent or For Lease.",
+  "ca-anon": () => "Anonymous Commercial: price band or sign-in gate, coarsened location, no phone or email. Signing in reveals the broker's figures — it does not verify them.",
+  "ca-zero": () => "Zero results, Commercial recovery order: drop the subtype, widen the budget, widen the area, create an alert. Leaving Commercial is offered last and separately. No nearby areas, no invented counts.",
+  "ca-one": () => "Singular copy: 1 commercial property for sale, not 1 commercial properties. Watch the count line and the card action.",
+  "ca-mobile": () => "Commercial filters at 390 × 844: family selector, subtype row, then area and budget — Type and Commercial type stay open, Area and Budget sit behind More filters with a count. Every group label sits directly above its own chips, chips wrap, 44px tap targets, nothing covers the search or List/Map.",
+  // ---- contextual attribute filters ------------------------------------------
+  "attr-dwelling": () => "A dwelling offers Beds, Carpet area and Budget. Area is available to every Residential subtype — it is the unit that changes, not its presence.",
+  "attr-plot": () => "Plots swap Beds for Plot size in the same place, and keep Budget. A plot has no bedrooms, so none are offered, claimed on a card, or shown in the detail. The 2 BHK and carpet-area selections are parked, not applied.",
+  "attr-plot-to-dwelling": () => "Back on a dwelling: Beds returns at 2+ and Carpet area at 1,000+ sq ft, exactly as they were. Plot size is parked at 1,200+ sq ft. Carpet area and plot size are separate state and never stand in for each other.",
+  "attr-com-buy": () => "Commercial Buy budget — sale-price thresholds on the Commercial ladder. Illustrative values, not derived from verified listings. The Residential budget is untouched underneath.",
+  "attr-com-rent": () => "Same control on Rent: monthly-rent thresholds, and the label reads Monthly rent with Any rent as the default.",
+  "attr-com-sub-budget": () => "Budget is independent of subtype: add or remove Commercial subtype chips and it stays put. Reset commercial filters is the one action that clears both.",
+  "attr-res-mobile": () => "Residential filters at 390 × 844: Type and Residential type stay open, the refinements sit behind More filters with a count. Open it — Bedrooms, Carpet area and Budget each keep their own label directly above their own chips.",
+  "attr-plot-mobile": () => "Plot filters at 390 × 844 — Plot size and Budget as their own stacked groups, tap-only, with no bedrooms and no carpet area anywhere.",
+  // ---- Preserved — non-regression -------------------------------------------
+  "pre-default": () => "Baseline, Residential family: the Type row offers Residential | Commercial, and Residential type below it holds the original subtypes. Every count is the pre-Commercial count.",
+  "pre-hierarchy": () => "Canonical hierarchy, unchanged: City → Direction → Local destination → Area, with the original breadcrumb and Back.",
+  "pre-residential": () => "Existing residential filtering — Apartments, 2+ BHK. Beds and budget still apply, and Commercial stock is invisible to these counts.",
+  "pre-schools": () => "The Schools journey, untouched. Agricultural and Schools stay separate journeys — neither is a property family.",
+  "pre-agri": () => "The Agricultural journey, untouched — its own parcel model, its own counts. It is a journey, never a third property type.",
+  "pre-listmap": () => "List / Map switching at 390 × 844, exactly as before. Switch to List and back.",
+  "pre-marker": () => "Existing price pins, clusters and marker selection. Click a pin to open the original listing detail.",
+  "pre-cleared": st => st.filters.family === "Commercial" ? "Now press Residential in the Type row." : "Back in the Residential family: same three areas, same camera, same breadcrumb, residential counts restored. This is the baseline experience."
 };
 function Experience() {
   const [st, setSt] = React.useState(() => {
@@ -49221,6 +58403,8 @@ function Experience() {
     hover: k
   });
   const snapRef = React.useRef([]);
+  const mfOpenRef = React.useRef(false),
+    mfSkipPop = React.useRef(false);
 
   // ---- browser history: committed states only -------------------------------
   const snapOf = s => ({
@@ -49262,6 +58446,19 @@ function Experience() {
   }, []);
   React.useEffect(() => {
     const onPop = e => {
+      // #2627: browser Back while the filter sheet is open = Cancel, nothing else
+      if (mfSkipPop.current) {
+        mfSkipPop.current = false;
+        return;
+      }
+      if (mfOpenRef.current) {
+        mfOpenRef.current = false;
+        setSt(s => ({
+          ...s,
+          mfSheet: null
+        }));
+        return;
+      }
       const i = e.state && e.state.i;
       const snap = i != null ? snapRef.current[i] : null;
       setSt(s => ({
@@ -49408,6 +58605,17 @@ function Experience() {
   }, [st.scope, st.filters, st.query, st.journey]);
 
   // ---- actions -------------------------------------------------------------
+  const mfClose = patch => {
+    set({
+      mfSheet: null,
+      ...patch
+    });
+    if (mfOpenRef.current) {
+      mfOpenRef.current = false;
+      mfSkipPop.current = true;
+      window.history.back();
+    }
+  };
   const act = {
     hover: k => setHover(k),
     setCity: c => commit({
@@ -49428,10 +58636,23 @@ function Experience() {
       shown: 8,
       phase: "idle"
     }),
+    // Switching family swaps which subtype row is offered and which catalogue is
+    // searched. It touches nothing else — not the journey, city, search, hierarchy,
+    // breadcrumb, selected areas, scope mode, camera, List/Map or Buy/Rent — and it
+    // leaves BOTH families' subtype selections in place, so each is restored on return.
+    setFamily: fam => set({
+      filters: {
+        ...st.filters,
+        family: fam
+      },
+      shown: 8,
+      phase: "idle"
+    }),
     resetFilters: () => set({
       filters: {
         ...EX.DEFAULT_FILTERS,
-        purpose: st.filters.purpose
+        purpose: st.filters.purpose,
+        family: st.filters.family
       },
       shown: 8,
       phase: "idle"
@@ -50226,7 +59447,70 @@ function Experience() {
       saved: st.saved.indexOf(id) !== -1 ? st.saved.filter(x => x !== id) : st.saved.concat(id)
     }),
     setPresentation: p => set({
-      presentation: p
+      presentation: p,
+      mfSheet: null
+    }),
+    // ---- #2627 mobile Map filters: staged copy of the canonical filters -------
+    openMapFilters: () => {
+      if (!mfOpenRef.current) {
+        mfOpenRef.current = true;
+        window.history.pushState({
+          i: Math.max(0, snapRef.current.length - 1),
+          mf: true
+        }, "");
+      }
+      set({
+        mfSheet: {
+          draft: {
+            ...st.filters
+          }
+        },
+        peek: null,
+        mfFocusDemo: false
+      });
+    },
+    mfEdit: p => setSt(s => s.mfSheet ? {
+      ...s,
+      mfSheet: {
+        ...s.mfSheet,
+        draft: {
+          ...s.mfSheet.draft,
+          ...p
+        }
+      }
+    } : s),
+    mfClear: () => setSt(s => s.mfSheet ? {
+      ...s,
+      mfSheet: {
+        ...s.mfSheet,
+        draft: window.MFX.cleared(s.mfSheet.draft)
+      }
+    } : s),
+    mfCancel: () => mfClose({}),
+    mfApply: () => {
+      const f = st.mfSheet.draft;
+      const n = window.MFX.count(st, f);
+      mfClose({
+        filters: {
+          ...f
+        },
+        shown: 8,
+        phase: "idle",
+        peek: null,
+        mfAnnounce: "Filters applied. " + n + " " + EX.nounsOf(f).count(n) + " on the map."
+      });
+    },
+    mapClearFilters: () => {
+      const f = window.MFX.cleared(st.filters);
+      set({
+        filters: f,
+        shown: 8,
+        phase: "idle",
+        mfAnnounce: "Filters cleared. " + window.MFX.count(st, f) + " listings on the map."
+      });
+    },
+    toggleSignedIn: () => set({
+      signedIn: !st.signedIn
     }),
     openAlerts: () => set({
       view: "alerts"
@@ -50256,7 +59540,12 @@ function Experience() {
     hint: hint,
     onScenario: id => {
       snapRef.current = [];
-      setSt(scenarioState(id));
+      mfOpenRef.current = false;
+      setSt(prev => {
+        const n = scenarioState(id);
+        if (n.device === "mobile" && prev.device === "mobile" && id !== "mf-12" && prev.vp) n.vp = prev.vp;
+        return n;
+      });
     }
   }), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -50265,12 +59554,151 @@ function Experience() {
       placeItems: "start center",
       padding: isMobile ? "24px 16px 40px" : "18px 16px 32px"
     }
-  }, /*#__PURE__*/React.createElement(ExpShell, {
+  }, /*#__PURE__*/React.createElement(ExpErrorBoundary, null, /*#__PURE__*/React.createElement(ExpShell, {
     st: st,
     view: view,
     act: act,
     isMobile: isMobile
-  })));
+  }))));
+}
+
+// ---- BEFORE / AFTER comparison (review chrome, not product UI) --------------
+// The two scenarios below share ONE scope: the same city, the same three committed
+// areas, the same camera and the same breadcrumb. Switching between them therefore
+// shows the additive delta and nothing else.
+const COMPARE_ROWS = [["Canonical hierarchy", "City → Direction → Local destination → Area", "Identical — family is a filter, not a level"], ["Breadcrumb and Back", "Original breadcrumb, original history", "Identical"], ["Search input", "Interactive, opens area suggestions", "Identical — same component, same behaviour"], ["Buy / Rent", "Buy shows sale stock, Rent shows rental stock", "Identical — Lease listings surface under Rent"], ["Top-level TYPE row", "Residential subtypes sat here", "Holds the FAMILY only: Residential | Commercial"], ["Subtype row", "Residential type — All residential, Apartments, Villas, Plots", "Commercial type — All commercial + the five subtypes"], ["Subtype memory", "One selection", "One per family, retained independently"], ["Attribute row", "Beds + Carpet area + Budget · Plot size + Budget on Plots", "Budget only — bedrooms never apply"], ["Budget state", "Residential ladder (≤ ₹50 L … ₹1.2 Cr)", "Own Commercial ladder, own field, own memory"], ["Result scope", "Selected areas, chips removable", "Identical — subtype chips join the same row"], ["Result cards", "Existing listing card", "Same card, three content slots swapped"], ["Map markers", "Price pin, cluster disc, selection", "Same pin carrying the subtype label"], ["Clustering and camera", "Proximity clusters, fly-to-bounds", "Identical — untouched"], ["List / Map switching", "Available at 390 × 844", "Identical"], ["Schools / Agricultural", "Separate Discover journeys", "Identical — neither is a property family"], ["Existing counts", "807 listings city-wide", "807 — Commercial stock is invisible to the Residential family"]];
+function ExpCompare({
+  st,
+  setSt,
+  onScenario
+}) {
+  // `open` lives in shared state, not local: ExpShell's fit must re-run when this
+  // expands, and a component-local toggle would not re-render it.
+  const open = !!st.compareOpen;
+  const setOpen = v => setSt(s => ({
+    ...s,
+    compareOpen: v
+  }));
+  const before = st.scenario === "pre-cleared",
+    after = st.scenario === "com-broad";
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "var(--navy-800)",
+      borderTop: "1px solid rgba(255,255,255,0.12)",
+      color: "rgba(255,255,255,0.85)"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "10px",
+      padding: "6px 16px",
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "9.5px",
+      fontWeight: 700,
+      letterSpacing: "0.05em",
+      textTransform: "uppercase",
+      color: "rgba(255,255,255,0.45)"
+    }
+  }, "Before / after"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => onScenario("pre-cleared"),
+    style: {
+      padding: "4px 11px",
+      borderRadius: "var(--radius-full)",
+      cursor: "pointer",
+      fontFamily: "var(--font-sans)",
+      fontSize: "11.5px",
+      fontWeight: 700,
+      border: "1px solid " + (before ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.22)"),
+      background: before ? "#fff" : "transparent",
+      color: before ? "var(--navy-900)" : "rgba(255,255,255,0.85)"
+    }
+  }, "Residential family"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "12px",
+      color: "rgba(255,255,255,0.4)"
+    }
+  }, "\u2194"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => onScenario("com-broad"),
+    style: {
+      padding: "4px 11px",
+      borderRadius: "var(--radius-full)",
+      cursor: "pointer",
+      fontFamily: "var(--font-sans)",
+      fontSize: "11.5px",
+      fontWeight: 700,
+      border: "1px solid " + (after ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.22)"),
+      background: after ? "#fff" : "transparent",
+      color: after ? "var(--navy-900)" : "rgba(255,255,255,0.85)"
+    }
+  }, "Commercial family"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "11.5px",
+      color: "rgba(255,255,255,0.62)",
+      minWidth: "200px",
+      flex: 1
+    }
+  }, "Same city, same three areas, same camera, same breadcrumb, same Buy/Rent \u2014 only the property family, its subtype row and the result membership change."), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setOpen(!open),
+    style: {
+      padding: "4px 10px",
+      borderRadius: "var(--radius-full)",
+      cursor: "pointer",
+      fontFamily: "var(--font-sans)",
+      fontSize: "11.5px",
+      fontWeight: 600,
+      border: "1px solid rgba(255,255,255,0.22)",
+      background: "transparent",
+      color: "rgba(255,255,255,0.85)",
+      whiteSpace: "nowrap"
+    }
+  }, open ? "Hide the element-by-element check" : "Element-by-element check")), open && /*#__PURE__*/React.createElement("div", {
+    "data-review-expand": "true",
+    style: {
+      padding: "0 16px 12px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxHeight: "38vh",
+      overflowY: "auto",
+      borderRadius: "var(--radius-md)",
+      border: "1px solid rgba(255,255,255,0.12)"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "minmax(150px,1fr) minmax(180px,1.3fr) minmax(180px,1.4fr)",
+      gap: "1px",
+      background: "rgba(255,255,255,0.12)"
+    }
+  }, ["Element", "Residential family", "Commercial family"].map(c => /*#__PURE__*/React.createElement("div", {
+    key: c,
+    style: {
+      background: "var(--navy-900)",
+      padding: "7px 11px",
+      fontSize: "9.5px",
+      fontWeight: 700,
+      letterSpacing: "0.05em",
+      textTransform: "uppercase",
+      color: "rgba(255,255,255,0.55)"
+    }
+  }, c)), COMPARE_ROWS.map(r => r.map((cell, i) => {
+    const added = i === 2 && /Holds the FAMILY|Commercial type|per family|bedrooms never|own field|Same card|Same pin|slots swapped|subtype label/.test(cell);
+    return /*#__PURE__*/React.createElement("div", {
+      key: r[0] + i,
+      style: {
+        background: "var(--navy-800)",
+        padding: "7px 11px",
+        fontSize: "11px",
+        lineHeight: 1.4,
+        color: i === 0 ? "rgba(255,255,255,0.92)" : added ? "var(--gold-100)" : "rgba(255,255,255,0.66)",
+        fontWeight: i === 0 ? 700 : 400
+      }
+    }, cell);
+  }))))));
 }
 
 // ---- reviewer strip (not product UI) ---------------------------------------
@@ -50280,6 +59708,28 @@ function ExpReviewerBar({
   onScenario,
   hint
 }) {
+  // The scenario set has grown to five groups; showing every pill at once made the
+  // chrome taller than the shell it frames. One group at a time keeps it to two rows.
+  const groupOf = id => {
+    const s = SCENARIOS.filter(x => x.id === id)[0];
+    return s ? s.group || null : null;
+  };
+  const [grp, setGrp] = React.useState(() => groupOf(st.scenario));
+  React.useEffect(() => {
+    setGrp(groupOf(st.scenario));
+  }, [st.scenario]);
+  const pill = on => ({
+    padding: "4px 10px",
+    borderRadius: "var(--radius-full)",
+    cursor: "pointer",
+    fontFamily: "var(--font-sans)",
+    fontSize: "11.5px",
+    fontWeight: 600,
+    border: "1px solid " + (on ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.2)"),
+    background: on ? "#fff" : "transparent",
+    color: on ? "var(--navy-900)" : "rgba(255,255,255,0.8)",
+    whiteSpace: "nowrap"
+  });
   return /*#__PURE__*/React.createElement("div", {
     style: {
       position: "sticky",
@@ -50287,13 +59737,14 @@ function ExpReviewerBar({
       zIndex: 900,
       background: "var(--navy-900)",
       color: "rgba(255,255,255,0.82)"
-    }
+    },
+    "data-review-chrome": "true"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
-      gap: "10px",
-      padding: "7px 16px",
+      gap: "8px",
+      padding: "6px 16px",
       flexWrap: "wrap"
     }
   }, /*#__PURE__*/React.createElement("span", {
@@ -50304,38 +59755,36 @@ function ExpReviewerBar({
       textTransform: "uppercase",
       color: "rgba(255,255,255,0.5)"
     }
-  }, "Review"), /*#__PURE__*/React.createElement("div", {
+  }, "Review"), SCENARIO_GROUPS.map(g => {
+    const on = (g.key || null) === grp;
+    return /*#__PURE__*/React.createElement("button", {
+      key: g.label,
+      onClick: () => setGrp(g.key || null),
+      style: {
+        padding: "4px 10px",
+        borderRadius: "var(--radius-full)",
+        cursor: "pointer",
+        fontFamily: "var(--font-sans)",
+        fontSize: "11px",
+        fontWeight: 700,
+        border: "1px solid " + (on ? "rgba(255,255,255,0.55)" : "transparent"),
+        background: on ? "rgba(255,255,255,0.14)" : "transparent",
+        color: on ? "#fff" : "rgba(255,255,255,0.55)",
+        whiteSpace: "nowrap"
+      }
+    }, g.label);
+  }), /*#__PURE__*/React.createElement("span", {
     style: {
+      marginLeft: "auto",
       display: "flex",
-      gap: "4px",
-      flexWrap: "wrap"
+      gap: "4px"
     }
-  }, SCENARIOS.map(j => /*#__PURE__*/React.createElement("button", {
-    key: j.id,
-    onClick: () => onScenario(j.id),
-    style: {
-      padding: "4px 10px",
-      borderRadius: "var(--radius-full)",
-      cursor: "pointer",
-      fontFamily: "var(--font-sans)",
-      fontSize: "11.5px",
-      fontWeight: 600,
-      border: "1px solid " + (st.scenario === j.id ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.2)"),
-      background: st.scenario === j.id ? "#fff" : "transparent",
-      color: st.scenario === j.id ? "var(--navy-900)" : "rgba(255,255,255,0.8)"
-    }
-  }, j.label))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: "4px",
-      marginLeft: "6px"
-    }
-  }, ["desktop", "mobile"].map(d => /*#__PURE__*/React.createElement("button", {
-    key: d,
+  }, /*#__PURE__*/React.createElement("button", {
     onClick: () => setSt(s => ({
       ...s,
-      device: d,
-      presentation: "list"
+      device: "desktop",
+      presentation: "list",
+      mfSheet: null
     })),
     style: {
       padding: "4px 10px",
@@ -50345,47 +59794,263 @@ function ExpReviewerBar({
       fontSize: "11.5px",
       fontWeight: 600,
       border: "1px solid rgba(255,255,255,0.2)",
-      background: st.device === d ? "rgba(255,255,255,0.16)" : "transparent",
-      color: "rgba(255,255,255,0.85)"
+      background: st.device === "desktop" ? "rgba(255,255,255,0.16)" : "transparent",
+      color: "rgba(255,255,255,0.85)",
+      whiteSpace: "nowrap"
     }
-  }, d === "desktop" ? "1366 × 768" : "390 × 844"))), /*#__PURE__*/React.createElement("span", {
+  }, "1366 \xD7 768"), Object.keys(EXP_MOBILE_VP).map(k => {
+    const on = st.device === "mobile" && (st.vp || "390") === k;
+    return /*#__PURE__*/React.createElement("button", {
+      key: k,
+      onClick: () => setSt(s => ({
+        ...s,
+        device: "mobile",
+        vp: k,
+        presentation: s.device === "mobile" ? s.presentation : "list"
+      })),
+      style: {
+        padding: "4px 10px",
+        borderRadius: "var(--radius-full)",
+        cursor: "pointer",
+        fontFamily: "var(--font-sans)",
+        fontSize: "11.5px",
+        fontWeight: 600,
+        border: "1px solid rgba(255,255,255,0.2)",
+        background: on ? "rgba(255,255,255,0.16)" : "transparent",
+        color: "rgba(255,255,255,0.85)",
+        whiteSpace: "nowrap"
+      }
+    }, EXP_MOBILE_VP[k].join(" × "));
+  }), [["Anon", false], ["Signed in", true]].map(([lbl, v]) => /*#__PURE__*/React.createElement("button", {
+    key: lbl,
+    onClick: () => setSt(s => ({
+      ...s,
+      signedIn: v
+    })),
     style: {
-      flex: 1,
-      minWidth: "220px",
-      fontSize: "12px",
-      color: "rgba(255,255,255,0.72)"
+      padding: "4px 10px",
+      borderRadius: "var(--radius-full)",
+      cursor: "pointer",
+      fontFamily: "var(--font-sans)",
+      fontSize: "11.5px",
+      fontWeight: 600,
+      border: "1px solid rgba(255,255,255,0.2)",
+      background: !!st.signedIn === v ? "rgba(255,255,255,0.16)" : "transparent",
+      color: "rgba(255,255,255,0.85)",
+      whiteSpace: "nowrap"
     }
-  }, hint), /*#__PURE__*/React.createElement("a", {
+  }, lbl)), [["Buyer", "buyer"], ["Dealer", "dealer"], ["Admin", "admin"]].map(([lbl, v]) => /*#__PURE__*/React.createElement("button", {
+    key: v,
+    onClick: () => setSt(s => ({
+      ...s,
+      role: v
+    })),
+    "data-review-role": v,
+    style: {
+      padding: "4px 10px",
+      borderRadius: "var(--radius-full)",
+      cursor: "pointer",
+      fontFamily: "var(--font-sans)",
+      fontSize: "11.5px",
+      fontWeight: 600,
+      border: "1px solid rgba(255,255,255,0.2)",
+      background: (st.role || "buyer") === v ? "rgba(255,255,255,0.16)" : "transparent",
+      color: "rgba(255,255,255,0.85)",
+      whiteSpace: "nowrap"
+    }
+  }, lbl)), /*#__PURE__*/React.createElement("a", {
     href: "transitions.html",
     style: {
+      alignSelf: "center",
       fontSize: "11.5px",
       fontWeight: 600,
       color: "var(--copper-400)",
-      whiteSpace: "nowrap"
+      whiteSpace: "nowrap",
+      marginLeft: "4px"
     }
-  }, "Storyboard \u2197")));
+  }, "Storyboard \u2197"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "6px",
+      padding: "0 16px 7px",
+      flexWrap: "wrap"
+    }
+  }, SCENARIOS.filter(j => (j.group || null) === grp).map(j => /*#__PURE__*/React.createElement("button", {
+    key: j.id,
+    onClick: () => onScenario(j.id),
+    style: pill(st.scenario === j.id)
+  }, j.label)), /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1,
+      minWidth: "200px",
+      fontSize: "11.5px",
+      color: "rgba(255,255,255,0.72)",
+      paddingLeft: "6px"
+    }
+  }, hint)), /*#__PURE__*/React.createElement(ExpCompare, {
+    st: st,
+    setSt: setSt,
+    onScenario: onScenario
+  }));
+}
+
+// A map hiccup must never cost the whole artifact. Without a boundary, Leaflet
+// throwing from inside a commit effect makes React discard the entire tree, and the
+// reviewer gets a blank page with no clue what happened.
+class ExpErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      err: null,
+      attempt: 0
+    };
+  }
+  static getDerivedStateFromError(err) {
+    return {
+      err: err
+    };
+  }
+  componentDidCatch(err, info) {
+    console.error("Discover shell error:", err, info && info.componentStack);
+  }
+  render() {
+    if (!this.state.err) return /*#__PURE__*/React.createElement(React.Fragment, {
+      key: this.state.attempt
+    }, this.props.children);
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        maxWidth: "560px",
+        margin: "40px auto",
+        padding: "20px 22px",
+        background: "var(--surface-card)",
+        border: "1px solid var(--brick-600)",
+        borderRadius: "var(--radius-lg)",
+        fontFamily: "var(--font-sans)"
+      }
+    }, /*#__PURE__*/React.createElement("h2", {
+      style: {
+        margin: "0 0 8px",
+        fontFamily: "var(--font-serif)",
+        fontSize: "20px",
+        fontWeight: 600,
+        color: "var(--text-strong)"
+      }
+    }, "The Discover shell stopped rendering"), /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 14px",
+        fontSize: "13px",
+        lineHeight: 1.5,
+        color: "var(--text-body)"
+      }
+    }, "This is a failure in the review harness, not a designed state. Try again re-mounts the shell in place; most transient errors clear on the retry."), /*#__PURE__*/React.createElement("pre", {
+      style: {
+        margin: "0 0 14px",
+        padding: "10px 12px",
+        background: "var(--surface-subtle)",
+        borderRadius: "var(--radius-md)",
+        fontFamily: "var(--font-mono)",
+        fontSize: "11.5px",
+        lineHeight: 1.45,
+        color: "var(--brick-600)",
+        whiteSpace: "pre-wrap"
+      }
+    }, String(this.state.err && this.state.err.message || this.state.err)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: "8px",
+        flexWrap: "wrap"
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => this.setState(s => ({
+        err: null,
+        attempt: s.attempt + 1
+      })),
+      style: {
+        padding: "9px 15px",
+        borderRadius: "var(--radius-md)",
+        border: "none",
+        cursor: "pointer",
+        background: "var(--accent)",
+        color: "#fff",
+        fontFamily: "var(--font-sans)",
+        fontSize: "13px",
+        fontWeight: 700
+      }
+    }, "Try again"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => window.location.reload(),
+      style: {
+        padding: "9px 15px",
+        borderRadius: "var(--radius-md)",
+        border: "1px solid var(--border-strong)",
+        cursor: "pointer",
+        background: "var(--paper)",
+        color: "var(--text-strong)",
+        fontFamily: "var(--font-sans)",
+        fontSize: "13px",
+        fontWeight: 600
+      }
+    }, "Reload the artifact")));
+  }
 }
 
 // ---- shell: fixed target sizes, scaled to fit ------------------------------
+const EXP_MOBILE_VP = {
+  375: [375, 667],
+  390: [390, 844],
+  412: [412, 915]
+};
 function ExpShell({
   st,
   view,
   act,
   isMobile
 }) {
-  const W = isMobile ? 390 : 1366,
-    H = isMobile ? 844 : 768;
+  const mvp = EXP_MOBILE_VP[st.vp || "390"] || EXP_MOBILE_VP[390];
+  const W = isMobile ? mvp[0] : 1366,
+    H = isMobile ? mvp[1] : 768;
   const [scale, setScale] = React.useState(1);
+  // The review chrome is MEASURED, never hardcoded — a constant here went stale twice.
+  // But measuring is not enough on its own: the chrome's height also changes when the
+  // hint text re-wraps on a scenario switch, and a ResizeObserver did not fire for
+  // that. So the fit runs after EVERY commit via a dep-less layout effect (two
+  // getBoundingClientRect reads; setScale no-ops when the value is unchanged), which
+  // cannot go stale, with the observer and resize listener kept for changes that
+  // originate outside React.
+  const fit = React.useCallback(() => {
+    const chrome = document.querySelector("[data-review-chrome]");
+    let chromeH = chrome ? chrome.getBoundingClientRect().height : 0;
+    // The element-by-element table is an OPT-IN reference panel. Fitting against it
+    // would crush the shell to an unreadable scale on a short viewport, so it is
+    // excluded: the shell keeps a sensible size and the page scrolls by the table's
+    // height while it is open, which is the normal answer for expanded chrome.
+    const expand = document.querySelector("[data-review-expand]");
+    if (expand) chromeH -= expand.getBoundingClientRect().height;
+    const availW = window.innerWidth - 40;
+    // the shell sits in a padded container: 18/32 desktop, 24/40 mobile. The extra 4px
+    // is slack: the chrome's height is fractional and can settle a pixel late (hint
+    // reflow, font swap), and without slack that remainder becomes page overflow.
+    const availH = window.innerHeight - chromeH - (isMobile ? 64 : 50) - 4;
+    const next = Math.max(0.2, Math.min(1, availW / W, availH / H));
+    setScale(s => Math.abs(s - next) < 0.0005 ? s : next);
+  }, [W, H, isMobile]);
+  React.useLayoutEffect(fit);
   React.useEffect(() => {
-    const fit = () => {
-      const availW = window.innerWidth - 40,
-        availH = window.innerHeight - 130;
-      setScale(Math.min(1, availW / W, availH / H));
-    };
-    fit();
+    // one deferred pass for anything that settles after the commit
+    const raf = requestAnimationFrame(fit);
     window.addEventListener("resize", fit);
-    return () => window.removeEventListener("resize", fit);
-  }, [W, H]);
+    let ro = null;
+    const chrome = document.querySelector("[data-review-chrome]");
+    if (chrome && typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(fit);
+      ro.observe(chrome);
+    }
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", fit);
+      ro && ro.disconnect();
+    };
+  }, [fit]);
   return /*#__PURE__*/React.createElement("div", {
     style: {
       width: W * scale + "px",
@@ -50421,29 +60086,253 @@ const JOURNEY_BADGE = {
   schools: ["Schools", "neutral"],
   agri: ["Agricultural", "success"]
 };
+
+// ONE shared global header for every desktop state, session and role (same rule in
+// Discover and Results). Mobile (compact) keeps its existing chrome. Structure:
+// logo · [city | Buy/Rent | search] · journeys · role actions. The passive journey
+// badge is gone on desktop (the selected journey pill already says it). Search is
+// floored at 300px. If the row would still overflow: stage 1 drops the logo
+// tagline, stage 2 tightens gaps, stage 3 folds 2+ role actions into one menu.
+// Nothing ever wraps to a second row.
+// Role actions are review-coverage only: they link to the existing Dealer / Admin
+// artifacts in this system and grant nothing.
+const HDR_ROLE_ACTIONS = {
+  buyer: [],
+  dealer: [{
+    label: "My listings",
+    icon: "layers",
+    href: "../broker/listings.html"
+  }, {
+    label: "Post a listing",
+    icon: "plus",
+    href: "../buyer/choose-lisiting-journey.html",
+    primary: true
+  }],
+  admin: [{
+    label: "Admin console",
+    icon: "users",
+    href: "../../City Launch - Admin Wireframes v1.html",
+    primary: true
+  }]
+};
+const HDR_ROLE_LABEL = {
+  buyer: "Buyer",
+  dealer: "Dealer",
+  admin: "Admin"
+};
+function HdrBtn({
+  a,
+  compact
+}) {
+  const base = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
+    border: "1px solid " + (a.primary ? "var(--navy-800)" : "var(--border-strong)"),
+    background: a.primary ? "var(--navy-800)" : "var(--paper)",
+    cursor: "pointer",
+    padding: compact ? "5px 10px" : "7px 12px",
+    borderRadius: "var(--radius-md)",
+    fontFamily: "var(--font-sans)",
+    fontSize: compact ? "11.5px" : "12.5px",
+    fontWeight: 600,
+    color: a.primary ? "#fff" : "var(--text-strong)",
+    whiteSpace: "nowrap",
+    textDecoration: "none",
+    flex: "none"
+  };
+  const {
+    Icon
+  } = window.ReTrendsDesignSystem_f37966;
+  const inner = /*#__PURE__*/React.createElement(React.Fragment, null, a.icon && /*#__PURE__*/React.createElement(Icon, {
+    name: a.icon,
+    size: 14,
+    color: a.primary ? "#fff" : "var(--grey-500)"
+  }), a.label);
+  return a.href ? /*#__PURE__*/React.createElement("a", {
+    href: a.href,
+    target: "_blank",
+    rel: "noopener",
+    "data-role-action": a.label,
+    style: base
+  }, inner) : /*#__PURE__*/React.createElement("button", {
+    onClick: a.onClick,
+    "data-role-action": a.label,
+    style: base
+  }, inner);
+}
+function HdrActionsMenu({
+  label,
+  items
+}) {
+  const {
+    Icon
+  } = window.ReTrendsDesignSystem_f37966;
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const f = e => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    const k = e => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", f);
+    document.addEventListener("keydown", k);
+    return () => {
+      document.removeEventListener("mousedown", f);
+      document.removeEventListener("keydown", k);
+    };
+  }, [open]);
+  const row = {
+    display: "flex",
+    alignItems: "center",
+    gap: "9px",
+    width: "100%",
+    padding: "8px 10px",
+    border: "none",
+    borderRadius: "var(--radius-md)",
+    background: "transparent",
+    cursor: "pointer",
+    fontFamily: "var(--font-sans)",
+    fontSize: "13px",
+    fontWeight: 600,
+    color: "var(--text-strong)",
+    textDecoration: "none",
+    textAlign: "left"
+  };
+  return /*#__PURE__*/React.createElement("span", {
+    ref: ref,
+    "data-design-component": "role-actions-menu",
+    style: {
+      position: "relative",
+      flex: "none"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setOpen(o => !o),
+    "aria-haspopup": "menu",
+    "aria-expanded": open,
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "6px",
+      border: "1px solid var(--border-strong)",
+      background: "var(--paper)",
+      cursor: "pointer",
+      padding: "7px 10px 7px 12px",
+      borderRadius: "var(--radius-md)",
+      fontFamily: "var(--font-sans)",
+      fontSize: "12.5px",
+      fontWeight: 600,
+      color: "var(--text-strong)",
+      whiteSpace: "nowrap"
+    }
+  }, label, /*#__PURE__*/React.createElement(Icon, {
+    name: "chevron-down",
+    size: 14,
+    color: "var(--grey-500)"
+  })), open && /*#__PURE__*/React.createElement("div", {
+    role: "menu",
+    style: {
+      position: "absolute",
+      top: "calc(100% + 6px)",
+      right: 0,
+      zIndex: 1200,
+      minWidth: "190px",
+      padding: "5px",
+      background: "var(--surface-card)",
+      border: "1px solid var(--border)",
+      borderRadius: "var(--radius-lg)",
+      boxShadow: "var(--shadow-lg)"
+    }
+  }, items.map(a => a.href ? /*#__PURE__*/React.createElement("a", {
+    key: a.label,
+    role: "menuitem",
+    href: a.href,
+    target: "_blank",
+    rel: "noopener",
+    style: row
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: a.icon || "arrow-right",
+    size: 15,
+    color: "var(--grey-500)"
+  }), a.label) : /*#__PURE__*/React.createElement("button", {
+    key: a.label,
+    role: "menuitem",
+    onClick: () => {
+      setOpen(false);
+      a.onClick();
+    },
+    style: row
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: a.icon || "arrow-right",
+    size: 15,
+    color: "var(--grey-500)"
+  }), a.label))));
+}
 function ExpTopNav({
   compact,
   st,
-  act
+  act,
+  view
 }) {
   const {
     Icon,
     Badge
   } = window.ReTrendsDesignSystem_f37966;
   const badge = JOURNEY_BADGE[st.journey] || JOURNEY_BADGE.areas;
+  const ref = React.useRef(null);
+  const [stage, setStage] = React.useState(0);
+  const global = !compact && view;
+  const role = st.role || "buyer";
+  const actions = [{
+    label: "Saved alerts",
+    onClick: act.openAlerts
+  }].concat(HDR_ROLE_ACTIONS[role] || []);
+  // reset MUST run before the fit check in the same commit (else set(1)+set(0) nets to a no-op bail-out)
+  React.useLayoutEffect(() => {
+    setStage(0);
+  }, [st.journey, role, st.city]);
+  React.useLayoutEffect(() => {
+    const el = ref.current;
+    if (!global || !el || stage >= 3) return;
+    const sr = el.querySelector('[data-design-component="area-autocomplete"]');
+    if (el.scrollWidth > el.clientWidth + 1 || sr && sr.offsetWidth < 300) setStage(stage + 1);
+  });
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!global || !el || !window.ResizeObserver) return;
+    let w = el.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (Math.abs(el.clientWidth - w) > 1) {
+        w = el.clientWidth;
+        setStage(0);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [global]);
   return /*#__PURE__*/React.createElement("header", {
+    ref: ref,
+    "data-design-component": "global-header",
+    "data-role": role,
+    "data-fit-stage": stage,
     style: {
       flex: "none",
-      height: compact ? "44px" : "56px",
+      position: "relative",
+      zIndex: 1100,
+      height: compact ? "44px" : "58px",
       display: "flex",
       alignItems: "center",
-      gap: compact ? "10px" : "24px",
-      padding: compact ? "0 14px" : "0 22px",
+      gap: compact ? "10px" : global ? stage >= 2 ? "8px" : "14px" : "24px",
+      padding: compact ? "0 14px" : stage >= 2 ? "0 14px" : "0 20px",
       background: "var(--paper)",
       borderBottom: "1px solid var(--border)"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
+      flex: "none",
       display: "flex",
       alignItems: "center",
       gap: "10px"
@@ -50473,36 +60362,38 @@ function ExpTopNav({
       letterSpacing: "-0.01em",
       color: "var(--text-strong)"
     }
-  }, "Bangalore Property Tracker"), !compact && /*#__PURE__*/React.createElement("div", {
+  }, "Bangalore Property Tracker"), !compact && stage < 1 && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: "11px",
       color: "var(--text-muted)"
     }
-  }, "Real estate trends"))), /*#__PURE__*/React.createElement("div", {
+  }, "Real estate trends"))), global && /*#__PURE__*/React.createElement(window.ExpModeBar, {
+    st: st,
+    act: act,
+    view: view,
+    isMobile: false,
+    part: "header",
+    tight: stage >= 2
+  }), /*#__PURE__*/React.createElement("div", {
+    "data-design-component": "role-actions",
     style: {
-      marginLeft: "auto",
+      flex: "none",
+      marginLeft: global ? 0 : "auto",
       display: "flex",
       alignItems: "center",
-      gap: "12px"
+      gap: "8px"
     }
-  }, !compact && /*#__PURE__*/React.createElement(Badge, {
+  }, !global && !compact && /*#__PURE__*/React.createElement(Badge, {
     tone: badge[1],
     pill: true
-  }, badge[0]), /*#__PURE__*/React.createElement("button", {
-    onClick: act.openAlerts,
-    style: {
-      border: "1px solid var(--border-strong)",
-      background: "var(--paper)",
-      cursor: "pointer",
-      padding: compact ? "5px 10px" : "7px 13px",
-      borderRadius: "var(--radius-md)",
-      fontFamily: "var(--font-sans)",
-      fontSize: compact ? "11.5px" : "12.5px",
-      fontWeight: 600,
-      color: "var(--text-strong)",
-      whiteSpace: "nowrap"
-    }
-  }, "Saved alerts")));
+  }, badge[0]), global && stage >= 3 && actions.length > 1 ? /*#__PURE__*/React.createElement(HdrActionsMenu, {
+    label: HDR_ROLE_LABEL[role],
+    items: actions
+  }) : (compact ? actions.slice(0, 1) : actions).map(a => /*#__PURE__*/React.createElement(HdrBtn, {
+    key: a.label,
+    a: a,
+    compact: compact
+  }))));
 }
 function mapProps(st, view, act) {
   return {
@@ -50536,7 +60427,8 @@ function ExpDesktop({
 }) {
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(ExpTopNav, {
     st: st,
-    act: act
+    act: act,
+    view: view
   }), /*#__PURE__*/React.createElement("div", {
     style: {
       flex: 1,
@@ -50651,7 +60543,12 @@ function ExpMobile({
       minHeight: 0
     }
   }, /*#__PURE__*/React.createElement(window.ExpMap, _extends({}, mapProps(st, view, act), {
-    isMobile: true
+    isMobile: true,
+    lead: window.MFX && window.MFX.available(st, view) ? /*#__PURE__*/React.createElement(window.ExpMapFilterButton, {
+      st: st,
+      act: act,
+      focusDemo: st.mfFocusDemo
+    }) : null
   })), /*#__PURE__*/React.createElement(ExpSheet, {
     st: st,
     view: view,
@@ -50667,7 +60564,20 @@ function ExpMobile({
     st: st,
     act: act,
     isMobile: true
-  })));
+  })), mapMode && st.mfSheet && /*#__PURE__*/React.createElement(window.ExpMapFilterSheet, {
+    st: st,
+    act: act,
+    view: view
+  }), /*#__PURE__*/React.createElement("div", {
+    "aria-live": "polite",
+    style: {
+      position: "absolute",
+      width: "1px",
+      height: "1px",
+      overflow: "hidden",
+      clip: "rect(0 0 0 0)"
+    }
+  }, st.mfAnnounce || ""));
 }
 function ExpSheet({
   st,
@@ -50675,6 +60585,9 @@ function ExpSheet({
   act
 }) {
   const rows = view.sheetRows || [];
+  const mapFilters = !!(window.MFX && window.MFX.available(st, view) && (view.listingCapable || view.level === "schools-homes"));
+  // #2627 ruling 2: intent + family always stated in the heading; refinements go on the Filtered line
+  const sheetTitle = mapFilters ? window.MFX.intent(st.filters, view.results.length) : view.sheetTitle;
   // mobile Map mode: a selected marker opens a listing PREVIEW here, never a silent no-op
   if (st.peek) {
     const l = EX.listings.find(x => x.id === st.peek);
@@ -50759,7 +60672,7 @@ function ExpSheet({
         textOverflow: "ellipsis",
         whiteSpace: "nowrap"
       }
-    }, l.propType, " \xB7 ", l.beds, " BHK"), /*#__PURE__*/React.createElement("div", {
+    }, EX.isCom(l) ? EX.comLabel(l.comSub) + " · " + l.deal : l.propType === "Plot" ? "Plot · " + l.sqft.toLocaleString("en-IN") + " sq.ft" : l.propType + " · " + l.beds + " BHK"), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: "11.5px",
         color: "var(--text-muted)",
@@ -50840,12 +60753,13 @@ function ExpSheet({
       gap: "10px"
     }
   }, /*#__PURE__*/React.createElement("span", {
+    "data-design-component": "map-result-heading",
     style: {
       fontSize: "14px",
       fontWeight: 700,
       color: "var(--text-strong)"
     }
-  }, view.sheetTitle), view.clusterFocus ? /*#__PURE__*/React.createElement("button", {
+  }, sheetTitle), view.clusterFocus ? /*#__PURE__*/React.createElement("button", {
     onClick: st.journey === "schools" ? act.schoolsShowAll : act.showAllAreas,
     style: {
       border: "none",
@@ -50881,7 +60795,18 @@ function ExpSheet({
       fontWeight: 700,
       color: "var(--text-strong)"
     }
-  }, "Result scope \u2014 ", view.scopeLabel), /*#__PURE__*/React.createElement("div", {
+  }, "Result scope \u2014 ", view.scopeLabel), mapFilters && view.results.length > 0 && /*#__PURE__*/React.createElement(window.ExpMapFilterSummary, {
+    st: st,
+    act: act
+  }), mapFilters && view.results.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: "10px"
+    }
+  }, /*#__PURE__*/React.createElement(window.ExpMapZero, {
+    st: st,
+    act: act,
+    view: view
+  })) : /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
@@ -50968,7 +60893,8 @@ function buildView(st, results, act) {
     focusChip: st.focusChip,
     hover: st.hover,
     filters: st.filters,
-    noun: st.filters.purpose === "Rent" ? "rentals" : "listings",
+    noun: EX.nounsOf(st.filters).plural,
+    nouns: EX.nounsOf(st.filters),
     clusterFocus: st.clusterFocus,
     presentation: st.presentation,
     results,
@@ -51016,15 +60942,15 @@ function buildView(st, results, act) {
       title: "Where in Bangalore?",
       stat: {
         v: total,
-        l: v.noun
+        l: v.nouns.count(total)
       },
-      sub: "Five directions, positioned as they really lie. Each card names the areas with matching homes inside it."
+      sub: "Five directions, positioned as they really lie. Each card names the areas with matching listings inside it."
     } : level === "direction" ? {
       eyebrow: "Direction · " + crumb[crumb.length - 1].label,
       title: crumb[crumb.length - 1].label,
       stat: {
         v: total,
-        l: v.noun
+        l: v.nouns.count(total)
       },
       sub: areaKids ? "This direction goes straight to its areas — no extra layer is invented." : "Local destinations, named by their prominent areas."
     } : {
@@ -51032,9 +60958,9 @@ function buildView(st, results, act) {
       title: crumb[crumb.length - 1].label,
       stat: {
         v: total,
-        l: v.noun
+        l: v.nouns.count(total)
       },
-      sub: "Pick an area to see its homes. The dashed cluster on the map only zooms."
+      sub: "Pick an area to see its listings. The dashed cluster on the map only zooms."
     };
     if (areaKids) {
       v.notes.push(focusMembers ? {
@@ -51078,38 +61004,38 @@ function buildView(st, results, act) {
     const rent = st.filters.purpose === "Rent";
     v.heading = single ? {
       eyebrow: "Areas · " + areaObjs[0].name,
-      title: (rent ? "Homes to rent in " : "Properties in ") + areaObjs[0].name,
+      title: v.nouns.inPlace(areaObjs[0].name),
       stat: {
         v: results.length,
-        l: rent ? results.length === 1 ? "home to rent" : "homes to rent" : results.length === 1 ? "home for sale" : "homes for sale"
+        l: v.nouns.deal(results.length)
       }
     } : scopeKind === "CITY" ? {
-      eyebrow: "Browse all listings",
-      title: rent ? "All homes to rent in Bangalore" : "All homes in Bangalore",
+      eyebrow: "Browse all " + v.nouns.plural,
+      title: v.nouns.allCity,
       stat: {
         v: results.length,
-        l: v.noun
+        l: v.nouns.count(results.length)
       },
       sub: "Every listing in the city on one filterable list — the funnel skipped, filters and alerts unchanged."
     } : scopeKind === "HIERARCHY" ? {
       eyebrow: "Result scope — " + (st.scope.level === "direction" ? "Direction" : "Local destination"),
-      title: (rent ? "Homes to rent in " : "Properties in ") + crumb[crumb.length - 1].label,
+      title: v.nouns.inPlace(crumb[crumb.length - 1].label),
       stat: {
         v: results.length,
-        l: rent ? results.length === 1 ? "home to rent" : "homes to rent" : results.length === 1 ? "home for sale" : "homes for sale"
+        l: v.nouns.deal(results.length)
       },
       sub: "Every area in " + crumb[crumb.length - 1].label + " on one filterable list."
     } : {
-      eyebrow: scopeKind === "AREA_SET" ? "Selected areas · " + st.committed.length : (rent ? "Homes to rent · " : "Homes for sale · ") + (scopeKind === "POLYGON" ? "Drawn area" : "Visible map area"),
+      eyebrow: scopeKind === "AREA_SET" ? "Selected areas · " + st.committed.length : v.nouns.dealScope + (scopeKind === "POLYGON" ? "Drawn area" : "Visible map area"),
       title: scopeKind === "AREA_SET" ? areaObjs.map(a => a.name).join(", ") : scopeKind === "POLYGON" ? "Inside your drawn boundary" : "On screen right now",
       stat: {
         v: results.length,
-        l: v.noun
+        l: v.nouns.count(results.length)
       }
     };
     if (st.query) v.notes.push({
       tone: "info",
-      text: "Filtered to “" + st.query + "” within " + (single ? areaObjs[0].name : v.scopeLabel) + " — " + results.length + " of " + (single ? EX.countIn(st.committed[0], st.filters) : "the") + " homes.",
+      text: "Filtered to “" + st.query + "” within " + (single ? areaObjs[0].name : v.scopeLabel) + " — " + results.length + " of " + (single ? EX.countIn(st.committed[0], st.filters) : "the") + " " + v.nouns.unitPlural + ".",
       action: "Clear search",
       onAction: () => act.setQuery("")
     });
@@ -51248,6 +61174,17 @@ Object.assign(window, {
   Experience,
   ExpBuildView: buildView
 });
+
+// This file is deliberately side-effect-free: the design-system compiler also bundles
+// it into _ds_bundle.js, which runs BEFORE the data modules load, so any mount here
+// would execute once with its dependencies missing.
+//
+// Instead it publishes a readiness handle that ONLY a copy with real dependencies can
+// set. The bundled copy runs while window.EXP is undefined and so never sets it;
+// experience.html waits for this handle rather than for `window.Experience`, which
+// the bundle also defines. Because this is the last .jsx the page loads, every other
+// real module has already executed by the time it resolves.
+if (window.EXP && window.EXP.DEFAULT_FILTERS && window.EXP.listings) window.ExperienceReady = Experience;
 })(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/new_discover/src/Experience.jsx", error: String((e && e.message) || e) }); }
 
 // ui_kits/new_discover/src/NDMap.jsx
@@ -59906,9 +69843,18 @@ function ListingCard({
   saved,
   onToggleSave,
   distanceKm,
-  priceText
+  priceText,
+  signedIn
 }) {
   const [h, setH] = React.useState(false);
+  // Commercial listings use this same card: same shell, image, save control and
+  // action. Only three content slots change — the price line becomes the price
+  // treatment, the type badge becomes the subtype label, and the bed/bath/size
+  // row becomes at most two subtype facts.
+  const com = listing.kind === "commercial";
+  const comPrice = com && window.EXP.comPriceText(listing, signedIn);
+  // A plot has no bedrooms or bathrooms — it reports land area, never "0 BHK".
+  const isPlot = !com && listing.propType === "Plot";
   return /*#__PURE__*/React.createElement("div", {
     onMouseEnter: () => {
       setH(true);
@@ -59954,7 +69900,31 @@ function ListingCard({
       top: "11px",
       left: "11px"
     }
-  }, /*#__PURE__*/React.createElement(CTrust, {
+  }, com ? /*#__PURE__*/React.createElement("span", {
+    title: window.EXP.com ? window.EXP.com.tierNote(listing.trustTier) : "",
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "5px",
+      padding: "3px 9px",
+      borderRadius: "var(--radius-full)",
+      background: "rgba(255,255,255,0.94)",
+      backdropFilter: "blur(4px)",
+      boxShadow: "var(--shadow-sm)",
+      fontSize: "10.5px",
+      fontWeight: 700,
+      color: "var(--text-strong)",
+      whiteSpace: "nowrap"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: "6px",
+      height: "6px",
+      borderRadius: "50%",
+      background: listing.trustTier === "verified" ? "var(--evergreen-600)" : listing.trustTier === "trusted" ? "var(--ochre-600)" : "var(--grey-400)",
+      flex: "none"
+    }
+  }), window.EXP.com ? window.EXP.com.tierText(listing.trustTier) : "Broker-submitted listing") : /*#__PURE__*/React.createElement(CTrust, {
     tier: listing.trustTier,
     size: "sm"
   })), /*#__PURE__*/React.createElement("button", {
@@ -60034,17 +70004,99 @@ function ListingCard({
       justifyContent: "space-between",
       gap: "8px"
     }
+  }, com ? signedIn || comPrice ? /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "inline-flex",
+      alignItems: "baseline",
+      gap: "6px",
+      flexWrap: "wrap",
+      minWidth: 0
+    }
   }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: "var(--font-mono)",
+      fontSize: signedIn ? "19px" : "17px",
+      fontWeight: 600,
+      color: "var(--text-strong)"
+    }
+  }, comPrice), !signedIn && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "10px",
+      fontWeight: 700,
+      letterSpacing: "var(--tracking-caps)",
+      textTransform: "uppercase",
+      color: "var(--text-muted)"
+    }
+  }, "Price band")) : /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "6px",
+      padding: "5px 10px",
+      borderRadius: "var(--radius-md)",
+      background: "var(--surface-subtle)",
+      border: "1px solid var(--border)",
+      fontSize: "12.5px",
+      fontWeight: 600,
+      color: "var(--text-body)",
+      whiteSpace: "nowrap"
+    }
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "13",
+    height: "13",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "var(--grey-500)",
+    strokeWidth: "2",
+    strokeLinecap: "round"
+  }, /*#__PURE__*/React.createElement("rect", {
+    x: "4",
+    y: "11",
+    width: "16",
+    height: "10",
+    rx: "2"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M8 11V7a4 4 0 0 1 8 0v4"
+  })), "Sign in to view price") : /*#__PURE__*/React.createElement("span", {
     style: {
       fontFamily: "var(--font-mono)",
       fontSize: "19px",
       fontWeight: 600,
       color: "var(--text-strong)"
     }
-  }, priceText || inr(listing.price)), /*#__PURE__*/React.createElement(CBadge, {
+  }, priceText || inr(listing.price)), com ? /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: "none",
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "5px",
+      padding: "3px 9px",
+      borderRadius: "var(--radius-full)",
+      background: "var(--gold-100)",
+      color: "var(--text-strong)",
+      fontSize: "11px",
+      fontWeight: 700,
+      whiteSpace: "nowrap"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: "7px",
+      height: "7px",
+      borderRadius: "50%",
+      background: "var(--gold-600)",
+      flex: "none"
+    }
+  }), window.EXP.comLabel(listing.comSub)) : /*#__PURE__*/React.createElement(CBadge, {
     tone: TYPE_TONE[listing.propType] || "neutral",
     pill: true
-  }, listing.propType)), /*#__PURE__*/React.createElement("h3", {
+  }, listing.propType)), com && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: "6px",
+      fontSize: "12px",
+      fontWeight: 600,
+      color: "var(--text-muted)"
+    }
+  }, listing.deal), /*#__PURE__*/React.createElement("h3", {
     style: {
       margin: "8px 0 4px",
       fontSize: "14.5px",
@@ -60064,7 +70116,59 @@ function ListingCard({
     name: "map-pin",
     size: 13,
     color: "var(--grey-400)"
-  }), listing.locality, ", ", listing.area), /*#__PURE__*/React.createElement("div", {
+  }), com && !signedIn ? listing.coarse : listing.locality + ", " + listing.area), com ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "7px",
+      fontSize: "12.5px",
+      color: "var(--text-body)",
+      margin: "12px 0 14px",
+      flexWrap: "wrap"
+    }
+  }, listing.facts.map((ft, i) => /*#__PURE__*/React.createElement(React.Fragment, {
+    key: ft
+  }, i > 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: "3px",
+      height: "3px",
+      borderRadius: "50%",
+      background: "var(--grey-400)"
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: i === 0 ? "var(--font-mono)" : "var(--font-sans)",
+      fontWeight: i === 0 ? 600 : 500
+    }
+  }, ft)))) : isPlot ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "14px",
+      fontSize: "12.5px",
+      color: "var(--text-body)",
+      margin: "12px 0 14px"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "5px"
+    }
+  }, /*#__PURE__*/React.createElement(CIcon, {
+    name: "maximize",
+    size: 15,
+    color: "var(--grey-400)"
+  }), listing.sqft.toLocaleString("en-IN"), " sq.ft plot"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "5px"
+    }
+  }, /*#__PURE__*/React.createElement(CIcon, {
+    name: "map-pin",
+    size: 15,
+    color: "var(--grey-400)"
+  }), "Land")) : /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: "14px",
@@ -64351,6 +74455,405 @@ window.BLR_HOMES_NEAR = function (school, km) {
 };
 })(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/new_discover/src/data.js", error: String((e && e.message) || e) }); }
 
+// ui_kits/new_discover/src/exp-commercial.js
+try { (() => {
+// Commercial inventory — an ADDITIVE layer on the canonical mock backend.
+// Loaded before exp-data.js, which calls EXP_COM.build() to append Commercial
+// records to the one `listings` catalogue and delegates Commercial filtering here.
+// Nothing in the residential, schools or agricultural model changes: a Commercial
+// record fails `passes` unless the existing property-type filter is on Commercial,
+// so every pre-existing count on screen stays exactly what it was.
+(function () {
+  // The only buyer-facing labels. Missing/legacy/unrecognised values -> "Commercial".
+  const SUBTYPES = [{
+    k: "shop",
+    label: "Shop"
+  }, {
+    k: "office",
+    label: "Office"
+  }, {
+    k: "building",
+    label: "Commercial Building"
+  }, {
+    k: "warehouse",
+    label: "Warehouse / Godown"
+  }, {
+    k: "land",
+    label: "Commercial Land"
+  }];
+  const FALLBACK_LABEL = "Commercial";
+  const LABEL = {};
+  SUBTYPES.forEach(s => LABEL[s.k] = s.label);
+  const label = k => LABEL[k] || FALLBACK_LABEL;
+  const IMG = {
+    shop: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=720&h=480&fit=crop",
+    office: "https://images.unsplash.com/photo-1497366216548-37526070297c?w=720&h=480&fit=crop",
+    building: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=720&h=480&fit=crop",
+    warehouse: "https://images.unsplash.com/photo-1553413077-190dd305871c?w=720&h=480&fit=crop",
+    // A cleared, kerbed development plot — deliberately NOT green farmland, which
+    // would read as Agricultural. No imagery here implies zoning or approval status.
+    land: "https://images.unsplash.com/photo-1590674899484-d5640e854abe?w=720&h=480&fit=crop",
+    unknown: "https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=720&h=480&fit=crop"
+  };
+
+  // Which areas carry which Commercial inventory. Retail on the high streets,
+  // offices in the tech corridors, warehouses and land on the industrial edges.
+  const SPEC = {
+    indiranagar: ["shop", "shop", "shop", "office", "office", "building"],
+    jayanagar: ["shop", "shop", "office"],
+    jpnagar: ["shop", "shop", "office", "building"],
+    shivajinagar: ["shop", "shop", "unknown"],
+    rajajinagar: ["shop", "warehouse"],
+    domlur: ["office", "office", "building"],
+    whitefield: ["office", "office", "office", "building", "warehouse"],
+    marathahalli: ["office", "office", "shop"],
+    "electronic-city": ["office", "office", "land"],
+    krpuram: ["warehouse", "warehouse", "land"],
+    budigere: ["land", "land", "warehouse"],
+    kengeri: ["warehouse", "land"],
+    nagarbhavi: ["shop", "land"],
+    vijayanagar: ["shop", "office"],
+    hebbal: ["office", "shop", "land"],
+    nagawara: ["warehouse", "unknown"],
+    thanisandra: ["office", "shop"]
+  };
+  const DEALS = {
+    shop: ["For Rent", "For Rent", "For Sale"],
+    office: ["For Sale", "For Rent", "For Rent"],
+    building: ["For Sale"],
+    warehouse: ["For Lease", "For Lease", "For Rent"],
+    land: ["For Sale"],
+    unknown: ["For Rent", "For Sale"]
+  };
+  const HUBS = ["High-street retail", "Neighbourhood market", "Mall unit", "Commercial complex"];
+  const FLOORS = ["Ground", "1st", "2nd", "3rd", "4th"];
+  // Readable, non-repetitive card titles — the subtype label and the area both appear
+  // elsewhere on the card, so the title carries the phrasing rather than the numbers.
+  const TITLE = {
+    shop: a => "Shop in " + a,
+    office: a => "Office space in " + a,
+    building: a => "Commercial building in " + a,
+    warehouse: a => "Warehouse in " + a,
+    land: a => "Commercial land in " + a,
+    unknown: a => "Commercial property in " + a
+  };
+  function inrShort(p) {
+    return p >= 10000000 ? "₹" + (p / 10000000).toFixed(2).replace(/\.00$/, "") + " Cr" : "₹" + Math.round(p / 100000) + " L";
+  }
+  function money(v) {
+    if (v >= 100000) return "₹" + (v / 100000).toFixed(2).replace(/\.00$/, "") + " L";
+    return "₹" + v.toLocaleString("en-IN");
+  }
+  // coarse band around a figure — the anonymous treatment
+  function bandOf(l) {
+    const v = l.deal === "For Sale" ? l.price : l.rent;
+    const lo = v * 0.88,
+      hi = v * 1.14;
+    const f = l.deal === "For Sale" ? inrShort : money;
+    return f(Math.round(lo / (v > 5000000 ? 100000 : 1000)) * (v > 5000000 ? 100000 : 1000)) + "–" + f(Math.round(hi / (v > 5000000 ? 100000 : 1000)) * (v > 5000000 ? 100000 : 1000)) + (l.deal === "For Sale" ? "" : " / month");
+  }
+  function exactOf(l) {
+    return l.deal === "For Sale" ? inrShort(l.price) : money(l.rent) + " / month";
+  }
+
+  // ---- the two card facts per subtype (never more than two) ----------------
+  function factsOf(l) {
+    const a = l.sqft.toLocaleString("en-IN") + " sq ft";
+    if (l.comSub === "shop") return [a, l.floor === "Ground" ? "Ground floor" : l.hub];
+    if (l.comSub === "office") return [a, l.seats + " seats"];
+    if (l.comSub === "building") return [a, l.floors + " floors"];
+    if (l.comSub === "warehouse") return [a, l.clearHt + " ft clear height"];
+    if (l.comSub === "land") return [a, l.frontage ? "Main-road frontage" : l.zoning];
+    return [a];
+  }
+
+  // ---- the compact detail summary: only fields this record actually has ----
+  function summaryOf(l) {
+    const out = [];
+    const size = l.sqft.toLocaleString("en-IN") + " sq ft";
+    if (l.comSub === "land") out.push({
+      icon: "maximize",
+      label: "Land area",
+      value: size
+    });else out.push({
+      icon: "maximize",
+      label: l.comSub === "warehouse" ? "Area" : "Built-up",
+      value: size
+    });
+    if (l.floor && l.comSub !== "land" && l.comSub !== "warehouse" && l.comSub !== "building") out.push({
+      icon: "layers",
+      label: "Floor",
+      value: l.floor + (l.ofFloors ? " of " + l.ofFloors : "")
+    });
+    if (l.comSub === "building") out.push({
+      icon: "layers",
+      label: "Floors",
+      value: String(l.floors)
+    });
+    if (l.comSub === "warehouse") out.push({
+      icon: "layers",
+      label: "Clear height",
+      value: l.clearHt + " ft"
+    });
+    if (l.comSub === "shop") out.push({
+      icon: "map-pin",
+      label: "Hub type",
+      value: l.hub
+    });
+    if (l.comSub === "office") out.push({
+      icon: "users",
+      label: "Seats",
+      value: String(l.seats)
+    });
+    if (l.comSub === "building") out.push({
+      icon: "users",
+      label: "Occupancy",
+      value: l.letFloors + " of " + l.floors + " floors let"
+    });
+    if (l.comSub === "land") out.push({
+      icon: "map-pin",
+      label: "Frontage",
+      value: l.frontage ? l.frontageFt + " ft, main road" : l.frontageFt + " ft"
+    });
+    if (l.comSub === "land" || l.comSub === "warehouse") out.push({
+      icon: "route",
+      label: "Access",
+      value: l.access
+    });
+    if (l.parking) out.push({
+      icon: "route",
+      label: "Parking",
+      value: l.parking
+    });
+    if (l.washrooms) out.push({
+      icon: "bath",
+      label: "Washrooms",
+      value: l.washrooms
+    });
+    if (l.available) out.push({
+      icon: "calendar",
+      label: "Available",
+      value: l.available
+    });
+    return out;
+  }
+
+  // ---- subtype-aware detail sections; broker:true = boxed disclosure -------
+  function sectionsOf(l) {
+    const size = l.sqft.toLocaleString("en-IN") + " sq ft";
+    const terms = l.deal === "For Sale" ? {
+      title: "Sale terms",
+      rows: [["Asking price", inrShort(l.price)], ["Maintenance", l.maint], ["Registration", "Buyer's account"]]
+    } : {
+      title: l.deal === "For Lease" ? "Lease terms" : "Rent terms",
+      rows: [[l.deal === "For Lease" ? "Monthly lease" : "Monthly rent", money(l.rent)], ["Deposit", l.deposit], ["Lock-in", l.lockIn], ["Escalation", l.escalation]]
+    };
+    if (l.comSub === "shop") {
+      return [{
+        title: "Shop details",
+        rows: [["Built-up area", size], ["Floor", l.floor], ["Hub type", l.hub], ["Frontage", l.frontageFt + " ft, shutter"], ["Washrooms", l.washrooms], ["Parking", l.parking]]
+      }, {
+        title: "Facilities & utilities",
+        rows: [["Facilities", l.facilities], ["Utilities", l.utilities], ["Power", l.power]]
+      }, {
+        title: "Suitable uses",
+        broker: true,
+        rows: [["As described by the broker", l.uses]]
+      }, terms];
+    }
+    if (l.comSub === "office") {
+      return [{
+        title: "Office details",
+        rows: [["Built-up area", size], ["Floor", l.floor + " of " + l.ofFloors], ["Office seats", String(l.seats)], ["Cabins", String(l.cabins)], ["Meeting rooms", String(l.meeting)], ["Washrooms", l.washrooms], ["Parking", l.parking]]
+      }, {
+        title: "Power & availability",
+        rows: [["Power", l.power], ["Backup", l.backup], ["Availability", l.available]]
+      }, terms];
+    }
+    if (l.comSub === "building") {
+      return [{
+        title: "Building details",
+        rows: [["Built-up area", size], ["Number of floors", String(l.floors)], ["Parking", l.parking], ["Washrooms", l.washrooms], ["Availability", l.available]]
+      }, {
+        title: "Facilities & utilities",
+        rows: [["Facilities", l.facilities], ["Utilities", l.utilities]]
+      }, {
+        title: "Income & lease",
+        broker: true,
+        rows: [["Occupancy", l.letFloors + " of " + l.floors + " floors let"], ["Current income", money(l.income) + " / month"], ["Expected yield", l.yield + "% a year"], ["Lease duration", l.leaseYears + " years"], ["Escalation", l.escalation]]
+      }, terms];
+    }
+    if (l.comSub === "warehouse") {
+      return [{
+        title: "Warehouse details",
+        rows: [["Area", size], ["Clear height", l.clearHt + " ft"], ["Loading bays", String(l.bays)], ["Flooring", l.flooring], ["Truck access", l.access], ["Loading yard", l.yard]]
+      }, {
+        title: "Power & availability",
+        rows: [["Power", l.power], ["Availability", l.available]]
+      }, terms];
+    }
+    if (l.comSub === "land") {
+      return [{
+        title: "Land details",
+        rows: [["Land area", size], ["Frontage", l.frontageFt + " ft" + (l.frontage ? " on the main road" : "")], ["Access", l.access], ["Shape", l.shape]]
+      }, {
+        title: "Zoning & ownership",
+        broker: true,
+        rows: [["Zoning", l.zoning], ["Ownership", l.ownership], ["Suitable uses", l.uses]]
+      }, {
+        title: "Utilities",
+        rows: [["Power", l.power], ["Water", l.water]]
+      }, terms];
+    }
+    // unrecognised subtype: generic supported facts only, nothing inferred
+    return [{
+      title: "Property details",
+      rows: [["Built-up area", size], ["Floor", l.floor], ["Availability", l.available]]
+    }, terms];
+  }
+
+  // ---- deterministic build -------------------------------------------------
+  function build(areas) {
+    let seed = 20260904;
+    const rnd = () => (seed = seed * 1103515245 + 12345 & 0x7fffffff) / 0x7fffffff;
+    const pick = arr => arr[Math.floor(rnd() * arr.length)];
+    const out = [];
+    areas.forEach(a => {
+      const spec = SPEC[a.key];
+      if (!spec) return;
+      spec.forEach((sub, i) => {
+        const deal = pick(DEALS[sub] || DEALS.unknown);
+        const sqft = sub === "land" ? 4000 + Math.round(rnd() * 40) * 400 : sub === "warehouse" ? 2400 + Math.round(rnd() * 30) * 200 : sub === "building" ? 5000 + Math.round(rnd() * 20) * 400 : sub === "office" ? 700 + Math.round(rnd() * 30) * 100 : 380 + Math.round(rnd() * 20) * 60;
+        const rate = sub === "land" ? 9000 : sub === "warehouse" ? 3200 : sub === "building" ? 7800 : sub === "office" ? 11000 : 14000;
+        const price = Math.round(sqft * rate * (0.85 + rnd() * 0.4) / 100000) * 100000;
+        const rent = Math.round(sqft * (sub === "warehouse" ? 28 : sub === "land" ? 12 : sub === "shop" ? 62 : 55) * (0.85 + rnd() * 0.35) / 1000) * 1000;
+        const floorIdx = sub === "shop" ? rnd() > 0.35 ? 0 : 1 : Math.floor(rnd() * 5);
+        const l = {
+          kind: "commercial",
+          comSub: sub,
+          deal,
+          id: "com-" + a.key + "-" + i,
+          areaKey: a.key,
+          area: a.name,
+          locality: a.name + (i % 3 === 0 ? " Main Road" : i % 3 === 1 ? " Market Road" : " Industrial Layout"),
+          lat: a.lat + (rnd() - 0.5) * 0.016,
+          lon: a.lon + (rnd() - 0.5) * 0.018,
+          price,
+          rent,
+          forRent: deal !== "For Sale",
+          sqft,
+          beds: 0,
+          baths: 0,
+          propType: label(sub),
+          image: IMG[sub] || IMG.unknown,
+          trustTier: rnd() > 0.6 ? "verified" : rnd() > 0.35 ? "trusted" : "listed",
+          ready: true,
+          tag: null,
+          floor: FLOORS[floorIdx],
+          ofFloors: 3 + Math.floor(rnd() * 5),
+          hub: pick(HUBS),
+          seats: 8 + Math.round(rnd() * 10) * 4,
+          cabins: 1 + Math.floor(rnd() * 4),
+          meeting: 1 + Math.floor(rnd() * 3),
+          floors: 2 + Math.floor(rnd() * 3),
+          clearHt: 16 + Math.round(rnd() * 4) * 2,
+          bays: 1 + Math.floor(rnd() * 3),
+          frontageFt: 18 + Math.round(rnd() * 10) * 4,
+          frontage: rnd() > 0.4,
+          washrooms: 1 + Math.floor(rnd() * 4) + (rnd() > 0.5 ? " private" : " shared"),
+          parking: sub === "shop" ? rnd() > 0.5 ? "Public, on-street" : "2 private" : 1 + Math.floor(rnd() * 5) + (rnd() > 0.5 ? " reserved" : " covered"),
+          power: sub === "land" ? "Line at the plot boundary" : 5 + Math.round(rnd() * 8) * 5 + " kVA sanctioned",
+          backup: rnd() > 0.5 ? "Full-floor DG" : "DG for common areas",
+          facilities: pick(["Rolling shutter · Signage space", "Passenger lift · Power backup", "Lift · Security cabin", "Signage space · Loading bay"]),
+          utilities: pick(["Metered power · Municipal water", "Municipal water · Borewell", "Borewell · 3-phase power"]),
+          water: rnd() > 0.5 ? "Borewell on site" : "Municipal connection at the boundary",
+          uses: pick(["Retail · Café · Clinic", "Showroom · Warehouse · Office block", "Retail · Services", "Office · Training centre"]),
+          zoning: pick(["Commercial", "Mixed use", "Commercial (corner plot)"]),
+          ownership: pick(["Single owner", "Two co-owners", "Family-held"]),
+          shape: rnd() > 0.5 ? "Corner plot" : "Rectangular",
+          access: sub === "warehouse" ? pick(["40 ft container", "Tempo / LCV", "20 ft container"]) : pick(["40 ft tar road", "30 ft tar road", "60 ft main road"]),
+          yard: rnd() > 0.5 ? "Space for 2 trucks" : "Shutter-side loading",
+          flooring: rnd() > 0.5 ? "Trimix concrete" : "Concrete",
+          available: rnd() > 0.55 ? "Ready to occupy" : pick(["From 1 Oct 2026", "From 15 Nov 2026", "From 1 Dec 2026"]),
+          maint: pick(["₹4/sq ft each month", "₹1,800 each month", "As per association"]),
+          deposit: pick(["3 months", "6 months", "10 months"]),
+          lockIn: pick(["11 months", "1 year", "2 years"]),
+          escalation: pick(["5% each year", "5% every 2 years", "8% every 3 years"]),
+          leaseYears: 3 + Math.floor(rnd() * 4)
+        };
+        l.letFloors = Math.max(1, l.floors - 1);
+        l.income = Math.round(l.sqft * 42 / 1000) * 1000;
+        l.yield = (1.2 + rnd() * 1.6).toFixed(1);
+        // The area appears in the fact row, so the title must not repeat it.
+        l.title = TITLE[sub] ? TITLE[sub](a.name) : "Commercial property in " + a.name;
+        l.facts = factsOf(l);
+        l.exact = exactOf(l);
+        // ~60% carry a coarse band anonymously; the rest show the sign-in gate
+        l.band = rnd() > 0.4 ? bandOf(l) : null;
+        l.coarse = a.name + ", " + (a.direction === "centre" ? "Central" : a.direction.charAt(0).toUpperCase() + a.direction.slice(1)) + " Bengaluru";
+        l.summary = summaryOf(l);
+        l.sections = sectionsOf(l);
+        out.push(l);
+      });
+    });
+    return out;
+  }
+
+  // ---- filtering: only reached for Commercial records or the Commercial family -
+  // Buy shows sale stock; Rent shows rent and lease stock (Lease is a deal label,
+  // not a third toggle). Bed and budget chips belong to the Residential family.
+  function passes(l, f) {
+    if (l.kind !== "commercial") return false; // the Commercial family excludes residential
+    if (f.family !== "Commercial") return false; // Commercial stock is opt-in
+    const subs = f.comSubs || [];
+    if (subs.length && subs.indexOf(l.comSub) === -1) return false;
+    if (f.purpose === "Rent" && l.deal === "For Sale") return false;
+    if (f.purpose === "Buy" && l.deal !== "For Sale") return false;
+    // Commercial budget — its own field, so it is independent of the Residential one
+    // and of the subtype selection.
+    if (f.comMaxPrice && (f.purpose === "Rent" ? l.rent : l.price) > f.comMaxPrice) return false;
+    // Area — its own field, independent of budget, geography and subtype selection.
+    if (f.comArea && l.sqft < f.comArea) return false;
+    if (f.verified && l.trustTier !== "verified") return false;
+    return true;
+  }
+
+  // "All commercial" is a family-local state: no subtype narrowing inside Commercial.
+  const labels = f => f.family === "Commercial" ? [(f.comSubs || []).length ? "Commercial" : "All commercial"].concat((f.comSubs || []).map(label)) : [];
+
+  // Trust language states only what the platform actually checks. Nothing here
+  // implies verified ownership, approvals, zoning or legal clearance.
+  const TIER_TEXT = {
+    verified: "Broker identity verified",
+    trusted: "Listing details reviewed",
+    listed: "Broker-submitted listing"
+  };
+  const TIER_NOTE = {
+    verified: "ReTrends has confirmed who the listing broker is. The property, its ownership and any approvals are not checked.",
+    trusted: "A ReTrends reviewer has read this listing for completeness. Nothing about the property itself is checked.",
+    listed: "Submitted by the broker and not yet reviewed."
+  };
+  window.EXP_COM = {
+    TIER_TEXT,
+    TIER_NOTE,
+    tierText: t => TIER_TEXT[t] || TIER_TEXT.listed,
+    tierNote: t => TIER_NOTE[t] || TIER_NOTE.listed,
+    SUBTYPES,
+    FALLBACK_LABEL,
+    label,
+    build,
+    passes,
+    labels,
+    exactOf,
+    bandOf,
+    // the three price presentations, and the only place anonymity is decided
+    priceText: (l, signedIn) => signedIn ? l.exact : l.band ? l.band : null,
+    isCom: l => !!l && l.kind === "commercial",
+    subLabels: () => SUBTYPES.map(s => s.label)
+  };
+})();
+})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/new_discover/src/exp-commercial.js", error: String((e && e.message) || e) }); }
+
 // ui_kits/new_discover/src/exp-data.js
 try { (() => {
 // Discover experience — canonical mock backend.
@@ -64485,7 +74988,7 @@ try { (() => {
         beds: beds || 0,
         baths: Math.max(1, beds - (rnd() > 0.6 ? 1 : 0)),
         sqft,
-        title: (propType === "Plot" ? sqft + " sq.ft plot" : beds + " BHK " + propType.toLowerCase()) + " · " + a.name,
+        title: (propType === "Plot" ? sqft.toLocaleString("en-IN") + " sq.ft plot" : beds + " BHK " + propType.toLowerCase()) + " · " + a.name,
         image: IMG[Math.floor(rnd() * IMG.length)],
         trustTier: rnd() > 0.62 ? "verified" : rnd() > 0.4 ? "trusted" : "listed",
         ready: rnd() > 0.45,
@@ -64493,28 +74996,233 @@ try { (() => {
       });
     }
   });
+  // Commercial inventory is appended to the SAME catalogue (additive). It is invisible
+  // to every existing count because `passes` rejects it unless the property-type filter
+  // is on Commercial — see src/exp-commercial.js.
+  if (window.EXP_COM) listings.push.apply(listings, window.EXP_COM.build(areas));
+  // The pre-Commercial catalogue size, captured before the append, so every existing
+  // "N listings" cue keeps reporting exactly what it reported before Commercial.
+  const residentialCount = listings.filter(l => l.kind !== "commercial").length;
 
   // ---- filters ---------------------------------------------------------------
+  // Two independent axes:
+  //   family  — "Residential" | "Commercial" (the top-level TYPE control)
+  //   subtype — scoped to its family and remembered per family:
+  //             ptype   holds the Residential subtype (single-select, unchanged)
+  //             comSubs holds the Commercial subtypes  (multi-select)
+  // Attribute filters are context-sensitive and each keeps its own field, so no
+  // selection is ever reinterpreted as another:
+  //             beds        dwelling bedrooms   (Apartment / Villa / House)
+  //             carpetArea  minimum carpet sq ft (Apartment / Villa / House)
+  //             plotArea    minimum plot sq ft   (Plots)
+  //             maxPrice    Residential budget
+  //             comMaxPrice Commercial budget   (independent of the Residential one)
+  // Area is available to EVERY Residential subtype — carpet area for dwellings, plot
+  // size for plots — and the two are separate fields, never each other's stand-in.
+  // Because the two families' budgets live in different fields, switching family
+  // restores that family's last budget selection untouched.
+  // Agricultural is NOT a family — it remains its own Discover journey.
   const DEFAULT_FILTERS = {
+    family: "Residential",
     purpose: "Buy",
     beds: 0,
+    carpetArea: 0,
+    plotArea: 0,
     maxPrice: 0,
+    comMaxPrice: 0,
+    comArea: 0,
     ptype: "Any type",
     ready: false,
-    verified: false
+    verified: false,
+    comSubs: []
   };
+
+  // Illustrative budget thresholds — chosen to span the fixture set, not derived
+  // from verified listing data. Commercial stock sits an order of magnitude above
+  // residential, so the two families carry their own ladders.
+  const BUDGETS = {
+    Residential: {
+      Buy: [{
+        k: 0,
+        l: "Any price"
+      }, {
+        k: 5000000,
+        l: "≤ ₹50 L"
+      }, {
+        k: 8000000,
+        l: "≤ ₹80 L"
+      }, {
+        k: 12000000,
+        l: "≤ ₹1.2 Cr"
+      }],
+      Rent: [{
+        k: 0,
+        l: "Any rent"
+      }, {
+        k: 20000,
+        l: "≤ ₹20k/mo"
+      }, {
+        k: 35000,
+        l: "≤ ₹35k/mo"
+      }, {
+        k: 60000,
+        l: "≤ ₹60k/mo"
+      }]
+    },
+    Commercial: {
+      Buy: [{
+        k: 0,
+        l: "Any price"
+      }, {
+        k: 10000000,
+        l: "≤ ₹1 Cr"
+      }, {
+        k: 25000000,
+        l: "≤ ₹2.5 Cr"
+      }, {
+        k: 50000000,
+        l: "≤ ₹5 Cr"
+      }],
+      // Monthly values with the unit spelled out, so a Rent / Lease state can never be
+      // mistaken for purchase bands.
+      Rent: [{
+        k: 0,
+        l: "Any rent"
+      }, {
+        k: 50000,
+        l: "≤ ₹50K / month"
+      }, {
+        k: 100000,
+        l: "≤ ₹1L / month"
+      }, {
+        k: 200000,
+        l: "≤ ₹2L / month"
+      }]
+    }
+  };
+  const budgetsFor = f => BUDGETS[f.family === "Commercial" ? "Commercial" : "Residential"][f.purpose === "Rent" ? "Rent" : "Buy"];
+  const budgetLabel = (f, v) => {
+    const hit = budgetsFor(f).filter(b => b.k === v)[0];
+    return hit ? hit.l : "≤ " + (f.purpose === "Rent" ? rentShort(v) : inrShort(v));
+  };
+  // Illustrative area thresholds. "sq ft" is visible on every non-default choice.
+  // Carpet area governs dwellings; plot size governs plots. Separate ladders because
+  // the two measure different things.
+  const CARPET_AREAS = [{
+    k: 0,
+    l: "Any size"
+  }, {
+    k: 600,
+    l: "600+ sq ft"
+  }, {
+    k: 1000,
+    l: "1,000+ sq ft"
+  }, {
+    k: 1500,
+    l: "1,500+ sq ft"
+  }];
+  const PLOT_AREAS = [{
+    k: 0,
+    l: "Any size"
+  }, {
+    k: 600,
+    l: "600+ sq ft"
+  }, {
+    k: 1200,
+    l: "1,200+ sq ft"
+  }, {
+    k: 2400,
+    l: "2,400+ sq ft"
+  }];
+  // Commercial area — one field, but the LABEL follows the selected subtype because
+  // the same number means a different thing per subtype. Illustrative thresholds.
+  const COM_AREAS = [{
+    k: 0,
+    l: "Any size"
+  }, {
+    k: 1000,
+    l: "1,000+ sq ft"
+  }, {
+    k: 2500,
+    l: "2,500+ sq ft"
+  }, {
+    k: 5000,
+    l: "5,000+ sq ft"
+  }];
+  const COM_AREA_LABEL = {
+    shop: "Built-up area (sq ft)",
+    office: "Built-up area (sq ft)",
+    building: "Built-up area (sq ft)",
+    warehouse: "Warehouse area (sq ft)",
+    land: "Plot size (sq ft)"
+  };
+  const comAreaLabel = f => {
+    const subs = f && f.comSubs || [];
+    return subs.length === 1 ? COM_AREA_LABEL[subs[0]] || "Area (sq ft)" : "Area (sq ft)";
+  };
+
+  // Result nouns follow the selected family and subtype: Commercial never borrows a
+  // residential noun, and a plot is never called a home.
+  function nounsOf(f) {
+    const rent = f.purpose === "Rent";
+    const com = f.family === "Commercial";
+    const plot = !com && f.ptype === "Plot";
+    const base = com ? "commercial listing" : plot ? "plot" : rent ? "rental" : "listing";
+    const unit = com ? "commercial property" : plot ? "plot" : "home";
+    // "commercial property" does not pluralise by adding s — the plural is carried
+    // explicitly rather than derived, so no surface can print "commercial propertys".
+    const units = com ? "commercial properties" : plot ? "plots" : "homes";
+    const suffix = rent ? " to rent" : " for sale";
+    return {
+      plural: base + "s",
+      count: k => k === 1 ? base : base + "s",
+      deal: k => (k === 1 ? unit : units) + suffix,
+      dealPlural: units + suffix,
+      inPlace: p => (com ? "Commercial properties in " : plot ? "Plots in " : rent ? "Homes to rent in " : "Properties in ") + p,
+      allCity: com ? "All commercial properties in Bangalore" : plot ? "All plots in Bangalore" : rent ? "All homes to rent in Bangalore" : "All homes in Bangalore",
+      dealScope: com ? rent ? "Commercial to rent · " : "Commercial for sale · " : plot ? "Plots for sale · " : rent ? "Homes to rent · " : "Homes for sale · ",
+      unitPlural: units
+    };
+  }
+
+  // Which inventories the current selection can actually return. `passes` keys off
+  // the per-listing kind, so every REPORTING site (filter labels, scope chips, the
+  // filter row itself) must key off these same predicates — re-deriving the test
+  // locally is how the plot-size narrowing came to be applied but never reported.
+  // Plots are sale-only stock, so a Rent search never returns them.
+  const showsHomes = f => f.family !== "Commercial" && f.ptype !== "Plot";
+  const showsPlots = f => f.family !== "Commercial" && (f.ptype === "Plot" || f.ptype === "Any type" && f.purpose !== "Rent");
   const filterLabels = f => {
     const out = [f.purpose];
-    if (f.beds) out.push(f.beds + "+ BHK");
+    if (window.EXP_COM && f.family === "Commercial") {
+      const l = out.concat(window.EXP_COM.labels(f));
+      if (f.comArea) l.push(f.comArea.toLocaleString("en-IN") + "+ sq ft");
+      if (f.comMaxPrice) l.push("up to " + budgetLabel(f, f.comMaxPrice).replace("≤ ", ""));
+      if (f.verified) l.push("Broker identity verified");
+      return l;
+    }
+    if (showsHomes(f) && f.beds) out.push(f.beds + "+ BHK");
+    if (showsHomes(f) && f.carpetArea) out.push(f.carpetArea.toLocaleString("en-IN") + "+ sq ft carpet");
+    if (showsPlots(f) && f.plotArea) out.push(f.plotArea.toLocaleString("en-IN") + "+ sq ft plot");
     if (f.maxPrice) out.push("up to " + (f.purpose === "Rent" ? rentShort(f.maxPrice) : inrShort(f.maxPrice)));
     if (f.ptype !== "Any type") out.push(f.ptype);
     if (f.ready) out.push("Ready to move");
-    if (f.verified) out.push("Verified only");
+    if (f.verified) out.push("Broker identity verified");
     return out;
   };
   const passes = (l, f) => {
+    // The family decides which catalogue is in play. A Commercial record is invisible
+    // to the Residential family and vice versa, so every pre-Commercial count holds.
+    const com = f.family === "Commercial";
+    if (com || l.kind === "commercial") return com && window.EXP_COM ? window.EXP_COM.passes(l, f) : false;
     if (f.purpose === "Rent" && !l.forRent) return false;
-    if (f.beds && l.beds < f.beds) return false;
+    // Bedrooms and carpet area apply to dwellings only, and plot size to plots only —
+    // the controls are labelled that way, so neither may quietly filter the other's
+    // inventory out.
+    const isPlot = l.propType === "Plot";
+    if (!isPlot && f.beds && l.beds < f.beds) return false;
+    if (!isPlot && f.carpetArea && l.sqft < f.carpetArea) return false;
+    if (isPlot && f.plotArea && l.sqft < f.plotArea) return false;
     if (f.maxPrice && (f.purpose === "Rent" ? l.rent : l.price) > f.maxPrice) return false;
     if (f.ptype !== "Any type" && l.propType !== f.ptype) return false;
     if (f.ready && !l.ready) return false;
@@ -64539,9 +75247,17 @@ try { (() => {
   const areasOfDirection = d => areas.filter(a => a.direction === d);
   const areasOfLocal = l => areas.filter(a => a.local === l);
   const localsOfDirection = d => locals.filter(l => l.direction === d);
+  // Math.min.apply(null, []) is Infinity and Math.max.apply(null, []) is -Infinity, so
+  // an empty list would return bounds that PASS Leaflet's isValid() (it tests isNaN,
+  // and Infinity is not NaN) and then yield NaN from getCenter() deep inside the camera
+  // effect. Guarded at the source, mirroring centerOf below, so every caller — areas,
+  // hierarchy, schools, agri — is covered. The filter also survives a committed key
+  // that is missing from byKey, which would otherwise map to undefined and throw.
   const boundsOf = list => {
-    const lats = list.map(a => a.lat),
-      lons = list.map(a => a.lon);
+    const pts = (list || []).filter(a => a && Number.isFinite(a.lat) && Number.isFinite(a.lon));
+    if (!pts.length) return [[12.78, 77.44], [13.28, 77.79]];
+    const lats = pts.map(a => a.lat),
+      lons = pts.map(a => a.lon);
     return [[Math.min.apply(null, lats) - 0.02, Math.min.apply(null, lons) - 0.02], [Math.max.apply(null, lats) + 0.02, Math.max.apply(null, lons) + 0.02]];
   };
   const reps = (list, k) => list.slice().sort((a, b) => b.n - a.n).slice(0, k || 2).map(a => a.name);
@@ -64743,6 +75459,133 @@ try { (() => {
   // one filter change at a time, each with its real resulting count
   function relaxations(keys, f) {
     const out = [];
+    // Commercial: bed and budget chips belong to the Residential family, so the only
+    // honest widenings are dropping the subtype narrowing or the verified-only chip.
+    // Widening never switches family by itself — that offer is explicit and labelled.
+    // Commercial recovery keeps the buyer INSIDE Commercial: subtype first, then the
+    // two attribute filters, and only then, clearly secondary, the other family.
+    // Nothing here widens the search on its own or touches the selected areas.
+    if (f.family === "Commercial") {
+      const subs = f.comSubs || [];
+      if (subs.length === 1) {
+        const n = inAreas(keys, {
+          ...f,
+          comSubs: []
+        }).length;
+        if (n > 0) out.push({
+          label: "Remove " + window.EXP_COM.label(subs[0]),
+          patch: {
+            comSubs: []
+          },
+          n
+        });
+      } else if (subs.length > 1) {
+        const dropped = subs.slice(0, -1);
+        const nOne = inAreas(keys, {
+          ...f,
+          comSubs: subs.slice(0, -1)
+        }).length;
+        if (nOne > 0) out.push({
+          label: "Remove " + window.EXP_COM.label(subs[subs.length - 1]),
+          patch: {
+            comSubs: dropped
+          },
+          n: nOne
+        });
+        const nAll = inAreas(keys, {
+          ...f,
+          comSubs: []
+        }).length;
+        if (nAll > 0) out.push({
+          label: "Show all Commercial types",
+          patch: {
+            comSubs: []
+          },
+          n: nAll
+        });
+      }
+      if (f.comMaxPrice) {
+        const wider = budgetsFor(f).filter(b => b.k === 0 || b.k > f.comMaxPrice)[0];
+        const patch = {
+          comMaxPrice: wider && wider.k ? wider.k : 0
+        };
+        const n = inAreas(keys, {
+          ...f,
+          ...patch
+        }).length;
+        if (n > 0) out.push({
+          label: patch.comMaxPrice ? "Raise the budget to " + budgetLabel(f, patch.comMaxPrice).replace("≤ ", "") : f.purpose === "Rent" ? "Accept any monthly figure" : "Accept any price",
+          patch,
+          n
+        });
+      }
+      if (f.comArea) {
+        const smaller = COM_AREAS.filter(a => a.k < f.comArea).slice(-1)[0];
+        const patch = {
+          comArea: smaller ? smaller.k : 0
+        };
+        const n = inAreas(keys, {
+          ...f,
+          ...patch
+        }).length;
+        if (n > 0) out.push({
+          label: patch.comArea ? "Accept " + patch.comArea.toLocaleString("en-IN") + "+ sq ft" : "Accept any size",
+          patch,
+          n
+        });
+      }
+      if (f.verified) {
+        const n = inAreas(keys, {
+          ...f,
+          verified: false
+        }).length;
+        if (n > 0) out.push({
+          label: "Include listings without broker identity checks",
+          patch: {
+            verified: false
+          },
+          n
+        });
+      }
+      // When two narrowings bind at once, no single change helps and the buyer would be
+      // left with nothing but "leave Commercial". This always-available action keeps
+      // them in the family, and its count is the real number of records it would show.
+      if ((f.comSubs || []).length || f.comArea || f.comMaxPrice || f.verified) {
+        const wide = {
+          ...f,
+          comSubs: [],
+          comArea: 0,
+          comMaxPrice: 0,
+          verified: false
+        };
+        const n = inAreas(keys, wide).length;
+        if (n > 0 && !out.some(r => r.n === n && r.patch.comSubs)) {
+          out.push({
+            label: "Show all Commercial in these areas",
+            patch: {
+              comSubs: [],
+              comArea: 0,
+              comMaxPrice: 0,
+              verified: false
+            },
+            n
+          });
+        }
+      }
+      const other = inAreas(keys, {
+        ...f,
+        family: "Residential"
+      }).length;
+      if (other > 0) out.push({
+        label: "Switch to Residential listings here",
+        patch: {
+          family: "Residential"
+        },
+        n: other,
+        secondary: true
+      });
+      return out.slice(0, 6);
+    }
     if (f.maxPrice) {
       for (const mult of [1.2, 1.6, 2, 3]) {
         const next = Math.round(f.maxPrice * mult / 100000) * 100000;
@@ -64775,7 +75618,33 @@ try { (() => {
         n
       });
     }
-    if (f.beds > 0) {
+    if (showsPlots(f) && f.plotArea) {
+      const n = inAreas(keys, {
+        ...f,
+        plotArea: 0
+      }).length;
+      if (n > 0) out.push({
+        label: "Accept any plot size",
+        patch: {
+          plotArea: 0
+        },
+        n
+      });
+    }
+    if (showsHomes(f) && f.carpetArea) {
+      const n = inAreas(keys, {
+        ...f,
+        carpetArea: 0
+      }).length;
+      if (n > 0) out.push({
+        label: "Accept any carpet area",
+        patch: {
+          carpetArea: 0
+        },
+        n
+      });
+    }
+    if (f.ptype !== "Plot" && f.beds > 0) {
       for (let b = f.beds - 1; b >= 0; b--) {
         const n = inAreas(keys, {
           ...f,
@@ -64799,7 +75668,7 @@ try { (() => {
         verified: false
       }).length;
       if (n > 0) out.push({
-        label: "Include Trusted and Listed homes",
+        label: "Include listings without broker identity checks",
         patch: {
           verified: false
         },
@@ -64812,7 +75681,7 @@ try { (() => {
         ptype: "Any type"
       }).length;
       if (n > 0) out.push({
-        label: "Include every property type",
+        label: "Include every residential type",
         patch: {
           ptype: "Any type"
         },
@@ -64903,6 +75772,17 @@ try { (() => {
     clusters,
     listings,
     DEFAULT_FILTERS,
+    residentialCount,
+    BUDGETS,
+    budgetsFor,
+    budgetLabel,
+    PLOT_AREAS,
+    CARPET_AREAS,
+    COM_AREAS,
+    comAreaLabel,
+    nounsOf,
+    showsHomes,
+    showsPlots,
     childrenOf,
     clustersFor,
     ancestry,
@@ -64933,7 +75813,12 @@ try { (() => {
     boardsIn,
     levelsIn,
     filterSchools,
-    homesNearSchool
+    homesNearSchool,
+    // Commercial helpers, re-exported so panel/map/cards reach them through EXP
+    com: window.EXP_COM || null,
+    comLabel: k => window.EXP_COM ? window.EXP_COM.label(k) : "Commercial",
+    comPriceText: (l, signedIn) => window.EXP_COM ? window.EXP_COM.priceText(l, signedIn) : null,
+    isCom: l => window.EXP_COM ? window.EXP_COM.isCom(l) : false
   };
 })();
 })(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/new_discover/src/exp-data.js", error: String((e && e.message) || e) }); }

@@ -288,7 +288,7 @@ function ExpMap({ lead, view, isMobile, onPick, onCluster, onArea, onOpenListing
   React.useEffect(() => {
     const map = L.map(elRef.current, { zoomControl: false, attributionControl: true, preferCanvas: false });
     map.setView([EM.city.lat, EM.city.lon], 11);
-    L.tileLayer("https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors &copy; CARTO' }).addTo(map);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", { maxZoom: 19, subdomains: "abcd", attribution: '&copy; OpenStreetMap contributors &copy; CARTO' }).addTo(map);
     L.control.zoom({ position: isMobile ? "topright" : "bottomright" }).addTo(map);
     navG.current = L.layerGroup().addTo(map);
     leafG.current = L.layerGroup().addTo(map);

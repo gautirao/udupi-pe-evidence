@@ -256,8 +256,278 @@ function EPFilters({ st, act, isMobile, expanded }) {
     </div>
   );
 }
+// ---- desktop listing skin: compact sticky filter row --------------------------
+// Same filter state, same setters, same chips as EPFilters — each group collapses
+// into one dropdown pill so the row stays one line and pins while results scroll.
+function expListingSkin(st, view) {
+  return st.device !== "mobile" && view.journey === "areas" && NAV_LEVELS.indexOf(view.level) === -1 && !st.draft;
+}
+function EPDrop({ label, active, filled, tone, tint, icon, count, align, dc, style, children }) {
+  const [open, setOpen] = React.useState(false);
+  const [h, setH] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const f = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const k = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", f); document.addEventListener("keydown", k);
+    return () => { document.removeEventListener("mousedown", f); document.removeEventListener("keydown", k); };
+  }, [open]);
+  const acc = tone || "var(--accent)";
+  const fg = filled ? "#fff" : "var(--text-strong)";
+  return (
+    <div ref={ref} data-design-component={dc} style={{ position: "relative", flex: "none", ...(style || {}) }}>
+      <button onClick={() => setOpen((o) => !o)} aria-haspopup="true" aria-expanded={open} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
+        style={{ display: "inline-flex", alignItems: "center", gap: "7px", height: "34px", padding: "0 9px 0 12px", borderRadius: "var(--radius-full)", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "var(--font-sans)", fontSize: "12.5px", fontWeight: 600, color: fg,
+          border: "1px solid " + (filled || active || open ? acc : "var(--border-strong)"), background: filled ? acc : active ? (tint || "var(--accent-tint)") : "var(--surface-card)",
+          boxShadow: h && !filled ? "var(--shadow-xs)" : "none", filter: h && filled ? "brightness(1.06)" : "none", transition: "border-color var(--dur-fast), background var(--dur-fast), box-shadow var(--dur-fast)" }}>
+        {icon && <EIcon name={icon} size={15} color={fg} />}
+        <span>{label}</span>
+        {count > 0 && <span style={{ minWidth: "18px", height: "18px", padding: "0 5px", borderRadius: "var(--radius-full)", background: "var(--navy-800)", color: "#fff", fontFamily: "var(--font-mono)", fontSize: "10.5px", fontWeight: 700, display: "inline-grid", placeItems: "center" }}>{count}</span>}
+        <EIcon name="chevron-down" size={14} color={filled ? "#fff" : "var(--grey-500)"} style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform var(--dur-fast)" }} />
+      </button>
+      {open && (
+        <div role="dialog" style={{ position: "absolute", top: "calc(100% + 6px)", [align === "right" ? "right" : "left"]: 0, zIndex: 45, minWidth: "250px", maxWidth: "360px", padding: "13px 14px", display: "flex", flexDirection: "column", gap: "12px", background: "var(--surface-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-lg)" }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+function EPPop({ label, children }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+      <EPToolLabel>{label}</EPToolLabel>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>{children}</div>
+    </div>
+  );
+}
+function EPFiltersCompact({ st, act }) {
+  const f = st.filters;
+  const rent = f.purpose === "Rent";
+  const com = f.family === "Commercial";
+  const subs = f.comSubs || [];
+  const resTypes = rent ? ["Any type", "Apartment", "Villa"] : ["Any type", "Apartment", "Villa", "Plot"];
+  const homes = EP.showsHomes(f), plots = EP.showsPlots(f);
+  const mixedRes = plots && homes;
+  const budgets = EP.budgetsFor(f);
+  const budgetVal = com ? f.comMaxPrice : f.maxPrice;
+  const setBudget = (k) => act.setFilters(com ? { comMaxPrice: k } : { maxPrice: k });
+  const budgetList = budgets.slice();
+  if (budgetVal && !budgetList.some((b) => b.k === budgetVal)) budgetList.push({ k: budgetVal, l: EP.budgetLabel(f, budgetVal) });
+  const readyLabel = rent ? "Available now" : com ? "Ready to occupy" : "Ready to move";
+  const tone = com ? COM_GOLD : undefined;
+  const tint = com ? "var(--gold-100)" : undefined;
+  const sqft = (n) => n.toLocaleString("en-IN") + "+ sq ft";
+  const typeLabel = com ? (subs.length === 0 ? "All types" : subs.length === 1 ? EP.comLabel(subs[0]) : subs.length + " types") : (f.ptype === "Any type" ? "All types" : f.ptype + "s");
+  // Every group, in the same order as before. `drop` = collapse priority: when the row
+  // would overflow, the highest drop value moves into More filters first. Family and
+  // Budget never collapse.
+  const groups = [];
+  groups.push({ k: "type", drop: 1, active: com ? subs.length > 0 : f.ptype !== "Any type", dc: com ? "commercial-subtype-row" : "residential-subtype-row", label: typeLabel,
+    pop: (
+      <>
+        {com ? (
+          <EPPop label="Commercial type">
+            <EPChip label="All commercial" on={subs.length === 0} onClick={() => act.setFilters({ comSubs: [] })} tone={COM_GOLD} />
+            {EP.com.SUBTYPES.map((s) => (
+              <EPChip key={s.k} label={s.label} on={subs.indexOf(s.k) !== -1}
+                onClick={() => act.setFilters({ comSubs: subs.indexOf(s.k) !== -1 ? subs.filter((x) => x !== s.k) : subs.concat(s.k) })} tone={COM_GOLD} />
+            ))}
+          </EPPop>
+        ) : (
+          <EPPop label="Residential type">
+            {resTypes.map((t) => <EPChip key={t} label={t === "Any type" ? "All residential" : t + "s"} on={f.ptype === t} onClick={() => act.setFilters({ ptype: t })} />)}
+          </EPPop>
+        )}
+        {com && subs.length > 0 && <span style={{ display: "flex" }}><EPGhost onClick={() => act.setFilters({ comSubs: [] })}>Clear commercial types</EPGhost></span>}
+        {!com && f.ptype !== "Any type" && <span style={{ display: "flex" }}><EPGhost onClick={() => act.setFilters({ ptype: "Any type" })}>Clear residential types</EPGhost></span>}
+      </>
+    ) });
+  if (!com && homes) groups.push({ k: "beds", drop: 2, active: f.beds > 0, dc: "residential-beds-group", label: f.beds ? f.beds + "+ BHK" : "BHK",
+    pop: <EPPop label={mixedRes ? "Home bedrooms" : "Bedrooms"}>{[0, 1, 2, 3].map((b) => <EPChip key={b} label={b === 0 ? "Any" : b === 3 ? "3+" : String(b)} on={f.beds === b} onClick={() => act.setFilters({ beds: b })} />)}</EPPop> });
+  if (!com && homes) groups.push({ k: "carpet", drop: 4, active: f.carpetArea > 0, dc: "residential-carpet-group", label: f.carpetArea ? sqft(f.carpetArea) : "Carpet area",
+    pop: <EPPop label={mixedRes ? "Home carpet area" : "Carpet area"}>{EP.CARPET_AREAS.map((a) => <EPChip key={"c" + a.k} label={a.l} on={f.carpetArea === a.k} onClick={() => act.setFilters({ carpetArea: a.k })} />)}</EPPop> });
+  if (!com && plots) groups.push({ k: "plot", drop: 5, active: f.plotArea > 0, dc: "residential-plot-group", label: f.plotArea ? sqft(f.plotArea) + " plot" : "Plot size",
+    pop: <EPPop label="Plot size">{EP.PLOT_AREAS.map((a) => <EPChip key={a.k} label={a.l} on={f.plotArea === a.k} onClick={() => act.setFilters({ plotArea: a.k })} />)}</EPPop> });
+  if (com) groups.push({ k: "comArea", drop: 3, active: f.comArea > 0, dc: "commercial-area-group", label: f.comArea ? sqft(f.comArea) : epShortArea(EP.comAreaLabel(f)),
+    pop: <EPPop label={epShortArea(EP.comAreaLabel(f))}>{EP.COM_AREAS.map((a) => <EPChip key={"a" + a.k} label={a.l} on={(f.comArea || 0) === a.k} onClick={() => act.setFilters({ comArea: a.k })} tone={COM_GOLD} />)}</EPPop> });
+  groups.push({ k: "budget", drop: 0, active: budgetVal > 0, dc: "budget-group", label: budgetVal ? EP.budgetLabel(f, budgetVal) : rent ? "Monthly rent" : "Budget",
+    pop: <EPPop label={rent ? "Monthly rent" : "Budget"}>{budgetList.map((b) => <EPChip key={"p" + b.k} label={b.l} on={budgetVal === b.k} onClick={() => setBudget(b.k)} />)}</EPPop> });
+  // collapse loop: measured, never guessed. Reset on any width change or when the
+  // group set changes; each layout pass that still overflows moves one more group.
+  const rowRef = React.useRef(null);
+  const [nHide, setNHide] = React.useState(0);
+  const sig = groups.map((g) => g.k + ":" + g.label).join("|");
+  const collapsible = groups.filter((g) => g.drop > 0).sort((a, b) => b.drop - a.drop);
+  const hidden = collapsible.slice(0, nHide).map((g) => g.k);
+  React.useLayoutEffect(() => { setNHide(0); }, [sig]);
+  React.useLayoutEffect(() => {
+    const el = rowRef.current;
+    if (el && el.scrollWidth > el.clientWidth + 1 && nHide < collapsible.length) setNHide(nHide + 1);
+  });
+  React.useEffect(() => {
+    const el = rowRef.current;
+    if (!el || !window.ResizeObserver) return;
+    let w = el.clientWidth;
+    const ro = new ResizeObserver(() => { if (Math.abs(el.clientWidth - w) > 1) { w = el.clientWidth; setNHide(0); } });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const moved = groups.filter((g) => hidden.indexOf(g.k) !== -1);
+  const more = (f.ready ? 1 : 0) + (f.verified ? 1 : 0) + moved.filter((g) => g.active).length;
+  return (
+    <div ref={rowRef} data-design-component="filter-toolbar" role="toolbar" aria-label="Property filters" style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "nowrap", minWidth: 0 }}>
+      <EPDrop dc="property-family-row" label={com ? "Commercial" : "Residential"} filled tone={com ? COM_GOLD : "var(--accent)"}>
+        <EPPop label="Property family">
+          <EPChip label="Residential" on={!com} onClick={() => act.setFamily("Residential")} />
+          <EPChip label="Commercial" on={com} onClick={() => act.setFamily("Commercial")} tone={COM_GOLD} />
+        </EPPop>
+      </EPDrop>
+      {groups.filter((g) => hidden.indexOf(g.k) === -1).map((g) => (
+        <EPDrop key={g.k} dc={g.dc} label={g.label} active={g.active} tone={tone} tint={tint}>{g.pop}</EPDrop>
+      ))}
+      <span style={{ flex: "1 0 0px" }} />
+      <EPDrop dc="standing-toggles-group" label="More filters" icon="sliders-horizontal" count={more} align="right">
+        {moved.map((g) => <React.Fragment key={g.k}>{g.pop}</React.Fragment>)}
+        <EPPop label="Only show">
+          <EPChip label={readyLabel} on={f.ready} onClick={() => act.setFilters({ ready: !f.ready })} />
+          <EPChip label="Broker identity verified" on={f.verified} onClick={() => act.setFilters({ verified: !f.verified })} tone="var(--evergreen-600)" />
+        </EPPop>
+        {com && (f.comMaxPrice || f.comArea || subs.length > 0 || f.verified) && (
+          <span data-design-component="commercial-reset-row" style={{ display: "flex" }}>
+            <EPGhost onClick={() => act.setFilters({ comSubs: [], comMaxPrice: 0, comArea: 0, verified: false })}>Reset commercial filters</EPGhost>
+          </span>
+        )}
+      </EPDrop>
+    </div>
+  );
+}
+// menu of scope operations — every action the old chip row had, one click deeper
+function EPMenu({ label, items, dc }) {
+  const [open, setOpen] = React.useState(false);
+  const [h, setH] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const f = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const k = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", f); document.addEventListener("keydown", k);
+    return () => { document.removeEventListener("mousedown", f); document.removeEventListener("keydown", k); };
+  }, [open]);
+  return (
+    <span ref={ref} data-design-component={dc} style={{ position: "relative", display: "inline-flex", flex: "none" }}>
+      <button onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
+        style={{ display: "inline-flex", alignItems: "center", gap: "4px", height: "26px", padding: "0 8px", borderRadius: "var(--radius-sm)", border: "1px solid " + (open ? "var(--border-strong)" : "transparent"), background: h || open ? "var(--surface-subtle)" : "transparent", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "12.5px", fontWeight: 600, color: "var(--text-strong)", whiteSpace: "nowrap" }}>
+        {label}<EIcon name="chevron-down" size={13} color="var(--grey-500)" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform var(--dur-fast)" }} />
+      </button>
+      {open && (
+        <div role="menu" style={{ position: "absolute", top: "calc(100% + 5px)", left: 0, zIndex: 46, minWidth: "210px", padding: "5px", background: "var(--surface-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-lg)" }}>
+          {items.filter(Boolean).map((it) => (
+            <button key={it.label} role="menuitem" onClick={() => { setOpen(false); it.onClick(); }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-subtle)")} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              style={{ display: "flex", alignItems: "center", gap: "9px", width: "100%", textAlign: "left", padding: "8px 10px", border: "none", borderRadius: "var(--radius-md)", background: "transparent", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "13px", fontWeight: it.strong ? 700 : 600, color: "var(--text-strong)" }}>
+              <EIcon name={it.icon} size={15} color="var(--grey-500)" />{it.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
+  );
+}
+// in-scope listing search, collapsed to one pill until used; same act.setQuery
+function EPSearchPill({ label, st, act }) {
+  const [q, setQ] = React.useState(st.query || "");
+  const [open, setOpen] = React.useState(!!st.query);
+  const inRef = React.useRef(null);
+  React.useEffect(() => { setQ(st.query || ""); if (st.query) setOpen(true); }, [st.query, label]);
+  React.useEffect(() => { if (open && inRef.current && !q) inRef.current.focus(); }, [open]);
+  if (!open) return (
+    <button data-design-component="property-search" onClick={() => setOpen(true)} title={"Search " + label + " by road, project or landmark"}
+      style={{ display: "inline-flex", alignItems: "center", gap: "7px", height: "36px", padding: "0 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-strong)", background: "var(--surface-card)", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "13px", fontWeight: 600, color: "var(--text-strong)", whiteSpace: "nowrap" }}>
+      <EIcon name="search" size={15} color="var(--grey-500)" />Search {label}
+    </button>
+  );
+  return (
+    <div data-design-component="property-search" style={{ display: "flex", alignItems: "center", gap: "7px", width: "250px", maxWidth: "100%", height: "36px", padding: "0 10px", background: "var(--surface-card)", border: "1px solid var(--accent)", borderRadius: "var(--radius-md)" }}>
+      <EIcon name="search" size={15} color="var(--accent)" />
+      <input ref={inRef} value={q} onChange={(e) => { setQ(e.target.value); act.setQuery(e.target.value); }} onBlur={() => { if (!q) setOpen(false); }} onKeyDown={(e) => { if (e.key === "Escape" && !q) setOpen(false); }}
+        placeholder={"Road, project or landmark…"} aria-label={"Search " + label + " by road, project or landmark"}
+        style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", fontFamily: "var(--font-sans)", fontSize: "13px", color: "var(--text-strong)" }} />
+      <button onMouseDown={(e) => e.preventDefault()} onClick={() => { setQ(""); act.setQuery(""); setOpen(false); }} aria-label="Close search" style={{ border: "none", background: "var(--surface-subtle)", cursor: "pointer", borderRadius: "var(--radius-full)", width: "20px", height: "20px", display: "grid", placeItems: "center", padding: 0 }}><EIcon name="x" size={12} color="var(--text-muted)" /></button>
+    </div>
+  );
+}
+// Desktop listing header: title + search + sort on one line; count, scope chips
+// and the scope-operations menu on the second. Replaces the full-width chip row.
+function EPResultHeadSkin({ view, st, act, sort, onSort }) {
+  const kind = view.scopeKind;
+  const keys = view.committed;
+  const h = view.heading;
+  const total = view.scopeTotal;
+  const searchLabel = kind === "HIERARCHY" ? view.scopeLabel : view.areaActions && keys[0] ? EP.byKey[keys[0]].name : null;
+  const chip = { display: "inline-flex", alignItems: "center", gap: "5px", padding: "3px 8px", borderRadius: "var(--radius-xs)", background: "var(--surface-subtle)", border: "1px solid var(--border)", fontSize: "12.5px", fontWeight: 600, color: "var(--text-strong)", whiteSpace: "nowrap" };
+  const x = { border: "none", background: "transparent", padding: 0, cursor: "pointer", color: "inherit", opacity: 0.6, fontSize: "14px", lineHeight: 1 };
+  const back = (kind === "VIEWPORT" || kind === "POLYGON") && st.prevScope;
+  const menu = kind === "AREA_SET"
+    ? { label: "Edit areas", items: [{ label: "Add or remove areas", icon: "pencil", onClick: act.openDraft, strong: true }, { label: "Draw search area", icon: "route", onClick: act.drawArea }, { label: "Clear selected areas", icon: "x", onClick: act.clearScope }, { label: "Create alert", icon: "alert-triangle", onClick: act.openAlertForm }] }
+    : kind === "CITY" ? { label: "Options", items: [{ label: "Draw search area", icon: "route", onClick: act.drawArea }, { label: "Create alert", icon: "alert-triangle", onClick: act.openAlertForm }] }
+      : kind ? { label: "Options", items: [{ label: "Create alert", icon: "alert-triangle", onClick: act.openAlertForm }] } : null;
+  return (
+    <div data-design-component="scope-bar" style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+      <div data-design-component="results-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px 14px", flexWrap: "wrap" }}>
+        <h2 style={{ margin: 0, flex: "1 1 200px", minWidth: 0, fontFamily: "var(--font-serif)", fontSize: "24px", fontWeight: 600, letterSpacing: "-0.02em", color: "var(--text-strong)", lineHeight: 1.15, textWrap: "pretty" }}>{h.title}</h2>
+        <div style={{ flex: "none", display: "flex", alignItems: "center", gap: "8px" }}>
+          {searchLabel && <EPSearchPill label={searchLabel} st={st} act={act} />}
+          <span style={{ position: "relative", display: "inline-flex" }}>
+            <select value={sort} onChange={(e) => onSort(e.target.value)} data-design-component="sort-select" aria-label="Sort by"
+              style={{ appearance: "none", WebkitAppearance: "none", height: "36px", padding: "0 32px 0 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-strong)", background: "var(--surface-card)", fontFamily: "var(--font-sans)", fontSize: "13px", fontWeight: 600, color: "var(--text-strong)", cursor: "pointer" }}>
+              {EP_SORTS.map((o) => <option key={o.k} value={o.k}>{o.k === "rel" ? "Sort: Relevance" : o.l}</option>)}
+            </select>
+            <span style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", display: "flex", pointerEvents: "none" }}><EIcon name="chevron-down" size={14} color="var(--grey-500)" /></span>
+          </span>
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", minHeight: "26px" }}>
+        <span style={{ fontSize: "13px", color: "var(--text-muted)", whiteSpace: "nowrap", marginRight: "4px" }}>
+          {st.phase === "loading" ? "loading…" : <><span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: total === 0 ? "var(--brick-600)" : "var(--text-strong)" }}>{total}</span> {h.stat ? h.stat.l : "listings"}</>}
+        </span>
+        {/* one area is already named by the title; chips earn their place at 2+ */}
+        {kind === "AREA_SET" && keys.length > 1 && keys.map((k) => {
+          const on = view.focusChip === k;
+          return (
+            <span key={k} style={{ ...chip, background: on ? "var(--navy-800)" : chip.background, color: on ? "#fff" : chip.color }}>
+              <EIcon name="map-pin" size={12} color={on ? "#fff" : "var(--copper-500)"} />
+              <button onClick={() => act.focusChip(k)} style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "12.5px", fontWeight: 600, color: "inherit" }}>{EP.byKey[k].name}</button>
+              <button onClick={() => act.removeCommitted(k)} aria-label={"Remove " + EP.byKey[k].name} style={x}>×</button>
+            </span>
+          );
+        })}
+        {kind === "HIERARCHY" && view.hierarchyAreas.map((a) => <span key={a.key} style={{ ...chip, color: "var(--text-body)" }}><EIcon name="map-pin" size={11} color="var(--copper-500)" />{a.name}</span>)}
+        {kind === "CITY" && <span style={chip}><EIcon name="layers" size={12} color="var(--copper-500)" />Every area in Bangalore</span>}
+        {kind === "POLYGON" && <span style={{ ...chip, background: "var(--accent-tint)", border: "1px solid var(--accent)", fontWeight: 700, color: "var(--copper-600)" }}>Drawn area<button onClick={act.returnToAreas} style={{ ...x, opacity: 1 }}>×</button></span>}
+        {kind === "VIEWPORT" && <span style={{ ...chip, background: "var(--navy-100)", border: "1px solid var(--navy-600)", fontWeight: 700, color: "var(--navy-700)" }}>Visible map area</span>}
+        {back && <EPGhost strong onClick={act.returnToAreas}>Return to {st.prevScope.kind === "AREA_SET" ? st.prevScope.areaKeys.map((k) => EP.byKey[k].name).join(" + ") : "all listings"}</EPGhost>}
+        {menu && <EPMenu dc="scope-actions-menu" label={menu.label} items={menu.items} />}
+      </div>
+    </div>
+  );
+}
+const EP_SORTS = [{ k: "rel", l: "Relevance" }, { k: "pa", l: "Price: low to high" }, { k: "pd", l: "Price: high to low" }, { k: "sz", l: "Size: largest first" }];
+function epSorted(list, sort, f) {
+  if (!sort || sort === "rel") return list;
+  const rent = f.purpose === "Rent";
+  const p = (l) => (rent ? (l.rent != null ? l.rent : l.price) : l.price) || 0;
+  const out = list.slice();
+  if (sort === "pa") out.sort((a, b) => p(a) - p(b));
+  else if (sort === "pd") out.sort((a, b) => p(b) - p(a));
+  else if (sort === "sz") out.sort((a, b) => (b.sqft || 0) - (a.sqft || 0));
+  return out;
+}
+
 // ---- ONE result header: scope · title · count · scope controls ---------------
-function EPResultHead({ view, st, act }) {
+function EPResultHead({ view, st, act, skin, sort, onSort }) {
+  if (skin && !st.draft) return <EPResultHeadSkin view={view} st={st} act={act} sort={sort} onSort={onSort} />;
   const draft = !!st.draft;
   const kind = draft ? "AREA_SET" : view.scopeKind;
   const keys = draft ? st.draft : view.committed;
@@ -379,7 +649,9 @@ function EPHierarchySearch({ view, st, act }) {
   );
 }
 // ---- area landing: compact actions ------------------------------------------
-function EPAreaActions({ view, st, act }) {
+function EPAreaActions({ view, st, act, skin }) {
+  const pad = skin ? "10px 13px" : "9px 11px", ic = skin ? "36px" : "30px", tsz = skin ? "14px" : "13px", ssz = skin ? "12px" : "11.5px";
+  const chev = (c) => skin ? <EIcon name="chevron-right" size={17} color={c} /> : <span style={{ flex: "none", fontSize: "14px", fontWeight: 700, color: c }}>›</span>;
   const key = view.committed[0];
   const name = EP.byKey[key].name;
   const schoolN = EP.byKey[key].schools;
@@ -387,30 +659,30 @@ function EPAreaActions({ view, st, act }) {
   React.useEffect(() => setQ(st.query || ""), [st.query, key]);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-      <div data-design-component="property-search" style={{ display: "flex", alignItems: "center", gap: "8px", padding: "0 12px", minHeight: "40px", background: "var(--surface-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)" }}>
+      {!skin && <div data-design-component="property-search" style={{ display: "flex", alignItems: "center", gap: "8px", padding: "0 12px", minHeight: "40px", background: "var(--surface-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)" }}>
         <EIcon name="search" size={15} color="var(--grey-400)" />
         <input value={q} onChange={(e) => { setQ(e.target.value); act.setQuery(e.target.value); }} placeholder={"Search " + name + " by road, project or landmark…"}
           style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", fontFamily: "var(--font-sans)", fontSize: "13px", color: "var(--text-strong)" }} />
         {q && <button onClick={() => { setQ(""); act.setQuery(""); }} style={{ border: "none", background: "var(--surface-subtle)", cursor: "pointer", borderRadius: "var(--radius-full)", width: "20px", height: "20px", lineHeight: 1, color: "var(--text-muted)" }}>×</button>}
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+      </div>}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: skin ? "10px" : "8px" }}>
         <button data-design-component="school-shortcut" onClick={act.openAreaSchools}
-          style={{ display: "flex", alignItems: "center", gap: "9px", padding: "9px 11px", borderRadius: "var(--radius-md)", cursor: "pointer", textAlign: "left", background: "var(--plum-tint)", border: "1px solid var(--plum-100)" }}>
-          <span style={{ flex: "none", width: "30px", height: "30px", borderRadius: "var(--radius-md)", background: "var(--plum-600)", display: "grid", placeItems: "center" }}><EIcon name="building" size={16} color="#fff" /></span>
+          style={{ display: "flex", alignItems: "center", gap: skin ? "12px" : "9px", padding: pad, borderRadius: skin ? "var(--radius-lg)" : "var(--radius-md)", cursor: "pointer", textAlign: "left", background: "var(--plum-tint)", border: "1px solid var(--plum-100)" }}>
+          <span style={{ flex: "none", width: ic, height: ic, borderRadius: "var(--radius-md)", background: "var(--plum-600)", display: "grid", placeItems: "center" }}><EIcon name="building" size={skin ? 18 : 16} color="#fff" /></span>
           <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text-strong)" }}>Schools in {name}</span>
-            <span style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "11.5px", color: "var(--plum-600)" }}>{schoolN} schools · keeps this area</span>
+            <span style={{ display: "block", fontSize: tsz, fontWeight: 700, color: "var(--text-strong)" }}>Schools in {name}</span>
+            <span style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: ssz, color: "var(--plum-600)", marginTop: skin ? "2px" : 0 }}>{schoolN} schools · keeps this area</span>
           </span>
-          <span style={{ flex: "none", fontSize: "14px", fontWeight: 700, color: "var(--plum-600)" }}>›</span>
+          {chev("var(--plum-600)")}
         </button>
-        <button onClick={act.openDraft}
-          style={{ display: "flex", alignItems: "center", gap: "9px", padding: "9px 11px", borderRadius: "var(--radius-md)", cursor: "pointer", textAlign: "left", background: "var(--surface-card)", border: "1px solid var(--border-strong)" }}>
-          <span style={{ flex: "none", width: "30px", height: "30px", borderRadius: "var(--radius-md)", background: "var(--accent-tint)", display: "grid", placeItems: "center" }}><EIcon name="map-pin" size={15} color="var(--copper-600)" /></span>
+        <button data-design-component="nearby-shortcut" onClick={act.openDraft}
+          style={{ display: "flex", alignItems: "center", gap: skin ? "12px" : "9px", padding: pad, borderRadius: skin ? "var(--radius-lg)" : "var(--radius-md)", cursor: "pointer", textAlign: "left", background: "var(--surface-card)", border: "1px solid var(--border-strong)" }}>
+          <span style={{ flex: "none", width: ic, height: ic, borderRadius: "var(--radius-md)", background: "var(--accent-tint)", display: "grid", placeItems: "center" }}><EIcon name="map-pin" size={skin ? 17 : 15} color="var(--copper-600)" /></span>
           <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text-strong)" }}>Add nearby areas</span>
-            <span style={{ display: "block", fontSize: "11.5px", color: "var(--text-muted)" }}>Add up to 2 nearby areas</span>
+            <span style={{ display: "block", fontSize: tsz, fontWeight: 700, color: "var(--text-strong)" }}>Add nearby areas</span>
+            <span style={{ display: "block", fontSize: ssz, color: "var(--text-muted)", marginTop: skin ? "2px" : 0 }}>Add up to 2 nearby areas</span>
           </span>
-          <span style={{ flex: "none", fontSize: "14px", fontWeight: 700, color: "var(--accent)" }}>›</span>
+          {chev("var(--accent)")}
         </button>
       </div>
     </div>
@@ -659,17 +931,20 @@ function EPAlertList({ st, act }) {
 }
 
 // ---- listings / detail ------------------------------------------------------
-function EPListings({ view, st, act, isMobile }) {
+// Dense = desktop listing skin: as many ≥250px columns as the panel allows (2 at
+// 1366, 3 on wider screens) — never a forced column count.
+const epCols = (isMobile, dense) => isMobile ? "1fr" : dense ? "repeat(auto-fill, minmax(250px, 1fr))" : "repeat(2, minmax(0,1fr))";
+function EPListings({ view, st, act, isMobile, dense, sort }) {
   if (st.phase === "loading") return (
-    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0,1fr))", gap: "16px" }}>
+    <div style={{ display: "grid", gridTemplateColumns: epCols(isMobile, dense), gap: dense ? "14px" : "16px" }}>
       {[0, 1, 2, 3].map((i) => <div key={i} style={{ height: "300px", borderRadius: "var(--radius-lg)", background: "linear-gradient(100deg, var(--canvas-200) 30%, var(--stone-300) 50%, var(--canvas-200) 70%)", border: "1px solid var(--border)" }} />)}
     </div>
   );
-  return <window.ExpListingsGrid homes={view.results.slice(0, st.shown)} st={st} act={act} isMobile={isMobile} />;
+  return <window.ExpListingsGrid homes={epSorted(view.results, sort, st.filters).slice(0, st.shown)} st={st} act={act} isMobile={isMobile} dense={dense} />;
 }
-function ExpListingsGrid({ homes, st, act, isMobile, distFrom }) {
+function ExpListingsGrid({ homes, st, act, isMobile, distFrom, dense }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0,1fr))", gap: "16px" }}>
+    <div style={{ display: "grid", gridTemplateColumns: epCols(isMobile, dense), gap: dense ? "14px" : "16px" }}>
       {homes.map((l) => (
         <window.DPListingCard key={l.id} listing={l} saved={st.saved.indexOf(l.id) !== -1} onToggleSave={act.toggleSave} onHover={act.hover} onOpen={act.openListing}
           signedIn={st.signedIn} priceText={EP.priceText(l, st.filters)} distanceKm={distFrom ? window.BLR_DIST(distFrom, l) : null} />
@@ -877,6 +1152,15 @@ function ExpPanel({ view, st, act, isMobile }) {
   const showFilters = (journey === "areas" && !navLevel) || (journey === "schools" && view.level === "schools-homes");
   const heading = view.heading;
   const tint = JOURNEY_TINT[journey];
+  // desktop listing skin: control bar moves to the full-width row above map + panel
+  // (ExpDesktop), filters collapse into one sticky dropdown row inside the scroller.
+  const skin = !isMobile && expListingSkin(st, view);
+  const [sort, setSort] = React.useState("rel");
+  const stickyFilters = skin && showFilters ? (
+    <div data-design-component="sticky-filter-row" style={{ position: "sticky", top: "-12px", zIndex: 20, margin: "0 -20px", padding: "8px 20px", background: "var(--background)", borderBottom: "1px solid var(--border)" }}>
+      <EPFiltersCompact st={st} act={act} />
+    </div>
+  ) : null;
   // the list keeps its place across a detail round trip: the offset is stored against the
   // result state it belongs to, and restored only when that same state comes back.
   const scRef = React.useRef(null);
@@ -892,11 +1176,19 @@ function ExpPanel({ view, st, act, isMobile }) {
 
   return (
     <div data-design-component="results-panel" style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, background: "var(--background)" }}>
-      <div style={{ flex: "none", padding: isMobile ? "10px 14px" : "12px 20px", borderBottom: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "9px" }}>
-        <window.ExpModeBar st={st} act={act} view={view} isMobile={isMobile} />
-        {showFilters && !isMobile && <EPFilters st={st} act={act} isMobile={false} />}
-      </div>
-      <div className="upt-scroll" ref={scRef} onScroll={onScroll} key={view.paintKey} style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: isMobile ? "12px 14px 108px" : "14px 20px 26px", display: "flex", flexDirection: "column", gap: "12px", animation: "expFade var(--dur-normal) var(--ease-out)" }}>
+      {/* mobile: unchanged full bar. desktop: global controls live in the one-row
+          header; the panel keeps only contextual cues and the non-skin filter rows. */}
+      {isMobile ? (
+        <div style={{ flex: "none", padding: "10px 14px", borderBottom: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "9px" }}>
+          <window.ExpModeBar st={st} act={act} view={view} isMobile />
+        </div>
+      ) : (view.journeyRoot || (showFilters && !skin)) && (
+        <div style={{ flex: "none", padding: "10px 20px", borderBottom: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "9px" }}>
+          <window.ExpModeBar st={st} act={act} view={view} isMobile={false} part="cues" />
+          {showFilters && !skin && <EPFilters st={st} act={act} isMobile={false} />}
+        </div>
+      )}
+      <div className="upt-scroll" ref={scRef} onScroll={onScroll} key={view.paintKey} style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: isMobile ? "12px 14px 108px" : skin ? "12px 20px 26px" : "14px 20px 26px", display: "flex", flexDirection: "column", gap: skin ? "10px" : "12px", animation: "expFade var(--dur-normal) var(--ease-out)" }}>
         {/* On mobile the filter groups stack at full tap height, which is taller than a
             phone can spare from a fixed header. They ride at the top of the scrolling
             body instead: every group is reachable by the scroll a phone user already
@@ -936,7 +1228,8 @@ function ExpPanel({ view, st, act, isMobile }) {
                 {navLevel && !st.draft
                   ? <EPHeading eyebrow={heading.eyebrow} title={heading.title} sub={heading.sub} stat={heading.stat}
                       browseAll={(view.level === "direction" || view.level === "local") ? { label: "Browse all " + heading.stat.v + " " + heading.stat.l, onClick: act.browseHierarchy } : null} />
-                  : <EPResultHead view={view} st={st} act={act} />}
+                  : <EPResultHead view={view} st={st} act={act} skin={skin} sort={sort} onSort={setSort} />}
+                {stickyFilters}
                 {view.notes.map((n, i) => <EPNote key={i} tone={n.tone} action={n.action} onAction={n.onAction}>{n.text}</EPNote>)}
                 {st.confirm && (
                   <div style={{ padding: "15px 16px", borderRadius: "var(--radius-lg)", background: "var(--surface-card)", border: "1px solid var(--border-strong)", boxShadow: "var(--shadow-lg)" }}>
@@ -963,8 +1256,8 @@ function ExpPanel({ view, st, act, isMobile }) {
                   ) : view.results.length === 0 && st.phase !== "loading" ? <EPZero view={view} st={st} act={act} />
                     : (
                       <>
-                        {view.scopeKind === "HIERARCHY" && <EPHierarchySearch view={view} st={st} act={act} />}
-                        {view.areaActions && <EPAreaActions view={view} st={st} act={act} />}
+                        {view.scopeKind === "HIERARCHY" && !skin && <EPHierarchySearch view={view} st={st} act={act} />}
+                        {view.areaActions && <EPAreaActions view={view} st={st} act={act} skin={skin} />}
                         {view.schoolsBlock && (
                           <div style={{ display: "flex", alignItems: "center", gap: "11px", padding: "10px 12px", borderRadius: "var(--radius-md)", background: "var(--plum-tint)", border: "1px solid var(--plum-100)" }}>
                             <span style={{ flex: "none", width: "30px", height: "30px", borderRadius: "var(--radius-md)", background: "var(--plum-600)", display: "grid", placeItems: "center" }}><EIcon name="building" size={16} color="#fff" /></span>
@@ -975,7 +1268,7 @@ function ExpPanel({ view, st, act, isMobile }) {
                             <EPGhost onClick={act.openAreaSchools}>Open Schools</EPGhost>
                           </div>
                         )}
-                        <EPListings view={view} st={st} act={act} isMobile={isMobile} />
+                        <EPListings view={view} st={st} act={act} isMobile={isMobile} dense={skin} sort={skin ? sort : "rel"} />
                         {view.results.length > st.shown && <EPGhost onClick={act.showMore}>Show more of {view.results.length} {view.noun || "listings"}</EPGhost>}
                       </>
                     )}
@@ -991,4 +1284,4 @@ function ExpPanel({ view, st, act, isMobile }) {
   );
 }
 
-Object.assign(window, { ExpPanel, ExpListingsGrid, EPFilters, EPChip, EPGroup, EPToolLabel });
+Object.assign(window, { ExpPanel, ExpListingsGrid, EPFilters, EPFiltersCompact, EPChip, EPGroup, EPToolLabel, expListingSkin });
