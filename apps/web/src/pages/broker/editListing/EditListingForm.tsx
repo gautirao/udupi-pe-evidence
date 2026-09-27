@@ -40,10 +40,6 @@ export function EditListingForm({ listing }: EditListingFormProps) {
     title, description, priceRupees, propertyType, locality, landArea, landAreaUnit,
     bedrooms, builtArea, builtAreaUnit, reraNumber, videoUrl, listingPurpose, boundaryCoords,
   } = base.values;
-  const {
-    setTitle, setDescription, setPriceRupees, setLocality, setLandArea, setLandAreaUnit,
-    setBedrooms, setBuiltArea, setBuiltAreaUnit, setReraNumber, setListingPurpose,
-  } = base.setters;
 
   // Issue #1838 slice-7 — wizard step-navigation state (currentStep,
   // cameFromReview, wizardSteps, reviewStep, boundaryStep, isAgriListing,
@@ -57,7 +53,7 @@ export function EditListingForm({ listing }: EditListingFormProps) {
   // useEditListingUiState(). These must NOT reset when the listing id changes.
   const ui = useEditListingUiState();
   const { canSubmitImages, videoUrlError, confirmedLocality } = ui.values;
-  const { setCanSubmitImages, setTitleManuallyEdited } = ui.setters;
+  const { setCanSubmitImages } = ui.setters;
 
   // Shared fields — Issue #1838 slice-5e: 7 fields shared across two or more
   // domains (carpetArea/carpetAreaUnit/floorNumber/totalFloors/
@@ -169,41 +165,23 @@ export function EditListingForm({ listing }: EditListingFormProps) {
       {/* ── Step 1: Describe ── */}
       <div data-testid="step-1-panel" style={{ display: currentStep === 1 ? 'block' : 'none' }}>
         <DescribeStep
-          agri={agri}
-          commercial={commercial}
-          rent={rent}
-          residential={residential}
-          shared={shared}
-          title={title}
-          setTitle={setTitle}
-          setTitleManuallyEdited={setTitleManuallyEdited}
-          description={description}
-          setDescription={setDescription}
-          priceRupees={priceRupees}
-          setPriceRupees={setPriceRupees}
-          propertyType={propertyType}
-          setPropertyType={commands.describe.changePropertyType}
-          commercialSubtype={commercialSubtype}
-          locality={locality}
-          setLocality={setLocality}
-          landArea={landArea}
-          setLandArea={setLandArea}
-          landAreaUnit={landAreaUnit}
-          setLandAreaUnit={setLandAreaUnit}
-          bedrooms={bedrooms}
-          setBedrooms={setBedrooms}
-          builtArea={builtArea}
-          setBuiltArea={setBuiltArea}
-          builtAreaUnit={builtAreaUnit}
-          setBuiltAreaUnit={setBuiltAreaUnit}
-          reraNumber={reraNumber}
-          setReraNumber={setReraNumber}
-          listingPurpose={listingPurpose}
-          setListingPurpose={setListingPurpose}
-          fieldVisible={editCtx.fieldVisible}
-          isCommercialType={isCommercialType}
-          handleStep1Save={commands.describe.save}
-          updateListing={updateListing}
+          view={{
+            basics: { title, description, locality, priceRupees, propertyType, listingPurpose, reraNumber },
+            dimensions: {
+              landArea: { value: landArea, unit: landAreaUnit },
+              builtArea: { value: builtArea, unit: builtAreaUnit },
+              carpetArea: { value: shared.values.carpetArea, unit: shared.values.carpetAreaUnit },
+              bedrooms,
+            },
+            capabilities: { isCommercialType, commercialSubtype, fieldVisible: editCtx.fieldVisible },
+            status: { isSaving: updateListing.isPending },
+            agri: agri.values,
+            commercial: commercial.values,
+            rent: rent.values,
+            residential: residential.values,
+            shared: shared.values,
+          }}
+          commands={commands.describe}
         />
       </div>
 

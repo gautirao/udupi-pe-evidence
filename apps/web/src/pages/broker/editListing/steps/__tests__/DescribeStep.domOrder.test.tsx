@@ -62,6 +62,47 @@ vi.mock('@/components/ui/select', () => ({
 
 type DescribeStepProps = React.ComponentProps<typeof DescribeStep>;
 
+// ─── Issue #1838 PR E — flat test-fixture shape (see DescribeStep.test.tsx
+// for the rationale; duplicated per this repo's local-per-file test
+// convention) ────────────────────────────────────────────────────────────
+type PropertyTypeValue = DescribeStepProps['view']['basics']['propertyType'];
+
+interface DescribeStepFlatProps {
+  agri: ReturnType<typeof useAgriFields>;
+  commercial: ReturnType<typeof useCommercialFields>;
+  rent: ReturnType<typeof useRentFields>;
+  residential: ReturnType<typeof useResidentialFields>;
+  shared: ReturnType<typeof useSharedFields>;
+  title: string;
+  setTitle: (v: string) => void;
+  markTitleManuallyEdited: () => void;
+  description: string;
+  setDescription: (v: string) => void;
+  priceRupees: number | null;
+  setPriceRupees: (v: number | null) => void;
+  propertyType: PropertyTypeValue;
+  changePropertyType: (value: PropertyTypeValue) => void;
+  commercialSubtype: DescribeStepProps['view']['capabilities']['commercialSubtype'];
+  locality: string;
+  setLocality: (v: string) => void;
+  landArea: number | null;
+  setLandArea: (value: number | null, unit: string) => void;
+  landAreaUnit: string;
+  bedrooms: string;
+  setBedrooms: (v: string) => void;
+  builtArea: number | null;
+  setBuiltArea: (value: number | null, unit: string) => void;
+  builtAreaUnit: string;
+  reraNumber: string;
+  setReraNumber: (v: string) => void;
+  listingPurpose: DescribeStepProps['view']['basics']['listingPurpose'];
+  setListingPurpose: (v: DescribeStepProps['view']['basics']['listingPurpose']) => void;
+  fieldVisible: (key: ListingFieldKey) => boolean;
+  isCommercialType: boolean;
+  handleStep1Save: (e: React.FormEvent) => void;
+  isSaving: boolean;
+}
+
 function makeShared(): ReturnType<typeof useSharedFields> {
   return {
     values: {
@@ -194,8 +235,8 @@ function makeFieldVisible(visible: ListingFieldKey[]) {
   return vi.fn((key: ListingFieldKey) => set.has(key));
 }
 
-function baseProps(overrides: Partial<DescribeStepProps> = {}): DescribeStepProps {
-  return {
+function baseProps(overrides: Partial<DescribeStepFlatProps> = {}): DescribeStepProps {
+  const flat: DescribeStepFlatProps = {
     agri: makeAgri(),
     commercial: makeCommercial(),
     rent: makeRent(),
@@ -203,26 +244,24 @@ function baseProps(overrides: Partial<DescribeStepProps> = {}): DescribeStepProp
     shared: makeShared(),
     title: '',
     setTitle: vi.fn(),
-    setTitleManuallyEdited: vi.fn(),
+    markTitleManuallyEdited: vi.fn(),
     description: '',
     setDescription: vi.fn(),
     priceRupees: null,
     setPriceRupees: vi.fn(),
     propertyType: 'house',
-    setPropertyType: vi.fn(),
+    changePropertyType: vi.fn(),
     commercialSubtype: undefined,
     locality: '',
     setLocality: vi.fn(),
     landArea: null,
     setLandArea: vi.fn(),
     landAreaUnit: 'cent',
-    setLandAreaUnit: vi.fn(),
     bedrooms: '',
     setBedrooms: vi.fn(),
     builtArea: null,
     setBuiltArea: vi.fn(),
     builtAreaUnit: 'sqft',
-    setBuiltAreaUnit: vi.fn(),
     reraNumber: '',
     setReraNumber: vi.fn(),
     listingPurpose: 'sale',
@@ -230,8 +269,66 @@ function baseProps(overrides: Partial<DescribeStepProps> = {}): DescribeStepProp
     fieldVisible: makeFieldVisible(RESIDENTIAL_VISIBLE),
     isCommercialType: false,
     handleStep1Save: vi.fn(),
-    updateListing: { mutate: vi.fn(), isPending: false } as unknown as DescribeStepProps['updateListing'],
+    isSaving: false,
     ...overrides,
+  };
+
+  return {
+    view: {
+      basics: {
+        title: flat.title,
+        description: flat.description,
+        locality: flat.locality,
+        priceRupees: flat.priceRupees,
+        propertyType: flat.propertyType,
+        listingPurpose: flat.listingPurpose,
+        reraNumber: flat.reraNumber,
+      },
+      dimensions: {
+        landArea: { value: flat.landArea, unit: flat.landAreaUnit },
+        builtArea: { value: flat.builtArea, unit: flat.builtAreaUnit },
+        carpetArea: { value: flat.shared.values.carpetArea, unit: flat.shared.values.carpetAreaUnit },
+        bedrooms: flat.bedrooms,
+      },
+      capabilities: {
+        isCommercialType: flat.isCommercialType,
+        commercialSubtype: flat.commercialSubtype,
+        fieldVisible: flat.fieldVisible,
+      },
+      status: { isSaving: flat.isSaving },
+      agri: flat.agri.values,
+      commercial: flat.commercial.values,
+      rent: flat.rent.values,
+      residential: flat.residential.values,
+      shared: flat.shared.values,
+    },
+    commands: {
+      workflow: { save: flat.handleStep1Save },
+      basics: {
+        setTitle: flat.setTitle,
+        setDescription: flat.setDescription,
+        setLocality: flat.setLocality,
+        setPriceRupees: flat.setPriceRupees,
+        setListingPurpose: flat.setListingPurpose,
+        setReraNumber: flat.setReraNumber,
+        changePropertyType: flat.changePropertyType,
+        markTitleManuallyEdited: flat.markTitleManuallyEdited,
+      },
+      dimensions: {
+        setLandArea: flat.setLandArea,
+        setBuiltArea: flat.setBuiltArea,
+        setCarpetArea: (value, unit) => {
+          flat.shared.setters.setCarpetArea(value);
+          flat.shared.setters.setCarpetAreaUnit(unit);
+        },
+        setBedrooms: flat.setBedrooms,
+      },
+      agri: flat.agri.setters,
+      commercial: flat.commercial.setters,
+      rent: flat.rent.setters,
+      residential: flat.residential.setters,
+      shared: flat.shared.setters,
+    },
   };
 }
 

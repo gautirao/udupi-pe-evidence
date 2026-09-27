@@ -75,6 +75,49 @@ function selectByLabelText(label: string): HTMLElement {
 
 type DescribeStepProps = React.ComponentProps<typeof DescribeStep>;
 
+// ─── Issue #1838 PR E — flat test-fixture shape ────────────────────────────
+// baseProps()'s OWN parameter/return-value plumbing stays the pre-PR-E flat
+// shape (every call site below is unchanged) — only its BODY now assembles
+// the real {view, commands} DescribeStepProps from these flat overrides.
+type PropertyTypeValue = DescribeStepProps['view']['basics']['propertyType'];
+type ListingPurposeValue = DescribeStepProps['view']['basics']['listingPurpose'];
+
+interface DescribeStepFlatProps {
+  agri: ReturnType<typeof useAgriFields>;
+  commercial: ReturnType<typeof useCommercialFields>;
+  rent: ReturnType<typeof useRentFields>;
+  residential: ReturnType<typeof useResidentialFields>;
+  shared: ReturnType<typeof useSharedFields>;
+  title: string;
+  setTitle: (v: string) => void;
+  markTitleManuallyEdited: () => void;
+  description: string;
+  setDescription: (v: string) => void;
+  priceRupees: number | null;
+  setPriceRupees: (v: number | null) => void;
+  propertyType: PropertyTypeValue;
+  changePropertyType: (value: PropertyTypeValue) => void;
+  commercialSubtype: DescribeStepProps['view']['capabilities']['commercialSubtype'];
+  locality: string;
+  setLocality: (v: string) => void;
+  landArea: number | null;
+  setLandArea: (value: number | null, unit: string) => void;
+  landAreaUnit: string;
+  bedrooms: string;
+  setBedrooms: (v: string) => void;
+  builtArea: number | null;
+  setBuiltArea: (value: number | null, unit: string) => void;
+  builtAreaUnit: string;
+  reraNumber: string;
+  setReraNumber: (v: string) => void;
+  listingPurpose: ListingPurposeValue;
+  setListingPurpose: (v: ListingPurposeValue) => void;
+  fieldVisible: (key: ListingFieldKey) => boolean;
+  isCommercialType: boolean;
+  handleStep1Save: (e: React.FormEvent) => void;
+  isSaving: boolean;
+}
+
 // ─── Hook-result stubs — mirror the real hooks' values/setters/hydrate shape,
 // each setter a distinct vi.fn() so per-field isolation assertions can tell
 // setters apart by reference. ────────────────────────────────────────────────
@@ -212,8 +255,8 @@ function makeFieldVisible(visible: ListingFieldKey[] = DEFAULT_VISIBLE) {
   return vi.fn((key: ListingFieldKey) => set.has(key));
 }
 
-function baseProps(overrides: Partial<DescribeStepProps> = {}): DescribeStepProps {
-  return {
+function baseProps(overrides: Partial<DescribeStepFlatProps> = {}): DescribeStepProps {
+  const flat: DescribeStepFlatProps = {
     agri: makeAgri(),
     commercial: makeCommercial(),
     rent: makeRent(),
@@ -221,14 +264,14 @@ function baseProps(overrides: Partial<DescribeStepProps> = {}): DescribeStepProp
     shared: makeShared(),
     title: '',
     setTitle: vi.fn(),
-    setTitleManuallyEdited: vi.fn(),
+    markTitleManuallyEdited: vi.fn(),
     description: '',
     setDescription: vi.fn(),
     priceRupees: null,
     setPriceRupees: vi.fn(),
     propertyType: 'house',
-    setPropertyType: vi.fn(),
-    // #2281 [#1684 parity] — derived CommercialSubtype now required by DescribeStepProps;
+    changePropertyType: vi.fn(),
+    // #2281 [#1684 parity] — derived CommercialSubtype now required by DescribeStepView;
     // undefined for the default 'house' fixture (non-commercial types never resolve one).
     commercialSubtype: undefined,
     locality: '',
@@ -236,13 +279,11 @@ function baseProps(overrides: Partial<DescribeStepProps> = {}): DescribeStepProp
     landArea: null,
     setLandArea: vi.fn(),
     landAreaUnit: 'cent',
-    setLandAreaUnit: vi.fn(),
     bedrooms: '',
     setBedrooms: vi.fn(),
     builtArea: null,
     setBuiltArea: vi.fn(),
     builtAreaUnit: 'sqft',
-    setBuiltAreaUnit: vi.fn(),
     reraNumber: '',
     setReraNumber: vi.fn(),
     listingPurpose: 'sale',
@@ -250,8 +291,66 @@ function baseProps(overrides: Partial<DescribeStepProps> = {}): DescribeStepProp
     fieldVisible: makeFieldVisible(),
     isCommercialType: false,
     handleStep1Save: vi.fn(),
-    updateListing: { mutate: vi.fn(), isPending: false } as unknown as DescribeStepProps['updateListing'],
+    isSaving: false,
     ...overrides,
+  };
+
+  return {
+    view: {
+      basics: {
+        title: flat.title,
+        description: flat.description,
+        locality: flat.locality,
+        priceRupees: flat.priceRupees,
+        propertyType: flat.propertyType,
+        listingPurpose: flat.listingPurpose,
+        reraNumber: flat.reraNumber,
+      },
+      dimensions: {
+        landArea: { value: flat.landArea, unit: flat.landAreaUnit },
+        builtArea: { value: flat.builtArea, unit: flat.builtAreaUnit },
+        carpetArea: { value: flat.shared.values.carpetArea, unit: flat.shared.values.carpetAreaUnit },
+        bedrooms: flat.bedrooms,
+      },
+      capabilities: {
+        isCommercialType: flat.isCommercialType,
+        commercialSubtype: flat.commercialSubtype,
+        fieldVisible: flat.fieldVisible,
+      },
+      status: { isSaving: flat.isSaving },
+      agri: flat.agri.values,
+      commercial: flat.commercial.values,
+      rent: flat.rent.values,
+      residential: flat.residential.values,
+      shared: flat.shared.values,
+    },
+    commands: {
+      workflow: { save: flat.handleStep1Save },
+      basics: {
+        setTitle: flat.setTitle,
+        setDescription: flat.setDescription,
+        setLocality: flat.setLocality,
+        setPriceRupees: flat.setPriceRupees,
+        setListingPurpose: flat.setListingPurpose,
+        setReraNumber: flat.setReraNumber,
+        changePropertyType: flat.changePropertyType,
+        markTitleManuallyEdited: flat.markTitleManuallyEdited,
+      },
+      dimensions: {
+        setLandArea: flat.setLandArea,
+        setBuiltArea: flat.setBuiltArea,
+        setCarpetArea: (value, unit) => {
+          flat.shared.setters.setCarpetArea(value);
+          flat.shared.setters.setCarpetAreaUnit(unit);
+        },
+        setBedrooms: flat.setBedrooms,
+      },
+      agri: flat.agri.setters,
+      commercial: flat.commercial.setters,
+      rent: flat.rent.setters,
+      residential: flat.residential.setters,
+      shared: flat.shared.setters,
+    },
   };
 }
 
@@ -427,16 +526,14 @@ describe('DescribeStep', () => {
 
   // ─── 7. AreaField + PriceField integration ────────────────────────────────
   describe('AreaField + PriceField integration', () => {
-    it('interacting with the land AreaField fires setLandArea/setLandAreaUnit with correct signatures', async () => {
+    it('interacting with the land AreaField fires commands.dimensions.setLandArea with a combined (value, unit) call', async () => {
       const user = userEvent.setup();
       const setLandArea = vi.fn();
-      const setLandAreaUnit = vi.fn();
       render(
         <DescribeStep
           {...baseProps({
             propertyType: 'land',
             setLandArea,
-            setLandAreaUnit,
             fieldVisible: makeFieldVisible(['landArea']),
           })}
         />,
@@ -444,11 +541,11 @@ describe('DescribeStep', () => {
 
       const input = screen.getByPlaceholderText('Enter area');
       await user.type(input, '10');
-      // DescribeStep's AreaField onChange wrapper calls setLandArea(area) and
-      // setLandAreaUnit(unit) as two SEPARATE single-arg calls (not one combined call) —
-      // verifies both setters are wired to their own field, not swapped or merged.
-      expect(setLandArea).toHaveBeenCalledWith(10);
-      expect(setLandAreaUnit).toHaveBeenCalledWith('cent');
+      // Issue #1838 PR E — DescribeStep's AreaField onChange wrapper now calls
+      // commands.dimensions.setLandArea(area, unit) as ONE combined 2-arg call
+      // (replacing the previous 2 separate setLandArea(area)/setLandAreaUnit(unit)
+      // calls) — verifies the combined setter receives both values together.
+      expect(setLandArea).toHaveBeenCalledWith(10, 'cent');
     });
 
     it('interacting with PriceField fires setPriceRupees with a numeric rupee value', async () => {
@@ -621,6 +718,31 @@ describe('DescribeStep', () => {
     it('is absent entirely when the agri fields section is not visible (non-agri property types)', () => {
       render(<DescribeStep {...baseProps({ propertyType: 'apartment' })} />);
       expect(screen.queryByTestId('chip-group-agri-crops')).not.toBeInTheDocument();
+    });
+  });
+
+  // ─── 9. RERA number field (PR E follow-up, issue #1838) ──────────────────
+  // DescribeBasicsCommands was originally missing setReraNumber — a gap this
+  // PR's own {view, commands} contract swap had to fix, since without it the
+  // RERA field would render but never be editable. Regression coverage for
+  // that fix: assert the render-time value comes from view.basics.reraNumber
+  // AND that editing the field fires commands.basics.setReraNumber (mirrors
+  // the AreaField/PriceField integration tests above — section 7).
+  describe('RERA number field (view.basics.reraNumber / commands.basics.setReraNumber)', () => {
+    it('renders the initial reraNumber from view.basics and fires setReraNumber when edited', async () => {
+      const user = userEvent.setup();
+      const setReraNumber = vi.fn();
+      render(
+        <DescribeStep
+          {...baseProps({ propertyType: 'house', reraNumber: 'PRM/KA/RERA/1234', setReraNumber })}
+        />,
+      );
+
+      const reraInput = screen.getByLabelText('RERA Number (optional)');
+      expect(reraInput).toHaveValue('PRM/KA/RERA/1234');
+
+      await user.type(reraInput, 'X');
+      expect(setReraNumber).toHaveBeenCalledWith('PRM/KA/RERA/1234X');
     });
   });
 });

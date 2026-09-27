@@ -116,7 +116,7 @@ function useTestHarness(listing: ListingResponse, updateIsPending: boolean, mock
       >[0]['mutations']['submitListing'],
     },
   });
-  return { base, ui, commercial, derived, commands };
+  return { base, shared, ui, commercial, derived, commands };
 }
 
 beforeEach(() => {
@@ -254,12 +254,62 @@ describe('useEditListingCommands', () => {
       expect(result.current.commercial.values.explicitSubtype).toBe('SHOP');
 
       act(() => {
-        result.current.commands.describe.changePropertyType('apartment');
+        result.current.commands.describe.basics.changePropertyType('apartment');
       });
 
       expect(result.current.base.values.propertyType).toBe('apartment');
       expect(result.current.derived.isCommercialType).toBe(false);
       expect(result.current.commercial.values.explicitSubtype).toBe('');
+    });
+  });
+
+  // Issue #1838 PR E — "producer independence" check: DescribeStep's own
+  // unit tests stub commands.dimensions.setXArea as plain vi.fn()s, so they
+  // structurally cannot catch a hook-side miswiring (e.g. setBuiltArea
+  // actually calling setLandArea/setLandAreaUnit). These tests exercise the
+  // REAL producer wired up by useEditListingCommands, asserting the combined
+  // (value, unit) setter lands in the correct pair of base/shared fields.
+  describe('commands.describe.dimensions — producer independence', () => {
+    it('setLandArea(value, unit) sets base.values.landArea and landAreaUnit', () => {
+      const { result } = renderHook(
+        () => useTestHarness(makeListing(), false, vi.fn()),
+        { wrapper: wrapperFor() },
+      );
+
+      act(() => {
+        result.current.commands.describe.dimensions.setLandArea(10, 'acre');
+      });
+
+      expect(result.current.base.values.landArea).toBe(10);
+      expect(result.current.base.values.landAreaUnit).toBe('acre');
+    });
+
+    it('setBuiltArea(value, unit) sets base.values.builtArea and builtAreaUnit', () => {
+      const { result } = renderHook(
+        () => useTestHarness(makeListing(), false, vi.fn()),
+        { wrapper: wrapperFor() },
+      );
+
+      act(() => {
+        result.current.commands.describe.dimensions.setBuiltArea(1200, 'sqft');
+      });
+
+      expect(result.current.base.values.builtArea).toBe(1200);
+      expect(result.current.base.values.builtAreaUnit).toBe('sqft');
+    });
+
+    it('setCarpetArea(value, unit) sets shared.values.carpetArea and carpetAreaUnit', () => {
+      const { result } = renderHook(
+        () => useTestHarness(makeListing(), false, vi.fn()),
+        { wrapper: wrapperFor() },
+      );
+
+      act(() => {
+        result.current.commands.describe.dimensions.setCarpetArea(500, 'sqft');
+      });
+
+      expect(result.current.shared.values.carpetArea).toBe(500);
+      expect(result.current.shared.values.carpetAreaUnit).toBe('sqft');
     });
   });
 });

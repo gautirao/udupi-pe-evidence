@@ -1,12 +1,18 @@
 /**
- * Issue #1838 — architecture baseline / ceiling guard, 4-layer edition (PR C).
+ * Issue #1838 — architecture baseline / ceiling guard, 5-layer edition (PR D).
  *
  * PR A (test-only) captured a single-file ceiling for EditListingForm.tsx.
  * PR B decomposed its state + hydration ownership into 3 new hook files.
  * PR C decomposes its save/submit COMMAND ownership into a 4th file
  * (useEditListingCommands.ts) and converts LocationStep/ReviewStep to a
- * {view, commands} prop contract (steps/stepContracts.ts), so this file
- * adds two new dimensions on top of PR B's three layers:
+ * {view, commands} prop contract (steps/stepContracts.ts).
+ * PR D splits DescribeStep.tsx's own 955-LOC render block into 7 module-scope
+ * section components under steps/describe/ (AgriDetailsSection,
+ * ResidentialFeaturesSection, FloorsAndFurnishingFields,
+ * CommercialBasicsSection, CommercialSubtypeSection, RentDetailsSection,
+ * ResidentialTermsSection) — zero public contract change (DescribeStepProps
+ * unchanged, same exported component name), so this file adds a 5th layer
+ * on top of PR C's four:
  *
  *   (a) EditListingForm.tsx alone: LOC ceiling LOWERED to the actual
  *       measured post-extraction size; useState/useRef/useEffect ceilings
@@ -30,12 +36,27 @@
  *       useEditListingCommands.ts). Each of LocationStep/ReviewStep's own
  *       {view, commands} Props interface (steps/stepContracts.ts) has
  *       exactly 2 top-level members.
- *   (e) DescribeStep.tsx scope-lock: still untouched (byte-identical to
- *       origin/main across the whole PR sequence) — verified separately via
- *       `git diff --exit-code origin/main...HEAD -- .../DescribeStep.tsx
- *       .../DescribeStep.test.tsx` in CI/review, not re-asserted here since
- *       a git-diff check doesn't belong in a unit test; this file keeps its
- *       existing LOC/prop-count ceiling as a content-level proxy.
+ *   (e) DescribeStep.tsx scope-lock, UPDATED for PR D: DescribeStep.tsx
+ *       ITSELF is no longer byte-identical to origin/main (PR D changed it —
+ *       that claim now only holds through PR C). What stays byte-identical
+ *       to origin/main are DescribeStep.test.tsx and DescribeStep.domOrder.test.tsx
+ *       (verified via a direct two-dot `git diff origin/main HEAD -- <path>`,
+ *       not the three-dot form — this stacked branch's merge-base with
+ *       origin/main predates origin/main's own PR-A merge, so a three-dot
+ *       diff misreports these as "new" even though their tip content is
+ *       identical) — not re-asserted here since a git-diff check doesn't
+ *       belong in a unit test. DescribeStep.tsx's own new LOC ceiling (layer
+ *       (f) below) is the content-level proxy for PR D's scope instead.
+ *   (f) NEW for PR D — DescribeStep.tsx + steps/describe/*.tsx dimension:
+ *       DescribeStep.tsx's LOC ceiling is LOWERED to its measured
+ *       post-split size. Each of the 7 new section files gets its own
+ *       measured per-file LOC ceiling. None of the 8 files owns any
+ *       useState/useRef/useEffect/useCallback/useMemo or calls `.mutate(`
+ *       (this split moves JSX + prop-routing only, never introduces new
+ *       state or side effects). A conservation-total check across all 8
+ *       files catches logic being duplicated rather than moved. A
+ *       directory-listing check on steps/describe/ pins the file count to
+ *       exactly 7 (catches an accidental 8th file or a stray barrel/index).
  *
  * This is NOT a "these numbers must never change" assertion — it is a
  * regression guard against ACCIDENTAL growth. When a later PR intentionally
@@ -55,8 +76,25 @@
  *   useBaseFields.ts:    137 LOC / 14 useState / 0 useRef / 0 useEffect
  *   useEditListingUiState.ts: 74 LOC / 6 useState / 0 useRef / 0 useEffect
  *   useListingHydration.ts:  52 LOC / 0 useState / 1 useRef / 1 useEffect
- *   DescribeStep.tsx:    1,611 LOC / 35 top-level DescribeStepProps members
- *   (DescribeStep.tsx's baseline is untouched by PR B or PR C — see PRs D–E)
+ *
+ * Baseline captured 2026-09-26 (PR D) against this worktree:
+ *   DescribeStep.tsx: 316 LOC / 35 top-level DescribeStepProps members
+ *     (down from 1,611 LOC pre-split — same 35-member DescribeStepProps,
+ *     unchanged)
+ *   steps/describe/AgriDetailsSection.tsx:          276 LOC
+ *   steps/describe/CommercialBasicsSection.tsx:      95 LOC
+ *   steps/describe/CommercialSubtypeSection.tsx:    443 LOC
+ *   steps/describe/FloorsAndFurnishingFields.tsx:   115 LOC
+ *   steps/describe/RentDetailsSection.tsx:           64 LOC
+ *   steps/describe/ResidentialFeaturesSection.tsx:  404 LOC
+ *   steps/describe/ResidentialTermsSection.tsx:     141 LOC
+ *   Conservation total (all 8 files): 1,854 LOC (higher than the ~1,700-1,750
+ *     originally estimated for this split — verified this is per-file
+ *     import/interface/JSDoc boilerplate across 7 new files, not duplicated
+ *     logic: the sum of the 7 section files' JSX bodies plus DescribeStep.tsx's
+ *     own remaining JSX accounts for the original 955-LOC render block with
+ *     no gate duplicated, and typecheck + the full DescribeStep test trio
+ *     confirm no behavior changed)
  *
  * Counts are derived from the live source at test time (not hardcoded
  * snapshots of unrelated content) so the guard fails loudly the moment any
@@ -64,7 +102,7 @@
  * unrelated line-content changes elsewhere in the file.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
 const EDIT_LISTING_FORM_PATH = path.resolve(
@@ -93,6 +131,23 @@ const REVIEW_STEP_PATH = path.resolve(__dirname, '../steps/ReviewStep.tsx');
 const PHOTOS_STEP_PATH = path.resolve(__dirname, '../steps/PhotosStep.tsx');
 const BOUNDARY_STEP_PATH = path.resolve(__dirname, '../steps/BoundaryStep.tsx');
 const STEP_CONTRACTS_PATH = path.resolve(__dirname, '../steps/stepContracts.ts');
+const DESCRIBE_DIR = path.resolve(__dirname, '../steps/describe');
+const AGRI_DETAILS_SECTION_PATH = path.resolve(DESCRIBE_DIR, 'AgriDetailsSection.tsx');
+const COMMERCIAL_BASICS_SECTION_PATH = path.resolve(DESCRIBE_DIR, 'CommercialBasicsSection.tsx');
+const COMMERCIAL_SUBTYPE_SECTION_PATH = path.resolve(DESCRIBE_DIR, 'CommercialSubtypeSection.tsx');
+const FLOORS_AND_FURNISHING_FIELDS_PATH = path.resolve(DESCRIBE_DIR, 'FloorsAndFurnishingFields.tsx');
+const RENT_DETAILS_SECTION_PATH = path.resolve(DESCRIBE_DIR, 'RentDetailsSection.tsx');
+const RESIDENTIAL_FEATURES_SECTION_PATH = path.resolve(DESCRIBE_DIR, 'ResidentialFeaturesSection.tsx');
+const RESIDENTIAL_TERMS_SECTION_PATH = path.resolve(DESCRIBE_DIR, 'ResidentialTermsSection.tsx');
+const DESCRIBE_SECTION_PATHS = [
+  AGRI_DETAILS_SECTION_PATH,
+  COMMERCIAL_BASICS_SECTION_PATH,
+  COMMERCIAL_SUBTYPE_SECTION_PATH,
+  FLOORS_AND_FURNISHING_FIELDS_PATH,
+  RENT_DETAILS_SECTION_PATH,
+  RESIDENTIAL_FEATURES_SECTION_PATH,
+  RESIDENTIAL_TERMS_SECTION_PATH,
+];
 
 function countLines(source: string): number {
   // A trailing newline (the normal end-of-file state) produces one extra
@@ -149,8 +204,8 @@ const MUTATE_CALL_PATTERN = /\.mutate\(/g;
 describe('EditListingForm.tsx — architecture baseline, layer (a): the component itself (Issue #1838 PR C)', () => {
   const source = readFileSync(EDIT_LISTING_FORM_PATH, 'utf-8');
 
-  it('does not exceed the recorded LOC ceiling (lowered from PR B by the PR C command extraction)', () => {
-    expect(countLines(source)).toBeLessThanOrEqual(290);
+  it('does not exceed the recorded LOC ceiling (lowered from 290 by the PR E {view,commands} DescribeStep swap)', () => {
+    expect(countLines(source)).toBeLessThanOrEqual(255);
   });
 
   it('owns no raw useState — all state now comes from composed hooks', () => {
@@ -330,35 +385,139 @@ describe('Issue #1838 PR C — layer (d): commands ownership dimension', () => {
   });
 });
 
-describe('DescribeStep.tsx — architecture baseline (Issue #1838 PR A, untouched by PR B or PR C)', () => {
+describe('DescribeStep.tsx — architecture baseline (Issue #1838 PR A/B/C/D ceiling, LOWERED by PR E\'s {view,commands} swap)', () => {
   const source = readFileSync(DESCRIBE_STEP_PATH, 'utf-8');
 
-  it('does not exceed the recorded LOC ceiling', () => {
-    expect(countLines(source)).toBeLessThanOrEqual(1611);
+  it('does not exceed the recorded LOC ceiling (lowered from 320 by the PR E {view,commands} swap)', () => {
+    expect(countLines(source)).toBeLessThanOrEqual(267);
   });
 
-  it('does not exceed the recorded DescribeStepProps top-level member ceiling', () => {
-    const interfaceMatch = source.match(
-      /interface DescribeStepProps \{([\s\S]*?)\n\}/,
-    );
-    expect(interfaceMatch, 'DescribeStepProps interface not found').toBeTruthy();
-    const body = interfaceMatch ? interfaceMatch[1] : '';
+  it('does not declare a bare 35-flat-prop DescribeStepProps interface any more (moved to stepContracts.ts as {view, commands})', () => {
+    expect(source).not.toMatch(/interface DescribeStepProps \{/);
+  });
+});
 
-    // Strip line comments before counting so comment-only line growth (e.g.
-    // clarifying a footgun, as several props already do) never trips this
-    // guard — only actual member additions should.
+describe('steps/stepContracts.ts — DescribeStep {view, commands} contract member ceilings (Issue #1838 PR E)', () => {
+  const source = readFileSync(STEP_CONTRACTS_PATH, 'utf-8');
+
+  function countTopLevelMembers(interfaceName: string): number {
+    const interfaceMatch = source.match(
+      new RegExp(`interface ${interfaceName} \\{([\\s\\S]*?)\\n\\}`),
+    );
+    expect(interfaceMatch, `${interfaceName} interface not found`).toBeTruthy();
+    const body = interfaceMatch ? interfaceMatch[1] : '';
+    // Strip line comments before counting so comment-only line growth never
+    // trips this guard — only actual member additions should.
     const withoutComments = body
       .split('\n')
       .map((line) => line.replace(/\/\/.*$/, ''))
       .join('\n');
-
     // Top-level members are exactly the lines ending in `;` at 2-space
-    // indent (nested types like the `fieldVisible` function signature don't
-    // introduce extra top-level `;`-terminated lines beyond their own).
-    const memberLines = withoutComments
-      .split('\n')
-      .filter((line) => /^ {2}\S.*;\s*$/.test(line));
+    // indent (nested types don't introduce extra top-level `;`-terminated
+    // lines beyond their own).
+    return withoutComments.split('\n').filter((line) => /^ {2}\S.*;\s*$/.test(line)).length;
+  }
 
-    expect(memberLines.length).toBeLessThanOrEqual(35);
+  it('DescribeStepProps has exactly the {view, commands} 2 top-level members', () => {
+    expect(countTopLevelMembers('DescribeStepProps')).toBeLessThanOrEqual(2);
+  });
+
+  it('DescribeStepView does not exceed its 9 top-level member ceiling', () => {
+    expect(countTopLevelMembers('DescribeStepView')).toBeLessThanOrEqual(9);
+  });
+
+  it('DescribeStepCommands does not exceed its 8 top-level member ceiling', () => {
+    expect(countTopLevelMembers('DescribeStepCommands')).toBeLessThanOrEqual(8);
+  });
+
+  it('setPropertyType is never referenced as a live type/value (comments may still explain why it is absent)', () => {
+    // Strip comments first — this file's own header comment explains the
+    // setPropertyType exclusion in prose, which would otherwise self-trip
+    // a raw substring check.
+    const withoutComments = source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('\n')
+      .map((line) => line.replace(/\/\/.*$/, ''))
+      .join('\n');
+    expect(withoutComments).not.toMatch(/\bsetPropertyType\b/);
+  });
+});
+
+describe('Issue #1838 PR D — layer (f): DescribeStep internal split (DescribeStep.tsx + steps/describe/*.tsx)', () => {
+  const describeStepSource = readFileSync(DESCRIBE_STEP_PATH, 'utf-8');
+  const sectionSources = DESCRIBE_SECTION_PATHS.map((p) => readFileSync(p, 'utf-8'));
+  const allSources = [describeStepSource, ...sectionSources];
+
+  it('steps/describe/ contains exactly 7 files (catches an accidental 8th file or a stray barrel/index)', () => {
+    const entries = readdirSync(DESCRIBE_DIR);
+    expect(entries.length).toBe(7);
+  });
+
+  it.each([
+    // Issue #1838 PR E commit 1 — 3 of these ceilings are RAISED from their
+    // PR D values (AgriDetailsSection 280->281, CommercialSubtypeSection
+    // 450->453, ResidentialFeaturesSection 410->414): each section's prop
+    // type narrowed from `Pick<ReturnType<typeof useXFields>, 'values'|
+    // 'setters'>` to `FieldSlice<XValues, XSetters, K>`, which adds a type
+    // import + a local `type ...ValueKeys` alias per file — legitimate,
+    // measured growth from this PR's own change, not accidental creep.
+    ['AgriDetailsSection.tsx', AGRI_DETAILS_SECTION_PATH, 281],
+    ['CommercialBasicsSection.tsx', COMMERCIAL_BASICS_SECTION_PATH, 100],
+    ['CommercialSubtypeSection.tsx', COMMERCIAL_SUBTYPE_SECTION_PATH, 453],
+    ['FloorsAndFurnishingFields.tsx', FLOORS_AND_FURNISHING_FIELDS_PATH, 120],
+    ['RentDetailsSection.tsx', RENT_DETAILS_SECTION_PATH, 70],
+    ['ResidentialFeaturesSection.tsx', RESIDENTIAL_FEATURES_SECTION_PATH, 414],
+    ['ResidentialTermsSection.tsx', RESIDENTIAL_TERMS_SECTION_PATH, 146],
+  ])('%s does not exceed its per-file LOC ceiling', (_name, filePath, ceiling) => {
+    const source = readFileSync(filePath as string, 'utf-8');
+    expect(countLines(source)).toBeLessThanOrEqual(ceiling as number);
+  });
+
+  it('conservation total across DescribeStep.tsx + the 7 new files does not exceed the measured total (lowered from 1,854 by the PR E swap — DescribeStep.tsx itself shrank more than the 7 sections grew)', () => {
+    const total = allSources.reduce((sum, source) => sum + countLines(source), 0);
+    expect(total).toBeLessThanOrEqual(1845);
+  });
+
+  it.each([
+    ['useState', USE_STATE_PATTERN],
+    ['useRef', USE_REF_PATTERN],
+    ['useEffect', USE_EFFECT_PATTERN],
+    ['useCallback', USE_CALLBACK_PATTERN],
+    ['useMemo', USE_MEMO_PATTERN],
+  ])('none of DescribeStep.tsx + the 7 new files calls %s (pure prop-routing + JSX, no new state/side effects)', (_hookName, pattern) => {
+    const total = allSources.reduce((sum, source) => sum + countHookCalls(source, pattern as RegExp), 0);
+    expect(total).toBeLessThanOrEqual(0);
+  });
+
+  it('none of DescribeStep.tsx + the 7 new files calls `.mutate(` directly (unchanged — DescribeStep only ever received updateListing as a prop, and PR E removed even that — see next test)', () => {
+    const total = allSources.reduce((sum, source) => sum + countHookCalls(source, MUTATE_CALL_PATTERN), 0);
+    expect(total).toBeLessThanOrEqual(0);
+  });
+
+  // Issue #1838 PR E — the 7 sections no longer type their props via
+  // `Pick<ReturnType<typeof useXFields>, 'values'|'setters'>` (replaced by
+  // `FieldSlice<XValues, XSetters, K>`, which never spells `ReturnType<typeof
+  // use...Fields>`), and DescribeStep.tsx no longer receives a raw
+  // `updateListing` prop (replaced by `status.isSaving` on the view).
+  // Mutation-checked 2026-09-27: temporarily reverting one section
+  // (AgriDetailsSection.tsx) back to `Pick<ReturnType<typeof useAgriFields>,
+  // 'values' | 'setters'>` turned this guard red; reverted.
+  const RETURN_TYPE_USE_FIELDS_PATTERN = /ReturnType<typeof use\w+Fields>/g;
+  const USE_UPDATE_LISTING_PATTERN = /useUpdateListing/g;
+
+  it('none of DescribeStep.tsx + the 7 new files types a prop via `ReturnType<typeof useXFields>` any more (replaced by FieldSlice)', () => {
+    const total = allSources.reduce(
+      (sum, source) => sum + countHookCalls(source, RETURN_TYPE_USE_FIELDS_PATTERN),
+      0,
+    );
+    expect(total).toBeLessThanOrEqual(0);
+  });
+
+  it('none of DescribeStep.tsx + the 7 new files references `useUpdateListing` any more (DescribeStep now reads view.status.isSaving, not a raw mutation object)', () => {
+    const total = allSources.reduce(
+      (sum, source) => sum + countHookCalls(source, USE_UPDATE_LISTING_PATTERN),
+      0,
+    );
+    expect(total).toBeLessThanOrEqual(0);
   });
 });

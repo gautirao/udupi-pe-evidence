@@ -10,6 +10,7 @@ import { deriveCommercialSubtype } from '@/lib/listingFieldConfig';
 import type { CommercialSubtype } from '@/lib/listingFieldConfig';
 import { validateVideoUrl } from '@/lib/editListing/valueMappers';
 import type { AddressPickerValue } from '@/components/broker/AddressPicker';
+import type { DescribeStepCommands } from './steps/stepContracts';
 import type { useBaseFields } from './useBaseFields';
 import type { useSharedFields } from './useSharedFields';
 import type { useCommercialFields } from './useCommercialFields';
@@ -70,11 +71,16 @@ export function useEditListingCommands({
     title, description, priceRupees, propertyType, locality, landArea, landAreaUnit,
     bedrooms, builtArea, builtAreaUnit, reraNumber, videoUrl, listingPurpose,
   } = base.values;
-  const { setTitle, setPropertyType, setVideoUrl, setBoundaryCoords } = base.setters;
+  const {
+    setTitle, setPropertyType, setVideoUrl, setBoundaryCoords,
+    setDescription, setLocality, setPriceRupees, setListingPurpose, setReraNumber,
+    setLandArea, setLandAreaUnit, setBedrooms, setBuiltArea, setBuiltAreaUnit,
+  } = base.setters;
 
   const {
     carpetArea, carpetAreaUnit, floorNumber, totalFloors, furnishingStatus, facing, ownershipType,
   } = shared.values;
+  const { setCarpetArea, setCarpetAreaUnit } = shared.setters;
 
   const {
     washrooms, parkingCount, roadFrontageFt, commercialUsage, numberOfUnits,
@@ -409,6 +415,48 @@ export function useEditListingCommands({
     });
   };
 
+  /**
+   * Issue #1838 PR E — the full DescribeStepCommands shape (replaces the old
+   * flat {save, changePropertyType} pair). Explicitly annotated so a wiring
+   * mistake (wrong setter, missing member) fails to compile rather than
+   * silently type-checking as `any`.
+   */
+  const describeCommands: DescribeStepCommands = {
+    workflow: {
+      save: handleStep1Save,
+    },
+    basics: {
+      setTitle,
+      setDescription,
+      setLocality,
+      setPriceRupees,
+      setListingPurpose,
+      setReraNumber,
+      changePropertyType: handlePropertyTypeChange,
+      markTitleManuallyEdited: () => setTitleManuallyEdited(true),
+    },
+    dimensions: {
+      setLandArea: (value, unit) => {
+        setLandArea(value);
+        setLandAreaUnit(unit);
+      },
+      setBuiltArea: (value, unit) => {
+        setBuiltArea(value);
+        setBuiltAreaUnit(unit);
+      },
+      setCarpetArea: (value, unit) => {
+        setCarpetArea(value);
+        setCarpetAreaUnit(unit);
+      },
+      setBedrooms,
+    },
+    agri: agri.setters,
+    commercial: commercial.setters,
+    rent: rent.setters,
+    residential: residential.setters,
+    shared: shared.setters,
+  };
+
   const isSubmittable = SUBMITTABLE_STATUSES.includes(listing.status);
 
   /**
@@ -465,10 +513,7 @@ export function useEditListingCommands({
       stepper: {
         stepClick: handleStepClick,
       },
-      describe: {
-        save: handleStep1Save,
-        changePropertyType: handlePropertyTypeChange,
-      },
+      describe: describeCommands,
       photos: {
         changeVideoUrl: handleVideoUrlChange,
         continue: handleStep2Continue,
