@@ -304,9 +304,9 @@ describe('School-first selected-area redesign — RealSchoolsInAreaPanel', () =>
 });
 
 describe('School-first homes-below section — SchoolsInAreaPanel wrapper', () => {
-  const AREA_POINT = { areaKey: 'IN|KA|Udupi|Manipal', areaLabel: 'Manipal' } as unknown as Parameters<
+  const AREA_POINT = { areaKey: 'IN|KA|Udupi|Manipal', areaLabel: 'Manipal' } as unknown as React.ComponentProps<
     typeof SchoolsInAreaWrapper
-  >[0]['selectedArea'];
+  >['view']['area'];
 
   const LISTINGS = [
     { id: 'l1', propertyType: 'apartment', pricePaise: 13500000 },
@@ -319,11 +319,14 @@ describe('School-first homes-below section — SchoolsInAreaPanel wrapper', () =
     render(
       <MemoryRouter>
         <SchoolsInAreaWrapper
-          selectedArea={AREA_POINT}
-          journey="school-first"
-          schools={SCHOOLS}
-          areaListings={LISTINGS}
-          intent="buy"
+          view={{
+            chrome: { journey: 'school-first' },
+            viewer: { intent: 'buy' },
+            area: AREA_POINT,
+            schools: { data: SCHOOLS },
+            homes: { data: LISTINGS },
+          }}
+          commands={{ chrome: {}, schools: {}, homes: {} }}
         />
       </MemoryRouter>,
     );
@@ -339,11 +342,14 @@ describe('School-first homes-below section — SchoolsInAreaPanel wrapper', () =
     render(
       <MemoryRouter>
         <SchoolsInAreaWrapper
-          selectedArea={AREA_POINT}
-          journey="school-first"
-          schools={SCHOOLS}
-          areaListings={LISTINGS}
-          intent="rent"
+          view={{
+            chrome: { journey: 'school-first' },
+            viewer: { intent: 'rent' },
+            area: AREA_POINT,
+            schools: { data: SCHOOLS },
+            homes: { data: LISTINGS },
+          }}
+          commands={{ chrome: {}, schools: {}, homes: {} }}
         />
       </MemoryRouter>,
     );
@@ -356,12 +362,14 @@ describe('School-first homes-below section — SchoolsInAreaPanel wrapper', () =
     render(
       <MemoryRouter>
         <SchoolsInAreaWrapper
-          selectedArea={AREA_POINT}
-          journey="school-first"
-          schools={SCHOOLS}
-          areaListings={LISTINGS}
-          intent="buy"
-          onHoverListing={onHoverListing}
+          view={{
+            chrome: { journey: 'school-first' },
+            viewer: { intent: 'buy' },
+            area: AREA_POINT,
+            schools: { data: SCHOOLS },
+            homes: { data: LISTINGS },
+          }}
+          commands={{ chrome: {}, schools: {}, homes: { hover: onHoverListing } }}
         />
       </MemoryRouter>,
     );
@@ -376,11 +384,14 @@ describe('School-first homes-below section — SchoolsInAreaPanel wrapper', () =
     const { container } = render(
       <MemoryRouter>
         <SchoolsInAreaWrapper
-          selectedArea={AREA_POINT}
-          journey="school-first"
-          schools={SCHOOLS}
-          areaListings={LISTINGS}
-          intent="buy"
+          view={{
+            chrome: { journey: 'school-first' },
+            viewer: { intent: 'buy' },
+            area: AREA_POINT,
+            schools: { data: SCHOOLS },
+            homes: { data: LISTINGS },
+          }}
+          commands={{ chrome: {}, schools: {}, homes: {} }}
         />
       </MemoryRouter>,
     );
@@ -396,12 +407,14 @@ describe('School-first homes-below section — SchoolsInAreaPanel wrapper', () =
     render(
       <MemoryRouter>
         <SchoolsInAreaWrapper
-          selectedArea={AREA_POINT}
-          journey="school-first"
-          schools={SCHOOLS}
-          areaListings={LISTINGS}
-          intent="buy"
-          selectedListingId="l2"
+          view={{
+            chrome: { journey: 'school-first' },
+            viewer: { intent: 'buy' },
+            area: AREA_POINT,
+            schools: { data: SCHOOLS },
+            homes: { data: LISTINGS, selectedId: 'l2' },
+          }}
+          commands={{ chrome: {}, schools: {}, homes: {} }}
         />
       </MemoryRouter>,
     );

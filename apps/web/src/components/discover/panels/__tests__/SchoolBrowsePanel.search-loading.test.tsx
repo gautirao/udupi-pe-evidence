@@ -94,9 +94,8 @@ function renderPanel() {
     <BrowserRouter>
       <QueryClientProvider client={makeQC()}>
         <SchoolBrowsePanel
-          city="udupi"
-          onSelectSchool={vi.fn()}
-          onSelectAreaKey={vi.fn()}
+          view={{ chrome: {}, city: { slug: 'udupi' }, scope: {}, zones: {} }}
+          commands={{ chrome: {}, scope: {}, navigation: { selectAreaKey: vi.fn() } }}
         />
       </QueryClientProvider>
     </BrowserRouter>,

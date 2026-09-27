@@ -1224,37 +1224,42 @@ function AreaLeafListingsSurface({
     return (
       <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden" data-testid="areas-journey-panel-school-combined">
         <AreaSchoolCombinedPanel
-          selectedArea={areaPoint}
-          selectedSchool={selectedSchool ?? null}
-          listings={schoolListings ?? []}
-          isLoadingListings={schoolListingsLoading ?? false}
-          isFetching={isFetchingAreaListingsResolved}
-          radiusKm={radiusKm ?? null}
-          onRadiusChange={onRadiusChange ?? (() => undefined)}
-          onClearSchool={onClearSchool ?? (() => undefined)}
-          onClearArea={() => undefined}
-          filters={effectiveFilters}
-          onFiltersChange={(next) => {
-            // Issue #2553 — forward what the panel emitted instead of rebuilding
-            // from a key allowlist. This pair was the WORST instance of the class:
-            // it never received the Issue #2023 `readyToMove` fix that the AREA-leaf
-            // pair below did, so it silently dropped TWO axes rather than one. That
-            // is the whole argument against enumerating keys at a commit boundary —
-            // a fix applied to one copy does not reach its siblings, and nothing
-            // fails when it doesn't.
-            if (onCommittedFiltersChange) {
-              onCommittedFiltersChange({ ...(committedFilters ?? {}), ...next });
-              return;
-            }
-            actions.setFiltersCommitted(toCommittedUrlFilters(nav.filters, next));
+          view={{
+            chrome: { journey: 'area-first' },
+            viewer: { intent: nav.intent, isAuthenticated },
+            area: areaPoint,
+            school: selectedSchool ?? null,
+            radius: { km: radiusKm ?? null },
+            listings: {
+              data: schoolListings ?? [],
+              loading: schoolListingsLoading ?? false,
+              fetching: isFetchingAreaListingsResolved,
+              selectedId: nav.selectedListing,
+            },
+            propertyFilters: { value: effectiveFilters },
           }}
-          isAuthenticated={isAuthenticated}
-          onStartOver={onStartOver}
-          onBack={onBackFromSchoolFlow}
-          journey="area-first"
-          intent={nav.intent}
-          selectedListingId={nav.selectedListing}
-          onSelectListing={(id) => actions.setSelectedListing(id)}
+          commands={{
+            chrome: { startOver: onStartOver, back: onBackFromSchoolFlow },
+            radius: { change: onRadiusChange ?? (() => undefined) },
+            listings: { select: (id) => actions.setSelectedListing(id) },
+            propertyFilters: {
+              replace: (next) => {
+                // Issue #2553 — forward what the panel emitted instead of rebuilding
+                // from a key allowlist. This pair was the WORST instance of the class:
+                // it never received the Issue #2023 `readyToMove` fix that the AREA-leaf
+                // pair below did, so it silently dropped TWO axes rather than one. That
+                // is the whole argument against enumerating keys at a commit boundary —
+                // a fix applied to one copy does not reach its siblings, and nothing
+                // fails when it doesn't.
+                if (onCommittedFiltersChange) {
+                  onCommittedFiltersChange({ ...(committedFilters ?? {}), ...next });
+                  return;
+                }
+                actions.setFiltersCommitted(toCommittedUrlFilters(nav.filters, next));
+              },
+            },
+            school: { clear: onClearSchool ?? (() => undefined) },
+          }}
         />
       </div>
     );
@@ -1264,23 +1269,23 @@ function AreaLeafListingsSurface({
     return (
       <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden" data-testid="areas-journey-panel-schools-in-area">
         <SchoolsInAreaPanel
-          selectedArea={areaPoint}
-          onStartOver={onStartOver}
-          onBack={onBackFromSchoolFlow}
-          journey="area-first"
-          schools={schools ?? []}
-          schoolsLoading={schoolsLoading}
-          schoolsError={schoolsError}
-          onSchoolsRetry={onSchoolsRetry}
-          schoolsFetching={schoolsFetching}
-          onSelectSchool={onSelectSchool}
-          areaListings={areaListingsForPanel}
-          isLoadingAreaListings={isLoadingAreaListingsResolved}
-          isFetching={isFetchingAreaListingsResolved}
-          isAuthenticated={isAuthenticated}
-          intent={nav.intent}
-          selectedListingId={nav.selectedListing}
-          onSelectListing={(id) => actions.setSelectedListing(id)}
+          view={{
+            chrome: { journey: 'area-first' },
+            viewer: { intent: nav.intent, isAuthenticated },
+            area: areaPoint,
+            schools: { data: schools ?? [], loading: schoolsLoading, fetching: schoolsFetching, error: schoolsError },
+            homes: {
+              data: areaListingsForPanel,
+              loading: isLoadingAreaListingsResolved,
+              fetching: isFetchingAreaListingsResolved,
+              selectedId: nav.selectedListing,
+            },
+          }}
+          commands={{
+            chrome: { startOver: onStartOver, back: onBackFromSchoolFlow },
+            schools: { retry: onSchoolsRetry, select: onSelectSchool },
+            homes: { select: (id) => actions.setSelectedListing(id) },
+          }}
         />
       </div>
     );

@@ -314,13 +314,21 @@ describe('Batch B panels-parity — SchoolSelectedPanel summary band + skeleton'
   it('loading (school=null): renders a navy skeleton shell matching the loaded hero (mock parity, cycle 2)', () => {
     renderWithProviders(
       <SchoolSelectedPanel
-        school={null}
-        listings={[]}
-        isLoadingListings={false}
-        radiusKm={3}
-        onRadiusChange={vi.fn()}
-        onStartOver={vi.fn()}
-        intent="buy"
+        view={{
+          chrome: {},
+          viewer: { intent: 'buy' },
+          school: null,
+          radius: { km: 3 },
+          listings: { data: [], loading: false },
+          propertyFilters: {},
+          boundedSearch: {},
+        }}
+        commands={{
+          chrome: { startOver: vi.fn() },
+          radius: { change: vi.fn() },
+          listings: {},
+          propertyFilters: {},
+        }}
       />,
     );
     const skeleton = screen.getByTestId('school-summary-skeleton');
@@ -334,13 +342,21 @@ describe('Batch B panels-parity — SchoolSelectedPanel summary band + skeleton'
   it('data: renders the dark-navy school-summary-band (SchoolJourneyHero, mock parity cycle 2)', () => {
     renderWithProviders(
       <SchoolSelectedPanel
-        school={mockSchool}
-        listings={[makeListing('l-1')]}
-        isLoadingListings={false}
-        radiusKm={3}
-        onRadiusChange={vi.fn()}
-        onStartOver={vi.fn()}
-        intent="buy"
+        view={{
+          chrome: {},
+          viewer: { intent: 'buy' },
+          school: mockSchool,
+          radius: { km: 3 },
+          listings: { data: [makeListing('l-1')], loading: false },
+          propertyFilters: {},
+          boundedSearch: {},
+        }}
+        commands={{
+          chrome: { startOver: vi.fn() },
+          radius: { change: vi.fn() },
+          listings: {},
+          propertyFilters: {},
+        }}
       />,
     );
     const band = screen.getByTestId('school-summary-band');

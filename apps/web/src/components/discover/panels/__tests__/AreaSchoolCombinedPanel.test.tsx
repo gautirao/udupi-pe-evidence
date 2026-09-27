@@ -7,6 +7,8 @@ import { AreaSchoolCombinedPanel } from '../SchoolJourneyPanels';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
+import type { PropertyFilters } from '@/hooks/usePropertyListings';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -48,26 +50,73 @@ const makeListing = (id: string, overrides: Partial<DiscoverCityListingItem> = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-const baseProps = () => ({
-  selectedArea: mockArea,
-  selectedSchool: mockSchool,
-  listings: [makeListing('l-1')],
-  isLoadingListings: false,
-  radiusKm: 3 as number | null,
-  onRadiusChange: vi.fn(),
-  onClearSchool: vi.fn(),
-  onClearArea: vi.fn(),
-  filters: {},
-  onFiltersChange: vi.fn(),
-  isAuthenticated: false,
-});
+/**
+ * Flat logical overrides — the pre-commit-5 prop shape. `baseProps`/`renderPanel`
+ * translate these into the real `{view,commands}` contract (Issue #2661 commit
+ * 5), so every `it()` below keeps overriding by these same flat names and its
+ * `expect(` lines needed zero changes. `onClearArea` is intentionally dropped —
+ * the panel no longer accepts it (dead prop removed in commit 5).
+ */
+interface AreaSchoolCombinedPanelFlatOverrides {
+  selectedArea?: AreaPoint | null;
+  selectedSchool?: SchoolResult | null;
+  listings?: DiscoverCityListingItem[];
+  isLoadingListings?: boolean;
+  isFetching?: boolean;
+  radiusKm?: number | null;
+  onRadiusChange?: (radiusKm: number) => void;
+  onClearSchool?: () => void;
+  filters?: PropertyFilters;
+  onFiltersChange?: (filters: PropertyFilters) => void;
+  isAuthenticated?: boolean;
+  intent?: DiscoverIntent;
+  selectedListingId?: string | null;
+}
+
+const baseProps = (
+  overrides: AreaSchoolCombinedPanelFlatOverrides = {},
+): React.ComponentProps<typeof AreaSchoolCombinedPanel> => {
+  const {
+    selectedArea = mockArea,
+    selectedSchool = mockSchool,
+    listings = [makeListing('l-1')],
+    isLoadingListings = false,
+    isFetching,
+    radiusKm = 3,
+    onRadiusChange = vi.fn(),
+    onClearSchool = vi.fn(),
+    filters = {},
+    onFiltersChange = vi.fn(),
+    isAuthenticated = false,
+    intent,
+    selectedListingId,
+  } = overrides;
+  return {
+    view: {
+      chrome: {},
+      viewer: { intent, isAuthenticated },
+      area: selectedArea,
+      school: selectedSchool,
+      radius: { km: radiusKm },
+      listings: { data: listings, loading: isLoadingListings, fetching: isFetching, selectedId: selectedListingId },
+      propertyFilters: { value: filters },
+    },
+    commands: {
+      chrome: {},
+      radius: { change: onRadiusChange },
+      listings: {},
+      propertyFilters: { replace: onFiltersChange },
+      school: { clear: onClearSchool },
+    },
+  };
+};
 
 // Issue #1953 (build step 2) — AreaSchoolCombinedPanel now consumes the
 // DiscoverProvider facade instead of calling useDiscoverUrlState() directly.
-function renderPanel(props: Partial<React.ComponentProps<typeof AreaSchoolCombinedPanel>> = {}) {
+function renderPanel(props: AreaSchoolCombinedPanelFlatOverrides = {}) {
   return renderWithProviders(
     <DiscoverProvider>
-      <AreaSchoolCombinedPanel {...baseProps()} {...props} />
+      <AreaSchoolCombinedPanel {...baseProps(props)} />
     </DiscoverProvider>,
     { router: 'browser' },
   );

@@ -36,7 +36,7 @@ const JOURNEY_PILL: Record<DiscoverJourney, JourneyPill> = {
   },
 };
 
-interface PanelHeaderProps {
+export interface PanelHeaderProps {
   title: string;
   journey?: DiscoverJourney | null;
   onStartOver?: () => void;

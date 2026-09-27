@@ -213,12 +213,72 @@ function makePanelStub(testid: string) {
   };
 }
 
+/**
+ * Issue #2661 commit 5 — `AreaSchoolCombinedPanel`'s public props narrowed to
+ * `{view, commands}`. This stub reads `view.propertyFilters.value` and calls
+ * `commands.propertyFilters.replace(next)` instead of flat `filters`/
+ * `onFiltersChange`, mirroring the real panel's new contract exactly — the
+ * call site under test (`DiscoverAreasJourneyPanel`'s school-combined branch)
+ * constructs that same `view`/`commands` shape, so this mock must match it or
+ * every button here silently no-ops (see the mutation-check note below).
+ */
+function makeViewCommandsPanelStub(testid: string) {
+  return function ViewCommandsPanelStub({
+    view,
+    commands,
+  }: {
+    view?: { propertyFilters?: { value?: PropertyFilters } };
+    commands?: { propertyFilters?: { replace?: (next: PropertyFilters) => void } };
+  }) {
+    const filters = view?.propertyFilters?.value;
+    const onFiltersChange = commands?.propertyFilters?.replace;
+    return (
+      <div data-testid={testid}>
+        <pre data-testid={`${testid}-filters`}>{JSON.stringify(filters ?? {})}</pre>
+        <button
+          data-testid={`${testid}-toggle-subtype`}
+          onClick={() => onFiltersChange?.({ ...(filters ?? {}), commercialSubtypes: ['SHOP'] })}
+        >
+          toggle subtype
+        </button>
+        <button
+          data-testid={`${testid}-toggle-ready`}
+          onClick={() => onFiltersChange?.({ ...(filters ?? {}), readyToMove: true })}
+        >
+          toggle ready
+        </button>
+        <button
+          data-testid={`${testid}-clear-filters`}
+          onClick={() =>
+            onFiltersChange?.({
+              ...(filters ?? {}),
+              propertyTypes: undefined,
+              commercialSubtypes: undefined,
+              bedrooms: undefined,
+              priceMin: undefined,
+              priceMax: undefined,
+              localities: undefined,
+              sellerTypes: undefined,
+              backOnMarket: undefined,
+              newToMarket: undefined,
+              reraRegistered: undefined,
+              readyToMove: undefined,
+            })
+          }
+        >
+          clear filters
+        </button>
+      </div>
+    );
+  };
+}
+
 vi.mock('@/components/discover/panels/AreaSelectedPanel', () => ({
   AreaSelectedPanel: makePanelStub('area-selected-panel'),
 }));
 
 vi.mock('@/components/discover/panels/SchoolJourneyPanels', () => ({
-  AreaSchoolCombinedPanel: makePanelStub('area-school-combined-panel'),
+  AreaSchoolCombinedPanel: makeViewCommandsPanelStub('area-school-combined-panel'),
   SchoolsInAreaPanel: () => <div data-testid="schools-in-area-panel" />,
 }));
 

@@ -1151,6 +1151,10 @@ export function DiscoverRightPanel({
   radiusKm,
   onRadiusChange,
   onClearSchool,
+  // Issue #2661 commit 5 — AreaSchoolCombinedPanel's dead `onClearArea` prop was
+  // removed from its contract; this component's own `onClearArea` prop is kept
+  // (external callers may still pass it) but is no longer forwarded anywhere —
+  // same accepted-but-unwired pattern as `onClearGroup` above.
   onClearArea,
   onBoundedSearch,
   boundedSearchTriggered = false,
@@ -1888,23 +1892,18 @@ export function DiscoverRightPanel({
       case 'school-browse':
         return (
           <SchoolBrowsePanel
-            onStartOver={onStartOver}
-            journey={journey}
-            city={city}
-            cityLabel={cityLabel}
-            onSelectSchool={onSelectSchool ?? (() => undefined)}
-            onSelectAreaKey={onSelectAreaKey ?? (() => undefined)}
-            // Issue #1485 — zone cards (Level 1 grouped hierarchy)
-            areaGroups={areaGroups}
-            isLoadingAreaGroups={isLoadingAreaGroupsForSchool}
-            onSelectGroup={onSelectGroup}
-            discoverAreas={discoverAreas}
-            scope={scope}
-            onClearScope={onClearScope}
-            summaryRegions={summaryRegions}
-            // Visual-parity polish (cycle 2) — Area/School toggle reuses the same
-            // journey-switch setter JourneySwitcher calls at guided-entry.
-            onSelectJourney={onSelectJourney}
+            view={{
+              chrome: { journey },
+              city: { slug: city ?? '', label: cityLabel },
+              scope: { key: scope, summaryRegions },
+              // Issue #1485 — zone cards (Level 1 grouped hierarchy)
+              zones: { groups: areaGroups, loading: isLoadingAreaGroupsForSchool, discoverAreas },
+            }}
+            commands={{
+              chrome: { startOver: onStartOver, selectJourney: onSelectJourney },
+              scope: { clear: onClearScope },
+              navigation: { selectGroup: onSelectGroup, selectAreaKey: onSelectAreaKey ?? (() => undefined) },
+            }}
           />
         );
 
@@ -1934,19 +1933,17 @@ export function DiscoverRightPanel({
           // Invalid/stale groupId — AC8 safe fallback: render school-browse.
           return (
             <SchoolBrowsePanel
-              onStartOver={onStartOver}
-              journey={journey}
-              city={city}
-              cityLabel={cityLabel}
-              onSelectSchool={onSelectSchool ?? (() => undefined)}
-              onSelectAreaKey={onSelectAreaKey ?? (() => undefined)}
-              areaGroups={areaGroups}
-              isLoadingAreaGroups={isLoadingAreaGroupsForSchool}
-              onSelectGroup={onSelectGroup}
-              discoverAreas={discoverAreas}
-              scope={scope}
-              onClearScope={onClearScope}
-              summaryRegions={summaryRegions}
+              view={{
+                chrome: { journey },
+                city: { slug: city ?? '', label: cityLabel },
+                scope: { key: scope, summaryRegions },
+                zones: { groups: areaGroups, loading: isLoadingAreaGroupsForSchool, discoverAreas },
+              }}
+              commands={{
+                chrome: { startOver: onStartOver },
+                scope: { clear: onClearScope },
+                navigation: { selectGroup: onSelectGroup, selectAreaKey: onSelectAreaKey ?? (() => undefined) },
+              }}
             />
           );
         }
@@ -1980,87 +1977,90 @@ export function DiscoverRightPanel({
         }
         return (
           <SchoolsInAreaPanel
-            selectedArea={selectedArea}
-            onStartOver={onStartOver}
-            onBack={onBack}
-            journey={journey}
-            schools={schools}
-            schoolsLoading={schoolsLoading}
-            // Issue #1198 — thread the schools-in-area query's error/retry/fetching
-            // signals so the (already-built) #1144 error state + #1170 retry feedback
-            // are live in prop-owned mode, not only standalone.
-            schoolsError={schoolsError}
-            onSchoolsRetry={onSchoolsRetry}
-            schoolsFetching={schoolsFetching}
-            // Journey gate (Issue #1157): only the area-first journey delegates
-            // school selection to the parent (handleSelectSchoolById → area-school-combined).
-            // For school-first, `derivePanelContent` also yields 'schools-in-area', but the
-            // panel MUST keep its internal setSchoolJourney path — so pass undefined there.
-            onSelectSchool={journey === 'area-first' ? onSelectSchool : undefined}
-            areaListings={areaListings}
-            isLoadingAreaListings={isLoadingListings}
-            isFetching={isFetching}
-            isAuthenticated={isAuthenticated}
-            activeContextChips={activeContextChips}
-            intent={intent}
-            // Card↔marker shared state for the school-first homes grid (parity with
-            // AreaSelectedPanel). Hover highlights the matching home-marker; a home-marker
-            // click drives selectedListingId → copper card frame + scroll-into-view.
-            selectedListingId={selectedListingId}
-            onSelectListing={onSelectResultListing}
-            onHoverListing={onHoverResultListing}
+            view={{
+              chrome: { journey, activeContextChips },
+              viewer: { intent, isAuthenticated },
+              area: selectedArea,
+              // Issue #1198 — thread the schools-in-area query's error/retry/fetching
+              // signals so the (already-built) #1144 error state + #1170 retry feedback
+              // are live in prop-owned mode, not only standalone.
+              schools: { data: schools, loading: schoolsLoading, fetching: schoolsFetching, error: schoolsError },
+              homes: {
+                data: areaListings,
+                loading: isLoadingListings,
+                fetching: isFetching,
+                // Card↔marker shared state for the school-first homes grid (parity with
+                // AreaSelectedPanel). Hover highlights the matching home-marker; a home-marker
+                // click drives selectedListingId → copper card frame + scroll-into-view.
+                selectedId: selectedListingId,
+              },
+            }}
+            commands={{
+              chrome: { startOver: onStartOver, back: onBack },
+              schools: {
+                retry: onSchoolsRetry,
+                // Journey gate (Issue #1157): only the area-first journey delegates
+                // school selection to the parent (handleSelectSchoolById → area-school-combined).
+                // For school-first, `derivePanelContent` also yields 'schools-in-area', but the
+                // panel MUST keep its internal setSchoolJourney path — so pass undefined there.
+                select: journey === 'area-first' ? onSelectSchool : undefined,
+              },
+              homes: { select: onSelectResultListing, hover: onHoverResultListing },
+            }}
           />
         );
 
       case 'school-selected':
         return (
           <SchoolSelectedPanel
-            school={selectedSchool ?? null}
-            listings={schoolListings ?? []}
-            isLoadingListings={schoolListingsLoading ?? false}
-            isFetching={isFetching}
-            radiusKm={radiusKm ?? null}
-            onRadiusChange={onRadiusChange ?? (() => undefined)}
-            filters={filters}
-            onFiltersChange={onFiltersChange}
-            isAuthenticated={isAuthenticated}
-            onStartOver={onStartOver}
-            onBack={onBack}
-            journey={journey}
-            filtersContent={filtersContent}
-            activeContextChips={activeContextChips}
-            onBoundedSearch={onBoundedSearch}
-            boundedSearchTriggered={boundedSearchTriggered}
-            intent={intent}
-            selectedListingId={selectedListingId}
-            onHoverListing={onHoverResultListing}
+            view={{
+              chrome: { journey, activeContextChips, filtersContent },
+              viewer: { intent, isAuthenticated },
+              school: selectedSchool ?? null,
+              radius: { km: radiusKm ?? null },
+              listings: {
+                data: schoolListings ?? [],
+                loading: schoolListingsLoading ?? false,
+                fetching: isFetching,
+                selectedId: selectedListingId,
+              },
+              propertyFilters: { value: filters },
+              boundedSearch: { triggered: boundedSearchTriggered },
+            }}
+            commands={{
+              chrome: { startOver: onStartOver, back: onBack },
+              radius: { change: onRadiusChange ?? (() => undefined) },
+              listings: { hover: onHoverResultListing },
+              propertyFilters: { replace: onFiltersChange },
+              boundedSearch: onBoundedSearch ? { trigger: onBoundedSearch } : undefined,
+            }}
           />
         );
 
       case 'area-school-combined':
         return (
           <AreaSchoolCombinedPanel
-            selectedArea={selectedArea ?? null}
-            selectedSchool={selectedSchool ?? null}
-            listings={schoolListings ?? []}
-            isLoadingListings={schoolListingsLoading ?? false}
-            isFetching={isFetching}
-            radiusKm={radiusKm ?? null}
-            onRadiusChange={onRadiusChange ?? (() => undefined)}
-            onClearSchool={onClearSchool ?? (() => undefined)}
-            onClearArea={onClearArea ?? (() => undefined)}
-            filters={filters}
-            onFiltersChange={onFiltersChange}
-            isAuthenticated={isAuthenticated}
-            onStartOver={onStartOver}
-            onBack={onBack}
-            journey={journey}
-            filtersContent={filtersContent}
-            activeContextChips={activeContextChips}
-            intent={intent}
-            selectedListingId={selectedListingId}
-            onSelectListing={onSelectResultListing}
-            onHoverListing={onHoverResultListing}
+            view={{
+              chrome: { journey, activeContextChips, filtersContent },
+              viewer: { intent, isAuthenticated },
+              area: selectedArea ?? null,
+              school: selectedSchool ?? null,
+              radius: { km: radiusKm ?? null },
+              listings: {
+                data: schoolListings ?? [],
+                loading: schoolListingsLoading ?? false,
+                fetching: isFetching,
+                selectedId: selectedListingId,
+              },
+              propertyFilters: { value: filters },
+            }}
+            commands={{
+              chrome: { startOver: onStartOver, back: onBack },
+              radius: { change: onRadiusChange ?? (() => undefined) },
+              listings: { select: onSelectResultListing, hover: onHoverResultListing },
+              propertyFilters: { replace: onFiltersChange },
+              school: { clear: onClearSchool ?? (() => undefined) },
+            }}
           />
         );
 

@@ -17,6 +17,7 @@ import { SchoolSelectedPanel, AreaSchoolCombinedPanel } from './SchoolJourneyPan
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
+import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 
 // Minimal listing factory. lat/lon default to the mock school's own coordinates
 // (0 km) so callers that don't care about distance keep the old behaviour;
@@ -52,21 +53,66 @@ const mockSchool: SchoolResult = {
   distanceKm: 1.5,
 };
 
+/**
+ * Flat logical overrides — the pre-commit-5 prop shape (Issue #2661 commit 5
+ * narrowed SchoolSelectedPanel's public props to `{view,commands}`). This
+ * translator keeps every `it()` below overriding by the same flat names.
+ */
+interface SchoolSelectedPanelFlatOverrides {
+  school?: SchoolResult | null;
+  listings?: DiscoverCityListingItem[];
+  isLoadingListings?: boolean;
+  isFetching?: boolean;
+  radiusKm?: number;
+  onRadiusChange?: (radiusKm: number) => void;
+  isAuthenticated?: boolean;
+  onStartOver?: () => void;
+  intent?: DiscoverIntent;
+  filtersContent?: React.ReactNode;
+  onHoverListing?: (id: string | null) => void;
+  onSelectListing?: (id: string) => void;
+  onBoundedSearch?: () => void;
+  boundedSearchTriggered?: boolean;
+}
+
 // Issue #1953 (build step 2) — SchoolSelectedPanel now consumes the
 // DiscoverProvider facade instead of calling useDiscoverUrlState() directly.
-function renderPanel(props: Partial<React.ComponentProps<typeof SchoolSelectedPanel>> = {}) {
+function renderPanel(props: SchoolSelectedPanelFlatOverrides = {}) {
+  const {
+    school = mockSchool,
+    listings = [makeListing('l-1'), makeListing('l-2')],
+    isLoadingListings = false,
+    isFetching,
+    radiusKm = 2,
+    onRadiusChange = vi.fn(),
+    isAuthenticated = true,
+    onStartOver = vi.fn(),
+    intent = 'buy',
+    filtersContent,
+    onHoverListing,
+    onSelectListing,
+    onBoundedSearch,
+    boundedSearchTriggered,
+  } = props;
   return renderWithProviders(
     <DiscoverProvider>
       <SchoolSelectedPanel
-        school={mockSchool}
-        listings={[makeListing('l-1'), makeListing('l-2')]}
-        isLoadingListings={false}
-        radiusKm={2}
-        onRadiusChange={vi.fn()}
-        isAuthenticated={true}
-        onStartOver={vi.fn()}
-        intent="buy"
-        {...props}
+        view={{
+          chrome: { filtersContent },
+          viewer: { intent, isAuthenticated },
+          school,
+          radius: { km: radiusKm },
+          listings: { data: listings, loading: isLoadingListings, fetching: isFetching, selectedId: null },
+          propertyFilters: { value: {} },
+          boundedSearch: { triggered: boundedSearchTriggered },
+        }}
+        commands={{
+          chrome: { startOver: onStartOver },
+          radius: { change: onRadiusChange },
+          listings: { select: onSelectListing, hover: onHoverListing },
+          propertyFilters: { replace: vi.fn() },
+          boundedSearch: onBoundedSearch ? { trigger: onBoundedSearch } : undefined,
+        }}
       />
     </DiscoverProvider>,
   );
@@ -274,23 +320,47 @@ describe('AreaSchoolCombinedPanel — nearest-first sort order (Issue #1974)', (
     bbox: null,
   };
 
-  function renderCombinedPanel(
-    props: Partial<React.ComponentProps<typeof AreaSchoolCombinedPanel>> = {},
-  ) {
+  interface CombinedFlatOverrides {
+    selectedArea?: AreaPoint | null;
+    selectedSchool?: SchoolResult | null;
+    listings?: DiscoverCityListingItem[];
+    isLoadingListings?: boolean;
+    radiusKm?: number;
+    isAuthenticated?: boolean;
+    intent?: DiscoverIntent;
+    filtersContent?: React.ReactNode;
+  }
+
+  function renderCombinedPanel(props: CombinedFlatOverrides = {}) {
+    const {
+      selectedArea = mockAreaPoint,
+      selectedSchool = mockSchool,
+      listings = [makeListing('l-1'), makeListing('l-2')],
+      isLoadingListings = false,
+      radiusKm = 2,
+      isAuthenticated = true,
+      intent = 'buy',
+      filtersContent,
+    } = props;
     return renderWithProviders(
       <DiscoverProvider>
         <AreaSchoolCombinedPanel
-          selectedArea={mockAreaPoint}
-          selectedSchool={mockSchool}
-          listings={[makeListing('l-1'), makeListing('l-2')]}
-          isLoadingListings={false}
-          radiusKm={2}
-          onRadiusChange={vi.fn()}
-          onClearSchool={vi.fn()}
-          onClearArea={vi.fn()}
-          isAuthenticated={true}
-          intent="buy"
-          {...props}
+          view={{
+            chrome: { filtersContent },
+            viewer: { intent, isAuthenticated },
+            area: selectedArea,
+            school: selectedSchool,
+            radius: { km: radiusKm },
+            listings: { data: listings, loading: isLoadingListings },
+            propertyFilters: { value: {} },
+          }}
+          commands={{
+            chrome: {},
+            radius: { change: vi.fn() },
+            listings: {},
+            propertyFilters: { replace: vi.fn() },
+            school: { clear: vi.fn() },
+          }}
         />
       </DiscoverProvider>,
     );

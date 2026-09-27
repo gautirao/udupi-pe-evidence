@@ -63,12 +63,21 @@ function renderSchoolSelected(
       <QueryClientProvider client={makeQC()}>
         <DiscoverProvider>
           <SchoolSelectedPanel
-            school={mockSchool}
-            listings={[]}
-            isLoadingListings={false}
-            radiusKm={props.radiusKm}
-            onRadiusChange={vi.fn()}
-            isAuthenticated={props.isAuthenticated}
+            view={{
+              chrome: {},
+              viewer: { isAuthenticated: props.isAuthenticated },
+              school: mockSchool,
+              radius: { km: props.radiusKm },
+              listings: { data: [], loading: false },
+              propertyFilters: {},
+              boundedSearch: {},
+            }}
+            commands={{
+              chrome: {},
+              radius: { change: vi.fn() },
+              listings: {},
+              propertyFilters: {},
+            }}
           />
         </DiscoverProvider>
       </QueryClientProvider>
@@ -84,15 +93,22 @@ function renderCombined(
       <QueryClientProvider client={makeQC()}>
         <DiscoverProvider>
           <AreaSchoolCombinedPanel
-            selectedArea={mockArea}
-            selectedSchool={mockSchool}
-            listings={[]}
-            isLoadingListings={false}
-            radiusKm={props.radiusKm}
-            onRadiusChange={vi.fn()}
-            onClearSchool={vi.fn()}
-            onClearArea={vi.fn()}
-            isAuthenticated={props.isAuthenticated}
+            view={{
+              chrome: {},
+              viewer: { isAuthenticated: props.isAuthenticated },
+              area: mockArea,
+              school: mockSchool,
+              radius: { km: props.radiusKm },
+              listings: { data: [], loading: false },
+              propertyFilters: {},
+            }}
+            commands={{
+              chrome: {},
+              radius: { change: vi.fn() },
+              listings: {},
+              propertyFilters: {},
+              school: { clear: vi.fn() },
+            }}
           />
         </DiscoverProvider>
       </QueryClientProvider>

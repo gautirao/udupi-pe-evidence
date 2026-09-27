@@ -6,6 +6,8 @@ import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import { SchoolSelectedPanel } from '../SchoolJourneyPanels';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
+import type { PropertyFilters } from '@/hooks/usePropertyListings';
 
 
 const mockSchool: SchoolResult = {
@@ -36,24 +38,90 @@ const makeListing = (id: string, overrides: Partial<DiscoverCityListingItem> = {
   ...overrides,
 });
 
-describe('SchoolSelectedPanel', () => {
-  const renderPanel = (
-    props: Partial<React.ComponentProps<typeof SchoolSelectedPanel>> = {},
-  ) => {
-    const defaultProps: React.ComponentProps<typeof SchoolSelectedPanel> = {
-      school: mockSchool,
-      listings: [makeListing('l-1')],
-      isLoadingListings: false,
-      radiusKm: 3,
-      onRadiusChange: vi.fn(),
-      filters: {},
-      onFiltersChange: vi.fn(),
-      isAuthenticated: false,
-    };
+/**
+ * Flat logical overrides — the pre-commit-5 prop shape. Every test below still
+ * overrides by these same flat names; `buildSelectedPanelProps` is the single
+ * place that translates them into the real `{view,commands}` contract, so this
+ * commit's `expect(` lines needed zero changes (see Issue #2661 commit 5 report).
+ */
+interface SchoolSelectedPanelFlatOverrides {
+  school?: SchoolResult | null;
+  listings?: DiscoverCityListingItem[];
+  isLoadingListings?: boolean;
+  isFetching?: boolean;
+  radiusKm?: number | null;
+  onRadiusChange?: (radiusKm: number) => void;
+  filters?: PropertyFilters;
+  onFiltersChange?: (filters: PropertyFilters) => void;
+  isAuthenticated?: boolean;
+  onStartOver?: () => void;
+  onBack?: () => void;
+  journey?: React.ComponentProps<typeof SchoolSelectedPanel>['view']['chrome']['journey'];
+  filtersContent?: React.ReactNode;
+  activeContextChips?: React.ReactNode;
+  onBoundedSearch?: () => void;
+  boundedSearchTriggered?: boolean;
+  intent?: DiscoverIntent;
+  selectedListingId?: string | null;
+  onSelectListing?: (id: string) => void;
+  onHoverListing?: (id: string | null) => void;
+}
 
+/**
+ * Scenario-builder (Issue #2661 commit 1 prep, updated commit 5) — constructs
+ * SchoolSelectedPanel's `{view,commands}` props from a single overridable flat
+ * shape rather than inline object literals scattered through the file.
+ */
+function buildSelectedPanelProps(
+  overrides: SchoolSelectedPanelFlatOverrides = {},
+): React.ComponentProps<typeof SchoolSelectedPanel> {
+  const {
+    school = mockSchool,
+    listings = [makeListing('l-1')],
+    isLoadingListings = false,
+    isFetching,
+    radiusKm = 3,
+    onRadiusChange = vi.fn(),
+    filters = {},
+    onFiltersChange = vi.fn(),
+    isAuthenticated = false,
+    onStartOver,
+    onBack,
+    journey,
+    filtersContent,
+    activeContextChips,
+    onBoundedSearch,
+    boundedSearchTriggered,
+    intent,
+    selectedListingId,
+    onSelectListing,
+    onHoverListing,
+  } = overrides;
+  return {
+    view: {
+      chrome: { journey, activeContextChips, filtersContent },
+      viewer: { intent, isAuthenticated },
+      school,
+      radius: { km: radiusKm },
+      listings: { data: listings, loading: isLoadingListings, fetching: isFetching, selectedId: selectedListingId },
+      propertyFilters: { value: filters },
+      boundedSearch: { triggered: boundedSearchTriggered },
+    },
+    commands: {
+      chrome: { startOver: onStartOver, back: onBack },
+      radius: { change: onRadiusChange },
+      listings: { select: onSelectListing, hover: onHoverListing },
+      propertyFilters: { replace: onFiltersChange },
+      boundedSearch: onBoundedSearch ? { trigger: onBoundedSearch } : undefined,
+    },
+  };
+}
+
+describe('SchoolSelectedPanel', () => {
+  const renderPanel = (props: SchoolSelectedPanelFlatOverrides = {}) => {
     return renderWithProviders(
       <DiscoverProvider>
-        <SchoolSelectedPanel {...defaultProps} {...props} />
+        <SchoolSelectedPanel {...buildSelectedPanelProps(props)} />
       </DiscoverProvider>,
       { router: 'browser' },
     );
