@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { AddressPicker } from '@/components/broker/AddressPicker';
 import { SectionCard } from '@/components/broker/SectionCard';
-import type { ListingResponse } from '@/hooks/useBrokerListings';
-import type { useUpdateListing } from '@/hooks/useBrokerListings';
+import type { LocationStepProps } from './stepContracts';
 
 /**
  * Issue #1838 slice 6a — extracted step-3 ("Pin Location") JSX block from
@@ -21,23 +20,14 @@ import type { useUpdateListing } from '@/hooks/useBrokerListings';
  * guarantees. The gate is the `hasVisitedAddressStep` latch ALONE — it must
  * never be combined with a `currentStep === 3` check on the AddressPicker
  * render, or the mount/unmount regression this slice fixes would return.
+ *
+ * Issue #1838 PR C commit 3 — converted to the {view, commands} contract
+ * (see stepContracts.ts). The isPending guard on confirm/unconfirm now lives
+ * inside useEditListingCommands.ts's commands.location — preserved exactly.
  */
-interface LocationStepProps {
-  isSubmittable: boolean;
-  listing: ListingResponse;
-  updateListing: ReturnType<typeof useUpdateListing>;
-  handleLocalityConfirmed: (locality: string, lat: number, lng: number) => void;
-  handleStep3Continue: () => void;
-  currentStep: number;
-}
-
 export function LocationStep({
-  isSubmittable,
-  listing,
-  updateListing,
-  handleLocalityConfirmed,
-  handleStep3Continue,
-  currentStep,
+  view: { isSubmittable, listing, currentStep },
+  commands: { confirmAddress, unconfirmAddress, confirmLocality, saveAndContinue },
 }: LocationStepProps) {
   // Mount-on-first-visit latch — monotonic, never reset. Setting it to `true`
   // again on a later step-3 visit (or under React 18 Strict Mode's double
@@ -63,17 +53,9 @@ export function LocationStep({
                 initialLongitude={listing.longitude}
                 initialLocality={listing.locality}
                 initialConfirmed={listing.addressConfirmed}
-                onConfirm={(addr) => {
-                  if (!updateListing.isPending) {
-                    updateListing.mutate({ latitude: addr.lat, longitude: addr.lng, addressConfirmed: true });
-                  }
-                }}
-                onUnconfirm={() => {
-                  if (!updateListing.isPending) {
-                    updateListing.mutate({ addressConfirmed: false });
-                  }
-                }}
-                onLocalityConfirmed={handleLocalityConfirmed}
+                onConfirm={confirmAddress}
+                onUnconfirm={unconfirmAddress}
+                onLocalityConfirmed={confirmLocality}
               />
             ) : (
               <p className="text-sm text-muted-foreground">
@@ -85,7 +67,7 @@ export function LocationStep({
           <div className="flex flex-col items-end gap-1">
             <Button
               type="button"
-              onClick={handleStep3Continue}
+              onClick={saveAndContinue}
               disabled={!listing.addressConfirmed}
             >
               Save & Continue

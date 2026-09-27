@@ -2,9 +2,7 @@ import { Button } from '@/components/ui/button';
 import { AlertTriangle, Check, CheckCircle2, Loader2, MapPin, X } from 'lucide-react';
 import { PoiManager } from '@/components/poi/PoiManager';
 import { SectionCard } from '@/components/broker/SectionCard';
-import type { ListingResponse } from '@/hooks/useBrokerListings';
-import type { useSubmitListing, useUpdateListing } from '@/hooks/useBrokerListings';
-import type { ListingImage } from '@/hooks/useListingImages';
+import type { ReviewStepProps } from './stepContracts';
 
 /**
  * Issue #1838 slice 6a — extracted final "Review & Submit" step JSX block
@@ -13,51 +11,30 @@ import type { ListingImage } from '@/hooks/useListingImages';
  * `{currentStep === reviewStep && (<div data-testid="step-review-panel">
  * ...)}` conditional guard verbatim — this component is the inner content
  * only.
+ *
+ * Issue #1838 PR C commit 3 — converted to the {view, commands} contract
+ * (see stepContracts.ts). The submit button's disabled expression stays
+ * exactly `isSubmitting || isSaving || !allConditionsMet` (same operator
+ * order as the pre-conversion `submitListing.isPending || updateListing.isPending`).
  */
-interface ReviewStepProps {
-  showTitleLocalityWarning: boolean;
-  confirmedLocality: string;
-  setTitle: (title: string) => void;
-  setTitleManuallyEdited: (edited: boolean) => void;
-  listing: ListingResponse;
-  listingImages: ListingImage[];
-  canSubmitImages: boolean;
-  setCameFromReview: (value: boolean) => void;
-  setCurrentStep: (step: number) => void;
-  isAgriListing: boolean;
-  boundaryCoords: [number, number][];
-  boundaryStep: number;
-  id: string | undefined;
-  isSubmittable: boolean;
-  requiredFieldsComplete: boolean;
-  isRent: boolean;
-  submitListing: ReturnType<typeof useSubmitListing>;
-  updateListing: ReturnType<typeof useUpdateListing>;
-  allConditionsMet: boolean;
-  handleSubmitForReview: () => void;
-}
-
 export function ReviewStep({
-  showTitleLocalityWarning,
-  confirmedLocality,
-  setTitle,
-  setTitleManuallyEdited,
-  listing,
-  listingImages,
-  canSubmitImages,
-  setCameFromReview,
-  setCurrentStep,
-  isAgriListing,
-  boundaryCoords,
-  boundaryStep,
-  id,
-  isSubmittable,
-  requiredFieldsComplete,
-  isRent,
-  submitListing,
-  updateListing,
-  allConditionsMet,
-  handleSubmitForReview,
+  view: {
+    listing,
+    listingImages,
+    id,
+    isSubmittable,
+    canSubmitImages,
+    requiredFieldsComplete,
+    allConditionsMet,
+    isRent,
+    isAgriListing,
+    boundaryCoords,
+    showTitleLocalityWarning,
+    confirmedLocality,
+    isSubmitting,
+    isSaving,
+  },
+  commands: { submitForReview, editStepFromReview, editBoundary, resetTitleToLocality },
 }: ReviewStepProps) {
   return (
     <>
@@ -81,13 +58,7 @@ export function ReviewStep({
             size="sm"
             variant="outline"
             className="flex-shrink-0 border-yellow-400 text-yellow-900 hover:bg-yellow-100"
-            onClick={() => {
-              const shortLocality = confirmedLocality.split(',')[0].trim();
-              if (shortLocality) {
-                setTitle(`Property in ${shortLocality}`);
-                setTitleManuallyEdited(false);
-              }
-            }}
+            onClick={resetTitleToLocality}
           >
             Update title
           </Button>
@@ -122,7 +93,7 @@ export function ReviewStep({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => { setCameFromReview(true); setCurrentStep(1); }}
+              onClick={() => editStepFromReview(1)}
             >
               Edit
             </Button>
@@ -158,7 +129,7 @@ export function ReviewStep({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => { setCameFromReview(true); setCurrentStep(2); }}
+              onClick={() => editStepFromReview(2)}
             >
               Edit
             </Button>
@@ -179,7 +150,7 @@ export function ReviewStep({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => { setCameFromReview(true); setCurrentStep(3); }}
+              onClick={() => editStepFromReview(3)}
             >
               Edit
             </Button>
@@ -212,7 +183,7 @@ export function ReviewStep({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => { setCameFromReview(false); setCurrentStep(boundaryStep); }}
+              onClick={editBoundary}
               data-testid="boundary-review-edit-btn"
             >
               {boundaryCoords.length > 0 ? 'Edit Boundary' : 'Draw Boundary'}
@@ -281,11 +252,11 @@ export function ReviewStep({
                   className={`flex items-start gap-3 rounded-md transition-colors ${
                     !met ? 'cursor-pointer hover:bg-accent/60 px-2 py-1 -mx-2' : ''
                   }`}
-                  onClick={!met ? () => { setCameFromReview(true); setCurrentStep(step); } : undefined}
+                  onClick={!met ? () => editStepFromReview(step) : undefined}
                   role={!met ? 'button' : undefined}
                   tabIndex={!met ? 0 : undefined}
                   onKeyDown={!met ? (e) => {
-                    if (e.key === 'Enter' || e.key === ' ') { setCameFromReview(true); setCurrentStep(step); }
+                    if (e.key === 'Enter' || e.key === ' ') { editStepFromReview(step); }
                   } : undefined}
                 >
                   {met
@@ -305,10 +276,10 @@ export function ReviewStep({
               <Button
                 type="button"
                 className="w-full"
-                disabled={submitListing.isPending || updateListing.isPending || !allConditionsMet}
-                onClick={handleSubmitForReview}
+                disabled={isSubmitting || isSaving || !allConditionsMet}
+                onClick={submitForReview}
               >
-                {submitListing.isPending
+                {isSubmitting
                   ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Submitting…</>
                   : 'Submit for Review'}
               </Button>

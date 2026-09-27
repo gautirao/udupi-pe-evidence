@@ -7,6 +7,13 @@
  * AddressPicker (and any react-leaflet map internals it pulls in) is mocked
  * to a lightweight stub per the #1837 OOM lesson — no real Leaflet map is
  * ever mounted in this suite.
+ *
+ * Issue #1838 PR C commit 3 — updated to the {view, commands} prop contract
+ * (see ../stepContracts.ts). This suite now asserts that the AddressPicker
+ * callbacks are wired straight through to the `commands` functions passed
+ * in — WHAT those commands actually do (the isPending guard, the mutate
+ * call shape) is characterized at the hook level in
+ * useEditListingCommands.test.ts, not here.
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -14,6 +21,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LocationStep } from '../LocationStep';
 import type { ListingResponse } from '@/hooks/useBrokerListings';
+import type { LocationStepProps } from '../stepContracts';
 
 // Issue #1838 slice 8 — module-scope mount-tracking spies. Stable across
 // rerenders so the "mounts exactly once, never remounts on nav away+back"
@@ -103,15 +111,24 @@ function makeListing(overrides: Partial<ListingResponse> = {}): ListingResponse 
   };
 }
 
-function baseProps(overrides: Partial<React.ComponentProps<typeof LocationStep>> = {}) {
+function baseProps(overrides: {
+  view?: Partial<LocationStepProps['view']>;
+  commands?: Partial<LocationStepProps['commands']>;
+} = {}): LocationStepProps {
   return {
-    isSubmittable: true,
-    listing: makeListing(),
-    updateListing: { mutate: vi.fn(), isPending: false } as unknown as React.ComponentProps<typeof LocationStep>['updateListing'],
-    handleLocalityConfirmed: vi.fn(),
-    handleStep3Continue: vi.fn(),
-    currentStep: 3,
-    ...overrides,
+    view: {
+      isSubmittable: true,
+      listing: makeListing(),
+      currentStep: 3,
+      ...overrides.view,
+    },
+    commands: {
+      confirmAddress: vi.fn(),
+      unconfirmAddress: vi.fn(),
+      confirmLocality: vi.fn(),
+      saveAndContinue: vi.fn(),
+      ...overrides.commands,
+    },
   };
 }
 
@@ -121,7 +138,6 @@ describe('LocationStep', () => {
     unmountSpy.mockClear();
   });
 
-
   it('renders AddressPicker wired to the listing coordinates', () => {
     render(<LocationStep {...baseProps()} />);
     expect(screen.getByTestId('address-picker-stub')).toBeInTheDocument();
@@ -129,78 +145,79 @@ describe('LocationStep', () => {
   });
 
   it('disables continue while addressConfirmed is false', () => {
-    render(<LocationStep {...baseProps({ listing: makeListing({ addressConfirmed: false }) })} />);
+    render(<LocationStep {...baseProps({ view: { listing: makeListing({ addressConfirmed: false }) } })} />);
     expect(screen.getByRole('button', { name: /save & continue/i })).toBeDisabled();
     expect(screen.getByText(/confirm your pin location/i)).toBeInTheDocument();
   });
 
-  it('enables continue and calls handleStep3Continue when addressConfirmed is true', async () => {
+  it('enables continue and calls commands.saveAndContinue when addressConfirmed is true', async () => {
     const user = userEvent.setup();
-    const handleStep3Continue = vi.fn();
+    const saveAndContinue = vi.fn();
     render(
       <LocationStep
-        {...baseProps({ listing: makeListing({ addressConfirmed: true }), handleStep3Continue })}
+        {...baseProps({ view: { listing: makeListing({ addressConfirmed: true }) }, commands: { saveAndContinue } })}
       />,
     );
     const continueBtn = screen.getByRole('button', { name: /save & continue/i });
     expect(continueBtn).toBeEnabled();
     await user.click(continueBtn);
-    expect(handleStep3Continue).toHaveBeenCalledOnce();
+    expect(saveAndContinue).toHaveBeenCalledOnce();
   });
 
-  it('calls updateListing.mutate on pin confirm and passes locality confirmation through to handleLocalityConfirmed', async () => {
+  it('wires AddressPicker confirm/unconfirm/locality-confirmed straight through to the commands passed in', async () => {
     const user = userEvent.setup();
-    const mutate = vi.fn();
-    const handleLocalityConfirmed = vi.fn();
+    const confirmAddress = vi.fn();
+    const unconfirmAddress = vi.fn();
+    const confirmLocality = vi.fn();
     render(
       <LocationStep
-        {...baseProps({
-          updateListing: { mutate, isPending: false } as unknown as React.ComponentProps<typeof LocationStep>['updateListing'],
-          handleLocalityConfirmed,
-        })}
+        {...baseProps({ commands: { confirmAddress, unconfirmAddress, confirmLocality } })}
       />,
     );
 
     await user.click(screen.getByText('confirm-pin'));
-    expect(mutate).toHaveBeenCalledWith({ latitude: 13.35, longitude: 74.75, addressConfirmed: true });
+    expect(confirmAddress).toHaveBeenCalledWith({ lat: 13.35, lng: 74.75 });
+
+    await user.click(screen.getByText('unconfirm-pin'));
+    expect(unconfirmAddress).toHaveBeenCalledOnce();
 
     await user.click(screen.getByText('confirm-locality'));
-    expect(handleLocalityConfirmed).toHaveBeenCalledWith('Manipal, Udupi', 13.35, 74.75);
+    expect(confirmLocality).toHaveBeenCalledWith('Manipal, Udupi', 13.35, 74.75);
   });
 
   it('renders nothing when isSubmittable is false', () => {
-    render(<LocationStep {...baseProps({ isSubmittable: false })} />);
+    render(<LocationStep {...baseProps({ view: { isSubmittable: false } })} />);
     expect(screen.queryByTestId('address-picker-stub')).not.toBeInTheDocument();
   });
 
   describe('Issue #1838 slice 8 — mount-on-first-visit latch', () => {
     it('is not mounted before the first step-3 visit', () => {
-      render(<LocationStep {...baseProps({ currentStep: 1 })} />);
+      render(<LocationStep {...baseProps({ view: { currentStep: 1 } })} />);
       expect(screen.queryByTestId('address-picker-stub')).not.toBeInTheDocument();
       expect(mountSpy).not.toHaveBeenCalled();
       expect(screen.getByText(/visit the location step/i)).toBeInTheDocument();
     });
 
     it('mounts exactly once on the first step-3 visit', () => {
-      const { rerender } = render(<LocationStep {...baseProps({ currentStep: 1 })} />);
-      rerender(<LocationStep {...baseProps({ currentStep: 3 })} />);
+      const { rerender } = render(<LocationStep {...baseProps({ view: { currentStep: 1 } })} />);
+      rerender(<LocationStep {...baseProps({ view: { currentStep: 3 } })} />);
       expect(screen.getByTestId('address-picker-stub')).toBeInTheDocument();
       expect(mountSpy).toHaveBeenCalledOnce();
       expect(unmountSpy).not.toHaveBeenCalled();
     });
 
     it('stays mounted across navigation away and back (primary proof of Option C)', () => {
-      const { rerender } = render(<LocationStep {...baseProps({ currentStep: 1 })} />);
-      rerender(<LocationStep {...baseProps({ currentStep: 3 })} />);
+      const { rerender } = render(<LocationStep {...baseProps({ view: { currentStep: 1 } })} />);
+      rerender(<LocationStep {...baseProps({ view: { currentStep: 3 } })} />);
       expect(mountSpy).toHaveBeenCalledOnce();
 
       // Navigate away from step 3
-      rerender(<LocationStep {...baseProps({ currentStep: 1 })} />);
+      rerender(<LocationStep {...baseProps({ view: { currentStep: 1 } })} />);
       expect(unmountSpy).not.toHaveBeenCalled();
       expect(screen.getByTestId('address-picker-stub')).toBeInTheDocument();
 
       // Navigate back to step 3
-      rerender(<LocationStep {...baseProps({ currentStep: 3 })} />);
+      rerender(<LocationStep {...baseProps({ view: { currentStep: 3 } })} />);
       expect(mountSpy).toHaveBeenCalledOnce();
       expect(unmountSpy).not.toHaveBeenCalled();
       expect(screen.getByTestId('address-picker-stub')).toBeInTheDocument();
@@ -208,10 +225,10 @@ describe('LocationStep', () => {
 
     it('reflects the listing-derived initial coordinates once mounted', () => {
       const { rerender } = render(
-        <LocationStep {...baseProps({ currentStep: 1, listing: makeListing({ latitude: 13.99 }) })} />,
+        <LocationStep {...baseProps({ view: { currentStep: 1, listing: makeListing({ latitude: 13.99 }) } })} />,
       );
       rerender(
-        <LocationStep {...baseProps({ currentStep: 3, listing: makeListing({ latitude: 13.99 }) })} />,
+        <LocationStep {...baseProps({ view: { currentStep: 3, listing: makeListing({ latitude: 13.99 }) } })} />,
       );
       expect(screen.getByTestId('address-picker-lat')).toHaveTextContent('13.99');
     });
