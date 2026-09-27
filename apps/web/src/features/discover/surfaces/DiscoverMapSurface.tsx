@@ -5,7 +5,6 @@ import { useDiscoverShell } from '@/features/discover/context/useDiscoverContext
 import { MapSkeleton } from '@/components/discover/MapSkeleton';
 import { MobileClusterSheet } from '@/features/discover/views/mobile/MobileClusterSheet';
 import { MobileListingPreviewSheet } from '@/features/discover/views/mobile/MobileListingPreviewSheet';
-import type { DiscoverMapCanvasProps } from '@/features/discover/views/DiscoverMapCanvas';
 import type { DiscoverMapSurfaceView, DiscoverMapSurfaceCommands } from './buildMapSurfaceModel';
 
 /**
@@ -16,9 +15,13 @@ import type { DiscoverMapSurfaceView, DiscoverMapSurfaceCommands } from './build
  * MobileListingPreviewSheet, and the recenter-button portal — see
  * buildMapSurfaceModel.ts's doc comment for why those live here rather than on
  * DiscoverOverlaySurface (DOM/stacking-context coupling with the map canvas,
- * team-lead ruling 2026-08-12). DiscoverMapCanvas itself is UNCHANGED: this
- * surface only reconstructs its exact flat prop shape from the grouped view/
- * commands contract before spreading it through.
+ * team-lead ruling 2026-08-12).
+ *
+ * Issue #2659 (D3) — DiscoverMapCanvas now takes the nested `{ view,
+ * commands, mapContainerRef }` contract directly (its own former 139-field
+ * flat props interface is deleted). This surface therefore no longer
+ * reconstructs a flat prop object here — it forwards `view`/`commands` as-is,
+ * minus `overlays` (never passed to the canvas; see the render below).
  */
 const LazyDiscoverMapCanvas = lazy(() =>
   import('../views/DiscoverMapCanvas').then((mod) => ({
@@ -44,24 +47,13 @@ export function DiscoverMapSurface({ view, commands, mapContainerRef }: Discover
   // right-hand column (city recenter, school-radius hint) can never disagree on "mobile".
   const isMobileMapOverlay = !!view.mobile.mobileListButton;
 
-  const canvasProps: DiscoverMapCanvasProps = {
-    ...view.camera,
-    ...view.layers,
-    ...view.navigation,
-    ...view.schools,
-    ...view.markers,
-    ...view.status,
-    ...view.mobile,
-    ...view.regionGuide,
-    ...commands.camera,
-    ...commands.drawing,
-    ...commands.navigation,
-    ...commands.markers,
-    ...commands.regionGuide,
-    // Issue #2628 — the mobile Map "Filters" sheet's one canonical write command.
-    ...commands.filters,
-    mapContainerRef,
-  };
+  // Issue #2659 (D3) — DiscoverMapCanvas now takes the nested `{ view, commands,
+  // mapContainerRef }` contract directly; this surface no longer reconstructs a
+  // flat prop object. `overlays` is deliberately EXCLUDED from both — it must
+  // never reach the canvas (see this file's own doc comment and the
+  // `surfaceLayering`/camera-ownership guards).
+  const { overlays: _viewOverlays, ...canvasView } = view;
+  const { overlays: _commandsOverlays, ...canvasCommands } = commands;
 
   return (
     <>
@@ -89,7 +81,7 @@ export function DiscoverMapSurface({ view, commands, mapContainerRef }: Discover
         // candidate instance instead of two independent, desynchronized
         // copies. See MapDiscovery.tsx's own comment for the full rationale.
         <Suspense fallback={<MapSkeleton />}>
-          <LazyDiscoverMapCanvas {...canvasProps} />
+          <LazyDiscoverMapCanvas view={canvasView} commands={canvasCommands} mapContainerRef={mapContainerRef} />
         </Suspense>
       )}
       {view.overlays.recenter.visible &&

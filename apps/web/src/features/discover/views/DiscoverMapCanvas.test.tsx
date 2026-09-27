@@ -9,18 +9,20 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRef, type ReactElement } from 'react';
+import { createRef, type ReactElement, type ReactNode, type RefObject, type MutableRefObject, type Dispatch, type SetStateAction } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { UseInfiniteQueryResult, InfiniteData } from '@tanstack/react-query';
-import type { DiscoverUrlState, DiscoverUrlActions } from '@/hooks/useDiscoverUrlState';
+import type { DiscoverUrlState, DiscoverUrlActions, DiscoverIntent, DiscoverUrlFilters } from '@/hooks/useDiscoverUrlState';
 import type {
   DiscoverJourneyTransitionsView,
   DiscoverJourneyTransitionsCommands,
 } from '@/features/discover/state/useDiscoverJourneyTransitions';
 import type { SchoolsByAreaResponse } from '@/hooks/useSchoolsByArea';
 import type { DiscoverBadgeResult } from '@/features/discover/presentation/discoverBadge';
+import type { AreaMarkerClusterInfo } from '@/components/map/AreaMarkerLayer';
+import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 
 // Issue #2018 slice 3 — the nearby contract is mocked here so the map/panel
 // count-parity test has KNOWN filter-aware counts to assert against. The
@@ -253,8 +255,24 @@ vi.mock('@/features/discover/context/useDiscoverContext', () => ({
   useDiscoverShell: mockUseDiscoverShell,
 }));
 
+
 import { DiscoverMapCanvas, type DiscoverMapCanvasProps } from './DiscoverMapCanvas';
 import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftContext';
+import type { PropertyFilters, PropertyListing, PropertyImage } from '@/hooks/usePropertyListings';
+import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
+import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
+import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
+import type { AreaGroup } from '@/hooks/useAreaGroups';
+import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
+import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import type { SchoolResult } from '@/hooks/useSchoolSearch';
+import type { ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
+import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
+import type { DiscoverMapCrumb } from '@/components/discover/DiscoverMapBreadcrumb';
+import type { CameraIntent } from '@/hooks/useDiscoverMapData';
+import type { MarkerPopoverStepper } from '@/features/discover/map/resolveMarkerPopover';
+import type { RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCard';
+import type { PolygonDraftBlock, PolygonDraftPhase } from '@/features/discover/state/polygonDraftPhase';
 
 const JOURNEY_VIEW: DiscoverJourneyTransitionsView = {
   startOverTick: 0,
@@ -302,9 +320,351 @@ const DISCOVER_BADGE: DiscoverBadgeResult = {
   state: 'zero-empty',
 };
 
-function baseProps(overrides: Partial<DiscoverMapCanvasProps> = {}): DiscoverMapCanvasProps {
+/**
+ * Issue #2659 (D5 — test fixture) — DiscoverMapCanvas now takes a nested
+ * `{ view, commands, mapContainerRef }` contract instead of ~137 flat props
+ * (see DiscoverMapCanvas.tsx's own doc comment). Rather than rewrite every
+ * every test in this suite to build nested objects by hand, this flat fixture
+ * type + `baseProps()`/`toCanvasProps()` below preserve the SUITE'S OWN
+ * flat-override authoring shape (every `Partial<...>` fixture literal and
+ * every `baseProps({ ... })` call in this file is unchanged) and do the
+ * flat -> nested conversion in ONE place. Assertions and test titles are
+ * byte-identical to before this change — only prop CONSTRUCTION differs.
+ */
+export interface DiscoverMapCanvasFlatProps {
+  markerPixelPos: { x: number; y: number } | null;
+  handlePopoverDismiss: () => void;
+  showLoader: boolean;
+  error: Error | null;
+  currentMapMarkerListings: PropertyListingWithImages[];
+  agriGroupFocusBounds: [[number, number], [number, number]] | null;
+  activeFocusBounds: [[number, number], [number, number]] | null;
+  selectedRegion: 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW' | null;
+  selectedMaxKm: 10 | 25 | 50 | 100 | null;
+  filteredAgriListings: AgriMapListingItem[] | null;
+  agriDestinationMarkers: AgriMapListingItem[];
+  filters: PropertyFilters;
+  isLandingState: boolean;
+  handlePolygonDrawn: (polygon: [number, number][]) => void;
+  handlePolygonCleared: () => void;
+  polygonDraftPhase?: PolygonDraftPhase;
+  polygonDraftBlock?: PolygonDraftBlock | null;
+  drawVertexCount?: number;
+  startDrawNonce?: number;
+  cancelDrawNonce?: number;
+  undoVertexNonce?: number;
+  handleCancelDrawPolygon?: () => void;
+  handleUndoDrawVertex?: () => void;
+  handleRedrawPolygon?: () => void;
+  handleRetryPolygonValidation?: () => void;
+  handleDismissPolygonRejection?: () => void;
+  handleDrawVertexCountChange?: (count: number) => void;
+  handleDrawModeExit?: () => void;
+  isReplaceScopeConfirmOpen?: boolean;
+  handleConfirmReplaceScope?: () => void;
+  handleCancelReplaceScope?: () => void;
+  viewportSearchIsDirty?: boolean;
+  viewportSearchIsEligible?: boolean;
+  onActivateViewportSearch?: () => void;
+  selectedSchool: SchoolResult | null;
+  memoizedInitialCenter: [number, number] | undefined;
+  isColdNavigate?: boolean;
+  cityCenter: [number, number] | undefined;
+  cityZoom: number | undefined;
+  overviewAreas: AreaPoint[];
+  handleOverviewAreaClick: (area: AreaPoint) => void;
+  publishCameraIntent: (area: AreaPoint) => void;
+  cameraIntent: CameraIntent | null;
+  pendingRemountCameraIntentSeqRef: MutableRefObject<number | null>;
+  focusedGroupAreas: string[] | undefined;
+  areaLayerMaxZoom: number;
+  selectedArea: AreaPoint | null;
+  areaSearchMatchKeys: string[] | undefined;
+  hoveredAreaKeyForMap: string | null;
+  publishClusterCameraIntent: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
+  publishMarkerClusterCameraIntent?: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
+  handleAreaClusterClick: (cluster: AreaMarkerClusterInfo) => void;
+  handleAreaMarkersComputed: (shownCount: number, totalCount: number) => void;
+  areasNavigationJourney?: UseAreasNavigationJourneyResult;
+  hoveredNavigationNodeKey?: string | null;
+  onNavigationNodeHoverChange?: (nodeKey: string | null) => void;
+  focusedClusterMemberAreaKeys?: readonly string[] | null;
+  onClusterFocusChange?: (memberAreaKeys: readonly string[] | null) => void;
+  onAreaVisualClusterCameraIntent?: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
+  autoAdvanceSelectNode?: (nodeKey: string) => void;
+  buildNavigationNodeHref?: (nodeKey: string) => string | null;
+  schoolZoneLabels: ZoneLabelPoint[];
+  setMapZoom: Dispatch<SetStateAction<number>>;
+  handleBoundsChange: (bbox: [number, number, number, number]) => void;
+  handleUserCameraGesture: () => void;
+  panToArea: AreaPoint | null;
+  bottomOcclusionPx?: number;
+  previewOcclusionPx?: number;
+  journeyView: DiscoverJourneyTransitionsView;
+  setMapReady: Dispatch<SetStateAction<boolean>>;
+  schools: SchoolResult[];
+  showSchoolMarkers: boolean;
+  journeyCommands: DiscoverJourneyTransitionsCommands;
+  schoolsQuery: UseInfiniteQueryResult<InfiniteData<SchoolsByAreaResponse>, Error>;
+  schoolFocusTick: number;
+  selectedSchoolLat: number | undefined;
+  selectedSchoolLon: number | undefined;
+  schoolMarkerFocusTick: number;
+  schoolMarkerPositions: Array<{ lat: number; lon: number }>;
+  areaRestoreArea: DiscoverArea | null;
+  isAgriJourney: boolean;
+  selectedMarkerListing: PropertyListingWithImages | null;
+  handleSelectMarkerListing: (listing: PropertyListingWithImages | null) => void;
+  hoveredListingId: string | null;
+  handleMarkerClickWithPosition: (pos: { x: number; y: number }) => void;
+  isAreaFirstCityLanding: boolean;
+  showSchoolBreadcrumb: boolean;
+  areaJourneySegments: DiscoverMapCrumb[];
+  schoolJourneySegments: DiscoverMapCrumb[];
+  focusedGroup: AreaGroup | null;
+  city: string;
+  mobileListButton?: ReactNode;
+  onFiltersChange?: (next: PropertyFilters) => void;
+  intent?: DiscoverIntent;
+  onIntentChange?: (intent: DiscoverIntent, filtersOverride?: DiscoverUrlFilters) => void;
+  schoolRadiusOverlay: boolean;
+  resolvedPanelContent: DiscoverPanelContent;
+  isSelectedGroupState: boolean;
+  handleCityChange: (newCity: string) => void;
+  regionGuideVisible: boolean;
+  resolvedRegionLabel: string | null;
+  regionSelectNonce: number;
+  regionOverviewMarkerKind: RegionOverviewMarkerKind;
+  regionGuideRingActive: boolean;
+  prefersReducedMotion: boolean;
+  dismissRegionGuide: () => void;
+  isRegionOverview: boolean;
+  regionOverviewShortLabel: string | null;
+  areaMarkerListings: (PropertyListing & { images?: PropertyImage[] })[];
+  announcedBadgeText: string;
+  discoverBadge: DiscoverBadgeResult;
+  areaResultSummaryText: string | null;
+  groupSelectedBadgeCopy: string;
+  fallbackBadgeCopy: string;
+  isAreaFirstSelectedAreaState: boolean;
+  schoolRadiusActive: boolean;
+  schoolRadiusPillNoun: 'homes' | 'rentals';
+  schoolFirstAreaSchoolCount: number | null;
+  schoolFirstZoneSchoolCount: number | null;
+  schoolFirstLandingSchoolCount: number | null;
+  cityTotal: number;
+  isAreaRecenterButtonVisible: boolean;
+  isAuthenticated: boolean;
+  schoolRadiusHasMore: boolean;
+  schoolListings: DiscoverCityListingItem[];
+  hasActiveAnonFilter: boolean;
+  markersTruncated: boolean;
+  markersReturnedElements: number | undefined;
+  markersTotalFilteredElements: number | undefined;
+  isLoading: boolean;
+  mapZoom: number;
+  isBoundedBrowseState: boolean;
+  isMarkerPopoverEligible: boolean;
+  markerPopoverStepper: MarkerPopoverStepper | null;
+  navigate: (path: string) => void;
+  handleStepMarkerListing: (direction: -1 | 1) => void;
+  showMarkerInList: (id: string) => void;
+}
+
+/** Builds the nested `{ view, commands }` contract from the flat fixture shape above. */
+function toCanvasProps(
+  flat: DiscoverMapCanvasFlatProps,
+  mapContainerRef: RefObject<HTMLDivElement | null>,
+): DiscoverMapCanvasProps {
   return {
-    mapContainerRef: createRef<HTMLDivElement>(),
+    mapContainerRef,
+    view: {
+      camera: {
+        agriGroupFocusBounds: flat.agriGroupFocusBounds,
+        activeFocusBounds: flat.activeFocusBounds,
+        memoizedInitialCenter: flat.memoizedInitialCenter,
+        isColdNavigate: flat.isColdNavigate,
+        cityCenter: flat.cityCenter,
+        cityZoom: flat.cityZoom,
+        cameraIntent: flat.cameraIntent,
+        pendingRemountCameraIntentSeqRef: flat.pendingRemountCameraIntentSeqRef,
+        panToArea: flat.panToArea,
+        bottomOcclusionPx: flat.bottomOcclusionPx,
+        previewOcclusionPx: flat.previewOcclusionPx,
+        prefersReducedMotion: flat.prefersReducedMotion,
+        mapZoom: flat.mapZoom,
+      },
+      areas: {
+        focusedGroupAreas: flat.focusedGroupAreas,
+        areaLayerMaxZoom: flat.areaLayerMaxZoom,
+        selectedArea: flat.selectedArea,
+        overviewAreas: flat.overviewAreas,
+        areaSearchMatchKeys: flat.areaSearchMatchKeys,
+        hoveredAreaKeyForMap: flat.hoveredAreaKeyForMap,
+        isRegionOverview: flat.isRegionOverview,
+        regionOverviewShortLabel: flat.regionOverviewShortLabel,
+        areaRestoreArea: flat.areaRestoreArea,
+      },
+      agri: {
+        selectedRegion: flat.selectedRegion,
+        selectedMaxKm: flat.selectedMaxKm,
+        filteredAgriListings: flat.filteredAgriListings,
+        agriDestinationMarkers: flat.agriDestinationMarkers,
+        isAgriJourney: flat.isAgriJourney,
+      },
+      scope: {
+        filters: flat.filters,
+        isLandingState: flat.isLandingState,
+        isBoundedBrowseState: flat.isBoundedBrowseState,
+      },
+      navigation: {
+        showSchoolBreadcrumb: flat.showSchoolBreadcrumb,
+        focusedGroup: flat.focusedGroup,
+        city: flat.city,
+        areasNavigationJourney: flat.areasNavigationJourney,
+        hoveredNavigationNodeKey: flat.hoveredNavigationNodeKey,
+        focusedClusterMemberAreaKeys: flat.focusedClusterMemberAreaKeys,
+        isAreaFirstCityLanding: flat.isAreaFirstCityLanding,
+        areaJourneySegments: flat.areaJourneySegments,
+        schoolJourneySegments: flat.schoolJourneySegments,
+        resolvedPanelContent: flat.resolvedPanelContent,
+        isSelectedGroupState: flat.isSelectedGroupState,
+        isAreaFirstSelectedAreaState: flat.isAreaFirstSelectedAreaState,
+        journeyView: flat.journeyView,
+      },
+      schools: {
+        selectedSchool: flat.selectedSchool,
+        schools: flat.schools,
+        showSchoolMarkers: flat.showSchoolMarkers,
+        schoolsQuery: flat.schoolsQuery,
+        schoolFocusTick: flat.schoolFocusTick,
+        selectedSchoolLat: flat.selectedSchoolLat,
+        selectedSchoolLon: flat.selectedSchoolLon,
+        schoolMarkerFocusTick: flat.schoolMarkerFocusTick,
+        schoolMarkerPositions: flat.schoolMarkerPositions,
+        schoolRadiusActive: flat.schoolRadiusActive,
+        schoolRadiusPillNoun: flat.schoolRadiusPillNoun,
+        schoolFirstAreaSchoolCount: flat.schoolFirstAreaSchoolCount,
+        schoolFirstZoneSchoolCount: flat.schoolFirstZoneSchoolCount,
+        schoolFirstLandingSchoolCount: flat.schoolFirstLandingSchoolCount,
+        schoolRadiusHasMore: flat.schoolRadiusHasMore,
+        schoolListings: flat.schoolListings,
+        schoolZoneLabels: flat.schoolZoneLabels,
+        schoolRadiusOverlay: flat.schoolRadiusOverlay,
+      },
+      markers: {
+        markerPixelPos: flat.markerPixelPos,
+        selectedMarkerListing: flat.selectedMarkerListing,
+        hoveredListingId: flat.hoveredListingId,
+        isMarkerPopoverEligible: flat.isMarkerPopoverEligible,
+        markerPopoverStepper: flat.markerPopoverStepper,
+        markersTruncated: flat.markersTruncated,
+        markersReturnedElements: flat.markersReturnedElements,
+        markersTotalFilteredElements: flat.markersTotalFilteredElements,
+        areaMarkerListings: flat.areaMarkerListings,
+        currentMapMarkerListings: flat.currentMapMarkerListings,
+      },
+      status: {
+        showLoader: flat.showLoader,
+        error: flat.error,
+        isLoading: flat.isLoading,
+        discoverBadge: flat.discoverBadge,
+        areaResultSummaryText: flat.areaResultSummaryText,
+        groupSelectedBadgeCopy: flat.groupSelectedBadgeCopy,
+        fallbackBadgeCopy: flat.fallbackBadgeCopy,
+        cityTotal: flat.cityTotal,
+        isAreaRecenterButtonVisible: flat.isAreaRecenterButtonVisible,
+        isAuthenticated: flat.isAuthenticated,
+        hasActiveAnonFilter: flat.hasActiveAnonFilter,
+        announcedBadgeText: flat.announcedBadgeText,
+        intent: flat.intent,
+      },
+      mobile: { mobileListButton: flat.mobileListButton },
+      regionGuide: {
+        regionGuideVisible: flat.regionGuideVisible,
+        regionGuideRingActive: flat.regionGuideRingActive,
+        resolvedRegionLabel: flat.resolvedRegionLabel,
+        regionSelectNonce: flat.regionSelectNonce,
+        regionOverviewMarkerKind: flat.regionOverviewMarkerKind,
+      },
+      drawing: {
+        polygonDraftPhase: flat.polygonDraftPhase,
+        polygonDraftBlock: flat.polygonDraftBlock,
+        drawVertexCount: flat.drawVertexCount,
+        startDrawNonce: flat.startDrawNonce,
+        cancelDrawNonce: flat.cancelDrawNonce,
+        undoVertexNonce: flat.undoVertexNonce,
+      },
+      replaceScope: {
+        isReplaceScopeConfirmOpen: flat.isReplaceScopeConfirmOpen,
+      },
+      viewportSearch: {
+        viewportSearchIsDirty: flat.viewportSearchIsDirty,
+        viewportSearchIsEligible: flat.viewportSearchIsEligible,
+      },
+    },
+    commands: {
+      camera: {
+        publishCameraIntent: flat.publishCameraIntent,
+        setMapZoom: flat.setMapZoom,
+        handleBoundsChange: flat.handleBoundsChange,
+        handleUserCameraGesture: flat.handleUserCameraGesture,
+      },
+      drawing: {
+        handlePolygonDrawn: flat.handlePolygonDrawn,
+        handlePolygonCleared: flat.handlePolygonCleared,
+        handleCancelDrawPolygon: flat.handleCancelDrawPolygon,
+        handleUndoDrawVertex: flat.handleUndoDrawVertex,
+        handleRedrawPolygon: flat.handleRedrawPolygon,
+        handleRetryPolygonValidation: flat.handleRetryPolygonValidation,
+        handleDismissPolygonRejection: flat.handleDismissPolygonRejection,
+        handleDrawVertexCountChange: flat.handleDrawVertexCountChange,
+        handleDrawModeExit: flat.handleDrawModeExit,
+      },
+      replaceScope: {
+        handleConfirmReplaceScope: flat.handleConfirmReplaceScope,
+        handleCancelReplaceScope: flat.handleCancelReplaceScope,
+      },
+      viewportSearch: {
+        onActivateViewportSearch: flat.onActivateViewportSearch,
+      },
+      navigation: {
+        publishClusterCameraIntent: flat.publishClusterCameraIntent,
+        onAreaVisualClusterCameraIntent: flat.onAreaVisualClusterCameraIntent,
+        autoAdvanceSelectNode: flat.autoAdvanceSelectNode,
+        handleAreaMarkersComputed: flat.handleAreaMarkersComputed,
+        handleCityChange: flat.handleCityChange,
+        onNavigationNodeHoverChange: flat.onNavigationNodeHoverChange,
+        onClusterFocusChange: flat.onClusterFocusChange,
+        handleOverviewAreaClick: flat.handleOverviewAreaClick,
+        handleAreaClusterClick: flat.handleAreaClusterClick,
+        buildNavigationNodeHref: flat.buildNavigationNodeHref,
+        journeyCommands: flat.journeyCommands,
+      },
+      markers: {
+        publishMarkerClusterCameraIntent: flat.publishMarkerClusterCameraIntent,
+        navigate: flat.navigate,
+        setMapReady: flat.setMapReady,
+        handlePopoverDismiss: flat.handlePopoverDismiss,
+        handleSelectMarkerListing: flat.handleSelectMarkerListing,
+        handleMarkerClickWithPosition: flat.handleMarkerClickWithPosition,
+        handleStepMarkerListing: flat.handleStepMarkerListing,
+        showMarkerInList: flat.showMarkerInList,
+      },
+      regionGuide: { dismissRegionGuide: flat.dismissRegionGuide },
+      filters: {
+        onFiltersChange: flat.onFiltersChange,
+        onIntentChange: flat.onIntentChange,
+      },
+    },
+  };
+}
+
+function baseProps(
+  overrides: Partial<DiscoverMapCanvasFlatProps> & { mapContainerRef?: RefObject<HTMLDivElement | null> } = {},
+): DiscoverMapCanvasProps {
+  const { mapContainerRef = createRef<HTMLDivElement>(), ...flatOverrides } = overrides;
+  const flat: DiscoverMapCanvasFlatProps = {
     markerPixelPos: null,
     handlePopoverDismiss: vi.fn(),
     showLoader: false,
@@ -325,10 +685,10 @@ function baseProps(overrides: Partial<DiscoverMapCanvasProps> = {}): DiscoverMap
     cityCenter: undefined,
     cityZoom: undefined,
     overviewAreas: [],
-    discoverAreas: [],
     handleOverviewAreaClick: vi.fn(),
     publishCameraIntent: vi.fn(),
     cameraIntent: null,
+    pendingRemountCameraIntentSeqRef: { current: null },
     focusedGroupAreas: undefined,
     areaLayerMaxZoom: 12,
     selectedArea: null,
@@ -340,6 +700,7 @@ function baseProps(overrides: Partial<DiscoverMapCanvasProps> = {}): DiscoverMap
     schoolZoneLabels: [],
     setMapZoom: vi.fn(),
     handleBoundsChange: vi.fn(),
+    handleUserCameraGesture: vi.fn(),
     panToArea: null,
     journeyView: JOURNEY_VIEW,
     setMapReady: vi.fn(),
@@ -390,6 +751,7 @@ function baseProps(overrides: Partial<DiscoverMapCanvasProps> = {}): DiscoverMap
     schoolFirstZoneSchoolCount: null,
     schoolFirstLandingSchoolCount: null,
     cityTotal: 0,
+    isAreaRecenterButtonVisible: false,
     isAuthenticated: false,
     schoolRadiusHasMore: false,
     schoolListings: [],
@@ -405,9 +767,11 @@ function baseProps(overrides: Partial<DiscoverMapCanvasProps> = {}): DiscoverMap
     navigate: vi.fn(),
     handleStepMarkerListing: vi.fn(),
     showMarkerInList: vi.fn(),
-    ...overrides,
+    ...flatOverrides,
   };
+  return toCanvasProps(flat, mapContainerRef);
 }
+
 
 // Issue #2017 — AreaSetChips (mounted inside DiscoverMapCanvas's JSX, see its
 // own header doc) is a deliberately self-contained component that calls
@@ -1102,7 +1466,7 @@ describe('DiscoverMapCanvas — Issue #2478: floating ActiveScopeChip overlay re
 // `mobileListButton` is supplied ONLY while that overlay is open, so it is the
 // mobile/desktop discriminator here; desktop must stay exactly as it was.
 describe('Issue #2698 — mobile Map bottom chrome', () => {
-  const AREA_SELECTED_WITH_COUNT: Partial<DiscoverMapCanvasProps> = {
+  const AREA_SELECTED_WITH_COUNT: Partial<DiscoverMapCanvasFlatProps> = {
     isLandingState: false,
     resolvedPanelContent: 'area-selected',
     isAreaFirstSelectedAreaState: true,
@@ -1116,7 +1480,7 @@ describe('Issue #2698 — mobile Map bottom chrome', () => {
     areaResultSummaryText: '4 verified properties in Manipal',
     discoverBadge: { ...DISCOVER_BADGE, visible: true, count: 4, state: 'ok' },
   };
-  const MOBILE_MAP: Partial<DiscoverMapCanvasProps> = {
+  const MOBILE_MAP: Partial<DiscoverMapCanvasFlatProps> = {
     mobileListButton: <button type="button">List</button>,
     onFiltersChange: vi.fn(),
   };
@@ -1144,7 +1508,7 @@ describe('Issue #2698 — mobile Map bottom chrome', () => {
   // `discoverBadge.count`. With no markers supplied it renders the "0 matching" zero-state
   // block instead of a count, so each badge-hidden case feeds the SAME 4 to both sources and
   // asserts the heading actually states it.
-  const FOUR_MAP_RESULTS: Partial<DiscoverMapCanvasProps> = { markersReturnedElements: 4 };
+  const FOUR_MAP_RESULTS: Partial<DiscoverMapCanvasFlatProps> = { markersReturnedElements: 4 };
 
   it('mobile Map: drops the bottom count badge the results heading already states', () => {
     renderCanvas(
@@ -1179,12 +1543,12 @@ describe('Issue #2698 — mobile Map bottom chrome', () => {
   // the results are filtered ("Filtered: …") beside the map's own count, and re-showing the pill
   // would put it back across the zoom control. ('loading' needs no case: deriveDiscoverBadge
   // returns visible:false there, so the badge renders on neither desktop nor mobile.)
-  const SCHOOL_RADIUS_STALE: Partial<DiscoverMapCanvasProps> = {
+  const SCHOOL_RADIUS_STALE: Partial<DiscoverMapCanvasFlatProps> = {
     ...FOUR_MAP_RESULTS,
     isLandingState: false,
     resolvedPanelContent: 'school-selected',
     schoolRadiusActive: true,
-    filters: { ...baseProps().filters, bedrooms: [2] },
+    filters: { ...baseProps().view.scope.filters, bedrooms: [2] },
     discoverBadge: { ...DISCOVER_BADGE, visible: true, count: null, state: 'stale' },
   };
 
@@ -1276,7 +1640,7 @@ describe('Issue #2698 — mobile Map bottom chrome', () => {
   // `z-[500]`. Wherever the hint's box shares the right-hand column with them it swallows their
   // taps, so on the mobile Map it must sit ABOVE the whole column (zoom ≈ 0–90px, city recenter
   // 100–130px, area recenter 144–182px from the bottom), not at the desktop `bottom-28` (112px).
-  const SCHOOL_RADIUS_MORE_HINT: Partial<DiscoverMapCanvasProps> = {
+  const SCHOOL_RADIUS_MORE_HINT: Partial<DiscoverMapCanvasFlatProps> = {
     isLandingState: false,
     resolvedPanelContent: 'school-selected',
     isAuthenticated: false,
@@ -1452,7 +1816,7 @@ describe('Issue #2698 — mobile Map bottom chrome', () => {
 // mobile Map wiring (`mobileListButton` + `onFiltersChange`) as #2698 above.
 describe('Issue #2724 — Map zero-results panel requires a genuinely active filter', () => {
   // Local re-declaration: #2698's MOBILE_MAP is scoped to its own describe block above.
-  const MOBILE_MAP: Partial<DiscoverMapCanvasProps> = {
+  const MOBILE_MAP: Partial<DiscoverMapCanvasFlatProps> = {
     mobileListButton: <button type="button">List</button>,
     onFiltersChange: vi.fn(),
   };

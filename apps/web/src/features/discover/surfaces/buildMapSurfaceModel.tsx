@@ -1,8 +1,30 @@
-import type { RefObject } from 'react';
+import type { ReactNode, RefObject, MutableRefObject, Dispatch, SetStateAction } from 'react';
 import { AREA_LAYER_MAX_ZOOM } from '@/lib/map/zoomPolicy';
-import type { DiscoverMapCanvasProps } from '@/features/discover/views/DiscoverMapCanvas';
+import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
+import type { RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCard';
+import type { PropertyFilters, PropertyListing, PropertyImage } from '@/hooks/usePropertyListings';
+import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
+import type { AreaPoint, AreaMarkerClusterInfo } from '@/components/map/AreaMarkerLayer';
+import type { AreaGroup } from '@/hooks/useAreaGroups';
+import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
+import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import type { SchoolResult } from '@/hooks/useSchoolSearch';
+import type { ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
+import type {
+  DiscoverJourneyTransitionsView,
+  DiscoverJourneyTransitionsCommands,
+} from '@/features/discover/state/useDiscoverJourneyTransitions';
+import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
+import type { DiscoverMapCrumb } from '@/components/discover/DiscoverMapBreadcrumb';
+import type { CameraIntent } from '@/hooks/useDiscoverMapData';
+import type { MarkerPopoverStepper } from '@/features/discover/map/resolveMarkerPopover';
+import type { DiscoverBadgeResult } from '@/features/discover/presentation/discoverBadge';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
-import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
+import type { DiscoverIntent, DiscoverUrlFilters } from '@/hooks/useDiscoverUrlState';
+import type {
+  PolygonDraftBlock,
+  PolygonDraftPhase,
+} from '@/features/discover/state/polygonDraftPhase';
 import type { useDiscoverNavigationController } from '@/features/discover/controllers/useDiscoverNavigationController';
 import type { useDiscoverAgriController } from '@/features/discover/controllers/useDiscoverAgriController';
 import type { useDiscoverSchoolController } from '@/features/discover/controllers/useDiscoverSchoolController';
@@ -23,197 +45,250 @@ import type { useDiscoverBadgeController } from '@/features/discover/controllers
 import type { useDiscoverJourneyChromeController } from '@/features/discover/controllers/useDiscoverJourneyChromeController';
 import type { useDiscoverMarkerPopoverController } from '@/features/discover/controllers/useDiscoverMarkerPopoverController';
 import type { useDiscoverGeographyController } from '@/features/discover/controllers/useDiscoverGeographyController';
+import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 
 /**
- * Issue #2142 Commit 4 — typed view/commands contract for DiscoverMapSurface
- * (the renamed DiscoverMapMount). Every group below is a `Pick` straight off
- * the real (unmodified) DiscoverMapCanvasProps, keyed by identical field
- * names, so DiscoverMapSurface.tsx can reconstruct the exact flat props object
- * DiscoverMapCanvas still expects by spreading every group back together — no
- * field is renamed or reshaped, only regrouped.
+ * Issue #2659 (D1 — approved decision record) — the capability interfaces
+ * below are now the SOURCE OF TRUTH for the map surface's view/commands
+ * contract. Previously each was a `Pick<DiscoverMapCanvasProps, ...>`
+ * (DiscoverMapCanvas.tsx's own 139-field flat interface); that flat
+ * interface is now DELETED and DiscoverMapCanvasProps instead narrows to
+ * `{ mapContainerRef, view: Omit<DiscoverMapSurfaceView,'overlays'>,
+ * commands: Omit<DiscoverMapSurfaceCommands,'overlays'> }` — see that
+ * component's own doc comment. The derivation direction is therefore
+ * inverted from Issue #2142's original design: this file no longer imports
+ * anything from `views/DiscoverMapCanvas` at all, and DiscoverMapCanvas.tsx
+ * imports `DiscoverMapSurfaceView`/`DiscoverMapSurfaceCommands` FROM here.
  *
- * `overlays` is an ADDITION beyond DiscoverMapCanvasProps: MobileClusterSheet,
- * MobileListingPreviewSheet, and the recenter-button portal are not part of
- * DiscoverMapCanvas's own props (they're rendered as its siblings inside the
- * same z-[60] mobile-map wrapper), but per team-lead ruling (2026-08-12) they
- * belong on this surface rather than DiscoverOverlaySurface, since their DOM
- * position depends on the SAME map-canvas stacking context this surface owns
- * — see buildOverlaySurfaceModel.ts's doc comment for the full rationale.
+ * D2 (regroup) — two previously-oversized groups are split:
+ *   - the old 21-field `layers` group is replaced by `areas` (area-marker/
+ *     region-overview fields), `agri` (agri-journey fields), and `scope`
+ *     (filters + landing/bounded-browse flags); `schoolZoneLabels`/
+ *     `schoolRadiusOverlay` moved into `schools`, and the marker-listing
+ *     fields (`areaMarkerListings`/`currentMapMarkerListings`) moved into
+ *     `markers`.
+ *   - the old 19-field `commands.drawing`-only group is replaced by
+ *     `drawing` (view+commands), `replaceScope` (view+commands, the #2016
+ *     J3.3 dialog) and `viewportSearch` (view+commands, the #2015 CTA —
+ *     `viewportSearchIsDirty`/`viewportSearchIsEligible` pulled out of
+ *     `status`, where they previously lived, because they are read and
+ *     written together with `onActivateViewportSearch` by exactly one
+ *     consumer, `SearchThisAreaCta`). Issue #2419's original rationale for
+ *     co-locating draw-phase state with its handlers no longer applies once
+ *     both groups are required together by the same builder — this is a
+ *     deliberate, disclosed change, not an oversight.
  *
- * `mapContainerRef` is deliberately kept OUTSIDE the view/commands split: it's
- * a DOM ref the page creates and this surface both forwards to DiscoverMapCanvas
- * and reads (`.current`) to compute the recenter portal target and to gate the
- * mobile full-screen wrapper — not view data or a command.
+ * `overlays` is unchanged (still an ADDITION beyond the canvas contract):
+ * MobileClusterSheet, MobileListingPreviewSheet, and the recenter-button
+ * portal are rendered as DiscoverMapCanvas's siblings, never passed to it
+ * (see DiscoverMapSurface.tsx, which must never spread `view.overlays`/
+ * `commands.overlays` into the canvas props).
  *
- * Issue #2142 Commit 5 (team-lead ruling, 2026-08-12) — BuildMapSurfaceViewParams
- * accepts the CONTROLLERS' OWN result objects (or small Picked subsets of them)
- * as nested params, instead of ~65 individually-named flat fields duplicating
- * what MapDiscovery.tsx's own controller-destructure already named. Only the
- * genuinely page-local fields (state this page owns directly, or derived
- * consts with no controller source — filters, city, badge copy, etc.) stay
- * flat. This is an input-shape tightening of the already-approved Commit 4
- * builder boundary, not a new abstraction: the `view`/`commands` OUTPUT shape
- * below is completely unchanged, and every downstream line in
- * buildMapSurfaceModel()/buildMapSurfaceCommands() is untouched — only the
- * destructuring prelude at the top of each function changed source.
+ * `mapContainerRef` stays OUTSIDE the view/commands split for the same
+ * reason as before: it's a DOM ref the page creates and the surface both
+ * forwards to DiscoverMapCanvas and reads directly.
  */
 
-type MapCameraView = Pick<
-  DiscoverMapCanvasProps,
-  | 'activeFocusBounds'
-  | 'memoizedInitialCenter'
-  | 'cityCenter'
-  | 'cityZoom'
-  | 'cameraIntent'
-  | 'pendingRemountCameraIntentSeqRef'
-  | 'panToArea'
-  | 'mapZoom'
-> &
-  Pick<DiscoverMapCanvasProps, 'agriGroupFocusBounds' | 'isColdNavigate' | 'prefersReducedMotion'> &
-  Pick<DiscoverMapCanvasProps, 'bottomOcclusionPx' | 'previewOcclusionPx'>;
-type MapCameraCommands = Pick<
-  DiscoverMapCanvasProps,
-  'publishCameraIntent' | 'setMapZoom' | 'handleBoundsChange' | 'handleUserCameraGesture'
->;
+type MapCameraView = {
+  agriGroupFocusBounds: [[number, number], [number, number]] | null;
+  activeFocusBounds: [[number, number], [number, number]] | null;
+  memoizedInitialCenter: [number, number] | undefined;
+  isColdNavigate?: boolean;
+  cityCenter: [number, number] | undefined;
+  cityZoom: number | undefined;
+  cameraIntent: CameraIntent | null;
+  pendingRemountCameraIntentSeqRef: MutableRefObject<number | null>;
+  panToArea: AreaPoint | null;
+  bottomOcclusionPx?: number;
+  previewOcclusionPx?: number;
+  prefersReducedMotion: boolean;
+  mapZoom: number;
+};
+type MapCameraCommands = {
+  publishCameraIntent: (area: AreaPoint) => void;
+  setMapZoom: Dispatch<SetStateAction<number>>;
+  handleBoundsChange: (bbox: [number, number, number, number]) => void;
+  handleUserCameraGesture: () => void;
+};
 
-type MapLayersView = Pick<
-  DiscoverMapCanvasProps,
-  | 'currentMapMarkerListings'
-  | 'filters'
-  | 'isLandingState'
-  | 'focusedGroupAreas'
-  | 'areaLayerMaxZoom'
-  | 'selectedArea'
-  | 'isAgriJourney'
-  | 'areaMarkerListings'
-  | 'schoolRadiusOverlay'
-  | 'isBoundedBrowseState'
-  | 'areaRestoreArea'
-> &
-  Pick<DiscoverMapCanvasProps, 'selectedRegion' | 'selectedMaxKm' | 'filteredAgriListings' | 'agriDestinationMarkers'> &
-  Pick<DiscoverMapCanvasProps, 'overviewAreas' | 'areaSearchMatchKeys' | 'hoveredAreaKeyForMap'> &
-  Pick<DiscoverMapCanvasProps, 'schoolZoneLabels'> &
-  Pick<DiscoverMapCanvasProps, 'isRegionOverview' | 'regionOverviewShortLabel'>;
-type MapDrawingCommands = Pick<
-  DiscoverMapCanvasProps,
-  | 'handlePolygonDrawn'
-  | 'handlePolygonCleared'
-  // Issue #2016 — J3.3 replace-confirmation dialog state.
-  | 'isReplaceScopeConfirmOpen'
-  | 'handleConfirmReplaceScope'
-  | 'handleCancelReplaceScope'
-  // Issue #2015 — commits the live viewport as a VIEWPORT result scope
-  // (AC2/AC7); reuses this already-spread `commands.drawing` group (see
-  // DiscoverMapSurface.tsx) so it reaches DiscoverMapCanvasProps without a
-  // new spread group, same shape as the ReplaceResultScopeDialog fields above.
-  | 'onActivateViewportSearch'
-  // Issue #2419 (PR-2) — the product-native draw-mode seam. The phase, block
-  // and vertex count are view data in spirit, but they travel with the
-  // commands that change them: DiscoverMapCanvas gates the overlay, the
-  // plugin-toolbar hide and the DrawControl nonces on exactly these fields,
-  // and a canvas handed the handlers without the phase (or vice versa) is a
-  // control that looks armed and does nothing — the gap the #2016 contract
-  // spec's re-pointed draw arm caught on the first live run.
-  | 'polygonDraftPhase'
-  | 'polygonDraftBlock'
-  | 'drawVertexCount'
-  | 'startDrawNonce'
-  | 'cancelDrawNonce'
-  | 'undoVertexNonce'
-  | 'handleCancelDrawPolygon'
-  | 'handleUndoDrawVertex'
-  | 'handleRedrawPolygon'
-  | 'handleRetryPolygonValidation'
-  | 'handleDismissPolygonRejection'
-  | 'handleDrawVertexCountChange'
-  | 'handleDrawModeExit'
->;
+/** D2 — split out of the old (21-field) `layers` group. */
+type MapAreasView = {
+  focusedGroupAreas: string[] | undefined;
+  areaLayerMaxZoom: number;
+  selectedArea: AreaPoint | null;
+  overviewAreas: AreaPoint[];
+  areaSearchMatchKeys: string[] | undefined;
+  hoveredAreaKeyForMap: string | null;
+  isRegionOverview: boolean;
+  regionOverviewShortLabel: string | null;
+  areaRestoreArea: DiscoverArea | null;
+};
 
-type MapNavigationView = Pick<DiscoverMapCanvasProps, 'showSchoolBreadcrumb' | 'focusedGroup' | 'city'> &
-  Pick<
-    DiscoverMapCanvasProps,
-    'areasNavigationJourney' | 'hoveredNavigationNodeKey' | 'focusedClusterMemberAreaKeys'
-  > &
-  Pick<
-    DiscoverMapCanvasProps,
-    | 'isAreaFirstCityLanding'
-    | 'areaJourneySegments'
-    | 'schoolJourneySegments'
-    | 'resolvedPanelContent'
-    | 'isSelectedGroupState'
-    | 'isAreaFirstSelectedAreaState'
-  > &
-  Pick<DiscoverMapCanvasProps, 'journeyView'>;
-type MapNavigationCommands = Pick<
-  DiscoverMapCanvasProps,
-  | 'publishClusterCameraIntent'
-  | 'onAreaVisualClusterCameraIntent'
-  | 'autoAdvanceSelectNode'
-  | 'handleAreaMarkersComputed'
-  | 'handleCityChange'
-> &
-  Pick<DiscoverMapCanvasProps, 'onNavigationNodeHoverChange' | 'onClusterFocusChange'> &
-  Pick<DiscoverMapCanvasProps, 'handleOverviewAreaClick' | 'handleAreaClusterClick' | 'buildNavigationNodeHref'> &
-  Pick<DiscoverMapCanvasProps, 'journeyCommands'>;
+/** D2 — split out of the old (21-field) `layers` group. */
+type MapAgriView = {
+  selectedRegion: 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW' | null;
+  selectedMaxKm: 10 | 25 | 50 | 100 | null;
+  filteredAgriListings: AgriMapListingItem[] | null;
+  agriDestinationMarkers: AgriMapListingItem[];
+  isAgriJourney: boolean;
+};
 
-type MapSchoolsView = Pick<DiscoverMapCanvasProps, 'selectedSchool' | 'showSchoolMarkers' | 'schoolMarkerFocusTick' | 'schoolMarkerPositions' | 'schoolRadiusActive' | 'schoolRadiusPillNoun' | 'schoolRadiusHasMore'> &
-  Pick<
-    DiscoverMapCanvasProps,
-    | 'schools'
-    | 'schoolsQuery'
-    | 'schoolFocusTick'
-    | 'selectedSchoolLat'
-    | 'selectedSchoolLon'
-    | 'schoolFirstAreaSchoolCount'
-    | 'schoolFirstZoneSchoolCount'
-    | 'schoolFirstLandingSchoolCount'
-    | 'schoolListings'
-  >;
+/** D2 — split out of the old (21-field) `layers` group. */
+type MapScopeView = {
+  filters: PropertyFilters;
+  isLandingState: boolean;
+  isBoundedBrowseState: boolean;
+};
 
-type MapMarkersView = Pick<DiscoverMapCanvasProps, 'isMarkerPopoverEligible' | 'markerPopoverStepper' | 'markersTruncated' | 'markersReturnedElements' | 'markersTotalFilteredElements'> &
-  Pick<DiscoverMapCanvasProps, 'markerPixelPos' | 'selectedMarkerListing'> &
-  Pick<DiscoverMapCanvasProps, 'hoveredListingId'>;
-type MapMarkersCommands = Pick<DiscoverMapCanvasProps, 'publishMarkerClusterCameraIntent' | 'navigate' | 'setMapReady'> &
-  Pick<DiscoverMapCanvasProps, 'handlePopoverDismiss' | 'handleSelectMarkerListing' | 'handleMarkerClickWithPosition'> &
-  Pick<DiscoverMapCanvasProps, 'handleStepMarkerListing' | 'showMarkerInList'>;
+/** D2 — split out of the old (19-field) `commands.drawing`-only group. */
+type MapDrawingView = {
+  polygonDraftPhase?: PolygonDraftPhase;
+  polygonDraftBlock?: PolygonDraftBlock | null;
+  drawVertexCount?: number;
+  startDrawNonce?: number;
+  cancelDrawNonce?: number;
+  undoVertexNonce?: number;
+};
+type MapDrawingCommands = {
+  handlePolygonDrawn: (polygon: [number, number][]) => void;
+  handlePolygonCleared: () => void;
+  handleCancelDrawPolygon?: () => void;
+  handleUndoDrawVertex?: () => void;
+  handleRedrawPolygon?: () => void;
+  handleRetryPolygonValidation?: () => void;
+  handleDismissPolygonRejection?: () => void;
+  handleDrawVertexCountChange?: (count: number) => void;
+  handleDrawModeExit?: () => void;
+};
 
-type MapStatusView = Pick<
-  DiscoverMapCanvasProps,
-  | 'showLoader'
-  | 'error'
-  | 'isLoading'
-  | 'discoverBadge'
-  | 'areaResultSummaryText'
-  | 'groupSelectedBadgeCopy'
-  | 'fallbackBadgeCopy'
-  | 'cityTotal'
-  // Issue #2724 (pass 3, area-selected desktop pairing) — reuses the already-spread
-  // `view.status` group (see DiscoverMapSurface.tsx) so it reaches DiscoverMapCanvasProps
-  // without a new spread group. Computed from the SAME `overlays.recenter.visible` signal
-  // below, so the count pill's desktop pairing and the portalled recenter button's own
-  // visibility can never disagree.
-  | 'isAreaRecenterButtonVisible'
-  | 'isAuthenticated'
-  | 'hasActiveAnonFilter'
-  | 'announcedBadgeText'
-  // Issue #2015 — "Search this area" CTA dirty-state (AC1) and eligibility
-  // gating (MUST-HAVE #2); reuses the already-spread `view.status` group
-  // (see DiscoverMapSurface.tsx) so it reaches DiscoverMapCanvasProps
-  // without a new spread group.
-  | 'viewportSearchIsDirty'
-  | 'viewportSearchIsEligible'
-  // Issue #2628 — the applied Buy/Rent intent (DiscoverMapCanvasProps' own
-  // `intent` doc: "needed only for the Map results heading/summary copy and
-  // MapFilterSheet's own `intent` prop"). Reuses the already-spread
-  // `view.status` group (see DiscoverMapSurface.tsx) so it reaches
-  // DiscoverMapCanvasProps without a new spread group. Was previously
-  // omitted here entirely: the composition root never supplied it, so
-  // DiscoverMapCanvasProps' `intent` prop silently fell back to its own
-  // `'buy'` default even on a Rent navigation.
-  | 'intent'
->;
+/** D2 — Issue #2016 J3.3 replace-confirmation dialog, split out of `drawing`. */
+type MapReplaceScopeView = {
+  isReplaceScopeConfirmOpen?: boolean;
+};
+type MapReplaceScopeCommands = {
+  handleConfirmReplaceScope?: () => void;
+  handleCancelReplaceScope?: () => void;
+};
 
-type MapMobileView = Pick<DiscoverMapCanvasProps, 'mobileListButton'>;
+/**
+ * D2 — Issue #2015 "Search this area" CTA, split out of `drawing`
+ * (commands) and `status` (view: `viewportSearchIsDirty`/
+ * `viewportSearchIsEligible` previously lived on `status` even though they
+ * are consumed only by `SearchThisAreaCta` alongside `onActivateViewportSearch`).
+ */
+type MapViewportSearchView = {
+  viewportSearchIsDirty?: boolean;
+  viewportSearchIsEligible?: boolean;
+};
+type MapViewportSearchCommands = {
+  onActivateViewportSearch?: () => void;
+};
+
+type MapNavigationView = {
+  showSchoolBreadcrumb: boolean;
+  focusedGroup: AreaGroup | null;
+  city: string;
+  areasNavigationJourney?: UseAreasNavigationJourneyResult;
+  hoveredNavigationNodeKey?: string | null;
+  focusedClusterMemberAreaKeys?: readonly string[] | null;
+  isAreaFirstCityLanding: boolean;
+  areaJourneySegments: DiscoverMapCrumb[];
+  schoolJourneySegments: DiscoverMapCrumb[];
+  resolvedPanelContent: DiscoverPanelContent;
+  isSelectedGroupState: boolean;
+  isAreaFirstSelectedAreaState: boolean;
+  journeyView: DiscoverJourneyTransitionsView;
+};
+type MapNavigationCommands = {
+  publishClusterCameraIntent: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
+  onAreaVisualClusterCameraIntent?: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
+  autoAdvanceSelectNode?: (nodeKey: string) => void;
+  handleAreaMarkersComputed: (shownCount: number, totalCount: number) => void;
+  handleCityChange: (newCity: string) => void;
+  onNavigationNodeHoverChange?: (nodeKey: string | null) => void;
+  onClusterFocusChange?: (memberAreaKeys: readonly string[] | null) => void;
+  handleOverviewAreaClick: (area: AreaPoint) => void;
+  handleAreaClusterClick: (cluster: AreaMarkerClusterInfo) => void;
+  buildNavigationNodeHref?: (nodeKey: string) => string | null;
+  journeyCommands: DiscoverJourneyTransitionsCommands;
+};
+
+/**
+ * D2 — gains `schoolZoneLabels`/`schoolRadiusOverlay` (moved out of the old `layers` group).
+ *
+ * `schoolsQuery` is narrowed to the 3 sub-fields DiscoverMapCanvas.tsx actually reads
+ * (`.isLoading`/`.isError`/`.error`, forwarded to PropertyMap's `schoolsIsLoading`/
+ * `schoolsIsError`/`schoolsError`) rather than passed through as the whole react-query result —
+ * see this PR's evidence table for why every other whole-object passthrough in this file stays
+ * whole. Derived from `useDiscoverSchoolController`'s own return type
+ * (`Pick<ReturnType<...>['schoolsQuery'], ...>`) rather than importing react-query's
+ * `UseInfiniteQueryResult` directly — surfaceLayering.guard.test.ts forbids `surfaces/**` from
+ * naming `@tanstack/react-query` in ANY form, including type-only.
+ */
+type MapSchoolsView = {
+  selectedSchool: SchoolResult | null;
+  showSchoolMarkers: boolean;
+  schoolMarkerFocusTick: number;
+  schoolMarkerPositions: Array<{ lat: number; lon: number }>;
+  schoolRadiusActive: boolean;
+  schoolRadiusPillNoun: 'homes' | 'rentals';
+  schoolRadiusHasMore: boolean;
+  schools: SchoolResult[];
+  schoolsQuery: Pick<ReturnType<typeof useDiscoverSchoolController>['schoolsQuery'], 'isLoading' | 'isError' | 'error'>;
+  schoolFocusTick: number;
+  selectedSchoolLat: number | undefined;
+  selectedSchoolLon: number | undefined;
+  schoolFirstAreaSchoolCount: number | null;
+  schoolFirstZoneSchoolCount: number | null;
+  schoolFirstLandingSchoolCount: number | null;
+  schoolListings: DiscoverCityListingItem[];
+  schoolZoneLabels: ZoneLabelPoint[];
+  schoolRadiusOverlay: boolean;
+};
+
+/** D2 — gains `areaMarkerListings`/`currentMapMarkerListings` (moved out of the old `layers` group). */
+type MapMarkersView = {
+  isMarkerPopoverEligible: boolean;
+  markerPopoverStepper: MarkerPopoverStepper | null;
+  markersTruncated: boolean;
+  markersReturnedElements: number | undefined;
+  markersTotalFilteredElements: number | undefined;
+  markerPixelPos: { x: number; y: number } | null;
+  selectedMarkerListing: PropertyListingWithImages | null;
+  hoveredListingId: string | null;
+  areaMarkerListings: (PropertyListing & { images?: PropertyImage[] })[];
+  currentMapMarkerListings: PropertyListingWithImages[];
+};
+type MapMarkersCommands = {
+  publishMarkerClusterCameraIntent?: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
+  navigate: (path: string) => void;
+  setMapReady: Dispatch<SetStateAction<boolean>>;
+  handlePopoverDismiss: () => void;
+  handleSelectMarkerListing: (listing: PropertyListingWithImages | null) => void;
+  handleMarkerClickWithPosition: (pos: { x: number; y: number }) => void;
+  handleStepMarkerListing: (direction: -1 | 1) => void;
+  showMarkerInList: (id: string) => void;
+};
+
+/** `viewportSearchIsDirty`/`viewportSearchIsEligible` moved OUT (see `MapViewportSearchView` above). */
+type MapStatusView = {
+  showLoader: boolean;
+  error: Error | null;
+  isLoading: boolean;
+  discoverBadge: DiscoverBadgeResult;
+  areaResultSummaryText: string | null;
+  groupSelectedBadgeCopy: string;
+  fallbackBadgeCopy: string;
+  cityTotal: number;
+  isAreaRecenterButtonVisible: boolean;
+  isAuthenticated: boolean;
+  hasActiveAnonFilter: boolean;
+  announcedBadgeText: string;
+  /** Issue #2628 — the applied Buy/Rent intent (Map results heading/summary + MapFilterSheet). */
+  intent?: DiscoverIntent;
+};
+
+type MapMobileView = { mobileListButton?: ReactNode };
 
 /**
  * Issue #2628 — the mobile Map "Filters" staged sheet's one canonical write command.
@@ -221,11 +296,19 @@ type MapMobileView = Pick<DiscoverMapCanvasProps, 'mobileListButton'>;
  * (city.ts's `setIntent`) so the sheet's Apply can commit an intent switch atomically,
  * the same way `onFiltersChange` lets it commit the transitioned filters.
  */
-type MapFiltersCommands = Pick<DiscoverMapCanvasProps, 'onFiltersChange' | 'onIntentChange'>;
+type MapFiltersCommands = {
+  onFiltersChange?: (next: PropertyFilters) => void;
+  onIntentChange?: (intent: DiscoverIntent, filtersOverride?: DiscoverUrlFilters) => void;
+};
 
-type MapRegionGuideView = Pick<DiscoverMapCanvasProps, 'regionGuideVisible' | 'regionGuideRingActive'> &
-  Pick<DiscoverMapCanvasProps, 'resolvedRegionLabel' | 'regionSelectNonce' | 'regionOverviewMarkerKind'>;
-type MapRegionGuideCommands = Pick<DiscoverMapCanvasProps, 'dismissRegionGuide'>;
+type MapRegionGuideView = {
+  regionGuideVisible: boolean;
+  regionGuideRingActive: boolean;
+  resolvedRegionLabel: string | null;
+  regionSelectNonce: number;
+  regionOverviewMarkerKind: RegionOverviewMarkerKind;
+};
+type MapRegionGuideCommands = { dismissRegionGuide: () => void };
 
 export interface DiscoverMapOverlaysView {
   mobileCluster: {
@@ -254,19 +337,26 @@ export interface DiscoverMapOverlaysCommands {
 
 export interface DiscoverMapSurfaceView {
   camera: MapCameraView;
-  layers: MapLayersView;
+  areas: MapAreasView;
+  agri: MapAgriView;
+  scope: MapScopeView;
   navigation: MapNavigationView;
   schools: MapSchoolsView;
   markers: MapMarkersView;
   status: MapStatusView;
   mobile: MapMobileView;
   regionGuide: MapRegionGuideView;
+  drawing: MapDrawingView;
+  replaceScope: MapReplaceScopeView;
+  viewportSearch: MapViewportSearchView;
   overlays: DiscoverMapOverlaysView;
 }
 
 export interface DiscoverMapSurfaceCommands {
   camera: MapCameraCommands;
   drawing: MapDrawingCommands;
+  replaceScope: MapReplaceScopeCommands;
+  viewportSearch: MapViewportSearchCommands;
   navigation: MapNavigationCommands;
   markers: MapMarkersCommands;
   regionGuide: MapRegionGuideCommands;
@@ -315,159 +405,27 @@ type MapRegionGuideSlice = Pick<
   'regionSelectNonce' | 'prefersReducedMotion' | 'regionGuideVisible' | 'regionGuideRingActive'
 >;
 
-export type BuildMapSurfaceViewParams = Omit<
-  DiscoverMapCanvasProps,
-  | 'mapContainerRef'
-  | 'hoveredNavigationNodeKey'
-  | 'focusedClusterMemberAreaKeys'
-  | 'selectedRegion'
-  | 'selectedMaxKm'
-  | 'filteredAgriListings'
-  | 'agriDestinationMarkers'
-  | 'schoolZoneLabels'
-  | 'schools'
-  | 'schoolsQuery'
-  | 'schoolFocusTick'
-  | 'selectedSchoolLat'
-  | 'selectedSchoolLon'
-  | 'schoolFirstAreaSchoolCount'
-  | 'schoolFirstZoneSchoolCount'
-  | 'schoolFirstLandingSchoolCount'
-  | 'schoolListings'
-  | 'journeyView'
-  | 'journeyCommands'
-  | 'agriGroupFocusBounds'
-  | 'isColdNavigate'
-  | 'overviewAreas'
-  | 'handleOverviewAreaClick'
-  | 'areaSearchMatchKeys'
-  | 'hoveredAreaKeyForMap'
-  | 'handleAreaClusterClick'
-  | 'resolvedRegionLabel'
-  | 'regionSelectNonce'
-  | 'regionOverviewMarkerKind'
-  | 'prefersReducedMotion'
-  | 'dismissRegionGuide'
-  | 'isRegionOverview'
-  | 'regionOverviewShortLabel'
-  | 'areaJourneySegments'
-  | 'schoolJourneySegments'
-  | 'hoveredListingId'
-  | 'isAreaFirstCityLanding'
-  | 'bottomOcclusionPx'
-  | 'previewOcclusionPx'
-  | 'handleBoundsChange'
-  | 'markerPixelPos'
-  | 'selectedMarkerListing'
-  | 'handlePopoverDismiss'
-  | 'handleSelectMarkerListing'
-  | 'handleMarkerClickWithPosition'
-  // Issue #2142 (correction pass) — these four are now DERIVED here rather
-  // than by the caller, so the composition root stays free of conditionals
-  // and constants. See the derivations at the top of buildMapSurfaceModel().
-  | 'mobileListButton'
-  | 'isBoundedBrowseState'
-  | 'isMarkerPopoverEligible'
-  | 'areaLayerMaxZoom'
-  | 'selectedArea'
-  // Issue #2724 (pass 3, area-selected desktop pairing) — DERIVED here from the
-  // same signal `overlays.recenter.visible` uses, rather than supplied by the
-  // caller (see the local computed just above the `return` in
-  // buildMapSurfaceModel()).
-  | 'isAreaRecenterButtonVisible'
-  // Issue #2142 (correction pass) — every field below now arrives as part of
-  // its OWNING CONTROLLER's result object (the grouped params after this
-  // Omit), so the composition root passes references instead of transcribing
-  // ~55 individually-named fields it would otherwise keep in sync by hand.
-  // Same change, and same rationale, as buildPanelSurfaceModel.ts.
-  | 'isAuthenticated'
-  | 'isAgriJourney'
-  | 'showLoader'
-  | 'filters'
-  | 'selectedSchool'
-  | 'panToArea'
-  | 'mapZoom'
-  | 'city'
-  | 'resolvedPanelContent'
-  | 'error'
-  | 'activeFocusBounds'
-  | 'cityCenter'
-  | 'cityZoom'
-  | 'cameraIntent'
-  | 'pendingRemountCameraIntentSeqRef'
-  | 'areaMarkerListings'
-  | 'schoolRadiusHasMore'
-  | 'markersTruncated'
-  | 'markersReturnedElements'
-  | 'markersTotalFilteredElements'
-  | 'isLoading'
-  | 'focusedGroupAreas'
-  | 'focusedGroup'
-  | 'announcedBadgeText'
-  | 'discoverBadge'
-  | 'areaResultSummaryText'
-  | 'groupSelectedBadgeCopy'
-  | 'fallbackBadgeCopy'
-  | 'schoolRadiusActive'
-  | 'schoolRadiusPillNoun'
-  | 'cityTotal'
-  | 'hasActiveAnonFilter'
-  | 'isLandingState'
-  | 'showSchoolMarkers'
-  | 'showSchoolBreadcrumb'
-  | 'schoolRadiusOverlay'
-  | 'isSelectedGroupState'
-  | 'isAreaFirstSelectedAreaState'
-  | 'currentMapMarkerListings'
-  | 'markerPopoverStepper'
-  | 'memoizedInitialCenter'
-  | 'schoolMarkerFocusTick'
-  | 'schoolMarkerPositions'
-  | 'areaRestoreArea'
-  | 'regionGuideVisible'
-  | 'regionGuideRingActive'
-  | 'navigate'
-  | 'handlePolygonDrawn'
-  | 'handlePolygonCleared'
-  // Issue #2628 — command, not view data; lives in MapFiltersCommands below.
-  | 'onFiltersChange'
-  // Issue #2711 — command, not view data; lives in MapFiltersCommands below.
-  | 'onIntentChange'
-  // Issue #2016 — commands, not view data; live in MapDrawingCommands below.
-  | 'isReplaceScopeConfirmOpen'
-  | 'handleConfirmReplaceScope'
-  | 'handleCancelReplaceScope'
-  // Issue #2015 — command, not view data; lives in MapDrawingCommands below.
-  | 'onActivateViewportSearch'
-  // Issue #2419 (PR-2) — draw-mode seam; lives in MapDrawingCommands below.
-  | 'polygonDraftPhase'
-  | 'polygonDraftBlock'
-  | 'drawVertexCount'
-  | 'startDrawNonce'
-  | 'cancelDrawNonce'
-  | 'undoVertexNonce'
-  | 'handleCancelDrawPolygon'
-  | 'handleUndoDrawVertex'
-  | 'handleRedrawPolygon'
-  | 'handleRetryPolygonValidation'
-  | 'handleDismissPolygonRejection'
-  | 'handleDrawVertexCountChange'
-  | 'handleDrawModeExit'
-  // Issue #2015 — view data, but derived from viewportSearchController.isDirty
-  // / .isEligible (already a param below) rather than supplied as its own
-  // flat field.
-  | 'viewportSearchIsDirty'
-  | 'viewportSearchIsEligible'
-  | 'setMapZoom'
-  | 'setMapReady'
-  | 'handleCityChange'
-  | 'publishCameraIntent'
-  | 'publishClusterCameraIntent'
-  | 'publishMarkerClusterCameraIntent'
-  | 'handleAreaMarkersComputed'
-  | 'handleStepMarkerListing'
-  | 'showMarkerInList'
-> & {
+/**
+ * Issue #2659 (D1) — the leftover flat fields this builder still takes
+ * directly (everything else now arrives nested inside an owning
+ * controller's Pick below). Previously computed as `Omit<DiscoverMapCanvasProps,
+ * ~120 names>`; rewritten as an explicit inline type now that
+ * DiscoverMapCanvasProps no longer carries these fields at all (deriving off
+ * it here would silently start including `view`/`commands` themselves).
+ * `intent` is the only field the function body actually reads off this base
+ * — every other name the old Omit computation happened to leave in (e.g.
+ * `handleUserCameraGesture`) was unused dead type surface: the composition
+ * root (`assembleDiscoverSurfaceProps.ts`) never supplied it as a flat
+ * field (it arrives via `viewportTrackerController` instead), and this was a
+ * pre-existing `BuildMapSurfaceViewParams` mismatch predating this PR (see
+ * this PR's typecheck delta note) — this rewrite drops the unused surplus
+ * rather than re-deriving it.
+ */
+type MapSurfaceLeftoverParams = {
+  intent?: DiscoverIntent;
+};
+
+export type BuildMapSurfaceViewParams = MapSurfaceLeftoverParams & {
   mapContainerRef: RefObject<HTMLDivElement | null>;
   mobileMapOpen: boolean;
   setMobileView: (view: 'LIST' | 'MAP') => void;
@@ -514,6 +472,21 @@ export type BuildMapSurfaceViewParams = Omit<
     | 'city'
     | 'resolvedPanelContent'
     | 'effectiveSelectedArea'
+    // Issue #2659 (D2) — draw-mode/replace-scope VIEW data. Previously this
+    // builder never read these (they reached DiscoverMapCanvas only via
+    // `buildMapSurfaceCommands`'s own, separate `pageStateController` Pick,
+    // bundled with their handlers in the single old `commands.drawing`
+    // group). The regrouped `view.drawing`/`view.replaceScope` need them
+    // here too — same controller object the composition root already
+    // passes to both builders, just a wider Pick, so no composition-root
+    // change is required.
+    | 'isReplaceScopeConfirmOpen'
+    | 'polygonDraftPhase'
+    | 'polygonDraftBlock'
+    | 'drawVertexCount'
+    | 'startDrawNonce'
+    | 'cancelDrawNonce'
+    | 'undoVertexNonce'
   >;
   mapDataController: Pick<
     ReturnType<typeof useDiscoverMapDataController>,
@@ -645,7 +618,24 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
 
   const {
     pageContextController: { isAuthenticated, isAgriJourney },
-    pageStateController: { showLoader, filters, selectedSchool, panToArea, mapZoom, mapReady, city, resolvedPanelContent, effectiveSelectedArea: selectedArea },
+    pageStateController: {
+      showLoader,
+      filters,
+      selectedSchool,
+      panToArea,
+      mapZoom,
+      mapReady,
+      city,
+      resolvedPanelContent,
+      effectiveSelectedArea: selectedArea,
+      isReplaceScopeConfirmOpen,
+      polygonDraftPhase,
+      polygonDraftBlock,
+      drawVertexCount,
+      startDrawNonce,
+      cancelDrawNonce,
+      undoVertexNonce,
+    },
     mapDataController: { error, activeFocusBounds, cityCenter, cityZoom, cameraIntent, pendingRemountCameraIntentSeqRef, areaMarkerListings, schoolRadiusHasMore, markersTruncated, markersReturnedElements, markersTotalFilteredElements, isLoading },
     areaGroupsController: { focusedGroupAreas, focusedGroup },
     badgeController: { announcedBadgeText, discoverBadge, areaResultSummaryText, groupSelectedBadgeCopy, fallbackBadgeCopy, schoolRadiusActive, schoolRadiusPillNoun, cityTotal, hasActiveAnonFilter },
@@ -727,28 +717,28 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
       prefersReducedMotion,
       mapZoom,
     },
-    layers: {
-      currentMapMarkerListings,
+    areas: {
+      focusedGroupAreas,
+      areaLayerMaxZoom,
+      selectedArea,
+      overviewAreas,
+      areaSearchMatchKeys,
+      hoveredAreaKeyForMap,
+      isRegionOverview,
+      regionOverviewShortLabel,
+      areaRestoreArea,
+    },
+    agri: {
       selectedRegion,
       selectedMaxKm,
       filteredAgriListings,
       agriDestinationMarkers,
+      isAgriJourney,
+    },
+    scope: {
       filters,
       isLandingState,
-      overviewAreas,
-      focusedGroupAreas,
-      areaLayerMaxZoom,
-      selectedArea,
-      areaSearchMatchKeys,
-      hoveredAreaKeyForMap,
-      isAgriJourney,
-      areaMarkerListings,
-      schoolZoneLabels,
-      schoolRadiusOverlay,
-      isRegionOverview,
-      regionOverviewShortLabel,
       isBoundedBrowseState,
-      areaRestoreArea,
     },
     navigation: {
       areasNavigationJourney: activeAreasNavigationJourney,
@@ -782,6 +772,8 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
       schoolFirstLandingSchoolCount,
       schoolRadiusHasMore,
       schoolListings,
+      schoolZoneLabels,
+      schoolRadiusOverlay,
     },
     markers: {
       markerPixelPos,
@@ -792,6 +784,8 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
       markersTruncated,
       markersReturnedElements,
       markersTotalFilteredElements,
+      areaMarkerListings,
+      currentMapMarkerListings,
     },
     status: {
       showLoader,
@@ -806,10 +800,6 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
       isAuthenticated,
       hasActiveAnonFilter,
       announcedBadgeText,
-      /** Issue #2015 — "Search this area" CTA dirty-state (AC1). */
-      viewportSearchIsDirty: isViewportSearchDirty,
-      /** Issue #2015 MUST-HAVE #2 — CTA eligibility gating (PR review 5085561270). */
-      viewportSearchIsEligible: isViewportSearchEligible,
       /** Issue #2628 — the applied Buy/Rent intent (Map results heading/summary + MapFilterSheet). */
       intent,
     },
@@ -820,6 +810,23 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
       regionSelectNonce,
       regionOverviewMarkerKind,
       regionGuideRingActive,
+    },
+    drawing: {
+      polygonDraftPhase,
+      polygonDraftBlock,
+      drawVertexCount,
+      startDrawNonce,
+      cancelDrawNonce,
+      undoVertexNonce,
+    },
+    replaceScope: {
+      isReplaceScopeConfirmOpen,
+    },
+    viewportSearch: {
+      /** Issue #2015 — "Search this area" CTA dirty-state (AC1). */
+      viewportSearchIsDirty: isViewportSearchDirty,
+      /** Issue #2015 MUST-HAVE #2 — CTA eligibility gating (PR review 5085561270). */
+      viewportSearchIsEligible: isViewportSearchEligible,
     },
     overlays: {
       mobileCluster: {
@@ -854,10 +861,8 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
   };
 }
 
-export type BuildMapSurfaceCommandsParams = Pick<
-  DiscoverMapCanvasProps,
-  'onAreaVisualClusterCameraIntent'
-> & {
+export type BuildMapSurfaceCommandsParams = {
+  onAreaVisualClusterCameraIntent?: (bounds: CameraIntent['bounds'], center: [number, number]) => void;
   pageContextController: Pick<ReturnType<typeof useDiscoverPageContext>, 'navigate'>;
   pageStateController: Pick<
     ReturnType<typeof useDiscoverPageStateController>,
@@ -937,7 +942,7 @@ export type BuildMapSurfaceCommandsParams = Pick<
     | 'handleMarkerClickWithPosition'
     | 'showMarkerInList'
   >;
-  buildNavigationNodeHref: DiscoverMapCanvasProps['buildNavigationNodeHref'];
+  buildNavigationNodeHref?: (nodeKey: string) => string | null;
   clearSelectedListing: () => void;
   /**
    * Issue #2628 — the mobile Map "Filters" sheet's one canonical write command (the existing
@@ -949,16 +954,15 @@ export type BuildMapSurfaceCommandsParams = Pick<
    * "Filters" pill/sheet stay mounted but inert (`DiscoverMapCanvas`'s own `onFiltersChange` prop
    * is equally optional and gates the pill's very presence — see that component).
    */
-  handleFiltersChange?: (next: DiscoverMapCanvasProps['filters']) => void;
+  handleFiltersChange?: (next: PropertyFilters) => void;
   /**
    * Issue #2711 — the matching canonical Buy/Rent intent command (city.ts's `setIntent`, the
    * SAME function `DiscoverControlBar.tsx` already passes as `IntentSelector`'s own
    * `onIntentChange`), reached through this same optional/inert-until-wired seam as
    * `handleFiltersChange` above so the Map "Filters" sheet's Apply can commit an intent switch
-   * atomically instead of silently dropping it (the bug this issue fixes). Typed off the prop
-   * itself (rather than retyped here) so its `filtersOverride` second argument can't drift.
+   * atomically instead of silently dropping it (the bug this issue fixes).
    */
-  handleIntentChange?: DiscoverMapCanvasProps['onIntentChange'];
+  handleIntentChange?: (intent: DiscoverIntent, filtersOverride?: DiscoverUrlFilters) => void;
 };
 
 export function buildMapSurfaceCommands(
@@ -970,16 +974,9 @@ export function buildMapSurfaceCommands(
       handlePolygonDrawn,
       handlePolygonCleared,
       // Issue #2016 — J3.3 replace-confirmation dialog state.
-      isReplaceScopeConfirmOpen,
       handleConfirmReplaceScope,
       handleCancelReplaceScope,
       // Issue #2419 (PR-2) — draw-mode seam.
-      polygonDraftPhase,
-      polygonDraftBlock,
-      drawVertexCount,
-      startDrawNonce,
-      cancelDrawNonce,
-      undoVertexNonce,
       handleCancelDrawPolygon,
       handleUndoDrawVertex,
       handleRedrawPolygon,
@@ -1031,19 +1028,6 @@ export function buildMapSurfaceCommands(
     drawing: {
       handlePolygonDrawn,
       handlePolygonCleared,
-      // Issue #2016 — J3.3 replace-confirmation dialog state.
-      isReplaceScopeConfirmOpen,
-      handleConfirmReplaceScope,
-      handleCancelReplaceScope,
-      // Issue #2015 — commits the live viewport as a VIEWPORT result scope (AC2/AC7).
-      onActivateViewportSearch: activateViewportSearch,
-      // Issue #2419 (PR-2) — draw-mode seam.
-      polygonDraftPhase,
-      polygonDraftBlock,
-      drawVertexCount,
-      startDrawNonce,
-      cancelDrawNonce,
-      undoVertexNonce,
       handleCancelDrawPolygon,
       handleUndoDrawVertex,
       handleRedrawPolygon,
@@ -1051,6 +1035,15 @@ export function buildMapSurfaceCommands(
       handleDismissPolygonRejection,
       handleDrawVertexCountChange,
       handleDrawModeExit,
+    },
+    replaceScope: {
+      // Issue #2016 — J3.3 replace-confirmation dialog state.
+      handleConfirmReplaceScope,
+      handleCancelReplaceScope,
+    },
+    viewportSearch: {
+      // Issue #2015 — commits the live viewport as a VIEWPORT result scope (AC2/AC7).
+      onActivateViewportSearch: activateViewportSearch,
     },
     navigation: {
       handleOverviewAreaClick,

@@ -267,19 +267,41 @@ describe('MapDiscovery.tsx architecture baseline (#2142 Commit 1, updated per-co
   });
 
   describe('map/panel surface prop-contract snapshot (today\'s actual DiscoverMapMount / DiscoverRightPanelContainer)', () => {
-    // DiscoverMapMount.tsx itself just forwards `props: DiscoverMapCanvasProps`
-    // to a lazily-loaded DiscoverMapCanvas — the real enumerated prop surface
-    // is DiscoverMapCanvasProps. Verified via jCodemunch symbol read, not
-    // guessed: 111 fields (including JSDoc-documented optional props).
-    it('DiscoverMapCanvasProps field count is at today\'s documented baseline', () => {
-      const fieldCount = countMatches(mapCanvasSource, /^\s{2}\w[\w?]*:\s/gm);
-      // Coarse floor rather than an exact pin: the interface has inline
-      // JSDoc blocks between some fields that a purely textual count can
-      // be thrown off by if comments are reformatted without a field being
-      // added/removed. 100 is comfortably below the verified actual (111)
-      // and comfortably above what any accidental drop of a real field
-      // would produce.
-      expect(fieldCount).toBeGreaterThanOrEqual(100);
+    // Issue #2659 (D1) — DiscoverMapMount/DiscoverMapSurface used to forward
+    // `props: DiscoverMapCanvasProps`, a hand-written 139-field flat
+    // interface, to a lazily-loaded DiscoverMapCanvas. That flat interface is
+    // now DELETED outright (not kept as a renamed catalogue type): the
+    // capability interfaces it used to be `Pick<>`'d from are now the source
+    // of truth in buildMapSurfaceModel.tsx, and DiscoverMapCanvasProps
+    // narrows to `{ mapContainerRef, view, commands }`. This mirrors the
+    // panel side's own already-established pattern two tests below ("the
+    // flat DiscoverRightPanelContainerProps interface is GONE") — a field
+    // COUNT on a hand-written flat interface is no longer the right
+    // assertion once that interface stops being the source of truth.
+    it('DiscoverMapCanvasProps is the narrow {mapContainerRef, view, commands} contract, not a re-inflated flat interface', () => {
+      // The old field-count floor no longer applies: the flat interface is
+      // gone, so a purely textual field count on this file would just count
+      // the 3 top-level contract fields (a vacuous, always-passing assertion
+      // once the interface is empty of any hand-written flat field). What
+      // must hold instead is structural: the flat shape is genuinely absent,
+      // and the nested contract is genuinely present.
+      expect(mapCanvasSource).toMatch(
+        /export interface DiscoverMapCanvasProps \{\s*mapContainerRef: RefObject<HTMLDivElement \| null>;\s*view: Omit<DiscoverMapSurfaceView, 'overlays'>;\s*commands: Omit<DiscoverMapSurfaceCommands, 'overlays'>;\s*\}/,
+      );
+      // A stray flat field (e.g. a reviewer re-adding one directly to this
+      // interface instead of to its owning capability group in
+      // buildMapSurfaceModel.tsx) would show up as a field line between the
+      // interface's opening brace and its close — assert there is none.
+      const ifaceMatch = mapCanvasSource.match(
+        /export interface DiscoverMapCanvasProps \{([\s\S]*?)\n\}/,
+      );
+      expect(ifaceMatch).not.toBeNull();
+      const ifaceBody = ifaceMatch ? ifaceMatch[1] : '';
+      const flatFieldLines = ifaceBody
+        .split('\n')
+        .filter((line) => /^\s{2}\w[\w?]*:\s/.test(line))
+        .filter((line) => !/^\s{2}(mapContainerRef|view|commands):/.test(line));
+      expect(flatFieldLines).toEqual([]);
     });
 
     it('the flat DiscoverRightPanelContainerProps interface is GONE, replaced by controller-derived types', () => {
