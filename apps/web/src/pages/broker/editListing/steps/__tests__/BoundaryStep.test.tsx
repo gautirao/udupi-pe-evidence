@@ -14,6 +14,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BoundaryStep } from '../BoundaryStep';
 import type { ListingResponse } from '@/hooks/useBrokerListings';
+import type { BoundaryStepProps } from '../stepContracts';
 
 vi.mock('@/components/dealer/BoundaryDrawStep', () => ({
   BoundaryDrawStep: (props: {
@@ -88,13 +89,21 @@ function makeListing(overrides: Partial<ListingResponse> = {}): ListingResponse 
   };
 }
 
-function baseProps(overrides: Partial<React.ComponentProps<typeof BoundaryStep>> = {}) {
+function baseProps(overrides: {
+  view?: Partial<BoundaryStepProps['view']>;
+  commands?: Partial<BoundaryStepProps['commands']>;
+} = {}): BoundaryStepProps {
   return {
-    boundaryCoords: [] as [number, number][],
-    listing: makeListing(),
-    handleStep4Continue: vi.fn(),
-    handleStep4Skip: vi.fn(),
-    ...overrides,
+    view: {
+      boundaryCoords: [] as [number, number][],
+      listing: makeListing(),
+      ...overrides.view,
+    },
+    commands: {
+      continue: vi.fn(),
+      skip: vi.fn(),
+      ...overrides.commands,
+    },
   };
 }
 
@@ -102,25 +111,25 @@ describe('BoundaryStep', () => {
   it('renders BoundaryDrawStep with the current boundary coords and declared area', () => {
     render(
       <BoundaryStep
-        {...baseProps({ boundaryCoords: [[13.35, 74.75], [13.36, 74.76], [13.37, 74.77]] })}
+        {...baseProps({ view: { boundaryCoords: [[13.35, 74.75], [13.36, 74.76], [13.37, 74.77]] } })}
       />,
     );
     expect(screen.getByTestId('boundary-draw-stub')).toBeInTheDocument();
     expect(screen.getByTestId('boundary-coord-count')).toHaveTextContent('3');
   });
 
-  it('calls handleStep4Continue with the saved coords when BoundaryDrawStep saves', async () => {
+  it('calls commands.continue with the saved coords when BoundaryDrawStep saves', async () => {
     const user = userEvent.setup();
     const handleStep4Continue = vi.fn();
-    render(<BoundaryStep {...baseProps({ handleStep4Continue })} />);
+    render(<BoundaryStep {...baseProps({ commands: { continue: handleStep4Continue } })} />);
     await user.click(screen.getByText('save-boundary'));
     expect(handleStep4Continue).toHaveBeenCalledWith([[13.35, 74.75], [13.36, 74.76]]);
   });
 
-  it('calls handleStep4Skip when BoundaryDrawStep is skipped', async () => {
+  it('calls commands.skip when BoundaryDrawStep is skipped', async () => {
     const user = userEvent.setup();
     const handleStep4Skip = vi.fn();
-    render(<BoundaryStep {...baseProps({ handleStep4Skip })} />);
+    render(<BoundaryStep {...baseProps({ commands: { skip: handleStep4Skip } })} />);
     await user.click(screen.getByText('skip-boundary'));
     expect(handleStep4Skip).toHaveBeenCalledOnce();
   });

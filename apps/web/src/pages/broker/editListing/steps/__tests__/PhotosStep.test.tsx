@@ -14,6 +14,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PhotosStep } from '../PhotosStep';
+import type { PhotosStepProps } from '../stepContracts';
 
 const mountCount = vi.hoisted(() => ({ current: 0 }));
 
@@ -32,17 +33,25 @@ vi.mock('@/components/broker/ImageUploader', () => ({
   },
 }));
 
-function baseProps(overrides: Partial<React.ComponentProps<typeof PhotosStep>> = {}) {
+function baseProps(overrides: {
+  view?: Partial<PhotosStepProps['view']>;
+  commands?: Partial<PhotosStepProps['commands']>;
+} = {}): PhotosStepProps {
   return {
-    id: 'listing-1',
-    isSubmittable: true,
-    videoUrl: '',
-    videoUrlError: '',
-    canSubmitImages: false,
-    setCanSubmitImages: vi.fn(),
-    handleVideoUrlChange: vi.fn(),
-    handleStep2Continue: vi.fn(),
-    ...overrides,
+    view: {
+      id: 'listing-1',
+      isSubmittable: true,
+      videoUrl: '',
+      videoUrlError: '',
+      canSubmitImages: false,
+      ...overrides.view,
+    },
+    commands: {
+      changeVideoUrl: vi.fn(),
+      continue: vi.fn(),
+      reportImageReadiness: vi.fn(),
+      ...overrides.commands,
+    },
   };
 }
 
@@ -54,10 +63,10 @@ describe('PhotosStep', () => {
     expect(screen.getByText(/add at least 3 photos to continue/i)).toBeInTheDocument();
   });
 
-  it('enables continue and calls handleStep2Continue when canSubmitImages is true', async () => {
+  it('enables continue and calls commands.continue when canSubmitImages is true', async () => {
     const user = userEvent.setup();
     const handleStep2Continue = vi.fn();
-    render(<PhotosStep {...baseProps({ canSubmitImages: true, handleStep2Continue })} />);
+    render(<PhotosStep {...baseProps({ view: { canSubmitImages: true }, commands: { continue: handleStep2Continue } })} />);
 
     const continueBtn = screen.getByRole('button', { name: /save & continue/i });
     expect(continueBtn).toBeEnabled();
@@ -68,7 +77,7 @@ describe('PhotosStep', () => {
   it('shows the YouTube thumbnail preview for a valid YouTube video URL', () => {
     render(
       <PhotosStep
-        {...baseProps({ videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' })}
+        {...baseProps({ view: { videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } })}
       />,
     );
     expect(screen.getByAltText('Video thumbnail')).toBeInTheDocument();
@@ -77,28 +86,28 @@ describe('PhotosStep', () => {
   it('shows the video URL validation error when present', () => {
     render(
       <PhotosStep
-        {...baseProps({ videoUrl: 'not-a-url', videoUrlError: 'Enter a valid video URL' })}
+        {...baseProps({ view: { videoUrl: 'not-a-url', videoUrlError: 'Enter a valid video URL' } })}
       />,
     );
     expect(screen.getByText('Enter a valid video URL')).toBeInTheDocument();
   });
 
   it('renders nothing when isSubmittable is false', () => {
-    render(<PhotosStep {...baseProps({ isSubmittable: false })} />);
+    render(<PhotosStep {...baseProps({ view: { isSubmittable: false } })} />);
     expect(screen.queryByTestId('image-uploader-stub')).not.toBeInTheDocument();
   });
 
   it('does NOT remount ImageUploader when the parent re-renders with a different prop (step-switch simulation)', () => {
     mountCount.current = 0;
-    const { rerender } = render(<PhotosStep {...baseProps({ videoUrl: 'a' })} />);
+    const { rerender } = render(<PhotosStep {...baseProps({ view: { videoUrl: 'a' } })} />);
     expect(mountCount.current).toBe(1);
 
     // Simulate the parent re-rendering PhotosStep with a changed prop (e.g. as the
     // broker types in an unrelated field, or another step's state changes) — the
     // always-mounted display:none wrapper in the parent must keep PhotosStep (and
     // therefore ImageUploader) mounted across these re-renders, never remounting it.
-    rerender(<PhotosStep {...baseProps({ videoUrl: 'ab' })} />);
-    rerender(<PhotosStep {...baseProps({ videoUrl: 'abc', canSubmitImages: true })} />);
+    rerender(<PhotosStep {...baseProps({ view: { videoUrl: 'ab' } })} />);
+    rerender(<PhotosStep {...baseProps({ view: { videoUrl: 'abc', canSubmitImages: true } })} />);
 
     expect(mountCount.current).toBe(1);
     expect(screen.getByTestId('image-uploader-stub')).toBeInTheDocument();

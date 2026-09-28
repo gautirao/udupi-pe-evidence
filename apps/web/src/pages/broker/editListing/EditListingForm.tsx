@@ -1,12 +1,14 @@
 import { useParams } from 'react-router-dom';
 import { useUpdateListing, useSubmitListing } from '@/hooks/useBrokerListings';
 import type { ListingResponse } from '@/hooks/useBrokerListings';
+import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertTriangle } from 'lucide-react';
 import { useListingImages } from '@/hooks/useListingImages';
 import { StepIndicator } from '@/components/broker/StepIndicator';
 import { formatListingId } from '@/lib/listing-id';
+import { COMMERCIAL_TYPES } from '@/lib/listing-constants';
 import { useAgriFields } from './useAgriFields';
 import { useCommercialFields } from './useCommercialFields';
 import { useRentFields } from './useRentFields';
@@ -16,7 +18,16 @@ import { useBaseFields } from './useBaseFields';
 import { useEditListingUiState } from './useEditListingUiState';
 import { useListingHydration } from './useListingHydration';
 import { useEditListingNavigation } from './useEditListingNavigation';
-import { useEditListingCommands } from './useEditListingCommands';
+import { useDescribeStepCommands } from './useDescribeStepCommands';
+import { useMediaStepCommands } from './useMediaStepCommands';
+import { useLocationStepCommands } from './useLocationStepCommands';
+import { useBoundaryStepCommands } from './useBoundaryStepCommands';
+import { useReviewStepCommands } from './useReviewStepCommands';
+import {
+  selectStep1Complete, selectStep2Complete, selectStep3Complete, selectWizardSteps,
+  selectCommercialSubtype, selectEditCtx, selectIsSubmittable, selectStatusBadgeVariant,
+  selectTitleLocalityWarning, selectRequiredFieldsComplete, selectAllConditionsMet,
+} from './editListingSelectors';
 import { DescribeStep } from './steps/DescribeStep';
 import { PhotosStep } from './steps/PhotosStep';
 import { LocationStep } from './steps/LocationStep';
@@ -29,6 +40,7 @@ interface EditListingFormProps {
 
 export function EditListingForm({ listing }: EditListingFormProps) {
   const { id } = useParams<{ id: string }>();
+  const { toast } = useToast();
 
   const updateListing = useUpdateListing(id ?? '');
   const submitListing = useSubmitListing(id);
@@ -47,13 +59,16 @@ export function EditListingForm({ listing }: EditListingFormProps) {
   // is not passed — wizardSteps/reviewStep/boundaryStep depend only on
   // propertyType, so it would be a dead parameter.
   const nav = useEditListingNavigation(propertyType);
-  const { currentStep, reviewStep, isAgriListing } = nav;
+  const { currentStep, setCurrentStep, setCameFromReview, wizardSteps, reviewStep, boundaryStep, isAgriListing, advanceAfterSave } = nav;
 
   // UI-only fields — Issue #1838 PR B: 6 never-hydrated fields extracted into
   // useEditListingUiState(). These must NOT reset when the listing id changes.
   const ui = useEditListingUiState();
-  const { canSubmitImages, videoUrlError, confirmedLocality } = ui.values;
-  const { setCanSubmitImages } = ui.setters;
+  const { canSubmitImages, videoUrlError, titleManuallyEdited, confirmedLocality } = ui.values;
+  const {
+    setCanSubmitImages, setLandAreaUnitError, setBuiltAreaUnitError, setVideoUrlError,
+    setTitleManuallyEdited, setConfirmedLocality,
+  } = ui.setters;
 
   // Shared fields — Issue #1838 slice-5e: 7 fields shared across two or more
   // domains (carpetArea/carpetAreaUnit/floorNumber/totalFloors/
@@ -62,7 +77,7 @@ export function EditListingForm({ listing }: EditListingFormProps) {
   // useSharedFields(). Issue #1838 PR C — Form no longer destructures the
   // individual values/setters; DescribeStep receives the whole `shared`
   // hook-result object, and the save-payload build that used to read these
-  // individual values now lives in useEditListingCommands.ts.
+  // individual values now lives in useDescribeStepCommands.ts.
   const shared = useSharedFields();
 
   // Commercial-exclusive fields — Issue #1838 slice-5b: 5 commercial-only
@@ -106,22 +121,65 @@ export function EditListingForm({ listing }: EditListingFormProps) {
     residential: residential.hydrate,
   });
 
-  // Issue #1838 PR C — save/submit command handlers + derived values
-  // extracted into useEditListingCommands(). See that file's header comment
-  // for the preserve-exactly list (commercialSubtype vs explicitSubtype,
-  // step1Complete vs editCtx.isRent, the crops merge order, no memoization,
-  // no double-toasting onError, setBoundaryCoords-before-mutate ordering).
-  const { derived, commands } = useEditListingCommands({
-    listing,
-    fields: { base, shared, commercial, rent, agri, residential },
-    ui,
-    nav,
-    mutations: { updateListing, submitListing },
+  // Issue #1838 PR F — derived gates now come from pure selectors
+  // (editListingSelectors.ts), each fed only the primitives it needs.
+  const step1Complete = selectStep1Complete({
+    listingPurpose, propertyType, monthlyRent: rent.values.monthlyRent, priceRupees, locality,
   });
-  const {
-    steps, isCommercialType, commercialSubtype, editCtx, isSubmittable,
-    showTitleLocalityWarning, statusBadgeVariant, requiredFieldsComplete, allConditionsMet,
-  } = derived;
+  const step2Complete = selectStep2Complete(canSubmitImages);
+  const step3Complete = selectStep3Complete(listing.addressConfirmed);
+  const steps = selectWizardSteps({ isAgriListing, wizardSteps, step1Complete, step2Complete, step3Complete });
+
+  const isCommercialType = COMMERCIAL_TYPES.has(propertyType);
+  const commercialSubtype = selectCommercialSubtype(propertyType, commercial.values.explicitSubtype);
+  const editCtxFull = selectEditCtx(propertyType, listingPurpose, commercialSubtype);
+  const { isRent, fieldVisible } = editCtxFull;
+
+  const isSubmittable = selectIsSubmittable(listing.status);
+  const statusBadgeVariant = selectStatusBadgeVariant(listing.status);
+  const { showTitleLocalityWarning } = selectTitleLocalityWarning({
+    titleManuallyEdited, confirmedLocality, title,
+  });
+  const requiredFieldsComplete = selectRequiredFieldsComplete({
+    isRent, monthlyRent: rent.values.monthlyRent, priceRupees, propertyType, locality,
+  });
+  const allConditionsMet = selectAllConditionsMet({
+    canSubmitImages, addressConfirmed: listing.addressConfirmed, requiredFieldsComplete, showTitleLocalityWarning,
+  });
+
+  // Issue #1838 PR F — command hooks, one per workflow, split out of the
+  // former useEditListingCommands.ts God controller. EditListingForm itself
+  // composes their outputs into the `commands` shape each step expects — no
+  // aggregator hook re-bundles them.
+  const describeCommands = useDescribeStepCommands({
+    base, shared, commercial, rent, agri, residential,
+    ui: { setLandAreaUnitError, setBuiltAreaUnitError, setTitleManuallyEdited },
+    editCtxFull, isAgriListing, advanceAfterSave, updateListing, toast,
+  });
+  const mediaCommands = useMediaStepCommands({
+    videoUrl, setVideoUrl: base.setters.setVideoUrl, setVideoUrlError, advanceAfterSave, updateListing,
+  });
+  const locationCommands = useLocationStepCommands({
+    titleManuallyEdited, setTitle: base.setters.setTitle, setConfirmedLocality,
+    setCameFromReview, setCurrentStep, isAgriListing, reviewStep, updateListing,
+  });
+  const boundaryCommands = useBoundaryStepCommands({
+    setBoundaryCoords: base.setters.setBoundaryCoords, setCurrentStep, reviewStep, updateListing,
+  });
+  const reviewCommands = useReviewStepCommands({
+    confirmedLocality, setTitle: base.setters.setTitle, setTitleManuallyEdited,
+    setCameFromReview, setCurrentStep, boundaryStep, submitListing, toast,
+  });
+
+  // Stepper click-gating — tiny enough to stay a plain closure here rather
+  // than its own command hook (see useEditListingNavigation.ts header: the
+  // `steps` completion-gate array is deliberately not nav-pure).
+  const handleStepClick = (n: number) => {
+    // Allow: step 1 always, any completed step, or any step before current
+    if (n === 1 || steps[n - 1]?.isComplete || n < currentStep) {
+      setCurrentStep(n);
+    }
+  };
 
   return (
     <div className="container max-w-2xl py-8 px-4 space-y-6">
@@ -159,7 +217,7 @@ export function EditListingForm({ listing }: EditListingFormProps) {
       <StepIndicator
         steps={steps}
         currentStep={currentStep}
-        onStepClick={commands.stepper.stepClick}
+        onStepClick={handleStepClick}
       />
 
       {/* ── Step 1: Describe ── */}
@@ -173,7 +231,7 @@ export function EditListingForm({ listing }: EditListingFormProps) {
               carpetArea: { value: shared.values.carpetArea, unit: shared.values.carpetAreaUnit },
               bedrooms,
             },
-            capabilities: { isCommercialType, commercialSubtype, fieldVisible: editCtx.fieldVisible },
+            capabilities: { isCommercialType, commercialSubtype, fieldVisible },
             status: { isSaving: updateListing.isPending },
             agri: agri.values,
             commercial: commercial.values,
@@ -181,24 +239,27 @@ export function EditListingForm({ listing }: EditListingFormProps) {
             residential: residential.values,
             shared: shared.values,
           }}
-          commands={commands.describe}
+          commands={describeCommands}
         />
       </div>
 
       {/* ── Step 2: Add Photos ── */}
       {/* CRITICAL: always-mounted (display:none toggle, not conditional currentStep===2 &&)
           so ImageUploader's in-flight upload state survives step navigation. Issue #1838
-          slice 6a — see steps/PhotosStep.tsx. */}
+          slice 6a — see steps/PhotosStep.tsx. WHY (PR F requirement 7): canSubmitImages
+          (step-2 completion + the Review allConditionsMet gate) is reported ONLY by
+          ImageUploader's onCanSubmitChange effect, so lazy-mounting it on
+          currentStep===2 would leave step 2 reporting incomplete for an
+          already-complete listing until the broker revisits a step they have no
+          reason to — see EditListingForm.imageReadinessOnMount.test.tsx. */}
       <div data-testid="step-2-panel" style={{ display: currentStep === 2 ? 'block' : 'none' }}>
         <PhotosStep
-          id={id}
-          isSubmittable={isSubmittable}
-          videoUrl={videoUrl}
-          videoUrlError={videoUrlError}
-          canSubmitImages={canSubmitImages}
-          setCanSubmitImages={setCanSubmitImages}
-          handleVideoUrlChange={commands.photos.changeVideoUrl}
-          handleStep2Continue={commands.photos.continue}
+          view={{ id, isSubmittable, videoUrl, videoUrlError, canSubmitImages }}
+          commands={{
+            changeVideoUrl: mediaCommands.changeVideoUrl,
+            continue: mediaCommands.continue,
+            reportImageReadiness: setCanSubmitImages,
+          }}
         />
       </div>
 
@@ -209,7 +270,7 @@ export function EditListingForm({ listing }: EditListingFormProps) {
       <div data-testid="step-3-panel" style={{ display: currentStep === 3 ? 'block' : 'none' }}>
         <LocationStep
           view={{ isSubmittable, listing, currentStep }}
-          commands={commands.location}
+          commands={locationCommands}
         />
       </div>
 
@@ -217,10 +278,8 @@ export function EditListingForm({ listing }: EditListingFormProps) {
       {currentStep === 4 && isAgriListing && (
         <div data-testid="step-4-panel">
           <BoundaryStep
-            boundaryCoords={boundaryCoords}
-            listing={listing}
-            handleStep4Continue={commands.boundary.continue}
-            handleStep4Skip={commands.boundary.skip}
+            view={{ boundaryCoords, listing }}
+            commands={boundaryCommands}
           />
         </div>
       )}
@@ -237,7 +296,7 @@ export function EditListingForm({ listing }: EditListingFormProps) {
             canSubmitImages,
             requiredFieldsComplete,
             allConditionsMet,
-            isRent: editCtx.isRent,
+            isRent,
             isAgriListing,
             boundaryCoords,
             showTitleLocalityWarning,
@@ -245,7 +304,7 @@ export function EditListingForm({ listing }: EditListingFormProps) {
             isSubmitting: submitListing.isPending,
             isSaving: updateListing.isPending,
           }}
-          commands={commands.review}
+          commands={reviewCommands}
         />
       </div>
       )}

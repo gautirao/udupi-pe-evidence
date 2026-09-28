@@ -5,6 +5,7 @@ import { Link } from 'lucide-react';
 import { ImageUploader } from '@/components/broker/ImageUploader';
 import { SectionCard } from '@/components/broker/SectionCard';
 import { extractYouTubeId, isInstagramUrl } from '@/lib/editListing/valueMappers';
+import type { PhotosStepProps } from './stepContracts';
 
 /**
  * Issue #1838 slice 6a — extracted step-2 ("Add Photos") JSX block from
@@ -13,27 +14,14 @@ import { extractYouTubeId, isInstagramUrl } from '@/lib/editListing/valueMappers
  * `data-testid="step-2-panel"` always-mounted `display:none` wrapper — see
  * CRITICAL comment there. This component must NOT be conditionally mounted
  * on `currentStep`, or ImageUploader's in-flight upload state is lost.
+ *
+ * Issue #1838 PR F — converted to the {view, commands} contract (see
+ * stepContracts.ts). `reportImageReadiness` is the one justified raw-setter
+ * crossing: it's ImageUploader's own state report, not a step action.
  */
-interface PhotosStepProps {
-  id: string | undefined;
-  isSubmittable: boolean;
-  videoUrl: string;
-  videoUrlError: string;
-  canSubmitImages: boolean;
-  setCanSubmitImages: (canSubmit: boolean) => void;
-  handleVideoUrlChange: (value: string) => void;
-  handleStep2Continue: () => void;
-}
-
 export function PhotosStep({
-  id,
-  isSubmittable,
-  videoUrl,
-  videoUrlError,
-  canSubmitImages,
-  setCanSubmitImages,
-  handleVideoUrlChange,
-  handleStep2Continue,
+  view: { id, isSubmittable, videoUrl, videoUrlError, canSubmitImages },
+  commands: { changeVideoUrl: handleVideoUrlChange, continue: handleStep2Continue, reportImageReadiness },
 }: PhotosStepProps) {
   return (
     <>
@@ -44,7 +32,7 @@ export function PhotosStep({
             description="A great set of photos helps buyers understand the property better."
           >
             {/* ImageUploader is always mounted (CSS visibility) so upload state is preserved */}
-            <ImageUploader listingId={id!} onCanSubmitChange={setCanSubmitImages} />
+            <ImageUploader listingId={id!} onCanSubmitChange={reportImageReadiness} />
           </SectionCard>
 
           <SectionCard

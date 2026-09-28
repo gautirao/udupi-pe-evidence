@@ -26,6 +26,45 @@ import type { SharedFieldValues, SharedFieldSetters } from '../useSharedFields';
 // from DescribeBasicsCommands, so a miswiring that bypasses that reset
 // cannot even compile.
 
+export interface PhotosStepView {
+  id: string | undefined;
+  isSubmittable: boolean;
+  videoUrl: string;
+  videoUrlError: string;
+  canSubmitImages: boolean;
+}
+
+export interface PhotosStepCommands {
+  changeVideoUrl: (value: string) => void;
+  continue: () => void;
+  /** Reported by ImageUploader's onCanSubmitChange child callback — a raw
+   * setter crossing the {view,commands} boundary here is justified: this IS
+   * a state report from a mounted child, not a broker-initiated action, and
+   * ImageUploader's own prop is inherently a state-setter signature
+   * (`(canSubmit: boolean) => void`). See useEditListingUiState.ts. */
+  reportImageReadiness: (canSubmit: boolean) => void;
+}
+
+export interface PhotosStepProps {
+  view: PhotosStepView;
+  commands: PhotosStepCommands;
+}
+
+export interface BoundaryStepView {
+  boundaryCoords: [number, number][];
+  listing: ListingResponse;
+}
+
+export interface BoundaryStepCommands {
+  continue: (coords: [number, number][]) => void;
+  skip: () => void;
+}
+
+export interface BoundaryStepProps {
+  view: BoundaryStepView;
+  commands: BoundaryStepCommands;
+}
+
 export interface LocationStepView {
   isSubmittable: boolean;
   listing: ListingResponse;
