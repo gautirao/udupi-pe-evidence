@@ -276,13 +276,71 @@ function originPinHTML(name) {
 }
 const CLUSTER_PX = 46;
 
-function ExpMap({ lead, view, isMobile, onPick, onCluster, onArea, onOpenListing, hover, onHover, onCameraMove, onSearchThisArea, dirty, phase, onCrumb, showAllAreas, onFitAll, onSchool, onSchoolHover, schoolHover, onAgriNav, onAgriTown, onParcel, agriActive }) {
+// ---- Map info dock --------------------------------------------------------------
+// ONE floating card owns every informational message over the map, top → bottom:
+//   1. guidance  (anonymous + not yet in a result scope only)
+//   2. count     "Showing N verified properties across <context>"
+//   3. recenter  "Recenter on <context>" — exactly one, always the CURRENT node
+// Desktop: pinned bottom-left of the map. Mobile: first block inside the bottom sheet.
+// The dock adapts to the map — it never moves markers or changes the camera fit.
+// Node names are never truncated away: labels wrap to at most 2 lines.
+const dockPin = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>';
+const dockAim = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>';
+function ExpMapInfoDock({ view, signedIn, onSignIn, compact, embedded }) {
+  if (!view || view.journey !== "areas" || !view.info) return null;
+  const i = view.info, guide = !signedIn && !view.listingCapable;
+  const n = (i.total || 0).toLocaleString("en-IN");
+  const recenter = () => window.dispatchEvent(new CustomEvent("exp:recenter"));
+  const signIn = <button onClick={onSignIn} style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "inherit", fontWeight: 700, color: "var(--accent)", textDecoration: "underline", textUnderlineOffset: "2px" }}>sign in</button>;
+  const aimBtn = (extra) => (
+    <button className="exp-recenter" onClick={recenter} title={"Recenter on " + i.where} aria-label={"Recenter on " + i.where} data-design-component="map-recenter" style={{ display: "flex", alignItems: "center", gap: "7px", minWidth: 0, border: "none", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "12.5px", fontWeight: 700, color: "var(--accent)", ...extra }}>
+      <span style={{ flex: "none", display: "flex" }} dangerouslySetInnerHTML={{ __html: dockAim }} />
+      <span style={{ minWidth: 0, overflow: "hidden", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2, lineHeight: 1.3, textAlign: "left", overflowWrap: "anywhere" }}>Recenter on {i.where}</span>
+    </button>
+  );
+  return (
+    <div data-design-component="map-info-dock" role="status" style={embedded ? { fontFamily: "var(--font-sans)", display: "flex", flexDirection: "column", gap: "4px" } : { background: "var(--paper)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-md)", overflow: "hidden", fontFamily: "var(--font-sans)" }}>
+      {guide && embedded && (
+        <div data-design-component="map-guidance" style={{ fontSize: "12px", lineHeight: 1.35, color: "var(--text-body)", textWrap: "pretty" }}>Select an area — or {signIn} for the full map</div>
+      )}
+      {guide && !embedded && (
+        <div data-design-component="map-guidance" style={{ padding: compact ? "8px 12px" : "9px 12px", background: "var(--surface-subtle)", borderBottom: "1px solid var(--border)", fontSize: "12px", lineHeight: 1.4, color: "var(--text-body)", textWrap: "pretty" }}>
+          {compact ? <>Select an area to see properties — or {signIn} for the full map</> : <>Select an area to see properties — or {signIn} to explore the full map</>}
+        </div>
+      )}
+      {compact ? (
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: embedded ? 0 : "6px 6px 6px 12px" }}>
+          <div data-design-component="map-count" style={{ flex: 1, minWidth: 0, lineHeight: 1.3 }}>
+            <div style={{ fontSize: "12.5px", color: "var(--text-body)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}><strong style={{ fontFamily: "var(--font-mono)", color: "var(--text-strong)" }}>{n}</strong> verified properties</div>
+            <div style={{ fontSize: "11.5px", color: "var(--text-muted)", overflow: "hidden", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2, overflowWrap: "anywhere" }}>across {i.where}</div>
+          </div>
+          {aimBtn({ flex: "0 1 auto", maxWidth: "56%", minHeight: "44px", padding: "6px 12px", borderRadius: "var(--radius-md)", background: "var(--surface-subtle)", boxShadow: "inset 0 0 0 1px var(--border-strong)" })}
+        </div>
+      ) : (
+        <>
+          <div data-design-component="map-count" style={{ display: "flex", gap: "8px", alignItems: "flex-start", padding: "10px 12px", fontSize: "12.5px", lineHeight: 1.4, color: "var(--text-body)" }}>
+            <span style={{ flex: "none", display: "flex", marginTop: "1px" }} dangerouslySetInnerHTML={{ __html: dockPin }} />
+            <span style={{ minWidth: 0 }}>Showing <strong style={{ fontFamily: "var(--font-mono)", color: "var(--text-strong)" }}>{n}</strong> verified properties across <strong style={{ color: "var(--text-strong)" }}>{i.where}</strong></span>
+          </div>
+          {aimBtn({ width: "100%", minHeight: "40px", padding: "8px 12px", background: "transparent", borderTop: "1px solid var(--border)", textAlign: "left" })}
+        </>
+      )}
+    </div>
+  );
+}
+
+function ExpMap({ signedIn, onSignIn, lead, view, isMobile, onPick, onCluster, onArea, onOpenListing, hover, onHover, onCameraMove, onSearchThisArea, dirty, phase, onCrumb, showAllAreas, onFitAll, onSchool, onSchoolHover, schoolHover, onAgriNav, onAgriTown, onParcel, agriActive }) {
   const elRef = React.useRef(null), mapRef = React.useRef(null);
   const navG = React.useRef(null), leafG = React.useRef(null), shapeG = React.useRef(null);
   const progRef = React.useRef(false), fitRef = React.useRef(null);
   const [tick, setTick] = React.useState(0);
   const markersRef = React.useRef({});
   const viewRef = React.useRef(view); viewRef.current = view;
+  // Original fit call, unchanged; shared by the committed-view fit and the dock's Recenter.
+  const flyFit = (b, mz) => {
+    progRef.current = true;
+    mapRef.current.flyToBounds(b, { paddingTopLeft: [56, isMobile ? 108 : 82], paddingBottomRight: [40, isMobile ? 168 : 56], duration: 0.65, easeLinearity: 0.25, maxZoom: mz || 15 });
+  };
   const cbRef = React.useRef({}); cbRef.current = { onPick, onCluster, onArea, onOpenListing, onHover, onSchool, onSchoolHover, onAgriNav, onAgriTown, onParcel, onCameraMove };
 
   React.useEffect(() => {
@@ -340,10 +398,18 @@ function ExpMap({ lead, view, isMobile, onPick, onCluster, onArea, onOpenListing
       return;
     }
     fitRef.current = view.fitKey;
-    progRef.current = true;
-    map.flyToBounds(view.fitBounds, { paddingTopLeft: [56, isMobile ? 108 : 82], paddingBottomRight: [40, isMobile ? 168 : 56], duration: 0.65, easeLinearity: 0.25, maxZoom: view.maxZoom || 15 });
+    flyFit(view.fitBounds, view.maxZoom);
     // eslint-disable-next-line
   }, [view.fitKey, tick]);
+
+  // Info dock → "Recenter on <context>": re-fly to the CURRENT node's fit. One listener,
+  // one target; the dock never knows about the camera.
+  React.useEffect(() => {
+    const h = () => { const v = viewRef.current; const f = v && v.fitBounds ? [].concat.apply([], v.fitBounds) : []; if (mapRef.current && f.length === 4 && f.every(Number.isFinite)) flyFit(v.fitBounds, v.maxZoom); };
+    window.addEventListener("exp:recenter", h);
+    return () => window.removeEventListener("exp:recenter", h);
+    // eslint-disable-next-line
+  }, []);
 
   // markers — rebuilt only when the marker SET changes (hover is a class toggle below,
   // so the element under the cursor is never replaced mid-click)
@@ -599,6 +665,11 @@ function ExpMap({ lead, view, isMobile, onPick, onCluster, onArea, onOpenListing
           </button>
         </div>
       )}
+      {!isMobile && (
+        <div data-design-component="map-info-dock-anchor" style={{ position: "absolute", left: "14px", bottom: "14px", zIndex: 500, width: "min(288px, calc(50% - 92px))" }}>
+          <ExpMapInfoDock view={view} signedIn={signedIn} onSignIn={onSignIn} />
+        </div>
+      )}
       {view.cameraNote && (
         <div style={{ position: "absolute", right: "14px", top: "14px", zIndex: 500, maxWidth: "230px", padding: "8px 11px", borderRadius: "var(--radius-md)", background: "rgba(255,255,255,0.95)", border: "1px solid var(--border)", boxShadow: "var(--shadow-md)", fontSize: "11.5px", lineHeight: 1.4, color: "var(--text-body)" }}>{view.cameraNote}</div>
       )}
@@ -606,4 +677,4 @@ function ExpMap({ lead, view, isMobile, onPick, onCluster, onArea, onOpenListing
   );
 }
 
-Object.assign(window, { ExpMap });
+Object.assign(window, { ExpMap, ExpMapInfoDock });

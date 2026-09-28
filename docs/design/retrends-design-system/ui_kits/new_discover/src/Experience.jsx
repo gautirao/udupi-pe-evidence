@@ -984,7 +984,7 @@ function ExpTopNav({ compact, st, act, view }) {
 
 function mapProps(st, view, act) {
   return {
-    view, hover: view.hover, dirty: st.dirty, phase: st.phase,
+    view, hover: view.hover, dirty: st.dirty, phase: st.phase, signedIn: st.signedIn, onSignIn: act.toggleSignedIn,
     onPick: st.journey === "schools" ? act.schoolsPickNode : act.pickNode,
     onCluster: st.journey === "schools" ? act.schoolsPickCluster : act.pickCluster,
     onArea: st.journey === "schools" ? act.pickSchoolArea : act.pickArea,
@@ -1077,7 +1077,9 @@ function ExpSheet({ st, view, act }) {
   }
   return (
     <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 700, padding: "10px 14px 18px", background: "var(--paper)", borderRadius: "16px 16px 0 0", borderTop: "1px solid var(--border)", boxShadow: "0 -8px 26px rgba(20,26,40,0.16)", transition: "transform var(--dur-normal) var(--ease-out)" }}>
+      {/* mobile info dock is the sheet's first block: the sheet is already the bottom info zone, so the dock adds no floating layer over markers or zoom */}
       <div style={{ width: "38px", height: "4px", borderRadius: "999px", background: "var(--stone-400)", margin: "0 auto 10px" }} />
+      {window.ExpMapInfoDock && view.journey === "areas" && <div style={{ marginBottom: "8px", paddingBottom: "8px", borderBottom: "1px solid var(--border)" }}><window.ExpMapInfoDock view={view} signedIn={st.signedIn} onSignIn={act.toggleSignedIn} compact embedded /></div>}
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "10px" }}>
         <span data-design-component="map-result-heading" style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-strong)" }}>{sheetTitle}</span>
         {view.clusterFocus
@@ -1125,6 +1127,9 @@ function buildView(st, results, act) {
     scopeTotal: results.length, showBack: false, backLabel: "", cameraNote: null
   };
 
+  // Map info dock: one context for count + recenter. Always the CURRENT node, so the
+  // city recenter disappears the moment a child is selected and returns with Back.
+  v.info = { total: results.length, where: resultsView && scopeKind !== "HIERARCHY" && v.scopeLabel ? v.scopeLabel : crumb[crumb.length - 1].label };
   if (!resultsView) {
     if (areaKids) {
       const list = focusMembers ? kids.filter((k) => focusMembers.indexOf(k.key) !== -1) : kids;
@@ -1138,6 +1143,7 @@ function buildView(st, results, act) {
     const areasUnder = level === "city" ? EX.areas : level === "direction" ? EX.areasOfDirection(st.nodeKey) : EX.areasOfLocal(st.nodeKey);
     const fitList = focusMembers ? focusMembers.map((k) => EX.byKey[k]) : areasUnder.filter((a) => EX.countIn(a.key, st.filters) > 0);
     v.fitBounds = EX.boundsOf(fitList.length ? fitList : areasUnder);
+    v.info.total = areasUnder.reduce((s, a) => s + EX.countIn(a.key, st.filters), 0);
     v.fitKey = "nav-" + st.nodeKey + "-" + (st.clusterFocus ? st.clusterFocus.key : "") + "-" + EX.filterLabels(st.filters).join(",");
     v.maxZoom = level === "city" ? 11 : level === "direction" ? 12 : 14;
     const total = kids.reduce((s, k) => s + k.n, 0);

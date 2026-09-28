@@ -55,6 +55,14 @@
   .nd-nav:focus-visible .nd-cap { opacity: 1; transform: translateY(0); }
   .upt-scroll::-webkit-scrollbar { width: 10px; }
   .upt-scroll::-webkit-scrollbar-thumb { background: var(--stone-400); border-radius: 999px; border: 3px solid var(--background); }
+  /* Map info dock — ONE card for guidance · count · recenter.
+     Desktop: bottom-left of the map, width min(288px, 50% − 92px) so it never meets the bottom-centre
+     "Search this area" or the bottom-right zoom/attribution. Mobile: the first block INSIDE the bottom
+     sheet (no extra floating layer; zoom lives top-right, Filters top-left). Rows toggle inside the card; the anchor never moves.
+     The dock never repositions markers or alters the camera fit; labels wrap (max 2 lines), never truncating the node name.
+     Recenter always targets the CURRENT node — never two. */
+  .exp-recenter:hover { background: var(--surface-subtle) !important; }
+  .exp-recenter:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   @keyframes expFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   @media (prefers-reduced-motion: reduce) { .nd-cap, .leaflet-tile-pane { transition: none; } .upt-scroll { animation: none !important; } }
 </style>
@@ -79,20 +87,20 @@
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 <script src="../../_ds_bundle.js"></script>
-<script src="src/data.js?v=e76"></script>
-<script src="src/geo.js?v=e76"></script>
-<script type="text/babel" src="src/components/shared.jsx?v=e76"></script>
-<script type="text/babel" src="src/components/cards.jsx?v=e76"></script>
-<script src="src/exp-commercial.js?v=e76"></script>
-<script src="src/exp-data.js?v=e76"></script>
-<script src="src/exp-journeys.js?v=e76"></script>
-<script type="text/babel" src="src/ExpMap.jsx?v=e76"></script>
-<script type="text/babel" src="src/ExpModeBar.jsx?v=e76"></script>
-<script type="text/babel" src="src/ExpSchools.jsx?v=e76"></script>
-<script type="text/babel" src="src/ExpAgri.jsx?v=e76"></script>
-<script type="text/babel" src="src/ExpPanel.jsx?v=e76"></script>
-<script type="text/babel" src="src/ExpMapFilters.jsx?v=e76"></script>
-<script type="text/babel" src="src/Experience.jsx?v=e76"></script>
+<script src="src/data.js?v=e84"></script>
+<script src="src/geo.js?v=e84"></script>
+<script type="text/babel" src="src/components/shared.jsx?v=e84"></script>
+<script type="text/babel" src="src/components/cards.jsx?v=e84"></script>
+<script src="src/exp-commercial.js?v=e84"></script>
+<script src="src/exp-data.js?v=e84"></script>
+<script src="src/exp-journeys.js?v=e84"></script>
+<script type="text/babel" src="src/ExpMap.jsx?v=e84"></script>
+<script type="text/babel" src="src/ExpModeBar.jsx?v=e84"></script>
+<script type="text/babel" src="src/ExpSchools.jsx?v=e84"></script>
+<script type="text/babel" src="src/ExpAgri.jsx?v=e84"></script>
+<script type="text/babel" src="src/ExpPanel.jsx?v=e84"></script>
+<script type="text/babel" src="src/ExpMapFilters.jsx?v=e84"></script>
+<script type="text/babel" src="src/Experience.jsx?v=e84"></script>
 <!-- The mount lives HERE, not inside Experience.jsx: the design-system compiler also
      bundles src/*.jsx into _ds_bundle.js, which loads before the data modules, so a
      mount inside a bundled file runs once with its dependencies missing. A plain
