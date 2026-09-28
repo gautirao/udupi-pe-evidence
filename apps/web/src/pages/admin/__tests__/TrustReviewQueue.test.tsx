@@ -272,4 +272,100 @@ describe('TrustReviewQueue', () => {
     resolveApprove({ message: 'ok' });
     await waitFor(() => expect(screen.getByRole('button', { name: /approve photos badge/i })).not.toBeDisabled());
   });
+
+  describe('onError paths (issue #2663 DoD — failure toast + reject-dialog close on error)', () => {
+    it('badge approve onError shows the failure toast (title + description + variant) and leaves the queue as-is', async () => {
+      const user = userEvent.setup();
+      mockGetByUrl([makeBadgeReview()], []);
+      vi.mocked(api.post).mockRejectedValue(new Error('Network exploded'));
+      renderPage();
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /approve photos badge/i })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /approve photos badge/i }));
+
+      await waitFor(() =>
+        expect(mockToast).toHaveBeenCalledWith({
+          title: 'Approval failed',
+          description: 'Network exploded',
+          variant: 'destructive',
+        }),
+      );
+      // The success toast must never have fired for this click.
+      expect(mockToast).not.toHaveBeenCalledWith({ title: 'Badge approved' });
+    });
+
+    it('badge reject onError closes the dialog and shows the failure toast', async () => {
+      const user = userEvent.setup();
+      mockGetByUrl([makeBadgeReview()], []);
+      vi.mocked(api.post).mockRejectedValue(new Error('Reject boom'));
+      renderPage();
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /reject photos badge/i })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /reject photos badge/i }));
+      // Confirm the dialog actually opened before we rely on it closing —
+      // otherwise a "dialog is gone" assertion below would pass vacuously.
+      await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+
+      await user.click(screen.getByRole('button', { name: 'Reject' }));
+
+      await waitFor(() =>
+        expect(mockToast).toHaveBeenCalledWith({
+          title: 'Rejection failed',
+          description: 'Reject boom',
+          variant: 'destructive',
+        }),
+      );
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(mockToast).not.toHaveBeenCalledWith({ title: 'Badge submission rejected' });
+    });
+
+    it('identity approve onError shows the failure toast (title + description + variant)', async () => {
+      const user = userEvent.setup();
+      mockGetByUrl([], [makeIdentityEvidence()]);
+      vi.mocked(api.post).mockRejectedValue(new Error('Identity approve boom'));
+      renderPage();
+
+      await waitFor(() => expect(screen.getByRole('tab', { name: /identity evidence/i })).toBeInTheDocument());
+      await user.click(screen.getByRole('tab', { name: /identity evidence/i }));
+      await waitFor(() => expect(screen.getByTestId('identity-evidence-ev-1')).toBeInTheDocument());
+
+      await user.click(screen.getByRole('button', { name: /approve identity evidence/i }));
+
+      await waitFor(() =>
+        expect(mockToast).toHaveBeenCalledWith({
+          title: 'Approval failed',
+          description: 'Identity approve boom',
+          variant: 'destructive',
+        }),
+      );
+      expect(mockToast).not.toHaveBeenCalledWith({ title: 'Identity evidence approved' });
+    });
+
+    it('identity reject onError closes the dialog and shows the failure toast', async () => {
+      const user = userEvent.setup();
+      mockGetByUrl([], [makeIdentityEvidence()]);
+      vi.mocked(api.post).mockRejectedValue(new Error('Identity reject boom'));
+      renderPage();
+
+      await waitFor(() => expect(screen.getByRole('tab', { name: /identity evidence/i })).toBeInTheDocument());
+      await user.click(screen.getByRole('tab', { name: /identity evidence/i }));
+      await waitFor(() => expect(screen.getByTestId('identity-evidence-ev-1')).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /reject identity evidence/i }));
+      // Confirm the dialog actually opened before relying on it closing.
+      await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+
+      await user.type(screen.getByLabelText(/reason/i), 'Blurry document');
+      await user.click(screen.getByRole('button', { name: 'Reject' }));
+
+      await waitFor(() =>
+        expect(mockToast).toHaveBeenCalledWith({
+          title: 'Rejection failed',
+          description: 'Identity reject boom',
+          variant: 'destructive',
+        }),
+      );
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(mockToast).not.toHaveBeenCalledWith({ title: 'Identity evidence rejected' });
+    });
+  });
 });
