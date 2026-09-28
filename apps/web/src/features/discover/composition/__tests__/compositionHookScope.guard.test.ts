@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { stripComments } from '@/test-utils/architectureGuards';
 
 /**
  * Issue #2142 (correction pass) — the guard that makes "the composition hook
@@ -22,7 +23,7 @@ const HOOK_PATH = path.resolve(__dirname, '../useDiscoverPageComposition.ts');
 const source = fs.readFileSync(HOOK_PATH, 'utf-8');
 
 /** Strip block comments and line comments so prose about a rule never satisfies (or trips) it. */
-const body = source.replace(/\/\*\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+const body = stripComments(source);
 
 describe('useDiscoverPageComposition is composition-only (structural guard)', () => {
   it('owns no React hook primitives — every one belongs to a named controller', () => {
