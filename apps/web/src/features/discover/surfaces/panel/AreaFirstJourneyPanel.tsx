@@ -1,5 +1,6 @@
 import { CITY_CONFIG } from '@/lib/localityUtils';
 import { DiscoverAreasJourneyPanel } from '@/features/discover/views/DiscoverAreasJourneyPanel';
+import { toAreaLeafScopeSource } from '@/features/discover/areas-journey/results/areaLeafResultSources';
 import { ROOT_NODE_KEY } from '@/features/discover/navigation/types';
 import { DiscoverJourneyPanelShell } from './DiscoverJourneyPanelShell';
 import type {
@@ -135,24 +136,8 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
   const { city } = view.routing;
   const { areasNavigationJourney, hoveredNavigationNodeKey, focusedClusterMemberAreaKeys } =
     view.navigation;
-  const {
-    areaListings,
-    isLoadingAreaListings,
-    isErrorAreaListings,
-    selectedArea,
-    isFetchingAreaListings,
-    isAnonViewport,
-    anonViewportListings,
-    anonViewportListingsLoading,
-    isAuthViewport,
-    authViewportListings,
-    authViewportListingsLoading,
-    isPolygonScope,
-    polygonListings,
-    polygonListingsLoading,
-    isErrorPolygonListings,
-    refetchPolygonListings,
-  } = view.geography;
+  const { areaListings, isLoadingAreaListings, isErrorAreaListings, selectedArea, isFetchingAreaListings } =
+    view.geography;
   const { filters } = view.filters;
   const { selectedSchool, schools, schoolsQuery, schoolListings } = view.schools;
   const { listingDataLoading } = view.results;
@@ -216,104 +201,97 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
       prefersReducedMotion={prefersReducedMotion}
     >
       <DiscoverAreasJourneyPanel
-        journey={areasNavigationJourney}
-        cityLabel={areaFirstCityLabel}
-        hoveredNodeKey={hoveredNavigationNodeKey}
-        onHoverChange={onNavigationNodeHoverChange}
-        focusedClusterMemberAreaKeys={focusedClusterMemberAreaKeys}
-        onClusterFocusChange={onClusterFocusChange}
-        isNodeListingsActive={urlState.nodeListings === true}
-        onClearNodeListings={urlActions.clearNodeListings}
-        onBrowseListings={urlActions.enterNodeListings}
-        // Issue #1956 PR 2 (Slice 5) — the pure href builder the visible
-        // in-app HierarchyBackButton uses to resolve the canonical parent.
-        buildNodeHref={urlActions.buildNodeHref}
-        // Issue #1956 PR-4 FIX CYCLE 3 (blocking Fix B) — forward the SAME
-        // `filters`/`handleFiltersChange` the legacy `DiscoverRightPanel` bridge
-        // receives, so an AREA-leaf chip toggle writes into the identical
-        // page-local filters state the map's query reads, instead of a parallel
-        // URL-only write.
-        areaLeafFilters={filters}
-        onAreaLeafFiltersChange={handleFiltersChange}
-        // Issue #2353 — the map's already-fetched area listings (keyed on the
-        // same effective AREA-leaf bridge), used as the primary data source by
-        // AreaLeafListingsSurface so it no longer issues its own duplicate
-        // useDiscoverCityListings query. `mapAreaListingsAreaKey` lets the
-        // surface verify the listings are actually keyed to the leaf it
-        // resolved (code-review fix) before trusting them; `mapAreaListingsRefetch`
-        // makes the surface's error-state Retry button a real refetch.
-        // `mapAreaListingsFetching` (code-review fix) — the SAME query's
-        // isFetching, so the surface can surface a `keepPreviousData`
-        // refresh-in-flight state (stale cards + new fetch pending, e.g. a
-        // filter/search rekey) instead of presenting it as fully settled.
-        mapAreaListings={areaListings}
-        mapAreaListingsLoading={isLoadingAreaListings}
-        mapAreaListingsError={isErrorAreaListings}
-        mapAreaListingsFetching={isFetchingAreaListings}
-        mapAreaListingsAreaKey={selectedArea?.areaKey ?? null}
-        mapAreaListingsRefetch={refetchAreaListings}
-        // Issue #2018 slice 3 — 'Adjust boundary' seam for the POLYGON
-        // zero-result row. Forwarded unchanged; commits nothing itself.
-        onRedrawPolygon={handleRedrawPolygon}
-        // Issue #2015 — the committed VIEWPORT-scope ("Search this area")
-        // signals, mirrored from the legacy `DiscoverRightPanel` bridge (see
-        // that component's `isAnonViewport || isAuthViewport` derivation).
-        // `AreaLeafListingsSurface` uses these to swap away from the stale
-        // AREA_SET `mapAreaListings` above once a VIEWPORT scope is active.
-        isAnonViewport={isAnonViewport}
-        anonViewportListings={anonViewportListings}
-        anonViewportListingsLoading={anonViewportListingsLoading}
-        isAuthViewport={isAuthViewport}
-        authViewportListings={authViewportListings}
-        authViewportListingsLoading={authViewportListingsLoading}
-        // Issue #2461 — the committed-POLYGON (drawn search area) signals,
-        // substituted by `AreaLeafListingsSurface` the same way as VIEWPORT.
-        isPolygonScope={isPolygonScope}
-        polygonListings={polygonListings}
-        polygonListingsLoading={polygonListingsLoading}
-        isErrorPolygonListings={isErrorPolygonListings}
-        refetchPolygonListings={refetchPolygonListings}
-        // Issue #1956 PR-4 FINAL FIX PASS (regression fix) — the canonical
-        // AREA-leaf surface silently dropped the "Add a school in this
-        // area" CTA because this call site never supplied `onAddSchool`
-        // (the prop is optional on both `DiscoverAreasJourneyPanel` and
-        // `AreaSelectedPanel`, so the omission compiled but the button just
-        // never rendered). `urlActions` is already the SAME
-        // `useDiscoverActions()` facade result the legacy `DiscoverRightPanel`
-        // bridge uses for its own `onAddSchool={urlActions.enterSchoolPicking}`
-        // — reusing it here (not a new handler) keeps the area-first
-        // school-picking sub-step (Issue #1157) identical on both surfaces:
-        // `journey` stays `area-first` so Back restores the selected area
-        // instead of deleting it.
-        onAddSchool={urlActions.enterSchoolPicking}
-        onSelectedListingPreviewChange={onSelectedListingPreviewChange}
-        // Issue #2124 (fix-cycle) — the canonical area-first "schools-in-area"
-        // sub-step (schoolPicking=1) and its follow-on area+school combined view
-        // (schoolId set). These are the SAME schools/selectedSchool/schoolListings/
-        // radiusKm props (and journeyCommands actions) already threaded to the
-        // legacy `DiscoverRightPanel` bridge for the identical panels —
-        // reused here, never re-fetched, so the canonical and legacy surfaces can
-        // never disagree on schools-in-area data.
-        schools={schools}
-        schoolsLoading={schoolsQuery.isLoading}
-        schoolsError={schoolsQuery.isError}
-        onSchoolsRetry={schoolsQuery.refetch}
-        schoolsFetching={schoolsQuery.isFetching}
-        selectedSchool={selectedSchool}
-        schoolListings={schoolListings}
-        schoolListingsLoading={listingDataLoading}
-        radiusKm={urlState.radiusKm}
-        onRadiusChange={journeyCommands.changeRadius}
-        onClearSchool={journeyCommands.clearSchool}
-        onSelectSchool={journeyCommands.selectSchoolById}
-        onStartOver={journeyCommands.startOver}
-        // Issue #2124 (fix-cycle) — `handleAreaFirstBack` already implements the
-        // exact 3-rung ladder (schoolId -> backToSchoolPicking; schoolPicking ->
-        // clearSchoolPicking; else -> area back) purely off `nav.schoolId`/
-        // `nav.schoolPicking` (URL state, journey-agnostic) — it never reads the
-        // legacy `areaKey` param, so it is already correct for the canonical
-        // journey unchanged.
-        onBackFromSchoolFlow={handleAreaFirstBack}
+        // Issue #2660 — {view, commands} capability groups (areas-journey/
+        // contracts.ts) replacing the former 48 flat props. Every value below
+        // is the same reference the flat call passed; only the grouping changed.
+        view={{
+          hierarchy: {
+            // The ONE journey result the map also reads (#2142) — passed by
+            // reference; the panel's contract only reads a Pick of it.
+            journey: areasNavigationJourney,
+            hoveredNodeKey: hoveredNavigationNodeKey,
+            isNodeListingsActive: urlState.nodeListings === true,
+          },
+          cluster: { focusedMemberAreaKeys: focusedClusterMemberAreaKeys },
+          results: {
+            // Issue #1956 PR-4 FIX CYCLE 3 (blocking Fix B) — the SAME page-local
+            // `filters` the map's query reads (not a parallel URL-only copy).
+            filters,
+            source: {
+              // Issue #2353 — the map's already-fetched area listings, used as
+              // the leaf's primary data source (no duplicate query). The areaKey
+              // they are keyed to lets the leaf verify they belong to the leaf it
+              // resolved; `retry` makes its error Retry a real refetch;
+              // `fetching` is the keepPreviousData refresh-in-flight signal.
+              areaBase: {
+                listings: areaListings,
+                areaKey: selectedArea?.areaKey ?? null,
+                loading: isLoadingAreaListings,
+                fetching: isFetchingAreaListings,
+                error: isErrorAreaListings,
+                retry: refetchAreaListings,
+              },
+              // Issue #2015 / #2461 — the committed VIEWPORT ("Search this
+              // area") / POLYGON scope, converged into one discriminated scope
+              // by the typed adapter (anon > auth > polygon, T10).
+              scope: toAreaLeafScopeSource(view.geography),
+            },
+          },
+          // Issue #2124 (fix-cycle) — the SAME schools/selectedSchool/
+          // schoolListings/radiusKm the legacy `DiscoverRightPanel` bridge
+          // receives, never re-fetched, so the two surfaces cannot disagree.
+          schools: {
+            inArea: {
+              data: schools,
+              loading: schoolsQuery.isLoading,
+              fetching: schoolsQuery.isFetching,
+              error: schoolsQuery.isError,
+            },
+            selected: selectedSchool,
+            selectedListings: { data: schoolListings, loading: listingDataLoading },
+            radiusKm: urlState.radiusKm,
+          },
+          city: { label: areaFirstCityLabel },
+        }}
+        commands={{
+          hierarchy: {
+            selectNode: areasNavigationJourney.selectNode,
+            retry: areasNavigationJourney.refetch,
+            hoverNode: onNavigationNodeHoverChange,
+          },
+          cluster: { changeFocus: onClusterFocusChange },
+          results: {
+            changeFilters: handleFiltersChange,
+            reportSelectedListingPreview: onSelectedListingPreviewChange,
+            // Issue #2018 slice 3 — 'Adjust boundary' seam for the POLYGON
+            // zero-result row; commits nothing itself.
+            redrawPolygon: handleRedrawPolygon,
+          },
+          schools: {
+            // Issue #1956 PR-4 FINAL FIX PASS — the SAME
+            // `urlActions.enterSchoolPicking` the legacy bridge wires to its
+            // "Add a school in this area" CTA, so the area-first school-picking
+            // sub-step (#1157) keeps `journey=area-first` and Back restores the
+            // selected area instead of deleting it.
+            enterPicking: urlActions.enterSchoolPicking,
+            select: journeyCommands.selectSchoolById,
+            clear: journeyCommands.clearSchool,
+            retry: schoolsQuery.refetch,
+            changeRadius: journeyCommands.changeRadius,
+            // Issue #2124 — `handleAreaFirstBack`'s 3-rung ladder (schoolId ->
+            // backToSchoolPicking; schoolPicking -> clearSchoolPicking; else ->
+            // area back), driven purely by URL state.
+            back: handleAreaFirstBack,
+          },
+          navigation: {
+            // Issue #1956 PR 2 (Slice 5) — the pure href builder the in-app
+            // HierarchyBackButton uses to resolve the canonical parent.
+            buildNodeHref: urlActions.buildNodeHref,
+            browseListings: urlActions.enterNodeListings,
+            clearNodeListings: urlActions.clearNodeListings,
+            startOver: journeyCommands.startOver,
+          },
+        }}
       />
     </DiscoverJourneyPanelShell>
   );

@@ -30,7 +30,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
-import { DiscoverAreasJourneyPanel } from '../DiscoverAreasJourneyPanel';
+import { FlatPropsAreasJourneyPanel } from '@/features/discover/areas-journey/testing/FlatPropsAreasJourneyPanel';
 import { NodeListingsSurface } from '../NodeListingsSurface';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
@@ -489,7 +489,7 @@ describe('#2553 — "Clear property filters" now genuinely clears out-of-project
 describe('#2553 — DiscoverAreasJourneyPanel AREA-leaf commit boundary', () => {
   function renderPanel(props: Record<string, unknown> = {}) {
     return renderWithProviders(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney({ node: makeAreaLeafNode() })}
         buildNodeHref={NOOP_BUILD_HREF}
         {...props}
@@ -554,7 +554,7 @@ describe('#2553 — DiscoverAreasJourneyPanel school-combined commit boundary', 
   function renderPanel(props: Record<string, unknown> = {}) {
     mockSchoolId = 'school-1';
     return renderWithProviders(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney({ node: makeAreaLeafNode() })}
         buildNodeHref={NOOP_BUILD_HREF}
         {...props}

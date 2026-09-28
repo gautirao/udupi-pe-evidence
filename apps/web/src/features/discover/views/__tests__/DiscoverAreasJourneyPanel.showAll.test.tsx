@@ -18,7 +18,7 @@ import { useState } from 'react';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
-import { DiscoverAreasJourneyPanel } from '../DiscoverAreasJourneyPanel';
+import { FlatPropsAreasJourneyPanel } from '@/features/discover/areas-journey/testing/FlatPropsAreasJourneyPanel';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { NavigationNodeResponse } from '@/features/discover/navigation/types';
 
@@ -90,7 +90,7 @@ function StatefulHarness({ initialFocus }: { initialFocus: readonly string[] | n
     children: TYPED_CHILDREN,
   });
   return (
-    <DiscoverAreasJourneyPanel
+    <FlatPropsAreasJourneyPanel
       journey={journey}
       buildNodeHref={NOOP_BUILD_HREF}
       focusedClusterMemberAreaKeys={focus}

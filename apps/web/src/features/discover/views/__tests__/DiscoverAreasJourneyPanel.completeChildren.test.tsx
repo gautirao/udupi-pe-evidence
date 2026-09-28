@@ -25,7 +25,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { DiscoverAreasJourneyPanel } from '../DiscoverAreasJourneyPanel';
+import { FlatPropsAreasJourneyPanel } from '@/features/discover/areas-journey/testing/FlatPropsAreasJourneyPanel';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { NavigationNodeResponse } from '@/features/discover/navigation/types';
 
@@ -99,7 +99,7 @@ const TYPED_CHILDREN: UseAreasNavigationJourneyResult['children'] = Array.from(
 function renderLargePanel() {
   return render(
     <MemoryRouter>
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney({
           node: makeNode({
             nodeKey: 'd:central',

@@ -10,7 +10,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
-import { DiscoverAreasJourneyPanel } from '../DiscoverAreasJourneyPanel';
+import { FlatPropsAreasJourneyPanel } from '@/features/discover/areas-journey/testing/FlatPropsAreasJourneyPanel';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { NavigationNodeResponse } from '@/features/discover/navigation/types';
 
@@ -63,14 +63,14 @@ function makeJourney(overrides: Partial<UseAreasNavigationJourneyResult> = {}): 
 
 describe('DiscoverAreasJourneyPanel', () => {
   it('loading state', () => {
-    render(<DiscoverAreasJourneyPanel journey={makeJourney({ isLoading: true })} buildNodeHref={NOOP_BUILD_HREF} />);
+    render(<FlatPropsAreasJourneyPanel journey={makeJourney({ isLoading: true })} buildNodeHref={NOOP_BUILD_HREF} />);
     expect(screen.getByTestId('areas-journey-panel-loading')).toBeInTheDocument();
   });
 
   it('error state — shows a retry CTA that calls journey.refetch', async () => {
     const user = userEvent.setup();
     const refetch = vi.fn();
-    render(<DiscoverAreasJourneyPanel journey={makeJourney({ isError: true, refetch })} buildNodeHref={NOOP_BUILD_HREF} />);
+    render(<FlatPropsAreasJourneyPanel journey={makeJourney({ isError: true, refetch })} buildNodeHref={NOOP_BUILD_HREF} />);
     const errorState = screen.getByTestId('areas-journey-panel-error');
     expect(errorState).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /retry/i }));
@@ -80,7 +80,7 @@ describe('DiscoverAreasJourneyPanel', () => {
   it('empty state — node resolved but no children, renders the honest empty state (AC3.8)', () => {
     render(
       <MemoryRouter>
-        <DiscoverAreasJourneyPanel
+        <FlatPropsAreasJourneyPanel
           journey={makeJourney({
             node: makeNode(),
             nodeCount: { listingCount: 0, schoolCount: 0, matchingAreaCount: null },
@@ -97,7 +97,7 @@ describe('DiscoverAreasJourneyPanel', () => {
   it('success state — renders the level panel with destination cards', () => {
     render(
       <MemoryRouter>
-        <DiscoverAreasJourneyPanel
+        <FlatPropsAreasJourneyPanel
           journey={makeJourney({
             node: makeNode(),
             nodeCount: { listingCount: 20, schoolCount: 3, matchingAreaCount: null },
@@ -134,7 +134,7 @@ describe('DiscoverAreasJourneyPanel', () => {
     it('renders the CURRENT node\'s direct children in a single-column-by-default grid (list-first at 390px)', () => {
       render(
         <MemoryRouter>
-          <DiscoverAreasJourneyPanel
+          <FlatPropsAreasJourneyPanel
             journey={makeJourney({
               // Non-root ancestry so HierarchyBackButton actually renders
               // (AC5.7 hides it only at the city root's empty ancestry).
@@ -192,7 +192,7 @@ describe('DiscoverAreasJourneyPanel', () => {
 
   it('renders nothing when node is null and not loading/erroring (gate closed)', () => {
     const { container } = render(
-      <DiscoverAreasJourneyPanel journey={makeJourney()} buildNodeHref={NOOP_BUILD_HREF} />,
+      <FlatPropsAreasJourneyPanel journey={makeJourney()} buildNodeHref={NOOP_BUILD_HREF} />,
     );
     expect(container).toBeEmptyDOMElement();
   });
@@ -200,7 +200,7 @@ describe('DiscoverAreasJourneyPanel', () => {
   it('invariant 8 — never renders any result-scope controls', () => {
     render(
       <MemoryRouter>
-        <DiscoverAreasJourneyPanel
+        <FlatPropsAreasJourneyPanel
           journey={makeJourney({
             node: makeNode(),
             nodeCount: { listingCount: 20, schoolCount: 3, matchingAreaCount: null },
@@ -238,7 +238,7 @@ describe('DiscoverAreasJourneyPanel', () => {
     it('is absent at the city root (empty ancestry)', () => {
       render(
         <MemoryRouter>
-          <DiscoverAreasJourneyPanel
+          <FlatPropsAreasJourneyPanel
             journey={makeJourney({
               node: makeNode(), // default fixture is the root (ancestry: [])
               nodeCount: { listingCount: 0, schoolCount: 0, matchingAreaCount: null },
@@ -254,7 +254,7 @@ describe('DiscoverAreasJourneyPanel', () => {
     it('renders and links to the canonical parent for a non-root resolved node', () => {
       render(
         <MemoryRouter>
-          <DiscoverAreasJourneyPanel
+          <FlatPropsAreasJourneyPanel
             journey={makeJourney({
               node: makeNode({
                 nodeKey: 'd:n',
@@ -299,7 +299,7 @@ describe('DiscoverAreasJourneyPanel', () => {
     function renderFocused(overrides: { onClusterFocusChange?: (keys: readonly string[] | null) => void; selectNode?: ReturnType<typeof vi.fn> } = {}) {
       return render(
         <MemoryRouter>
-          <DiscoverAreasJourneyPanel
+          <FlatPropsAreasJourneyPanel
             journey={makeJourney({
               node: makeNode({ children: CLUSTER_RAW_CHILDREN }),
               nodeCount: { listingCount: 9, schoolCount: 0, matchingAreaCount: null },
@@ -347,7 +347,7 @@ describe('DiscoverAreasJourneyPanel', () => {
     it('AC12: omits the listings subtitle (not a fabricated "0 listings") when nodeCount is unavailable', () => {
       render(
         <MemoryRouter>
-          <DiscoverAreasJourneyPanel
+          <FlatPropsAreasJourneyPanel
             journey={makeJourney({
               node: makeNode({ children: CLUSTER_RAW_CHILDREN }),
               nodeCount: null,
@@ -393,7 +393,7 @@ describe('DiscoverAreasJourneyPanel', () => {
     it('falls back to the normal navigation-level-panel when no cluster is focused (null)', () => {
       render(
         <MemoryRouter>
-          <DiscoverAreasJourneyPanel
+          <FlatPropsAreasJourneyPanel
             journey={makeJourney({
               node: makeNode(),
               nodeCount: { listingCount: 20, schoolCount: 3, matchingAreaCount: null },
@@ -442,7 +442,7 @@ describe('DiscoverAreasJourneyPanel', () => {
       ];
       render(
         <MemoryRouter>
-          <DiscoverAreasJourneyPanel
+          <FlatPropsAreasJourneyPanel
             journey={makeJourney({
               node: makeNode({ children: rawChildren }),
               nodeCount: { listingCount: 8, schoolCount: 0, matchingAreaCount: null },
@@ -467,7 +467,7 @@ describe('DiscoverAreasJourneyPanel', () => {
       }));
       render(
         <MemoryRouter>
-          <DiscoverAreasJourneyPanel
+          <FlatPropsAreasJourneyPanel
             journey={makeJourney({
               node: makeNode({ children: CLUSTER_RAW_CHILDREN }),
               nodeCount: { listingCount: 0, schoolCount: 0, matchingAreaCount: null },
@@ -504,7 +504,7 @@ describe('DiscoverAreasJourneyPanel', () => {
       ];
       render(
         <MemoryRouter>
-          <DiscoverAreasJourneyPanel
+          <FlatPropsAreasJourneyPanel
             journey={makeJourney({
               node: makeNode({ children: rawChildren }),
               nodeCount: { listingCount: 15, schoolCount: 0, matchingAreaCount: null },
@@ -568,7 +568,7 @@ describe('DiscoverAreasJourneyPanel', () => {
     function renderClusterLevel(overrides: { selectNode?: ReturnType<typeof vi.fn> } = {}) {
       return render(
         <MemoryRouter>
-          <DiscoverAreasJourneyPanel
+          <FlatPropsAreasJourneyPanel
             journey={makeJourney({
               node: DIRECTION_WITH_CLUSTER_CHILD,
               levelKind: 'clusters',

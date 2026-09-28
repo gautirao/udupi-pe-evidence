@@ -30,7 +30,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { DiscoverAreasJourneyPanel } from '../../views/DiscoverAreasJourneyPanel';
+import { FlatPropsAreasJourneyPanel } from '@/features/discover/areas-journey/testing/FlatPropsAreasJourneyPanel';
 import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftContext';
 import type { UseAreasNavigationJourneyResult } from '../useAreasNavigationJourney';
@@ -140,7 +140,7 @@ function makeListing(overrides: Partial<DiscoverCityListingItem> = {}): Discover
 function renderPanel(
   node: NavigationNodeResponse | null,
   url = '/discover?city=bangalore&journey=area-first&intent=buy',
-  extraProps: Partial<ComponentProps<typeof DiscoverAreasJourneyPanel>> = {},
+  extraProps: Partial<ComponentProps<typeof FlatPropsAreasJourneyPanel>> = {},
 ) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -153,7 +153,7 @@ function renderPanel(
               design). Production mounts it above both trees in
               pages/MapDiscovery.tsx. */}
           <AreaSetDraftProvider>
-            <DiscoverAreasJourneyPanel
+            <FlatPropsAreasJourneyPanel
               journey={makeJourney({
                 node,
                 nodeCount: { listingCount: 1, schoolCount: 0, matchingAreaCount: null },

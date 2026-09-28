@@ -21,7 +21,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import type { ReactElement } from 'react';
-import { DiscoverAreasJourneyPanel } from '../DiscoverAreasJourneyPanel';
+import { FlatPropsAreasJourneyPanel } from '@/features/discover/areas-journey/testing/FlatPropsAreasJourneyPanel';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { NavigationNodeResponse } from '@/features/discover/navigation/types';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
@@ -156,7 +156,7 @@ describe('DiscoverAreasJourneyPanel — AC5.9 full breadcrumb at the canonical A
   it('renders the Region AND Group crumbs (not just City) for a full-depth node', () => {
     const selectNode = vi.fn();
     renderWithProviders(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney({ node: makeFullDepthAreaLeafNode(), selectNode })}
         buildNodeHref={NOOP_BUILD_HREF}
       />,
@@ -175,7 +175,7 @@ describe('DiscoverAreasJourneyPanel — AC5.9 full breadcrumb at the canonical A
     const user = userEvent.setup();
     const selectNode = vi.fn();
     renderWithProviders(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney({ node: makeFullDepthAreaLeafNode(), selectNode })}
         buildNodeHref={NOOP_BUILD_HREF}
       />,
@@ -189,7 +189,7 @@ describe('DiscoverAreasJourneyPanel — AC5.9 full breadcrumb at the canonical A
     const user = userEvent.setup();
     const selectNode = vi.fn();
     renderWithProviders(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney({ node: makeFullDepthAreaLeafNode(), selectNode })}
         buildNodeHref={NOOP_BUILD_HREF}
       />,
@@ -203,7 +203,7 @@ describe('DiscoverAreasJourneyPanel — AC5.9 full breadcrumb at the canonical A
     const user = userEvent.setup();
     const selectNode = vi.fn();
     renderWithProviders(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney({ node: makeFullDepthAreaLeafNode(), selectNode })}
         buildNodeHref={NOOP_BUILD_HREF}
       />,
@@ -222,7 +222,7 @@ describe('DiscoverAreasJourneyPanel — AC5.9 full breadcrumb at the canonical A
       ancestry: [{ nodeKey: 'd:w', nodeType: 'DIRECTION', displayLabel: 'West Bangalore', displayOrder: 0 }],
     };
     renderWithProviders(
-      <DiscoverAreasJourneyPanel journey={makeJourney({ node: depth1Node })} buildNodeHref={NOOP_BUILD_HREF} />,
+      <FlatPropsAreasJourneyPanel journey={makeJourney({ node: depth1Node })} buildNodeHref={NOOP_BUILD_HREF} />,
     );
     expect(screen.getByTestId('breadcrumb-region')).toHaveTextContent('West Bangalore');
     expect(screen.queryByTestId('breadcrumb-group')).not.toBeInTheDocument();
@@ -239,7 +239,7 @@ describe('DiscoverAreasJourneyPanel — AC5.10/AC5.10c selected-listing preview 
   it('reports null when no listing is selected', () => {
     const onSelectedListingPreviewChange = vi.fn();
     renderWithProviders(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney({ node: makeFullDepthAreaLeafNode() })}
         buildNodeHref={NOOP_BUILD_HREF}
         onSelectedListingPreviewChange={onSelectedListingPreviewChange}
@@ -271,7 +271,7 @@ describe('DiscoverAreasJourneyPanel — AC5.10/AC5.10c selected-listing preview 
     };
     const onSelectedListingPreviewChange = vi.fn();
     renderWithProviders(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney({ node: makeFullDepthAreaLeafNode() })}
         buildNodeHref={NOOP_BUILD_HREF}
         onSelectedListingPreviewChange={onSelectedListingPreviewChange}
@@ -298,7 +298,7 @@ describe('DiscoverAreasJourneyPanel — AC5.10/AC5.10c selected-listing preview 
     mockSelectedListing = 'not-in-this-area';
     const onSelectedListingPreviewChange = vi.fn();
     renderWithProviders(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney({ node: makeFullDepthAreaLeafNode() })}
         buildNodeHref={NOOP_BUILD_HREF}
         onSelectedListingPreviewChange={onSelectedListingPreviewChange}

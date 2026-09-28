@@ -42,8 +42,14 @@ function walkTsx(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
+// Issue #2660 — `DiscoverAreasJourneyPanel.tsx`'s hierarchy and AREA-leaf
+// surfaces were decomposed into `features/discover/areas-journey/`; sweeping
+// only the original file would silently stop covering the moved JSX.
+const AREAS_JOURNEY_DIR = path.join(SRC_ROOT, 'features/discover/areas-journey');
+
 const MOBILE_SURFACE_FILES = [
   ...walkTsx(MOBILE_DIR),
+  ...walkTsx(AREAS_JOURNEY_DIR),
   path.join(SRC_ROOT, 'features/discover/views/DiscoverAreasJourneyPanel.tsx'),
   path.join(SRC_ROOT, 'components/discover/navigation/HierarchyBackButton.tsx'),
 ].filter((f) => fs.existsSync(f));

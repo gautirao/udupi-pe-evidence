@@ -29,7 +29,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { DiscoverAreasJourneyPanel } from '../../views/DiscoverAreasJourneyPanel';
+import { FlatPropsAreasJourneyPanel } from '@/features/discover/areas-journey/testing/FlatPropsAreasJourneyPanel';
 import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import type { UseAreasNavigationJourneyResult } from '../useAreasNavigationJourney';
 import type { NavigationNodeResponse } from '../types';
@@ -120,7 +120,7 @@ function renderPanel(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[url]}>
         <DiscoverProvider>
-          <DiscoverAreasJourneyPanel
+          <FlatPropsAreasJourneyPanel
             journey={makeJourney({
               node,
               nodeCount: { listingCount: 1, schoolCount: 0, matchingAreaCount: null },

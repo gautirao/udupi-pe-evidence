@@ -15,7 +15,7 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
-import { DiscoverAreasJourneyPanel } from '../DiscoverAreasJourneyPanel';
+import { FlatPropsAreasJourneyPanel } from '@/features/discover/areas-journey/testing/FlatPropsAreasJourneyPanel';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { NavigationNodeResponse } from '@/features/discover/navigation/types';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
@@ -144,7 +144,7 @@ describe('DiscoverAreasJourneyPanel — Issue #2461 committed POLYGON card parit
 
   it('renders polygonListings (4) instead of the AREA-keyed leaf list (2), and disables the AREA-keyed query', () => {
     renderWithProviders(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney({ node: makeAreaLeafNode() })}
         buildNodeHref={NOOP_BUILD_HREF}
         isPolygonScope
@@ -165,7 +165,7 @@ describe('DiscoverAreasJourneyPanel — Issue #2461 committed POLYGON card parit
   it('a failed POLYGON request renders the request-failure state and Retry re-issues the polygon query', async () => {
     const refetchPolygonListings = vi.fn();
     renderWithProviders(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney({ node: makeAreaLeafNode() })}
         buildNodeHref={NOOP_BUILD_HREF}
         isPolygonScope
@@ -186,7 +186,7 @@ describe('DiscoverAreasJourneyPanel — Issue #2461 committed POLYGON card parit
 
   it('control: without a committed POLYGON the AREA-keyed leaf list renders and its query stays keyed to the leaf', () => {
     renderWithProviders(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney({ node: makeAreaLeafNode() })}
         buildNodeHref={NOOP_BUILD_HREF}
         polygonListings={POLYGON_SCOPED}

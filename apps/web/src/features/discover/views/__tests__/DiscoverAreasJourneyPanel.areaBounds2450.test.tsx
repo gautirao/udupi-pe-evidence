@@ -35,7 +35,7 @@ import { render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
-import { DiscoverAreasJourneyPanel } from '../DiscoverAreasJourneyPanel';
+import { FlatPropsAreasJourneyPanel } from '@/features/discover/areas-journey/testing/FlatPropsAreasJourneyPanel';
 import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftContext';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { NavigationNodeResponse } from '@/features/discover/navigation/types';
@@ -203,7 +203,7 @@ describe('#2450 — the AREA-first leaf query forwards the area (sq ft) bound', 
    */
   it('forwards a committed lower bound', () => {
     renderPanel(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney()}
         buildNodeHref={() => null}
         areaLeafFilters={{ areaMinSqft: 1000 }}
@@ -221,7 +221,7 @@ describe('#2450 — the AREA-first leaf query forwards the area (sq ft) bound', 
    */
   it('forwards a lower bound that arrived via the URL when nothing is committed', () => {
     mockNavFilters = { areaMinSqft: 1000 };
-    renderPanel(<DiscoverAreasJourneyPanel journey={makeJourney()} buildNodeHref={() => null} />);
+    renderPanel(<FlatPropsAreasJourneyPanel journey={makeJourney()} buildNodeHref={() => null} />);
     expect(cityListingsArgs().areaMinSqft).toBe(1000);
   });
 
@@ -232,7 +232,7 @@ describe('#2450 — the AREA-first leaf query forwards the area (sq ft) bound', 
    */
   it('forwards a committed upper bound', () => {
     renderPanel(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney()}
         buildNodeHref={() => null}
         areaLeafFilters={{ areaMaxSqft: 2000 }}
@@ -243,7 +243,7 @@ describe('#2450 — the AREA-first leaf query forwards the area (sq ft) bound', 
 
   it('forwards both ends of a committed range, with min and max distinguishable', () => {
     renderPanel(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney()}
         buildNodeHref={() => null}
         areaLeafFilters={{ areaMinSqft: 800, areaMaxSqft: 1600 }}
@@ -260,7 +260,7 @@ describe('#2450 — the AREA-first leaf query forwards the area (sq ft) bound', 
    * call site that hard-coded some bound would satisfy every assertion above.
    */
   it('omits the axis entirely when no bound is selected', () => {
-    renderPanel(<DiscoverAreasJourneyPanel journey={makeJourney()} buildNodeHref={() => null} />);
+    renderPanel(<FlatPropsAreasJourneyPanel journey={makeJourney()} buildNodeHref={() => null} />);
     expect(cityListingsArgs().areaMinSqft).toBeUndefined();
     expect(cityListingsArgs().areaMaxSqft).toBeUndefined();
   });
@@ -273,7 +273,7 @@ describe('#2450 — the AREA-first leaf query forwards the area (sq ft) bound', 
    */
   it('forwards a zero lower bound rather than treating 0 as absent', () => {
     renderPanel(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney()}
         buildNodeHref={() => null}
         areaLeafFilters={{ areaMinSqft: 0 }}
@@ -301,7 +301,7 @@ describe('#2450 — the AREA-first leaf query forwards the area (sq ft) bound', 
    */
   it('disables its own query when the map supplies listings — site 5 is live in that state', () => {
     renderPanel(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney()}
         buildNodeHref={() => null}
         areaLeafFilters={{ areaMinSqft: 1000 }}

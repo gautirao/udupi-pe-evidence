@@ -28,7 +28,7 @@ import { render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
-import { DiscoverAreasJourneyPanel } from '../DiscoverAreasJourneyPanel';
+import { FlatPropsAreasJourneyPanel } from '@/features/discover/areas-journey/testing/FlatPropsAreasJourneyPanel';
 import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftContext';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { NavigationNodeResponse } from '@/features/discover/navigation/types';
@@ -200,7 +200,7 @@ describe('#2531 — the AREA-first leaf query forwards the Commercial subtype', 
    */
   it('forwards a committed subtype from areaLeafFilters', () => {
     renderPanel(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney()}
         buildNodeHref={() => null}
         areaLeafFilters={{ commercialSubtypes: ['OFFICE'] }}
@@ -217,13 +217,13 @@ describe('#2531 — the AREA-first leaf query forwards the Commercial subtype', 
    */
   it('forwards a subtype that arrived via the URL when nothing is committed', () => {
     mockNavFilters = { commercialSubtypes: ['SHOP'] };
-    renderPanel(<DiscoverAreasJourneyPanel journey={makeJourney()} buildNodeHref={() => null} />);
+    renderPanel(<FlatPropsAreasJourneyPanel journey={makeJourney()} buildNodeHref={() => null} />);
     expect(cityListingsArgs().commercialSubtypes).toEqual(['SHOP']);
   });
 
   it('forwards a multi-subtype selection whole', () => {
     renderPanel(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney()}
         buildNodeHref={() => null}
         areaLeafFilters={{ commercialSubtypes: ['SHOP', 'OFFICE'] }}
@@ -239,7 +239,7 @@ describe('#2531 — the AREA-first leaf query forwards the Commercial subtype', 
    */
   it('forwards the subtype when NO propertyTypes is selected', () => {
     renderPanel(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney()}
         buildNodeHref={() => null}
         areaLeafFilters={{ commercialSubtypes: ['OFFICE'] }}
@@ -256,7 +256,7 @@ describe('#2531 — the AREA-first leaf query forwards the Commercial subtype', 
    */
   it('omits the axis entirely when no subtype is selected', () => {
     renderPanel(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney()}
         buildNodeHref={() => null}
         areaLeafFilters={{ propertyTypes: ['commercial'] }}
@@ -272,7 +272,7 @@ describe('#2531 — the AREA-first leaf query forwards the Commercial subtype', 
 
   it('normalises an empty subtype array to an omitted param, never "match none"', () => {
     renderPanel(
-      <DiscoverAreasJourneyPanel
+      <FlatPropsAreasJourneyPanel
         journey={makeJourney()}
         buildNodeHref={() => null}
         areaLeafFilters={{ commercialSubtypes: [] }}
