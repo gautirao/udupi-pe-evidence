@@ -54,9 +54,21 @@ vi.mock('@/components/map/PropertyMap', () => ({
   },
 }));
 
+// Issue #2657 C8 — `onAreaSearchQueryChange` is a DEAD prop (architect plan
+// §1 C0 audit: DiscoverRightPanel's body never destructured/read it even
+// pre-C8) and was DROPPED entirely from the flipped `{view, commands}`
+// contract — there is no live equivalent anywhere in `RightPanelView`/
+// `RightPanelCommands`. Per the #2657 C8 task brief this assertion stays
+// PINNED TO THE PROP'S ABSENCE rather than silently deleted or re-pointed to
+// a fabricated equivalent; `discoverRightPanelHandle.onAreaSearchQueryChange`
+// is therefore always `null` now. RAISE ON THE PR: this test's live
+// "type in the panel -> map promotes the matching pin" wiring is now
+// unreachable through this mock, which may change which of this file's `it`
+// blocks pass/fail relative to the pre-C8 known-failure set (see the C8
+// report's probe-migration table).
 vi.mock('@/components/discover/DiscoverRightPanel', () => ({
-  DiscoverRightPanel: (props: { onAreaSearchQueryChange?: (query: string) => void }) => {
-    discoverRightPanelHandle.onAreaSearchQueryChange = props.onAreaSearchQueryChange ?? null;
+  DiscoverRightPanel: () => {
+    discoverRightPanelHandle.onAreaSearchQueryChange = null;
     return <div data-testid="discover-right-panel-mock" />;
   },
 }));

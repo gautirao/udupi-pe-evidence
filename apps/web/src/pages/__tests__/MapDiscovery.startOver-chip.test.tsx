@@ -41,17 +41,16 @@ vi.mock('@/components/layout/AppLayout', () => ({ RoleAwareHeader: () => null,
 
 // Render `activeContextChips` and a stub Start Over button so the test can
 // assert chip presence/absence without mounting the full DiscoverRightPanel tree.
+// Issue #2657 C8 — `activeContextChips` now arrives at `view.shared.chrome.activeContextChips`,
+// `onStartOver` at `commands.shared.chrome.startOver`.
 vi.mock('@/components/discover/DiscoverRightPanel', () => ({
   DiscoverRightPanel: ({
-    activeContextChips,
-    onStartOver,
-  }: {
-    activeContextChips?: React.ReactNode;
-    onStartOver?: () => void;
-  }) => (
+    view,
+    commands,
+  }: import('@/components/discover/DiscoverRightPanel').DiscoverRightPanelProps) => (
     <div data-testid="right-panel-mock">
-      <button onClick={onStartOver}>Start Over</button>
-      {activeContextChips}
+      <button onClick={commands.shared.chrome.startOver}>Start Over</button>
+      {view.shared.chrome.activeContextChips}
     </div>
   ),
 }));

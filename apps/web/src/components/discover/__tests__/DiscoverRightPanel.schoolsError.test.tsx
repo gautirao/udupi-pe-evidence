@@ -22,7 +22,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
-import { DiscoverRightPanel } from '../DiscoverRightPanel';
+import { DiscoverRightPanel } from '@/features/discover/right-panel/testing/flatPropsRightPanel';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 
 const mockNavigate = vi.fn();

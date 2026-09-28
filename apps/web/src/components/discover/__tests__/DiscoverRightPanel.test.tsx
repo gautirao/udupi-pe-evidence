@@ -8,7 +8,7 @@ import { renderWithProviders, makeTestQueryClient } from '@/test/renderWithProvi
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { AuthModalProvider } from '@/contexts/AuthModalContext';
-import { DiscoverRightPanel } from '../DiscoverRightPanel';
+import { DiscoverRightPanel } from '@/features/discover/right-panel/testing/flatPropsRightPanel';
 import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftContext';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
@@ -1311,5 +1311,149 @@ describe('DiscoverRightPanel — anon viewport error + retry (Issue #2015, revie
 
     await user.click(screen.getByTestId('anon-viewport-retry-btn'));
     expect(onRetryAnonViewport).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Issue #2657 R1 (code-review Finding 1) — the 'area-selected'/'schools-in-area'
+ * hydration-fallback (no resolved area, no urlAreaKey — i.e. a dead/absent
+ * areaKey deep link) pre-refactor (659a8b72) rendered the bare GuidedEntryPanel
+ * UNCONDITIONALLY, ignoring the anon-viewport flag. After the C7 dispatcher
+ * split, `resolveRightPanelRoute` collapsed that fallback into the SAME
+ * untagged `{kind: 'entry'}` as the real 'guided-entry' state, so
+ * GuidedEntryJourneyPanel's `view.anonViewport.active` check started
+ * substituting `AnonViewportListings` here too — an observable behaviour
+ * change. This regression-pins the fix: the fallback keeps rendering the bare
+ * panel regardless of anon-viewport state, while real 'guided-entry' keeps
+ * its existing anon-viewport substitution (control arm).
+ */
+describe('DiscoverRightPanel — R1 hydration-fallback ignores anon viewport (Issue #2657 Finding 1)', () => {
+  const makeAnonListing = (id: string): AnonViewportListingItem =>
+    ({
+      id,
+      priceBand: 'BAND_2',
+      monthlyRentBand: null,
+      propertyType: 'apartment',
+      locality: 'Manipal',
+      primaryImageUrl: null,
+      listingPurpose: 'sale',
+      bedrooms: 2,
+      title: `Listing ${id}`,
+      bathrooms: 2,
+      builtArea: null,
+      builtAreaUnit: null,
+      landArea: null,
+      landAreaUnit: null,
+      totalFloors: null,
+      parkingCount: null,
+      furnishingStatus: null,
+      createdAt: '2026-01-01T00:00:00Z',
+      confirmedAt: null,
+      trustBadge: null,
+      lat: 13.35,
+      lon: 74.79,
+      latitude: 13.35,
+      longitude: 74.79,
+      kind: 'ANON_VIEWPORT',
+      areaKey: 'udupi|manipal',
+    }) as unknown as AnonViewportListingItem;
+
+  it('area-selected: no selectedArea, no urlAreaKey, anon viewport active — renders bare GuidedEntryPanel, not AnonViewportListings', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="area-selected"
+        areas={[]}
+        selectedArea={null}
+        urlAreaKey={null}
+        isAnonViewport
+        anonViewportListings={[makeAnonListing('anon-1')]}
+      />,
+    );
+    expect(screen.getByTestId('guided-entry-panel')).toBeInTheDocument();
+    expect(screen.queryByTestId('anon-viewport-listing-grid')).not.toBeInTheDocument();
+  });
+
+  it('schools-in-area: no selectedArea, no urlAreaKey, anon viewport active — renders bare GuidedEntryPanel, not AnonViewportListings', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="schools-in-area"
+        areas={[]}
+        selectedArea={null}
+        urlAreaKey={null}
+        isAnonViewport
+        anonViewportListings={[makeAnonListing('anon-2')]}
+      />,
+    );
+    expect(screen.getByTestId('guided-entry-panel')).toBeInTheDocument();
+    expect(screen.queryByTestId('anon-viewport-listing-grid')).not.toBeInTheDocument();
+  });
+
+  it('control: real guided-entry + anon viewport active — DOES render AnonViewportListings (unchanged behaviour)', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="guided-entry"
+        areas={[]}
+        isAnonViewport
+        anonViewportListings={[makeAnonListing('anon-3')]}
+      />,
+    );
+    expect(screen.getByTestId('anon-viewport-listing-grid')).toBeInTheDocument();
+    expect(screen.queryByTestId('guided-entry-panel')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Issue #2657 R1 (code-review Finding 3) — PANEL_OPEN must fire exactly once
+ * per DiscoverRightPanel MOUNT, never re-firing when panelContent changes
+ * across re-renders (mirrors the existing "PANEL_OPEN telemetry ... mount-only"
+ * block above, extended to a journey switch that revisits 'guided-entry').
+ */
+describe('DiscoverRightPanel — PANEL_OPEN mount lifetime across journey switches (Issue #2657 Finding 3)', () => {
+  beforeEach(() => {
+    mockEmitPanelOpen.mockClear();
+  });
+
+  const fullTreeFor = (client: ReturnType<typeof makeTestQueryClient>, ui: React.ReactElement) => (
+    <QueryClientProvider client={client}>
+      <TooltipProvider>
+        <MemoryRouter>
+          <AuthProvider>
+            <AuthModalProvider>
+              <DiscoverProvider>
+                <AreaSetDraftProvider>{ui}</AreaSetDraftProvider>
+              </DiscoverProvider>
+            </AuthModalProvider>
+          </AuthProvider>
+        </MemoryRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+
+  it('guided-entry -> agri-landing -> guided-entry: emits exactly once total', () => {
+    const client = makeTestQueryClient();
+    const { rerender } = render(
+      fullTreeFor(client, <DiscoverRightPanel {...baseProps} panelContent="guided-entry" areas={[]} city="udupi" />),
+    );
+    expect(mockEmitPanelOpen).toHaveBeenCalledTimes(1);
+
+    rerender(fullTreeFor(client, <DiscoverRightPanel {...baseProps} panelContent="agri-landing" areas={[]} />));
+    expect(mockEmitPanelOpen).toHaveBeenCalledTimes(1);
+
+    rerender(fullTreeFor(client, <DiscoverRightPanel {...baseProps} panelContent="guided-entry" areas={[]} city="udupi" />));
+    expect(mockEmitPanelOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it('agri-landing -> guided-entry: emits exactly once total (reverse direction)', () => {
+    const client = makeTestQueryClient();
+    const { rerender } = render(
+      fullTreeFor(client, <DiscoverRightPanel {...baseProps} panelContent="agri-landing" areas={[]} />),
+    );
+    expect(mockEmitPanelOpen).toHaveBeenCalledTimes(1);
+
+    rerender(fullTreeFor(client, <DiscoverRightPanel {...baseProps} panelContent="guided-entry" areas={[]} city="udupi" />));
+    expect(mockEmitPanelOpen).toHaveBeenCalledTimes(1);
   });
 });

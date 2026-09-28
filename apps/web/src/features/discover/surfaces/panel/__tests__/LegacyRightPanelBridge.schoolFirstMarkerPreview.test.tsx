@@ -44,9 +44,16 @@ import type { UseAreasNavigationJourneyResult } from '@/features/discover/naviga
 import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
 import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 
+// Issue #2657 C8 — `DiscoverRightPanel`'s public contract flipped to
+// `{view, commands}`; `data-has-view` is a positive non-null identity control
+// so a probe reading `undefined` off a renamed path can't pass vacuously.
 vi.mock('@/components/discover/DiscoverRightPanel', () => ({
   DiscoverRightPanel: (props: DiscoverRightPanelProps) => (
-    <div data-testid="discover-right-panel-mock" data-panel-content={props.panelContent} />
+    <div
+      data-testid="discover-right-panel-mock"
+      data-panel-content={props.view.frame.layout.panelContent}
+      data-has-view={props.view != null}
+    />
   ),
 }));
 

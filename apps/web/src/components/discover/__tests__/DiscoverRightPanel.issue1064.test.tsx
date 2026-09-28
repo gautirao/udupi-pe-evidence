@@ -13,7 +13,7 @@ import { render, screen } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { DiscoverRightPanel } from '../DiscoverRightPanel';
+import { DiscoverRightPanel } from '@/features/discover/right-panel/testing/flatPropsRightPanel';
 import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';

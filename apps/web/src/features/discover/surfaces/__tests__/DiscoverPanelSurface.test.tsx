@@ -72,13 +72,26 @@ vi.mock('@/hooks/useDiscoverCityListings', async () => {
   };
 });
 
+// Issue #2657 C8 — `DiscoverRightPanel`'s public contract flipped to
+// `{view, commands}`; this probe reads the SAME forwarded values off the new
+// nested paths (`view.frame.layout.panelContent`, `view.shared.context.cityLabel`,
+// `view.area.filters.searchQuery`, `view.area.results.summaryText`,
+// `view.frame.layout.footer`). `data-has-view`/`data-has-commands` are a
+// positive non-null identity control on the two top-level groups themselves,
+// so a probe reading `undefined` off a renamed/dropped path can't pass
+// vacuously even where a test below only checks `toBeInTheDocument()`.
 vi.mock('@/components/discover/DiscoverRightPanel', () => ({
   DiscoverRightPanel: (props: DiscoverRightPanelProps) => (
-    <div data-testid="discover-right-panel-mock" data-panel-content={props.panelContent}>
-      <div data-testid="forwarded-city-label">{props.cityLabel}</div>
-      <div data-testid="forwarded-search-query">{props.searchQuery}</div>
-      <div data-testid="forwarded-area-result-summary">{props.areaResultSummaryText}</div>
-      {props.footerContent}
+    <div
+      data-testid="discover-right-panel-mock"
+      data-panel-content={props.view.frame.layout.panelContent}
+      data-has-view={props.view != null}
+      data-has-commands={props.commands != null}
+    >
+      <div data-testid="forwarded-city-label">{props.view.shared.context.cityLabel}</div>
+      <div data-testid="forwarded-search-query">{props.view.area.filters.searchQuery}</div>
+      <div data-testid="forwarded-area-result-summary">{props.view.area.results.summaryText}</div>
+      {props.view.frame.layout.footer}
     </div>
   ),
 }));

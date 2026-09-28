@@ -65,7 +65,7 @@ vi.mock('react-router-dom', async () => {
 
 // ─── Imports after mocks ──────────────────────────────────────────────────────
 import { useDiscoverMapData } from '@/hooks/useDiscoverMapData';
-import { DiscoverRightPanel } from '../DiscoverRightPanel';
+import { DiscoverRightPanel } from '@/features/discover/right-panel/testing/flatPropsRightPanel';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 

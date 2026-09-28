@@ -49,9 +49,10 @@ vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => mockUseAuth(),
 }));
 
+// Issue #2657 C8 — `agriGroupListings` now arrives at `view.agri.groupListings.data`.
 vi.mock('@/components/discover/DiscoverRightPanel', () => ({
-  DiscoverRightPanel: vi.fn((props: { agriGroupListings?: AgriMapListingItem[] }) => {
-    capturedAgriGroupListings.current = props.agriGroupListings ?? null;
+  DiscoverRightPanel: vi.fn((props: import('@/components/discover/DiscoverRightPanel').DiscoverRightPanelProps) => {
+    capturedAgriGroupListings.current = props.view.agri.groupListings.data ?? null;
     return <div data-testid="mock-drp" />;
   }),
 }));

@@ -35,10 +35,19 @@ import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 
 let capturedOnSelectAreaKey: ((areaKey: string) => void) | undefined;
 
+// Issue #2657 C8 — `DiscoverRightPanel`'s public contract flipped to
+// `{view, commands}`. `onSelectAreaKey` is the SAME single closure reused for
+// both `commands.school.zones.selectAreaKey` and
+// `commands.agri.corridors.selectAreaKey` (see rightPanelContract.ts) — this
+// probe captures it off the school-zones path, matching this suite's
+// school-first fixtures. `toBeInstanceOf(Function)` below is the positive
+// non-null identity control.
 vi.mock('@/components/discover/DiscoverRightPanel', () => ({
   DiscoverRightPanel: (props: DiscoverRightPanelProps) => {
-    capturedOnSelectAreaKey = props.onSelectAreaKey;
-    return <div data-testid="discover-right-panel-mock" data-panel-content={props.panelContent} />;
+    capturedOnSelectAreaKey = props.commands.school.zones.selectAreaKey;
+    return (
+      <div data-testid="discover-right-panel-mock" data-panel-content={props.view.frame.layout.panelContent} />
+    );
   },
 }));
 

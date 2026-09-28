@@ -93,7 +93,11 @@ function offenders(predicate: (imp: ImportStatement) => boolean): string[] {
 const COMPONENT_TYPE_IMPORT_EXCEPTIONS = [
   'features/discover/selectors/displayEligibility.ts -> @/components/map/AreaMarkerLayer',
   'features/discover/selectors/effectiveArea.ts -> @/components/map/AreaMarkerLayer',
-];
+  // Issue #2657 C1 — regionGuideHelperText.ts needs RegionOverviewMarkerKind's
+  // TYPE only (a plain string-union), the same carve-out as the two sites
+  // above; see that selector's own header comment.
+  'features/discover/selectors/regionGuideHelperText.ts -> @/components/map/RegionGuidanceCard',
+].sort();
 
 describe('selectors/** and adapters/** are pure, renderless modules (#2142 commit 4)', () => {
   it('finds both directories (guard is not silently scanning an empty set)', () => {

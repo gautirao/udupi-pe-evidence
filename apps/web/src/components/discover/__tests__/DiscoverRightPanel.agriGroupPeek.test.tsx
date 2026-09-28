@@ -15,7 +15,7 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { DiscoverRightPanel } from '../DiscoverRightPanel';
+import { DiscoverRightPanel } from '@/features/discover/right-panel/testing/flatPropsRightPanel';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
 import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
 
@@ -307,19 +307,16 @@ describe('DiscoverRightPanel — agri-group-peek routing (Issue #1430)', () => {
     expect(screen.queryByText('IN|KA|Udupi|Manipal')).not.toBeInTheDocument();
   });
 
-  // Issue #2151 PR C (code-reviewer finding, MEDIUM) — useAgriDestinations is called
-  // unconditionally at the top of DiscoverRightPanel (correct per Rules of Hooks) but must be
-  // gated so it doesn't fire a real GET /api/discover/agri-destinations on every Discover render.
-  // The hook has no exposed `enabled` option, so the gate is the `city` argument itself: it must
-  // collapse to '' (tripping the hook's own `enabled: city.length > 0` internal check) whenever
-  // panelContent isn't 'agri-group-locality'.
-  it('gates the destinations fetch: passes an empty city (no fetch) when panelContent is not agri-group-locality', () => {
+  // Issue #2151 PR C (code-reviewer finding, MEDIUM) — useAgriDestinations must not fire a real
+  // GET /api/discover/agri-destinations on every Discover render. Issue #2657 C4 — the hook moved
+  // (verbatim gate/cache-key) into AgriJourneyPanel, which mounts ONLY for the 6 agri-first
+  // panelContent values, so for a genuinely non-agri state (e.g. 'area-selection') the hook is not
+  // called AT ALL now — a strictly stronger form of "no fetch" than the pre-C4 empty-city gate.
+  it('gates the destinations fetch: not called at all when panelContent is a non-agri state', () => {
     mockUseAgriDestinations.mockClear();
     renderPanel(<DiscoverRightPanel {...baseProps} city="udupi" panelContent="area-selection" />);
 
-    expect(mockUseAgriDestinations).toHaveBeenCalledTimes(1);
-    const [cityArg] = mockUseAgriDestinations.mock.calls[0];
-    expect(cityArg).toBe('');
+    expect(mockUseAgriDestinations).not.toHaveBeenCalled();
   });
 
   it('gates the destinations fetch: passes the real city when panelContent is agri-group-locality', () => {

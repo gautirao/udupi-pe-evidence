@@ -10,7 +10,7 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftContext';
-import { DiscoverRightPanel } from '../DiscoverRightPanel';
+import { DiscoverRightPanel } from '@/features/discover/right-panel/testing/flatPropsRightPanel';
 import { derivePanelContent } from '@/utils/discoverPanelState';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';

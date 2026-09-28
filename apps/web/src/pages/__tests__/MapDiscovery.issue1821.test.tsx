@@ -105,9 +105,10 @@ vi.mock('@/components/layout/PublicDiscoverLayout', () => ({
   PublicDiscoverLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
+// Issue #2657 C8 — `selectedArea` now arrives at `view.shared.area.point`.
 vi.mock('@/components/discover/DiscoverRightPanel', () => ({
-  DiscoverRightPanel: (props: { selectedArea?: unknown }) => {
-    rightPanelPropsLog.selectedAreas.push(props.selectedArea ?? null);
+  DiscoverRightPanel: (props: import('@/components/discover/DiscoverRightPanel').DiscoverRightPanelProps) => {
+    rightPanelPropsLog.selectedAreas.push(props.view.shared.area.point ?? null);
     return <div data-testid="discover-right-panel-mock" />;
   },
 }));

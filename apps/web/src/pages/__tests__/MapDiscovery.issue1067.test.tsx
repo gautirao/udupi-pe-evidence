@@ -40,9 +40,13 @@ vi.mock('@/components/map/PropertyMap', () => ({
   },
 }));
 
+// Issue #2657 C8 — `DiscoverRightPanel`'s public contract flipped to
+// `{view, commands}`. `onSelectAreaKey` is the SAME single closure reused for
+// both `commands.school.zones.selectAreaKey` and
+// `commands.agri.corridors.selectAreaKey` (see rightPanelContract.ts).
 vi.mock('@/components/discover/DiscoverRightPanel', () => ({
-  DiscoverRightPanel: (props: { onSelectAreaKey?: (k: string) => void }) => {
-    rightPanelHandlers.onSelectAreaKey = props.onSelectAreaKey ?? null;
+  DiscoverRightPanel: (props: import('@/components/discover/DiscoverRightPanel').DiscoverRightPanelProps) => {
+    rightPanelHandlers.onSelectAreaKey = props.commands.school.zones.selectAreaKey ?? null;
     return <div data-testid="discover-right-panel-mock" />;
   },
 }));

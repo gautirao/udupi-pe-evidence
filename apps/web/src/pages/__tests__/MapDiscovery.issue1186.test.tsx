@@ -44,12 +44,13 @@ vi.mock('@/components/layout/AppLayout', () => ({ RoleAwareHeader: () => null,
 
 // Render `activeContextChips` directly so the test can assert chip presence/absence
 // without mounting the full DiscoverRightPanel tree.
+// Issue #2657 C8 — `activeContextChips` now arrives at `view.shared.chrome.activeContextChips`.
 vi.mock('@/components/discover/DiscoverRightPanel', () => ({
   DiscoverRightPanel: ({
-    activeContextChips,
-  }: {
-    activeContextChips?: React.ReactNode;
-  }) => <div data-testid="right-panel-mock">{activeContextChips}</div>,
+    view,
+  }: import('@/components/discover/DiscoverRightPanel').DiscoverRightPanelProps) => (
+    <div data-testid="right-panel-mock">{view.shared.chrome.activeContextChips}</div>
+  ),
 }));
 
 const KUNJIBETTU_AREA_KEY = 'IN|KA|Udupi|Kunjibettu';
