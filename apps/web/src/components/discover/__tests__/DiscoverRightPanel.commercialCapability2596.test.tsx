@@ -91,21 +91,33 @@ describe('#2596 — DiscoverRightPanel area-selected call site', () => {
     // Truthy, not just "not false" — an omitted prop would read as undefined
     // and silently fall back to the panel's `= false` default, which is exactly
     // how this shipped dark.
-    expect(captured[0].isCommercialSubtypeSupported).toBe(true);
+    // Issue #2658 (C5) — the panel's external surface is `{ view, commands }`,
+    // not ~40 flat props; this capability lives under `view.filters`.
+    const view = captured[0].view as { filters?: Record<string, unknown> };
+    expect(view.filters?.isCommercialSubtypeSupported).toBe(true);
   });
 
-  it('does NOT forward filtersContent, so the legacy drawer is not a second filter owner here', () => {
+  it('does NOT forward filter-sheet content, so the legacy drawer is not a second filter owner here', () => {
     renderAreaSelected();
     expect(captured.length).toBeGreaterThan(0);
-    expect(captured[0].filtersContent).toBeUndefined();
+    // `content` (view.filters.content) is the new-contract field that renders
+    // the Toolbar's mobile Sheet filter content — the legacy `filtersContent`
+    // flat prop's replacement. Asserting on `filtersContent` here would pass
+    // vacuously: that key can never exist under the new contract regardless
+    // of whether the drawer content is actually omitted.
+    const view = captured[0].view as { filters?: Record<string, unknown> };
+    expect(view.filters?.content).toBeUndefined();
   });
 
   it('still forwards the props the surface genuinely needs (guards against a blanket prop drop)', () => {
     renderAreaSelected();
-    const props = captured[0];
+    const view = captured[0].view as {
+      area?: { point?: unknown; journey?: unknown };
+      filters?: { intent?: unknown };
+    };
     // If someone "fixes" the assertion above by deleting the whole prop block,
     // these fail — so the test pins a narrow removal, not an indiscriminate one.
-    expect(props.selectedArea).toBeDefined();
-    expect(props.journey !== undefined || props.intent !== undefined).toBe(true);
+    expect(view.area?.point).toBeDefined();
+    expect(view.area?.journey !== undefined || view.filters?.intent !== undefined).toBe(true);
   });
 });

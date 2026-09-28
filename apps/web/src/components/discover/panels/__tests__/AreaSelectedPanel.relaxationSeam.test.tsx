@@ -7,6 +7,7 @@ import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftContext';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
+import { toAreaSelectedPanelContract, type AreaSelectedPanelFlatTestProps } from './areaSelectedPanelTestAdapter';
 
 /**
  * Issue #2552 — the relaxation seam, found by exact-head review of PR #2582.
@@ -86,7 +87,7 @@ const mockArea: AreaPoint = {
   bbox: null,
 };
 
-type PanelFilters = NonNullable<React.ComponentProps<typeof AreaSelectedPanel>['filters']>;
+type PanelFilters = NonNullable<AreaSelectedPanelFlatTestProps['filters']>;
 
 function ControlledHost({
   initialFilters,
@@ -97,6 +98,14 @@ function ControlledHost({
 }) {
   const [filters, setFilters] = useState<PanelFilters>(initialFilters);
 
+  const { view, commands } = toAreaSelectedPanelContract({
+    selectedArea: mockArea,
+    areaListings: [],
+    filters,
+    onFiltersChange: setFilters,
+    isCommercialSubtypeSupported: true,
+  });
+
   return (
     <>
       <button
@@ -106,13 +115,7 @@ function ControlledHost({
       >
         simulate back/forward
       </button>
-      <AreaSelectedPanel
-        selectedArea={mockArea}
-        areaListings={[]}
-        filters={filters}
-        onFiltersChange={setFilters}
-        isCommercialSubtypeSupported
-      />
+      <AreaSelectedPanel view={view} commands={commands} />
     </>
   );
 }
@@ -171,15 +174,16 @@ describe('AreaSelectedPanel — #2552 relaxation seam', () => {
    * `onRetryListings` and `onAddSchool`.
    */
   it('forwards no relaxation handler when the panel has no filter owner', () => {
+    const { view, commands } = toAreaSelectedPanelContract({
+      selectedArea: mockArea,
+      areaListings: [],
+      filters: { propertyTypes: ['apartment'] },
+      isCommercialSubtypeSupported: true,
+    });
     renderWithProviders(
       <DiscoverProvider>
         <AreaSetDraftProvider>
-          <AreaSelectedPanel
-            selectedArea={mockArea}
-            areaListings={[]}
-            filters={{ propertyTypes: ['apartment'] }}
-            isCommercialSubtypeSupported
-          />
+          <AreaSelectedPanel view={view} commands={commands} />
         </AreaSetDraftProvider>
       </DiscoverProvider>,
       { router: 'browser' },

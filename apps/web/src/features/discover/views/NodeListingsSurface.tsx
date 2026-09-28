@@ -373,82 +373,94 @@ export function NodeListingsSurface({
       ) : (
       <>
       <AreaSelectedPanel
-        selectedArea={syntheticAreaPoint}
-        // Issue #2017 — the multi-area AREA_SET header's `useDiscoverAreas(city)`
-        // call (inside AreaSetSelectedHeader) needs the raw city slug, not just
-        // the display label below. Without this, `city` fell back to '' at the
-        // panel's own `city={city ?? ''}` default, which is below
-        // useDiscoverAreas's `enabled: city.length > 0` guard — the query never
-        // fired, so the header always rendered its generic-count fallback
-        // instead of resolved area names/counts, even once real listings had
-        // loaded.
-        city={nav.city}
-        cityLabel={CITY_CONFIG[nav.city]?.label ?? nav.city}
-        regionName={regionName}
-        groupName={groupName}
-        onCrumbHome={onCrumbHome}
-        onCrumbCity={onCrumbCity}
-        onCrumbRegion={onCrumbRegion}
-        onCrumbGroup={onCrumbGroup}
-        areaListings={areaListingsForPanel}
-        isLoadingListings={isLoadingNodeListings}
-        isAuthenticated={isAuthenticated}
-        filters={effectiveFilters}
-        onFiltersChange={(next) => {
-          // Issue #2553 — forward what the panel actually emitted instead of
-          // rebuilding the committed object from a key allowlist. The allowlist
-          // shape silently dropped two separate axes over its life (readyToMove,
-          // Issue #2023; commercialSubtypes, Issue #2553). The failure mode is
-          // invisible at the point of loss and only shows up as a filter that
-          // appears to do nothing, so it survives review every time. `next` is a
-          // full PropertyFilters the panel derived from the `filters` prop this
-          // surface gave it, so spreading it over the committed base carries every
-          // axis — including ones added after this line was written — while the
-          // base still supplies anything outside this surface's own projection.
-          if (onCommittedFiltersChange) {
-            onCommittedFiltersChange({ ...(committedFilters ?? {}), ...next });
-            return;
-          }
-          actions.setFiltersCommitted(toCommittedUrlFilters(nav.filters, next));
+        // Issue #2658 (C5) — {view, commands} contract flip. Every value/expression
+        // below is carried over verbatim from the flat call this replaces; only the
+        // grouping changed.
+        view={{
+          area: {
+            point: syntheticAreaPoint,
+            // Issue #2017 — the multi-area AREA_SET header's `useDiscoverAreas(city)`
+            // call (inside AreaSetSelectedHeader) needs the raw city slug, not just
+            // the display label below. Without this, `city` fell back to '' at the
+            // panel's own `city={city ?? ''}` default, which is below
+            // useDiscoverAreas's `enabled: city.length > 0` guard — the query never
+            // fired, so the header always rendered its generic-count fallback
+            // instead of resolved area names/counts, even once real listings had
+            // loaded.
+            city: nav.city,
+            cityLabel: CITY_CONFIG[nav.city]?.label ?? nav.city,
+            regionName,
+            groupName,
+          },
+          results: {
+            listings: areaListingsForPanel,
+            isLoading: isLoadingNodeListings,
+          },
+          filters: {
+            filters: effectiveFilters,
+            intent: nav.intent,
+            // Issue #2023 (BLOCKING review fix) — this "Browse all" surface now
+            // genuinely applies readyToMove for BOTH authenticated users (via
+            // `useDiscoverListings`'s `filters` arg above) and anonymous users
+            // (via `useDiscoverCityListings`'s `readyToMove` param above, now
+            // filtered server-side by `CityAreaListingsService`). No longer
+            // gated on `isAuthenticated` — prop omitted, relying on
+            // AreaSelectedPanel's own `= true` default.
+            //
+            // Issue #2572 — COMMERCIAL CAPABILITY ENABLEMENT. This prop defaults
+            // FALSE in the panel, and until now NO production call site passed it,
+            // so the TYPE family row and the Commercial subtype row rendered for
+            // nobody: the whole family was unreachable on the real buyer surface
+            // while every test that exercised it passed the prop explicitly.
+            //
+            // Issue #2596 — AND IT HAPPENED AGAIN, for the same reason, on a site
+            // this comment did not know about. Enabling it here and on
+            // DiscoverAreasJourneyPanel left a THIRD render site untouched:
+            // `DiscoverRightPanel.tsx`'s `area-selected` case, which is the one the
+            // live selected-area route renders. So the family row was still dark for
+            // real buyers after #2572 shipped. Confirmed by driving the running app,
+            // not by reading this file. The lesson is the failure mode, not the
+            // count: a default-false capability enabled call-site-by-call-site has no
+            // way to report the site you missed. The
+            // three preconditions the panel's own gate comment names are now met on
+            // main — #2552 (family resync), #2553 (commit boundaries stopped
+            // discarding the axis, PR #2564), #2555 (panel mock parity) — and the
+            // anon wire that #2509 described as missing is present: the endpoint
+            // binds `commercialSubtypes` and `propertyType` is `List<String>`, so a
+            // subtype and a multi-select family both reach the server rather than
+            // being silently discarded. Enabling it here is what makes the control
+            // buyer-reachable.
+            isCommercialSubtypeSupported: true,
+          },
+          search: { query: searchQuery },
+          listingCards: { isAuthenticated, selectedListingId: nav.selectedListing },
+          links: {},
         }}
-        searchQuery={searchQuery}
-        onSearchChange={handleSearchChange}
-        selectedListingId={nav.selectedListing}
-        onSelectListing={(id) => actions.setSelectedListing(id)}
-        intent={nav.intent}
-        onAddSchool={onAddSchool}
-        // Issue #2023 (BLOCKING review fix) — this "Browse all" surface now
-        // genuinely applies readyToMove for BOTH authenticated users (via
-        // `useDiscoverListings`'s `filters` arg above) and anonymous users
-        // (via `useDiscoverCityListings`'s `readyToMove` param above, now
-        // filtered server-side by `CityAreaListingsService`). No longer
-        // gated on `isAuthenticated` — prop omitted, relying on
-        // AreaSelectedPanel's own `= true` default.
-        //
-        // Issue #2572 — COMMERCIAL CAPABILITY ENABLEMENT. This prop defaults
-        // FALSE in the panel, and until now NO production call site passed it,
-        // so the TYPE family row and the Commercial subtype row rendered for
-        // nobody: the whole family was unreachable on the real buyer surface
-        // while every test that exercised it passed the prop explicitly.
-        //
-        // Issue #2596 — AND IT HAPPENED AGAIN, for the same reason, on a site
-        // this comment did not know about. Enabling it here and on
-        // DiscoverAreasJourneyPanel left a THIRD render site untouched:
-        // `DiscoverRightPanel.tsx`'s `area-selected` case, which is the one the
-        // live selected-area route renders. So the family row was still dark for
-        // real buyers after #2572 shipped. Confirmed by driving the running app,
-        // not by reading this file. The lesson is the failure mode, not the
-        // count: a default-false capability enabled call-site-by-call-site has no
-        // way to report the site you missed. The
-        // three preconditions the panel's own gate comment names are now met on
-        // main — #2552 (family resync), #2553 (commit boundaries stopped
-        // discarding the axis, PR #2564), #2555 (panel mock parity) — and the
-        // anon wire that #2509 described as missing is present: the endpoint
-        // binds `commercialSubtypes` and `propertyType` is `List<String>`, so a
-        // subtype and a multi-select family both reach the server rather than
-        // being silently discarded. Enabling it here is what makes the control
-        // buyer-reachable.
-        isCommercialSubtypeSupported
+        commands={{
+          navigation: { onCrumbHome, onCrumbCity, onCrumbRegion, onCrumbGroup, onAddSchool },
+          filters: {
+            change: (next) => {
+              // Issue #2553 — forward what the panel actually emitted instead of
+              // rebuilding the committed object from a key allowlist. The allowlist
+              // shape silently dropped two separate axes over its life (readyToMove,
+              // Issue #2023; commercialSubtypes, Issue #2553). The failure mode is
+              // invisible at the point of loss and only shows up as a filter that
+              // appears to do nothing, so it survives review every time. `next` is a
+              // full PropertyFilters the panel derived from the `filters` prop this
+              // surface gave it, so spreading it over the committed base carries every
+              // axis — including ones added after this line was written — while the
+              // base still supplies anything outside this surface's own projection.
+              if (onCommittedFiltersChange) {
+                onCommittedFiltersChange({ ...(committedFilters ?? {}), ...next });
+                return;
+              }
+              actions.setFiltersCommitted(toCommittedUrlFilters(nav.filters, next));
+            },
+          },
+          search: { change: handleSearchChange },
+          listings: { select: (id) => actions.setSelectedListing(id) },
+          scope: {},
+        }}
       />
       {totalPages > 1 ? (
         <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border bg-card shrink-0">

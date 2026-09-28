@@ -9,6 +9,7 @@ import { useDiscoverCityListings } from '../useDiscoverCityListings';
 import { DiscoverDataSourceProvider } from '@/features/discover/state/DiscoverDataSourceContext';
 import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import { api } from '@/lib/api';
+import { toAreaSelectedPanelContract } from '@/components/discover/panels/__tests__/areaSelectedPanelTestAdapter';
 
 const mockGet = vi.hoisted(() => vi.fn());
 
@@ -33,22 +34,22 @@ function PreviewListingsTestComponent() {
 
   if (isLoading) return <div>Loading...</div>;
 
-  return (
-    <AreaSelectedPanel
-      selectedArea={{
-        areaKey: 'IN|KA|Bengaluru|Chokkasandra',
-        areaLabel: 'Chokkasandra',
-        geo_center_lat: 13,
-        geo_center_lon: 77,
-        bbox: null,
-      }}
-      areaListings={data?.areas[0]?.listings || []}
-      filters={{}}
-      onFiltersChange={vi.fn()}
-      onSelectJourney={vi.fn()}
-      onAddSchool={vi.fn()}
-    />
-  );
+  const { view, commands } = toAreaSelectedPanelContract({
+    selectedArea: {
+      areaKey: 'IN|KA|Bengaluru|Chokkasandra',
+      areaLabel: 'Chokkasandra',
+      geo_center_lat: 13,
+      geo_center_lon: 77,
+      bbox: null,
+    },
+    areaListings: data?.areas[0]?.listings || [],
+    filters: {},
+    onFiltersChange: vi.fn(),
+    onSelectJourney: vi.fn(),
+    onAddSchool: vi.fn(),
+  });
+
+  return <AreaSelectedPanel view={view} commands={commands} />;
 }
 
 // Issue #2463 — mirrors the production preview mount (pages/admin/

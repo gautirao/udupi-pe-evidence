@@ -83,13 +83,19 @@ vi.mock('@/features/discover/context/useDiscoverContext', () => ({
 }));
 
 // Stub the heavy AreaSelectedPanel so it doesn't need its own deps tree.
+// Issue #2658 (C5) — the real component now takes {view, commands}, not a
+// flat `areaListings` prop; the stub reads the same nested path the real
+// component destructures (`view.results.listings`).
 vi.mock('@/components/discover/panels/AreaSelectedPanel', () => ({
-  AreaSelectedPanel: ({ areaListings }: { areaListings: unknown[] }) => (
-    <div data-testid="area-selected-panel">
-      {areaListings.length} listings
-      <pre data-testid="listings-json">{JSON.stringify(areaListings)}</pre>
-    </div>
-  ),
+  AreaSelectedPanel: ({ view }: { view: { results: { listings?: unknown[] } } }) => {
+    const areaListings = view.results.listings ?? [];
+    return (
+      <div data-testid="area-selected-panel">
+        {areaListings.length} listings
+        <pre data-testid="listings-json">{JSON.stringify(areaListings)}</pre>
+      </div>
+    );
+  },
 }));
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────

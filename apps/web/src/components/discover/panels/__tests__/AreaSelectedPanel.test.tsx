@@ -8,6 +8,7 @@ import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftCont
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import * as DiscoverContextHooks from '@/features/discover/context/useDiscoverContext';
+import { toAreaSelectedPanelContract, type AreaSelectedPanelFlatTestProps } from './areaSelectedPanelTestAdapter';
 
 const mockArea: AreaPoint = {
   areaKey: 'test-area|city|udupi',
@@ -28,8 +29,8 @@ const mockListing: DiscoverCityListingItem = {
 };
 
 describe('AreaSelectedPanel', () => {
-  const renderPanel = (props: Partial<React.ComponentProps<typeof AreaSelectedPanel>> = {}) => {
-    const defaultProps: React.ComponentProps<typeof AreaSelectedPanel> = {
+  const renderPanel = (props: Partial<AreaSelectedPanelFlatTestProps> = {}) => {
+    const defaultProps: AreaSelectedPanelFlatTestProps = {
       selectedArea: mockArea,
       areaListings: [mockListing],
       filters: {},
@@ -37,6 +38,7 @@ describe('AreaSelectedPanel', () => {
       onSelectJourney: vi.fn(),
       onAddSchool: vi.fn(),
     };
+    const { view, commands } = toAreaSelectedPanelContract({ ...defaultProps, ...props });
 
     // Issue #2017 — AreaSelectedPanel now consumes the DiscoverProvider
     // facade (useDiscoverNav/useDiscoverActions/useDiscoverShell) to detect
@@ -53,7 +55,7 @@ describe('AreaSelectedPanel', () => {
     renderWithProviders(
       <DiscoverProvider>
         <AreaSetDraftProvider>
-          <AreaSelectedPanel {...defaultProps} {...props} />
+          <AreaSelectedPanel view={view} commands={commands} />
         </AreaSetDraftProvider>
       </DiscoverProvider>,
       { router: 'browser' },
@@ -628,17 +630,18 @@ describe('AreaSelectedPanel', () => {
 
   describe('F1 — Area-first pill and Start-over button (round-3)', () => {
     it('renders the area-first pill with bg-secondary (navy), NOT a copper class', () => {
+      const { view, commands } = toAreaSelectedPanelContract({
+        selectedArea: mockArea,
+        areaListings: [mockListing],
+        filters: {},
+        onFiltersChange: vi.fn(),
+        onSelectJourney: vi.fn(),
+        onAddSchool: vi.fn(),
+        journey: 'area-first',
+      });
       const { container } = renderWithProviders(
         <DiscoverProvider>
-          <AreaSelectedPanel
-            selectedArea={mockArea}
-            areaListings={[mockListing]}
-            filters={{}}
-            onFiltersChange={vi.fn()}
-            onSelectJourney={vi.fn()}
-            onAddSchool={vi.fn()}
-            journey="area-first"
-          />
+          <AreaSelectedPanel view={view} commands={commands} />
         </DiscoverProvider>,
         { router: 'browser' },
       );
@@ -650,17 +653,18 @@ describe('AreaSelectedPanel', () => {
     });
 
     it('renders the Layers icon alongside the area-first pill (not MapPin)', () => {
+      const { view, commands } = toAreaSelectedPanelContract({
+        selectedArea: mockArea,
+        areaListings: [mockListing],
+        filters: {},
+        onFiltersChange: vi.fn(),
+        onSelectJourney: vi.fn(),
+        onAddSchool: vi.fn(),
+        journey: 'area-first',
+      });
       const { container } = renderWithProviders(
         <DiscoverProvider>
-          <AreaSelectedPanel
-            selectedArea={mockArea}
-            areaListings={[mockListing]}
-            filters={{}}
-            onFiltersChange={vi.fn()}
-            onSelectJourney={vi.fn()}
-            onAddSchool={vi.fn()}
-            journey="area-first"
-          />
+          <AreaSelectedPanel view={view} commands={commands} />
         </DiscoverProvider>,
         { router: 'browser' },
       );
@@ -749,21 +753,24 @@ describe('AreaSelectedPanel', () => {
     // invariant: no Buy/Rent control (and therefore no now-vestigial "Looking
     // to" wrapper) renders here even when onIntentChange/intent are supplied.
     it('renders no Buy/Rent control (the "Looking to" controls card is retired), even when onIntentChange/intent are provided', () => {
-      renderWithProviders(
-        <DiscoverProvider>
-          <AreaSelectedPanel
-            selectedArea={mockArea}
-            areaListings={[mockListing]}
-            filters={{}}
-            onFiltersChange={vi.fn()}
-            onSelectJourney={vi.fn()}
-            onAddSchool={vi.fn()}
-            intent="buy"
-            onIntentChange={vi.fn()}
-          />
-        </DiscoverProvider>,
-        { router: 'browser' },
-      );
+      {
+        const { view, commands } = toAreaSelectedPanelContract({
+          selectedArea: mockArea,
+          areaListings: [mockListing],
+          filters: {},
+          onFiltersChange: vi.fn(),
+          onSelectJourney: vi.fn(),
+          onAddSchool: vi.fn(),
+          intent: 'buy',
+          onIntentChange: vi.fn(),
+        });
+        renderWithProviders(
+          <DiscoverProvider>
+            <AreaSelectedPanel view={view} commands={commands} />
+          </DiscoverProvider>,
+          { router: 'browser' },
+        );
+      }
       expect(screen.queryByTestId('intent-selector')).not.toBeInTheDocument();
       expect(screen.queryByText('Looking to')).not.toBeInTheDocument();
       // The intent-aware price helper (a separate, unconditional element) is unaffected.
@@ -773,19 +780,22 @@ describe('AreaSelectedPanel', () => {
     // Issue #2596 — the white card container box (bg-card) wrapping filter controls was removed
     // so filter controls render directly on the clean canvas surface (#F6F5F2 / bg-background).
     it('property-type filter sits directly on the clean canvas surface without bg-card wrapper', () => {
-      renderWithProviders(
-        <DiscoverProvider>
-          <AreaSelectedPanel
-            selectedArea={mockArea}
-            areaListings={[mockListing]}
-            filters={{}}
-            onFiltersChange={vi.fn()}
-            onSelectJourney={vi.fn()}
-            onAddSchool={vi.fn()}
-          />
-        </DiscoverProvider>,
-        { router: 'browser' },
-      );
+      {
+        const { view, commands } = toAreaSelectedPanelContract({
+          selectedArea: mockArea,
+          areaListings: [mockListing],
+          filters: {},
+          onFiltersChange: vi.fn(),
+          onSelectJourney: vi.fn(),
+          onAddSchool: vi.fn(),
+        });
+        renderWithProviders(
+          <DiscoverProvider>
+            <AreaSelectedPanel view={view} commands={commands} />
+          </DiscoverProvider>,
+          { router: 'browser' },
+        );
+      }
       // The quick-filter block sits on the canvas background.
       const allChip = screen.getByTestId('quick-chip-all');
       // Walk up to verify no bg-card wrapper exists around the quick filter controls.

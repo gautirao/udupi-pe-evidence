@@ -25,10 +25,8 @@ import {
   DrawerTitle,
 } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
-import {
-  usePropertyFilterGroups,
-  PropertyFilterGroups,
-} from '@/components/discover/panels/PropertyFilterGroups';
+import { usePropertyFilterGroups } from '@/features/discover/buyer-filters/controllers/usePropertyFilterGroups';
+import { PropertyFilterGroups } from '@/features/discover/buyer-filters/sections/PropertyFilterGroups';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import type { DiscoverIntent, DiscoverUrlFilters } from '@/hooks/useDiscoverUrlState';
 import { computeMapFilterRefinementCount } from './MapFiltersPill';

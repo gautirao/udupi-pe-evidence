@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { useDiscoverActions, useDiscoverNav, useDiscoverShell, useDiscoverViewport } from '@/features/discover/context/useDiscoverContext';
 import { PropertyMap } from '@/components/map/PropertyMap';
@@ -35,13 +35,16 @@ import { DrawModeOverlay } from '@/features/discover/components/map/DrawModeOver
 import { Button } from '@/components/ui/button';
 // Issue #2628 (step 5/8) — reuses the EXTRACTED "Clear all" reset rule (Decision #4: "the
 // existing `resetFilters` rule … Buy/Rent and family kept") for the Map zero-state's immediate
-// "Clear filters" action, rather than re-deriving a second reset implementation. This is a
-// SEPARATE `usePropertyFilterGroups` call from MapFilterSheet's/AreaSelectedPanel's own — safe
-// here because this call's `activeFamily`/`familyOverride` state is never read for rendering
-// (only `handleClearPropertyFilters` is used, inside a click handler), so it cannot split-brain
-// any displayed value (see PropertyFilterGroups.tsx's file header on why a second call that DID
-// feed rendered UI would be unsafe).
-import { usePropertyFilterGroups } from '@/components/discover/panels/PropertyFilterGroups';
+// "Clear filters" action, rather than re-deriving a second reset implementation.
+//
+// Issue #2658 (C4) — this used to instantiate a THIRD full `usePropertyFilterGroups` call just to
+// reach `handleClearPropertyFilters`, discarding everything else it computed (activeFamily,
+// familyOverride state, memory refs — none read here). That hook's own `handleClearPropertyFilters`
+// does exactly two things: reset the (here-unread) family override, then
+// `onFiltersChange(clearPropertyFilters(filters))`. Calling the pure selector directly is
+// byte-identical in emission (proven by clearPropertyFilters.mapCanvasParity.c4.test.ts) and drops
+// the unnecessary hook/controller instantiation entirely.
+import { clearPropertyFilters } from '@/features/discover/buyer-filters/selectors/clearPropertyFilters';
 import { useAreaSetDraftContext } from '@/features/discover/state/AreaSetDraftContext';
 import type {
   AreaSetCandidateCallout,
@@ -452,18 +455,15 @@ export function DiscoverMapCanvas({ mapContainerRef, view, commands }: DiscoverM
     !isLoading;
 
   // Issue #2628 (step 5/8) — the Map zero-state's immediate "Clear filters" action (Decision #4:
-  // "applies immediately … Buy/Rent and family kept … no draft to stage into"). A THIRD
-  // `usePropertyFilterGroups` call, but safe: only `handleClearPropertyFilters` is read from it —
-  // this call's own `activeFamily`/`familyOverride` never feeds any rendered value in this
-  // component, so it cannot disagree with AreaSelectedPanel's or MapFilterSheet's own instance.
-  const mapZeroStateFilterGroups = usePropertyFilterGroups({
-    filters,
-    onFiltersChange: onFiltersChange ?? (() => {}),
-    intent,
-    isReadyToMoveSupported: true,
-    isCommercialSubtypeSupported: true,
-  });
-  const handleClearMapFilters = mapZeroStateFilterGroups.handleClearPropertyFilters;
+  // "applies immediately … Buy/Rent and family kept … no draft to stage into").
+  //
+  // Issue #2658 (C4) — calls the pure `clearPropertyFilters` selector directly rather than
+  // instantiating a third `usePropertyFilterGroups`/`useBuyerFamilyController` pair just to reach
+  // one handler (see the import's own comment for the byte-identical-emission proof).
+  const handleClearMapFilters = useCallback(() => {
+    if (!onFiltersChange) return;
+    onFiltersChange(clearPropertyFilters(filters));
+  }, [filters, onFiltersChange]);
 
   // Issue #2017 — read the SAME shared AREA_SET draft/nearby-candidate state
   // AreaSetChips (rendered below) drives, via the context extracted for

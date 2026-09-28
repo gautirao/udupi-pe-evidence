@@ -7,6 +7,7 @@ import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftContext';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import { toAreaSelectedPanelContract, type AreaSelectedPanelFlatTestProps } from './areaSelectedPanelTestAdapter';
 
 /**
  * Issue #2552 — the family control must never disagree with the predicate.
@@ -55,7 +56,7 @@ const mockListing: DiscoverCityListingItem = {
   bathrooms: 1,
 };
 
-type PanelFilters = NonNullable<React.ComponentProps<typeof AreaSelectedPanel>['filters']>;
+type PanelFilters = NonNullable<AreaSelectedPanelFlatTestProps['filters']>;
 
 /**
  * Stored `property_type` tokens that mean "Commercial family", mirroring the panel's own
@@ -143,6 +144,17 @@ function ControlledHost({
 }) {
   const [filters, setFilters] = useState<PanelFilters>(initialFilters);
 
+  const { view, commands } = toAreaSelectedPanelContract({
+    selectedArea: mockArea,
+    areaListings,
+    filters,
+    onFiltersChange: (next) => {
+      onEmit?.(next);
+      setFilters(next);
+    },
+    isCommercialSubtypeSupported,
+  });
+
   return (
     <>
       <button
@@ -152,16 +164,7 @@ function ControlledHost({
       >
         simulate back/forward
       </button>
-      <AreaSelectedPanel
-        selectedArea={mockArea}
-        areaListings={areaListings}
-        filters={filters}
-        onFiltersChange={(next) => {
-          onEmit?.(next);
-          setFilters(next);
-        }}
-        isCommercialSubtypeSupported={isCommercialSubtypeSupported}
-      />
+      <AreaSelectedPanel view={view} commands={commands} />
     </>
   );
 }

@@ -156,15 +156,23 @@ vi.mock('@/hooks/useDiscoverListings', () => ({
  * `next` object reaching the handler under test has the real production shape
  * rather than an invented one. They also echo the `filters` prop they were
  * given, which pins the READ projection (see the effectiveFilters tests).
+ *
+ * Issue #2658 (C5) — the real component now takes {view, commands}, not flat
+ * `filters`/`onFiltersChange` props; the stub reads/writes the same nested
+ * paths (`view.filters.filters`, `commands.filters.change`) the real
+ * component destructures, so it still exercises exactly the seam this file
+ * is about — what the caller does with what the panel hands it.
  */
 function makePanelStub(testid: string) {
   return function PanelStub({
-    filters,
-    onFiltersChange,
+    view,
+    commands,
   }: {
-    filters?: PropertyFilters;
-    onFiltersChange?: (next: PropertyFilters) => void;
+    view?: { filters?: { filters?: PropertyFilters } };
+    commands?: { filters?: { change?: (next: PropertyFilters) => void } };
   }) {
+    const filters = view?.filters?.filters;
+    const onFiltersChange = commands?.filters?.change;
     return (
       <div data-testid={testid}>
         <pre data-testid={`${testid}-filters`}>{JSON.stringify(filters ?? {})}</pre>

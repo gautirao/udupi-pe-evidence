@@ -7,6 +7,7 @@ import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftContext';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import { toAreaSelectedPanelContract, type AreaSelectedPanelFlatTestProps } from './areaSelectedPanelTestAdapter';
 
 /**
  * Issue #2555 — the four #2450 DoD items that had no durable owner, plus the owner-mock
@@ -68,7 +69,7 @@ const mockListing: DiscoverCityListingItem = {
   bathrooms: 1,
 };
 
-type PanelProps = React.ComponentProps<typeof AreaSelectedPanel>;
+type PanelProps = AreaSelectedPanelFlatTestProps;
 type PanelFilters = NonNullable<PanelProps['filters']>;
 
 /** #2450's approved buyer wording for the Commercial subtype row, in mock order. */
@@ -106,24 +107,23 @@ function ControlledHost({
   const [filters, setFilters] = useState<PanelFilters>(initialFilters);
   const [query, setQuery] = useState(searchQuery ?? '');
 
-  return (
-    <AreaSelectedPanel
-      selectedArea={mockArea}
-      areaListings={areaListings}
-      filters={filters}
-      intent={intent}
-      searchQuery={query}
-      onSearchChange={(q) => {
-        onSearchChange?.(q);
-        setQuery(q);
-      }}
-      onFiltersChange={(next) => {
-        onEmit?.(next);
-        setFilters(next);
-      }}
-      isCommercialSubtypeSupported={isCommercialSubtypeSupported}
-    />
-  );
+  const { view, commands } = toAreaSelectedPanelContract({
+    selectedArea: mockArea,
+    areaListings,
+    filters,
+    intent,
+    searchQuery: query,
+    onSearchChange: (q) => {
+      onSearchChange?.(q);
+      setQuery(q);
+    },
+    onFiltersChange: (next) => {
+      onEmit?.(next);
+      setFilters(next);
+    },
+    isCommercialSubtypeSupported,
+  });
+  return <AreaSelectedPanel view={view} commands={commands} />;
 }
 
 const renderHost = (props: React.ComponentProps<typeof ControlledHost> = {}) =>
@@ -884,15 +884,16 @@ describe('AreaSelectedPanel — #2555 DoD items', () => {
      * every other arm in this block stays green.
      */
     it('keeps heading and subtype row on one family even on an UNCONTROLLED panel', () => {
+      const { view, commands } = toAreaSelectedPanelContract({
+        selectedArea: mockArea,
+        areaListings: [mockListing],
+        filters: {},
+        isCommercialSubtypeSupported: true,
+      });
       renderWithProviders(
         <DiscoverProvider>
           <AreaSetDraftProvider>
-            <AreaSelectedPanel
-              selectedArea={mockArea}
-              areaListings={[mockListing]}
-              filters={{}}
-              isCommercialSubtypeSupported
-            />
+            <AreaSelectedPanel view={view} commands={commands} />
           </AreaSetDraftProvider>
         </DiscoverProvider>,
         { router: 'browser' },

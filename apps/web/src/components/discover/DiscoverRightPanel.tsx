@@ -1786,105 +1786,118 @@ export function DiscoverRightPanel({
           : polygonListingsLoading;
         return (
           <AreaSelectedPanel
-            selectedArea={selectedArea}
-            areaListings={isScopeSubstituted ? substitutedListings : areaListings}
-            areaResultSummaryText={isScopeSubstituted ? undefined : areaResultSummaryText}
-            isLoadingListings={isScopeSubstituted ? substitutedListingsLoading : isLoadingListings}
-            // Issue #2018 requirement A — a failed request renders the
-            // explicit request-failure state, or keeps the last good cards
-            // behind an inline retry banner, instead of the zero-result
-            // recovery, which would assert "no matching listings" about a
-            // query that never returned.
-            //
-            // Slice 3 correction: this used to hard-code `false` for EVERY
-            // viewport scope, on the reasoning that VIEWPORT keeps its own
-            // #2015 treatment. That is true only for the ANONYMOUS viewport,
-            // which `renderAnonViewportListings` above handles. The
-            // AUTHENTICATED viewport had no error path at all —
-            // `isErrorAuthViewport` was declared, defaulted and destructured
-            // in this file and then never read — so a signed-in shopper whose
-            // "Search this area" request failed saw a zero-result state
-            // asserting the map area is empty. It is not; the request failed.
-            isListingsError={
-              isAnonViewport
-                ? false
-                : isAuthViewport
-                  ? isErrorAuthViewport
-                  : isPolygonScope
-                    ? isErrorPolygonListings
-                    : isListingsError
-            }
-            onRetryListings={
-              isAnonViewport
-                ? undefined
-                : isAuthViewport
-                  ? onRetryAuthViewport
-                  : isPolygonScope
-                    ? onRetryPolygonListings
-                    : onRetryListings
-            }
-            isViewportScope={isViewportScope}
-            isAuthenticated={isAuthenticated}
-            onBack={onBack}
-            onStartOver={onStartOver}
-            journey={journey}
-            // Issue #2596 — `filtersContent` is DELIBERATELY NOT PASSED HERE.
-            // It renders `<MapFilters/>` (built in useDiscoverFilterChromeController),
-            // and mounting it on this surface made the legacy right-hand Filters
-            // drawer a SECOND buyer filter system alongside the approved inline
-            // controls — which #2596 forbids in as many words ("Do not mount
-            // MapFilters as a second buyer filter system", "Do not create a second
-            // filter owner"). Verified on the running Manipal route: the drawer was
-            // reachable AND was the only place a buyer could select Commercial at
-            // all, while the inline surface showed Residential only.
-            //
-            // SCOPED DELIBERATELY: the school journeys below (`school-area` and
-            // `area-school-combined`) still receive `filtersContent`, because #2596
-            // governs the selected-area buyer surface only and those surfaces have
-            // no inline replacement. `MapFilters` itself is untouched.
-            //
-            // Issue #2596 — COMMERCIAL CAPABILITY. This is the THIRD production
-            // render site of AreaSelectedPanel, and the one the live selected-area
-            // route actually uses. The panel's own comment claimed there were only
-            // two (DiscoverAreasJourneyPanel and NodeListingsSurface, both of which
-            // pass this) — the comment was wrong and was believed, so the capability
-            // defaulted false here and the approved TYPE -> Residential | Commercial
-            // row rendered for nobody on the real buyer surface.
-            //
-            // NOT A BLIND DEFAULT FLIP: the data path was verified end-to-end in a
-            // browser on this exact route BEFORE enabling it. Selecting Commercial
-            // produced `type=commercial` in the URL, the "Commercial properties in
-            // Manipal" heading, suppression of the Bedrooms row, the BUILT-UP AREA
-            // label, the approved Commercial Buy budgets, a removable chip, and
-            // list/count/markers moving together. Everything downstream of this
-            // gate already worked; only the gate was off.
-            isCommercialSubtypeSupported
-            trendsHref={trendsHref}
-            isFetching={isFetching}
-            isInitialLoading={isInitialLoading}
-            searchQuery={searchQuery}
-            onSearchChange={onSearchChange}
-            activeContextChips={activeContextChips}
-            filters={filters}
-            onFiltersChange={onFiltersChange}
-            onSelectJourney={onSelectJourney}
-            onAddSchool={onAddSchool}
-            intent={intent}
-            selectedListingId={selectedListingId}
-            hoveredListingId={hoveredListingId}
-            onSelectListing={onSelectResultListing}
-            onHoverListing={onHoverResultListing}
-            // Issue #1606 / Issue #1798 PR-B1 — area-first results redesign: breadcrumb + in-panel controls.
-            cityLabel={cityLabel ?? city}
-            regionName={regionName}
-            groupName={selectedGroupName}
-            city={city}
-            onCityChange={onCityChange}
-            onIntentChange={onIntentChange}
-            onCrumbHome={onStartOver}
-            onCrumbCity={onNavigateAreaLanding}
-            onCrumbRegion={regionName && onBackToRegion ? () => onBackToRegion(regionName) : undefined}
-            onCrumbGroup={onBack}
+            // Issue #2658 (C5) — the binding prop-modelling contract: view/commands,
+            // not 40 flat props. Every value/expression below is carried over
+            // VERBATIM from the flat call this replaces; only the grouping changed.
+            view={{
+              area: {
+                point: selectedArea,
+                // Issue #1606 / Issue #1798 PR-B1 — area-first results redesign: breadcrumb + in-panel controls.
+                cityLabel: cityLabel ?? city,
+                regionName,
+                groupName: selectedGroupName,
+                city,
+                journey,
+              },
+              results: {
+                listings: isScopeSubstituted ? substitutedListings : areaListings,
+                summaryText: isScopeSubstituted ? undefined : areaResultSummaryText,
+                isLoading: isScopeSubstituted ? substitutedListingsLoading : isLoadingListings,
+                isFetching,
+                isInitialLoading,
+                // Issue #2018 requirement A — a failed request renders the
+                // explicit request-failure state, or keeps the last good cards
+                // behind an inline retry banner, instead of the zero-result
+                // recovery, which would assert "no matching listings" about a
+                // query that never returned.
+                //
+                // Slice 3 correction: this used to hard-code `false` for EVERY
+                // viewport scope, on the reasoning that VIEWPORT keeps its own
+                // #2015 treatment. That is true only for the ANONYMOUS viewport,
+                // which `renderAnonViewportListings` above handles. The
+                // AUTHENTICATED viewport had no error path at all —
+                // `isErrorAuthViewport` was declared, defaulted and destructured
+                // in this file and then never read — so a signed-in shopper whose
+                // "Search this area" request failed saw a zero-result state
+                // asserting the map area is empty. It is not; the request failed.
+                isError:
+                  isAnonViewport
+                    ? false
+                    : isAuthViewport
+                      ? isErrorAuthViewport
+                      : isPolygonScope
+                        ? isErrorPolygonListings
+                        : isListingsError,
+                isViewportScope,
+              },
+              filters: {
+                filters,
+                intent,
+                // Issue #2596 — COMMERCIAL CAPABILITY. This is the THIRD production
+                // render site of AreaSelectedPanel, and the one the live selected-area
+                // route actually uses. The panel's own comment claimed there were only
+                // two (DiscoverAreasJourneyPanel and NodeListingsSurface, both of which
+                // pass this) — the comment was wrong and was believed, so the capability
+                // defaulted false here and the approved TYPE -> Residential | Commercial
+                // row rendered for nobody on the real buyer surface.
+                //
+                // NOT A BLIND DEFAULT FLIP: the data path was verified end-to-end in a
+                // browser on this exact route BEFORE enabling it. Selecting Commercial
+                // produced `type=commercial` in the URL, the "Commercial properties in
+                // Manipal" heading, suppression of the Bedrooms row, the BUILT-UP AREA
+                // label, the approved Commercial Buy budgets, a removable chip, and
+                // list/count/markers moving together. Everything downstream of this
+                // gate already worked; only the gate was off.
+                isCommercialSubtypeSupported: true,
+                // Issue #2596 — `content` is DELIBERATELY NOT PASSED HERE.
+                // It renders `<MapFilters/>` (built in useDiscoverFilterChromeController),
+                // and mounting it on this surface made the legacy right-hand Filters
+                // drawer a SECOND buyer filter system alongside the approved inline
+                // controls — which #2596 forbids in as many words ("Do not mount
+                // MapFilters as a second buyer filter system", "Do not create a second
+                // filter owner"). Verified on the running Manipal route: the drawer was
+                // reachable AND was the only place a buyer could select Commercial at
+                // all, while the inline surface showed Residential only.
+                //
+                // SCOPED DELIBERATELY: the school journeys below (`school-area` and
+                // `area-school-combined`) still receive filter content, because #2596
+                // governs the selected-area buyer surface only and those surfaces have
+                // no inline replacement. `MapFilters` itself is untouched.
+                activeContextChips,
+              },
+              search: { query: searchQuery },
+              listingCards: { isAuthenticated, selectedListingId, hoveredListingId },
+              links: { trendsHref },
+            }}
+            commands={{
+              navigation: {
+                onBack,
+                onStartOver,
+                onSelectJourney,
+                onAddSchool,
+                onCityChange,
+                onIntentChange,
+                onCrumbHome: onStartOver,
+                onCrumbCity: onNavigateAreaLanding,
+                onCrumbRegion: regionName && onBackToRegion ? () => onBackToRegion(regionName) : undefined,
+                onCrumbGroup: onBack,
+              },
+              filters: { change: onFiltersChange },
+              search: { change: onSearchChange },
+              listings: {
+                select: onSelectResultListing,
+                hover: onHoverResultListing,
+                retry:
+                  isAnonViewport
+                    ? undefined
+                    : isAuthViewport
+                      ? onRetryAuthViewport
+                      : isPolygonScope
+                        ? onRetryPolygonListings
+                        : onRetryListings,
+              },
+              scope: {},
+            }}
           />
         );
       }

@@ -1350,110 +1350,123 @@ function AreaLeafListingsSurface({
         <AreaSetDraftPanel />
       ) : (
       <AreaSelectedPanel
-        selectedArea={areaPoint}
-        // #2702 — see this component's own comment above `trendsHref`'s derivation:
-        // this is what makes the "View Area Trends" CTA reachable from the real
-        // journey=area-first Discover flow.
-        trendsHref={trendsHref}
-        // Issue #2572 — COMMERCIAL CAPABILITY ENABLEMENT. See the twin comment
-        // at the NodeListingsSurface call site.
-        //
-        // CORRECTED, Issue #2596: this comment used to say "the second of the TWO
-        // production render sites". THERE ARE THREE. The third —
-        // `DiscoverRightPanel.tsx`'s `area-selected` case — is the one the live
-        // selected-area route actually renders, and it was the one missed. The
-        // count in this comment was wrong and was believed, so the omission it
-        // warns about is exactly the omission that happened: the approved TYPE ->
-        // Residential | Commercial row rendered for nobody on the real buyer
-        // surface while every test that passed the prop explicitly stayed green.
-        // If you add a fourth render site, pass it there too — and fix this count.
-        isCommercialSubtypeSupported
-        // FIX CYCLE 2 (opus review, nit) — was omitted, so AreaSelectedPanel's
-        // breadcrumb fell back to the area label for cityLabel too, rendering
-        // "Manipal › Manipal" instead of "Udupi › Manipal". Same
-        // `CITY_CONFIG[city]?.label ?? city` derivation MapDiscovery.tsx and
-        // DiscoverMapContextOverlay.tsx already use for this exact prop.
-        cityLabel={CITY_CONFIG[nav.city]?.label ?? nav.city}
-        // Issue #1956 PR-5 (AC5.9 breadcrumb omission-class fix) — the six
-        // previously-omitted breadcrumb props (this call site passed ONLY
-        // `cityLabel` before this fix — a sibling omission to PR-4 FIX
-        // CYCLE 2, which fixed `cityLabel` alone and left these six). See
-        // this component's own derivation above for regionName/groupName/
-        // onCrumb* semantics.
-        regionName={regionName}
-        groupName={groupName}
-        onCrumbHome={onCrumbHome}
-        onCrumbCity={onCrumbCity}
-        onCrumbRegion={onCrumbRegion}
-        onCrumbGroup={onCrumbGroup}
-        areaListings={areaListingsForPanel}
-        isLoadingListings={isLoadingAreaListingsResolved}
-        // Issue #2018 requirement A — reaching this call site with an error
-        // set means results WERE retained (the no-results case returned the
-        // full-replace state above), so the panel keeps the cards and shows
-        // an inline retry banner. Passing it unconditionally rather than
-        // `&& length > 0` keeps the panel the single owner of that decision.
-        onRedrawPolygon={onRedrawPolygon}
-        isListingsError={isErrorAreaListingsResolved}
-        onRetryListings={refetchAreaListings}
-        // Issue #2015 — once a VIEWPORT scope ("Search this area") is
-        // committed, `areaListingsForPanel`/`isLoadingAreaListingsResolved`
-        // above already carry the VIEWPORT-scoped data (see
-        // `rawAreaListings`'s `isViewportScope` branch); this flag only
-        // switches `AreaSelectedPanel`'s own heading/copy (e.g. "Properties
-        // in this area" vs "Properties in {areaLabel}") to match, mirroring
-        // the legacy `DiscoverRightPanel` bridge's identical prop.
-        isViewportScope={isViewportScope}
-        // Issue #2353 (code-review fix) — was omitted at this call site, so
-        // AreaSelectedPanel's own `isFetching && !isInitialLoading` dimmed/
-        // disabled-overlay convention (its established signal for "showing
-        // stale keepPreviousData while a refetch is in flight") never fired
-        // here, even once `isFetchingAreaListingsResolved` itself was fixed
-        // to stop being hardcoded `false`. This is the plain (no-school)
-        // AREA-leaf branch — the one a filter/search rekey most commonly
-        // hits — so it is exactly the path the stale-cards-as-settled bug
-        // described.
-        isFetching={isFetchingAreaListingsResolved}
-        isAuthenticated={isAuthenticated}
-        filters={effectiveFilters}
-        onFiltersChange={(next) => {
-          // Issue #1956 PR-4 FIX CYCLE 3 (blocking Fix B) — route through the
-          // SAME committed filters state/handler the map's query is built
-          // from (see the module doc above) so a chip toggle produces ONE
-          // filter identity across the URL, this panel's cards/count, and
-          // the map's markers. Falls back to the old URL-only
-          // `setFiltersCommitted` write only when no caller-supplied handler
-          // is present (defensive — production always supplies one via
-          // `DiscoverRightPanelContainer`).
-          // Issue #2553 — forward what the panel emitted rather than rebuilding
-          // the committed object from a key allowlist. The allowlist dropped
-          // readyToMove (Issue #2023) and then commercialSubtypes (Issue #2553);
-          // each loss is invisible where it happens and only surfaces as a filter
-          // that appears to do nothing. `next` is a full PropertyFilters derived
-          // from the `filters` prop this surface passed down, so the spread carries
-          // every axis the panel can emit — including future ones — while the base
-          // still supplies whatever sits outside `effectiveFilters`' projection.
-          if (onCommittedFiltersChange) {
-            onCommittedFiltersChange({ ...(committedFilters ?? {}), ...next });
-            return;
-          }
-          actions.setFiltersCommitted(toCommittedUrlFilters(nav.filters, next));
+        // Issue #2658 (C5) — {view, commands} contract flip. Every value/expression
+        // below is carried over verbatim from the flat call this replaces; only the
+        // grouping changed.
+        view={{
+          area: {
+            point: areaPoint,
+            // FIX CYCLE 2 (opus review, nit) — was omitted, so AreaSelectedPanel's
+            // breadcrumb fell back to the area label for cityLabel too, rendering
+            // "Manipal › Manipal" instead of "Udupi › Manipal". Same
+            // `CITY_CONFIG[city]?.label ?? city` derivation MapDiscovery.tsx and
+            // DiscoverMapContextOverlay.tsx already use for this exact prop.
+            cityLabel: CITY_CONFIG[nav.city]?.label ?? nav.city,
+            // Issue #1956 PR-5 (AC5.9 breadcrumb omission-class fix) — the six
+            // previously-omitted breadcrumb props (this call site passed ONLY
+            // `cityLabel` before this fix — a sibling omission to PR-4 FIX
+            // CYCLE 2, which fixed `cityLabel` alone and left these six). See
+            // this component's own derivation above for regionName/groupName/
+            // onCrumb* semantics.
+            regionName,
+            groupName,
+          },
+          results: {
+            listings: areaListingsForPanel,
+            isLoading: isLoadingAreaListingsResolved,
+            // Issue #2018 requirement A — reaching this call site with an error
+            // set means results WERE retained (the no-results case returned the
+            // full-replace state above), so the panel keeps the cards and shows
+            // an inline retry banner. Passing it unconditionally rather than
+            // `&& length > 0` keeps the panel the single owner of that decision.
+            isError: isErrorAreaListingsResolved,
+            // Issue #2015 — once a VIEWPORT scope ("Search this area") is
+            // committed, `areaListingsForPanel`/`isLoadingAreaListingsResolved`
+            // above already carry the VIEWPORT-scoped data (see
+            // `rawAreaListings`'s `isViewportScope` branch); this flag only
+            // switches `AreaSelectedPanel`'s own heading/copy (e.g. "Properties
+            // in this area" vs "Properties in {areaLabel}") to match, mirroring
+            // the legacy `DiscoverRightPanel` bridge's identical prop.
+            isViewportScope,
+            // Issue #2353 (code-review fix) — was omitted at this call site, so
+            // AreaSelectedPanel's own `isFetching && !isInitialLoading` dimmed/
+            // disabled-overlay convention (its established signal for "showing
+            // stale keepPreviousData while a refetch is in flight") never fired
+            // here, even once `isFetchingAreaListingsResolved` itself was fixed
+            // to stop being hardcoded `false`. This is the plain (no-school)
+            // AREA-leaf branch — the one a filter/search rekey most commonly
+            // hits — so it is exactly the path the stale-cards-as-settled bug
+            // described.
+            isFetching: isFetchingAreaListingsResolved,
+          },
+          filters: {
+            filters: effectiveFilters,
+            intent: nav.intent,
+            // Issue #2572 — COMMERCIAL CAPABILITY ENABLEMENT. See the twin comment
+            // at the NodeListingsSurface call site.
+            //
+            // CORRECTED, Issue #2596: this comment used to say "the second of the TWO
+            // production render sites". THERE ARE THREE. The third —
+            // `DiscoverRightPanel.tsx`'s `area-selected` case — is the one the live
+            // selected-area route actually renders, and it was the one missed. The
+            // count in this comment was wrong and was believed, so the omission it
+            // warns about is exactly the omission that happened: the approved TYPE ->
+            // Residential | Commercial row rendered for nobody on the real buyer
+            // surface while every test that passed the prop explicitly stayed green.
+            // If you add a fourth render site, pass it there too — and fix this count.
+            //
+            // Issue #2023 (BLOCKING review fix) — this AREA-leaf surface's listings
+            // come from `useDiscoverCityListings` (see `areaListingsForPanel` /
+            // `areaListingsQuery` above), which now forwards `readyToMove` to
+            // `CityAreaListingsService` and filters on `possession_status = 'READY'`,
+            // for both anon and authenticated callers — the same predicate
+            // markers/navigation-counts/authenticated "Browse all" already apply.
+            // The chip is genuinely functional here now, so it stays enabled —
+            // isReadyToMoveSupported omitted, relying on AreaSelectedPanel's own
+            // `= true` default, same as `NodeListingsSurface`'s "Browse all" surface.
+            isCommercialSubtypeSupported: true,
+          },
+          search: { query: searchQuery },
+          listingCards: { isAuthenticated, selectedListingId: nav.selectedListing },
+          // #2702 — see this component's own comment above `trendsHref`'s derivation:
+          // this is what makes the "View Area Trends" CTA reachable from the real
+          // journey=area-first Discover flow.
+          links: { trendsHref },
         }}
-        searchQuery={searchQuery}
-        onSearchChange={handleSearchChange}
-        selectedListingId={nav.selectedListing}
-        onSelectListing={(id) => actions.setSelectedListing(id)}
-        intent={nav.intent}
-        onAddSchool={onAddSchool}
-        // Issue #2023 (BLOCKING review fix) — this AREA-leaf surface's listings
-        // come from `useDiscoverCityListings` (see `areaListingsForPanel` /
-        // `areaListingsQuery` above), which now forwards `readyToMove` to
-        // `CityAreaListingsService` and filters on `possession_status = 'READY'`,
-        // for both anon and authenticated callers — the same predicate
-        // markers/navigation-counts/authenticated "Browse all" already apply.
-        // The chip is genuinely functional here now, so it stays enabled —
-        // prop omitted, relying on AreaSelectedPanel's own `= true` default,
-        // same as `NodeListingsSurface`'s "Browse all" surface.
+        commands={{
+          navigation: { onCrumbHome, onCrumbCity, onCrumbRegion, onCrumbGroup, onAddSchool },
+          filters: {
+            change: (next) => {
+              // Issue #1956 PR-4 FIX CYCLE 3 (blocking Fix B) — route through the
+              // SAME committed filters state/handler the map's query is built
+              // from (see the module doc above) so a chip toggle produces ONE
+              // filter identity across the URL, this panel's cards/count, and
+              // the map's markers. Falls back to the old URL-only
+              // `setFiltersCommitted` write only when no caller-supplied handler
+              // is present (defensive — production always supplies one via
+              // `DiscoverRightPanelContainer`).
+              // Issue #2553 — forward what the panel emitted rather than rebuilding
+              // the committed object from a key allowlist. The allowlist dropped
+              // readyToMove (Issue #2023) and then commercialSubtypes (Issue #2553);
+              // each loss is invisible where it happens and only surfaces as a filter
+              // that appears to do nothing. `next` is a full PropertyFilters derived
+              // from the `filters` prop this surface passed down, so the spread carries
+              // every axis the panel can emit — including future ones — while the base
+              // still supplies whatever sits outside `effectiveFilters`' projection.
+              if (onCommittedFiltersChange) {
+                onCommittedFiltersChange({ ...(committedFilters ?? {}), ...next });
+                return;
+              }
+              actions.setFiltersCommitted(toCommittedUrlFilters(nav.filters, next));
+            },
+          },
+          search: { change: handleSearchChange },
+          listings: {
+            select: (id) => actions.setSelectedListing(id),
+            retry: refetchAreaListings,
+          },
+          scope: { redrawPolygon: onRedrawPolygon },
+        }}
       />
       )}
     </div>

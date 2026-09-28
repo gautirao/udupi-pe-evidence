@@ -20,6 +20,7 @@ import { AreaSelectedPanel } from '../AreaSelectedPanel';
 import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftContext';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
+import { toAreaSelectedPanelContract, type AreaSelectedPanelFlatTestProps } from './areaSelectedPanelTestAdapter';
 
 const mockArea: AreaPoint = {
   areaKey: 'test-area|city|udupi',
@@ -29,24 +30,26 @@ const mockArea: AreaPoint = {
   bbox: null,
 };
 
-const renderPanel = (props: Partial<React.ComponentProps<typeof AreaSelectedPanel>> = {}) =>
-  renderWithProviders(
+const renderPanel = (props: Partial<AreaSelectedPanelFlatTestProps> = {}) => {
+  const defaultProps: AreaSelectedPanelFlatTestProps = {
+    selectedArea: mockArea,
+    areaListings: [],
+    filters: {},
+    onFiltersChange: vi.fn(),
+    onSelectJourney: vi.fn(),
+    onAddSchool: vi.fn(),
+    onSearchChange: vi.fn(),
+  };
+  const { view, commands } = toAreaSelectedPanelContract({ ...defaultProps, ...props });
+  return renderWithProviders(
     <DiscoverProvider>
       <AreaSetDraftProvider>
-        <AreaSelectedPanel
-          selectedArea={mockArea}
-          areaListings={[]}
-          filters={{}}
-          onFiltersChange={vi.fn()}
-          onSelectJourney={vi.fn()}
-          onAddSchool={vi.fn()}
-          onSearchChange={vi.fn()}
-          {...props}
-        />
+        <AreaSelectedPanel view={view} commands={commands} />
       </AreaSetDraftProvider>
     </DiscoverProvider>,
     { router: 'browser' },
   );
+};
 
 describe('#2596 density — spacing-sensitive structural classes', () => {
   it('collapses the single-action row when its child renders nothing', () => {

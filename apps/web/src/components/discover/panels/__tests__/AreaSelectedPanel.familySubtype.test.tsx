@@ -11,6 +11,7 @@ import {
   DISCOVER_COMMERCIAL_SUBTYPES,
   type CommercialSubtype,
 } from '@/lib/listing-constants';
+import { toAreaSelectedPanelContract, type AreaSelectedPanelFlatTestProps } from './areaSelectedPanelTestAdapter';
 
 /**
  * Issue #2450 — buyer-reachable Residential/Commercial family + subtype filters.
@@ -151,7 +152,7 @@ const expectSubtypeExpressed = (
   expect((emitted?.commercialSubtypes as string[] | undefined) ?? []).toContain(choice.value);
 };
 
-type PanelFilters = NonNullable<React.ComponentProps<typeof AreaSelectedPanel>['filters']>;
+type PanelFilters = NonNullable<AreaSelectedPanelFlatTestProps['filters']>;
 
 /**
  * The props this spec requires, including the capability gate the implementation must add.
@@ -160,9 +161,7 @@ type PanelFilters = NonNullable<React.ComponentProps<typeof AreaSelectedPanel>['
  * ZERO errors to the project's typecheck baseline — four `TS2353`s would otherwise land in
  * every other lane's subtraction control.
  */
-type PanelProps = React.ComponentProps<typeof AreaSelectedPanel> & {
-  isCommercialSubtypeSupported?: boolean;
-};
+type PanelProps = AreaSelectedPanelFlatTestProps;
 
 /*
  * NO TYPE-LEVEL TRIPWIRE HERE, deliberately, and the reason is worth recording because I built
@@ -302,10 +301,11 @@ describe('AreaSelectedPanel — #2450 family / subtype filters', () => {
        */
     };
 
+    const { view, commands } = toAreaSelectedPanelContract({ ...defaultProps, ...props });
     renderWithProviders(
       <DiscoverProvider>
         <AreaSetDraftProvider>
-          <AreaSelectedPanel {...defaultProps} {...props} />
+          <AreaSelectedPanel view={view} commands={commands} />
         </AreaSetDraftProvider>
       </DiscoverProvider>,
       { router: 'browser' },

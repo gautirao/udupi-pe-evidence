@@ -7,6 +7,7 @@ import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftContext';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import { toAreaSelectedPanelContract, type AreaSelectedPanelFlatTestProps } from './areaSelectedPanelTestAdapter';
 
 /**
  * Issue #2478 (step 1) — panel-side scope bar coverage.
@@ -78,11 +79,11 @@ const POLYGON_PARAM = '12.90000:77.50000;12.95000:77.55000;13.00000:77.60000';
 const PREV_POLYGON_PARAM = '12.80000:77.40000;12.85000:77.45000;12.90000:77.50000';
 
 const renderPanel = (
-  props: Partial<React.ComponentProps<typeof AreaSelectedPanel>> = {},
+  props: Partial<AreaSelectedPanelFlatTestProps> = {},
   route = '/discover',
 ) => {
   const onRedrawPolygon = vi.fn();
-  const defaultProps: React.ComponentProps<typeof AreaSelectedPanel> = {
+  const defaultProps: AreaSelectedPanelFlatTestProps = {
     selectedArea: mockArea,
     areaListings: [mockListing],
     filters: {},
@@ -91,10 +92,11 @@ const renderPanel = (
     onAddSchool: vi.fn(),
     onRedrawPolygon,
   };
+  const { view, commands } = toAreaSelectedPanelContract({ ...defaultProps, ...props });
   renderWithProviders(
     <DiscoverProvider>
       <AreaSetDraftProvider>
-        <AreaSelectedPanel {...defaultProps} {...props} />
+        <AreaSelectedPanel view={view} commands={commands} />
       </AreaSetDraftProvider>
     </DiscoverProvider>,
     { router: 'memory', route },

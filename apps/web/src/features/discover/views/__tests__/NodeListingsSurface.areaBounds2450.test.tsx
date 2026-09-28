@@ -86,9 +86,12 @@ vi.mock('@/features/discover/context/useDiscoverContext', () => ({
   }),
 }));
 
+// Issue #2658 (C5) — the real component now takes {view, commands}; the
+// stub reads the same nested path (`view.results.listings`) the real
+// component destructures.
 vi.mock('@/components/discover/panels/AreaSelectedPanel', () => ({
-  AreaSelectedPanel: ({ areaListings }: { areaListings: unknown[] }) => (
-    <div data-testid="area-selected-panel">{areaListings.length} listings</div>
+  AreaSelectedPanel: ({ view }: { view: { results: { listings?: unknown[] } } }) => (
+    <div data-testid="area-selected-panel">{(view.results.listings ?? []).length} listings</div>
   ),
 }));
 

@@ -18,11 +18,17 @@ import { resolve } from 'node:path';
  * component's own behaviour is already covered by
  * `AreaSetSelectedExtras.drawEntry.test.tsx`.
  *
+ * Issue #2658 (C3) — this wiring moved verbatim from AreaSelectedPanel.tsx
+ * into features/discover/area-selected/sections/ResultHeading.tsx (the
+ * single-area branch's action row) as part of the ResultHeading extraction;
+ * this guard now reads THAT file, since that is where the fact it pins
+ * actually lives post-decomposition.
+ *
  * Comments are stripped before matching so prose naming the component can
  * never satisfy a check.
  */
 
-const PANEL = resolve(__dirname, '../AreaSelectedPanel.tsx');
+const PANEL = resolve(__dirname, '../../../../features/discover/area-selected/sections/ResultHeading.tsx');
 
 const source = readFileSync(PANEL, 'utf-8')
   .replace(/\/\*\*[\s\S]*?\*\//g, '')
