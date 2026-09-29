@@ -423,6 +423,8 @@ export interface DiscoverMapCanvasFlatProps {
   schoolJourneySegments: DiscoverMapCrumb[];
   focusedGroup: AreaGroup | null;
   city: string;
+  /** Issue #2748 — `MapNavigationView.journey` (the raw `navJourney` builder param). */
+  journey: string;
   mobileListButton?: ReactNode;
   onFiltersChange?: (next: PropertyFilters) => void;
   intent?: DiscoverIntent;
@@ -518,6 +520,7 @@ function toCanvasProps(
         isBoundedBrowseState: flat.isBoundedBrowseState,
       },
       navigation: {
+        journey: flat.journey,
         showSchoolBreadcrumb: flat.showSchoolBreadcrumb,
         focusedGroup: flat.focusedGroup,
         city: flat.city,
@@ -725,6 +728,10 @@ function baseProps(
     schoolJourneySegments: [],
     focusedGroup: null,
     city: 'bangalore',
+    // Issue #2748 — unused by DiscoverMapCanvas itself (it reads journey from
+    // useDiscoverNav() context, mocked separately below); only present to satisfy
+    // MapNavigationView's shape.
+    journey: 'area-first',
     schoolRadiusOverlay: false,
     resolvedPanelContent: 'guided-entry',
     isSelectedGroupState: false,

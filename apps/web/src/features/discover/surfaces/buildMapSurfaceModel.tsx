@@ -188,6 +188,15 @@ type MapNavigationView = {
   showSchoolBreadcrumb: boolean;
   focusedGroup: AreaGroup | null;
   city: string;
+  /**
+   * Issue #2748 — the raw `navJourney` param, threaded through so
+   * DiscoverMapSurface (a `surfaces/**` renderer, forbidden from importing the
+   * Discover context facade) can gate the Map Info Dock / legacy recenter
+   * portal on "areas journey" without an ambient `useDiscoverNav()` read.
+   * DiscoverMapCanvas already has this via context (`useDiscoverNav().journey`)
+   * and does not need this field.
+   */
+  journey: string;
   areasNavigationJourney?: UseAreasNavigationJourneyResult;
   hoveredNavigationNodeKey?: string | null;
   focusedClusterMemberAreaKeys?: readonly string[] | null;
@@ -741,6 +750,7 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
       isBoundedBrowseState,
     },
     navigation: {
+      journey: navJourney,
       areasNavigationJourney: activeAreasNavigationJourney,
       hoveredNavigationNodeKey,
       focusedClusterMemberAreaKeys,

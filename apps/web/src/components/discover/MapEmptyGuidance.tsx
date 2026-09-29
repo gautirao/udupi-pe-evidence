@@ -39,6 +39,15 @@ interface MapEmptyGuidanceProps {
    * hint. Defaults to false, so any legacy caller is unaffected.
    */
   isMobileMapOverlay?: boolean;
+  /**
+   * Issue #2748 — the anonymous zoom-past-area prompt below is superseded, for the Areas
+   * journey only, by the Map Info Dock's own guidance row (DiscoverMapSurface.tsx), which
+   * uses a broader trigger (anon + not yet listing-capable, not just zoomed-past-threshold —
+   * see mapInfoDockContent.ts). The `cityTotal === 0` messages above are a DIFFERENT concern
+   * (not one of the dock's three messages) and are never suppressed by this flag. Defaults to
+   * false so every other journey (and any legacy caller) is unaffected.
+   */
+  suppressAnonZoomPrompt?: boolean;
 }
 
 /**
@@ -57,6 +66,7 @@ export function MapEmptyGuidance({
   areaLayerMaxZoom,
   isAgriJourney,
   isMobileMapOverlay = false,
+  suppressAnonZoomPrompt = false,
 }: MapEmptyGuidanceProps) {
   if (isLoading) return null;
 
@@ -96,6 +106,7 @@ export function MapEmptyGuidance({
   // during the Agri journey too, same as the two messages above, even though
   // its rendered copy carries no explicit count/claim.
   const showAnonZoomPrompt =
+    !suppressAnonZoomPrompt &&
     !isAgriJourney &&
     isAuthenticated === false &&
     hasAreaSelected === false &&

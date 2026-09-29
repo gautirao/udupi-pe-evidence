@@ -1234,7 +1234,17 @@ export function DiscoverMapCanvas({ mapContainerRef, view, commands }: DiscoverM
       {/* Radius legend — bottom-left, raised above the Leaflet zoom control (bottomleft).
           Only the selected-school radius state; swatches match the real map markers/ring.
           Issue #1824 Slice S8 — extracted to DiscoverMapLegend (chrome call). */}
-      <DiscoverMapLegend schoolRadiusChrome={schoolRadiusOverlay ? { schoolRadiusKm: filters.schoolRadiusKm } : null} />
+      <DiscoverMapLegend
+        schoolRadiusChrome={
+          schoolRadiusOverlay
+            ? {
+                schoolRadiusKm: filters.schoolRadiusKm,
+                isAreaFirstJourney: nav.journey === 'area-first',
+                isMobileMapOverlay,
+              }
+            : null
+        }
+      />
 
       {/* City select — REMOVED in #1953 build step 6 (ownership invariant).
           Previously shown top-right for every drill-down state except
@@ -1284,6 +1294,7 @@ export function DiscoverMapCanvas({ mapContainerRef, view, commands }: DiscoverM
           isSelectedGroupState,
           isAreaFirstCityLanding,
           journey: nav.journey,
+          isMobileMapOverlay,
           selectedLocality: nav.selectedLocality,
           selectedRegion,
         }}
@@ -1304,30 +1315,34 @@ export function DiscoverMapCanvas({ mapContainerRef, view, commands }: DiscoverM
       {/* City / area listing count — bottom-right (Issue #1152). Issue #1588 — on the
           public landing this is replaced by the centered city-wide summary pill below;
           kept bottom-right for contextual (area/school/group) drill-down counts.
-          Issue #1824 Slice S8 — both pills extracted to DiscoverMapCountBadge. */}
-      <DiscoverMapCountBadge
-        resolvedPanelContent={resolvedPanelContent}
-        isAreaFirstCityLanding={isAreaFirstCityLanding}
-        discoverBadge={discoverBadge}
-        isSelectedGroupState={isSelectedGroupState}
-        isAreaFirstSelectedAreaState={isAreaFirstSelectedAreaState}
-        selectedArea={selectedArea}
-        focusedGroup={focusedGroup}
-        areaResultSummaryText={areaResultSummaryText}
-        groupSelectedBadgeCopy={groupSelectedBadgeCopy}
-        fallbackBadgeCopy={fallbackBadgeCopy}
-        journey={nav.journey}
-        schoolRadiusActive={schoolRadiusActive}
-        schoolRadiusPillNoun={schoolRadiusPillNoun}
-        schoolFirstAreaSchoolCount={schoolFirstAreaSchoolCount}
-        schoolFirstZoneSchoolCount={schoolFirstZoneSchoolCount}
-        schoolFirstLandingSchoolCount={schoolFirstLandingSchoolCount}
-        cityTotal={cityTotal}
-        city={city}
-        hideDrillDownBadge={hideDuplicateCountBadge}
-        isMobileMapOverlay={isMobileMapOverlay}
-        isAreaRecenterButtonVisible={isAreaRecenterButtonVisible}
-      />
+          Issue #1824 Slice S8 — both pills extracted to DiscoverMapCountBadge.
+          Issue #2748 — superseded by the Map Info Dock's own count row for the Areas
+          journey (DiscoverMapSurface.tsx); every other journey is unchanged. */}
+      {nav.journey !== 'area-first' && (
+        <DiscoverMapCountBadge
+          resolvedPanelContent={resolvedPanelContent}
+          isAreaFirstCityLanding={isAreaFirstCityLanding}
+          discoverBadge={discoverBadge}
+          isSelectedGroupState={isSelectedGroupState}
+          isAreaFirstSelectedAreaState={isAreaFirstSelectedAreaState}
+          selectedArea={selectedArea}
+          focusedGroup={focusedGroup}
+          areaResultSummaryText={areaResultSummaryText}
+          groupSelectedBadgeCopy={groupSelectedBadgeCopy}
+          fallbackBadgeCopy={fallbackBadgeCopy}
+          journey={nav.journey}
+          schoolRadiusActive={schoolRadiusActive}
+          schoolRadiusPillNoun={schoolRadiusPillNoun}
+          schoolFirstAreaSchoolCount={schoolFirstAreaSchoolCount}
+          schoolFirstZoneSchoolCount={schoolFirstZoneSchoolCount}
+          schoolFirstLandingSchoolCount={schoolFirstLandingSchoolCount}
+          cityTotal={cityTotal}
+          city={city}
+          hideDrillDownBadge={hideDuplicateCountBadge}
+          isMobileMapOverlay={isMobileMapOverlay}
+          isAreaRecenterButtonVisible={isAreaRecenterButtonVisible}
+        />
+      )}
 
       {/* Issue #1261 — non-blocking "showing first N" hint for the anonymous
           school-radius result. The public endpoint returns a single page (size=50)
@@ -1372,6 +1387,7 @@ export function DiscoverMapCanvas({ mapContainerRef, view, commands }: DiscoverM
         areaLayerMaxZoom={areaLayerMaxZoom}
         isAgriJourney={isAgriJourney}
         isMobileMapOverlay={isMobileMapOverlay}
+        suppressAnonZoomPrompt={nav.journey === 'area-first'}
       />
 
       {/* a3 — Marker popover mini card. Gated to listing-marker clicks via
@@ -1517,38 +1533,43 @@ export function DiscoverMapCanvas({ mapContainerRef, view, commands }: DiscoverM
           The selected-area branch below is intentionally UNCHANGED (`bottom-48 right-4`) — already
           measured non-overlapping against every other selected-area element, so it stays put
           rather than being repositioned for a pairing it isn't part of. */}
-      <div
-        className={
-          isMobileMapOverlay
-            ? isAreaFirstSelectedAreaState
-              ? 'absolute bottom-[100px] right-[10px] z-[500] flex flex-col items-end gap-2'
-              : 'absolute bottom-[130px] left-1/2 -translate-x-1/2 z-[500] flex flex-col items-center gap-2'
-            : isAreaFirstSelectedAreaState
-              ? 'absolute bottom-48 right-4 z-[500] flex flex-col items-end gap-2'
-              : isDesktopBadgePaired
-                ? 'absolute bottom-60 left-1/2 z-[500] ml-2 flex flex-col items-start gap-2'
-                : 'absolute bottom-48 left-1/2 z-[500] flex -translate-x-1/2 flex-col items-center gap-2'
-        }
-      >
-        <button
-          type="button"
-          data-testid="map-recenter-city-button"
-          onClick={() => {
-            if (cityCenter) {
-              publishCameraIntent({
-                areaKey: nav.city || DEFAULT_CITY,
-                areaLabel: nav.city || DEFAULT_CITY,
-                geo_center_lat: cityCenter[0],
-                geo_center_lon: cityCenter[1],
-                bbox: null,
-              });
-            }
-          }}
-          className="px-3 py-1.5 bg-white/95 backdrop-blur-sm border border-slate-200 rounded-lg shadow-md text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors flex items-center gap-1.5"
+      {/* Issue #2748 — this unconditional city-recenter button is superseded, for the Areas
+          journey, by the Map Info Dock's own recenter row (always the CURRENT node, not just
+          the city) rendered by DiscoverMapSurface.tsx. Every other journey is unchanged. */}
+      {nav.journey !== 'area-first' && (
+        <div
+          className={
+            isMobileMapOverlay
+              ? isAreaFirstSelectedAreaState
+                ? 'absolute bottom-[100px] right-[10px] z-[500] flex flex-col items-end gap-2'
+                : 'absolute bottom-[130px] left-1/2 -translate-x-1/2 z-[500] flex flex-col items-center gap-2'
+              : isAreaFirstSelectedAreaState
+                ? 'absolute bottom-48 right-4 z-[500] flex flex-col items-end gap-2'
+                : isDesktopBadgePaired
+                  ? 'absolute bottom-60 left-1/2 z-[500] ml-2 flex flex-col items-start gap-2'
+                  : 'absolute bottom-48 left-1/2 z-[500] flex -translate-x-1/2 flex-col items-center gap-2'
+          }
         >
-          Recenter on {nav.city || DEFAULT_CITY}
-        </button>
-      </div>
+          <button
+            type="button"
+            data-testid="map-recenter-city-button"
+            onClick={() => {
+              if (cityCenter) {
+                publishCameraIntent({
+                  areaKey: nav.city || DEFAULT_CITY,
+                  areaLabel: nav.city || DEFAULT_CITY,
+                  geo_center_lat: cityCenter[0],
+                  geo_center_lon: cityCenter[1],
+                  bbox: null,
+                });
+              }
+            }}
+            className="px-3 py-1.5 bg-white/95 backdrop-blur-sm border border-slate-200 rounded-lg shadow-md text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors flex items-center gap-1.5"
+          >
+            Recenter on {nav.city || DEFAULT_CITY}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

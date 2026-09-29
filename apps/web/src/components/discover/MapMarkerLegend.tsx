@@ -16,6 +16,11 @@ import type { PropertyTypeGlyph } from '@/lib/propertyTypeConfig';
 interface MapMarkerLegendProps {
   /** The current area's resolved marker listings — used to derive per-type counts. */
   listings: Array<{ property_type: string }>;
+  /**
+   * Issue #2748 (owner feedback, round 6) — optional extra classes appended to the
+   * root, mirroring MapAreaLegend's own addition (see that file's doc comment).
+   */
+  className?: string;
 }
 
 interface LegendRow {
@@ -26,7 +31,7 @@ interface LegendRow {
   count: number;
 }
 
-export function MapMarkerLegend({ listings }: MapMarkerLegendProps) {
+export function MapMarkerLegend({ listings, className = '' }: MapMarkerLegendProps) {
   // Derive per-type counts from listings, preserving insertion order of first occurrence.
   const rows = useMemo<LegendRow[]>(() => {
     const countMap = new Map<string, number>();
@@ -52,7 +57,7 @@ export function MapMarkerLegend({ listings }: MapMarkerLegendProps) {
 
   return (
     <div
-      className="rounded-lg border border-border bg-white/95 px-3.5 py-2.5 font-sans shadow-md backdrop-blur-sm"
+      className={`rounded-lg border border-border bg-white/95 px-3.5 py-2.5 font-sans shadow-md backdrop-blur-sm ${className}`.trim()}
       aria-label="Property type legend"
     >
       <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.07em] text-muted-foreground">

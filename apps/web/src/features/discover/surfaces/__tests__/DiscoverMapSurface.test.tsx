@@ -19,6 +19,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRef } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { UseInfiniteQueryResult, InfiniteData } from '@tanstack/react-query';
 import type {
@@ -378,9 +379,13 @@ function renderSurface(
   const commands = buildMapSurfaceCommands(props);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={queryClient}>
-      <DiscoverMapSurface view={view} commands={commands} mapContainerRef={(props as { mapContainerRef: React.RefObject<HTMLDivElement> }).mapContainerRef} />
-    </QueryClientProvider>,
+    // Issue #2748 — the Map Info Dock's guidance row renders a real react-router-dom
+    // <Link> (sign-in), so this surface can no longer render outside a Router.
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <DiscoverMapSurface view={view} commands={commands} mapContainerRef={(props as { mapContainerRef: React.RefObject<HTMLDivElement> }).mapContainerRef} />
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -467,6 +472,59 @@ describe('DiscoverMapSurface', () => {
   });
 });
 
+// Issue #2748 (PR review + external reviewer bot, pass on 009c0be5) —
+// `hideDuplicateCountBadge` in DiscoverMapSurface.tsx omitted the
+// school-radius term DiscoverMapCanvas.tsx's own flag uses
+// (`isAreaFirstSelectedAreaState || schoolRadiusActive`), on the false premise
+// that school-radius never reaches the Areas journey. It does:
+// useDiscoverJourneyTransitions.ts's combined Areas + school flow keeps
+// `journey === 'area-first'` with schoolLat/schoolLon/schoolRadiusKm set, so
+// `schoolRadiusActive` (useDiscoverBadgeController.ts, filter-derived) can be
+// true here too. Without the fix, the mobile Map Info Dock's count row
+// duplicates the count already shown by the mobile Map results heading in
+// that state.
+describe('DiscoverMapSurface — dock count row honors schoolRadiusActive (#2748 follow-up)', () => {
+  let dockPortalContainer: HTMLDivElement;
+
+  beforeEach(() => {
+    // The dock is portalled into `mapContainerRef.current` (see
+    // buildMapSurfaceModel.tsx's `overlays.recenter.portalTarget`) — a detached
+    // ref never renders it, same requirement as the width-cap suite below.
+    dockPortalContainer = document.createElement('div');
+    document.body.appendChild(dockPortalContainer);
+  });
+
+  afterEach(() => {
+    document.body.removeChild(dockPortalContainer);
+  });
+
+  function renderMobileMapWithSchoolRadius(schoolRadiusActive: boolean) {
+    mockShell({ isMobileShell: true, mobileView: 'MAP' });
+    return renderSurface({
+      mobileMapOpen: true,
+      mapContainerRef: { current: dockPortalContainer } as unknown as React.RefObject<HTMLDivElement>,
+      // hideDuplicateCountBadge requires the mobile Map "Filters" seam to be
+      // wired up — see DiscoverMapCanvas.tsx's own identical guard.
+      handleFiltersChange: vi.fn(),
+      isAreaFirstSelectedAreaState: false,
+      schoolRadiusActive,
+      cityTotal: 42,
+      activeAreasNavigationJourney: { ...JOURNEY, node: null },
+    });
+  }
+
+  it('hides the dock count row when schoolRadiusActive is true, even though isAreaFirstSelectedAreaState is false', async () => {
+    renderMobileMapWithSchoolRadius(true);
+    await screen.findByTestId('map-info-dock');
+    expect(screen.queryByTestId('discover-badge')).not.toBeInTheDocument();
+  });
+
+  it('control: shows the dock count row when schoolRadiusActive is false (same fixture otherwise)', async () => {
+    renderMobileMapWithSchoolRadius(false);
+    expect(await screen.findByTestId('discover-badge')).toBeInTheDocument();
+  });
+});
+
 // Issue #2724 (code review, pass 4) — the desktop areas-recenter-button has no
 // width cap, so a long area name wraps to 3 lines and, being bottom-anchored,
 // grows UPWARD into the tip pill/other overlays. This suite exercises the REAL
@@ -474,6 +532,14 @@ describe('DiscoverMapSurface', () => {
 // mapReady + a populated mapContainerRef + isSelectedNodeOutOfView + a
 // non-ROOT active journey node) so the button is genuinely portalled and
 // queryable, not merely asserted against a hand-built view object.
+//
+// Issue #2748 — for the Areas journey (this suite's default `navJourney`) the
+// legacy `areas-recenter-button` no longer renders at all: the Map Info Dock's
+// own `map-info-dock-recenter` row is the ONE recenter now (always present,
+// not gated on out-of-view), so these two width/label-integrity assertions
+// were moved onto that row instead. The out-of-view visibility precondition
+// this suite exercises no longer applies to the dock (it is unconditional),
+// but is kept in the fixture unchanged since it is otherwise inert here.
 describe('DiscoverMapSurface — desktop areas-recenter-button width cap (#2724 pass 4)', () => {
   // The exact long name from the code-review evidence screenshot
   // (docs/audit/evidence/issue-2724/parity-after-desktop-1024-area-longname.png),
@@ -521,10 +587,27 @@ describe('DiscoverMapSurface — desktop areas-recenter-button width cap (#2724 
     });
   }
 
-  it('caps the button width to max-w-[220px] and clamps the label to 2 lines, matching the count pill', async () => {
+  it('legacy areas-recenter-button no longer renders for the Areas journey (#2748)', async () => {
     renderWithLongAreaSelected();
-    const button = await screen.findByTestId('areas-recenter-button');
-    expect(button).toHaveClass('max-w-[220px]');
+    await screen.findByTestId('map-info-dock-recenter');
+    expect(screen.queryByTestId('areas-recenter-button')).not.toBeInTheDocument();
+  });
+
+  it('the dock recenter row clamps the label to 2 lines within its capped-width card', async () => {
+    renderWithLongAreaSelected();
+    const button = await screen.findByTestId('map-info-dock-recenter');
+    const dock = await screen.findByTestId('map-info-dock');
+    // Owner feedback (round 4) — the width cap now lives on the desktop anchor
+    // wrapper (min(288px, 50% - 92px)), not a fixed px class on the card itself.
+    expect(dock).toHaveClass('w-full');
+    // Owner feedback (round 6) — the dock is now wrapped in its own `shrink-0` div
+    // (protects it from the narrow-band `min-h-[0]` column-shrink), so the positioned
+    // anchor is the GRANDPARENT, not the immediate parent.
+    const anchor = dock.parentElement?.parentElement;
+    expect(anchor).toHaveClass('w-[min(288px,calc(50%_-_92px))]');
+    // And that wrapper is flush in the corner per the #2747 mock, not the old bottom-36.
+    expect(anchor).toHaveClass('bottom-[14px]');
+    expect(anchor).toHaveClass('left-[14px]');
     const label = button.querySelector('span');
     expect(label).not.toBeNull();
     expect(label).toHaveClass('line-clamp-2');
@@ -532,7 +615,7 @@ describe('DiscoverMapSurface — desktop areas-recenter-button width cap (#2724 
 
   it('keeps the FULL long area name as the accessible name and in the title tooltip, even though it is visually clamped', async () => {
     renderWithLongAreaSelected();
-    const button = await screen.findByTestId('areas-recenter-button');
+    const button = await screen.findByTestId('map-info-dock-recenter');
     // getByRole with an exact accessible-name match proves line-clamp-2 (a
     // purely visual CSS truncation) has not also removed the DOM text — a
     // clamp implemented by truncating the string itself would fail this.
