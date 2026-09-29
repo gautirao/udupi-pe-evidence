@@ -1,5 +1,16 @@
 import React from 'react';
 import { PublicHeader } from './PublicHeader';
+import type { DiscoverHeaderRegionGuide } from '@/components/discover/DiscoverHeaderJourneyTabs';
+
+export interface PublicDiscoverLayoutProps {
+  children: React.ReactNode;
+  /** Forwarded to `PublicHeader`'s journey tabs for the region-guide ring/aria-live signal; optional for other callers. */
+  regionGuide?: DiscoverHeaderRegionGuide;
+  /** Forwarded to `PublicHeader`; single computed source, optional so callers with no Discover shell context still render (header falls back to its own hook). */
+  hostsHeaderControls?: boolean;
+  /** Forwarded to `PublicHeader`; single computed source, optional so callers with no Discover shell context still render (header falls back to its own computed value). */
+  headerHostsJourneyTabs?: boolean;
+}
 
 /**
  * Public-facing shell for the consumer Discover experience (Issue #1588).
@@ -9,10 +20,19 @@ import { PublicHeader } from './PublicHeader';
  * number). Used ONLY by the public `/discover` route; broker/admin/internal pages
  * continue to use {@link AppLayout}.
  */
-export function PublicDiscoverLayout({ children }: { children: React.ReactNode }) {
+export function PublicDiscoverLayout({
+  children,
+  regionGuide,
+  hostsHeaderControls,
+  headerHostsJourneyTabs,
+}: PublicDiscoverLayoutProps) {
   return (
     <div className="flex h-screen flex-col bg-background">
-      <PublicHeader />
+      <PublicHeader
+        regionGuide={regionGuide}
+        hostsHeaderControls={hostsHeaderControls}
+        headerHostsJourneyTabs={headerHostsJourneyTabs}
+      />
       <main className="min-h-0 flex-1">{children}</main>
     </div>
   );

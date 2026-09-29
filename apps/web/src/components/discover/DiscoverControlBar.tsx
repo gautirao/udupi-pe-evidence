@@ -128,9 +128,11 @@ interface CityDropdownProps {
   /** #2151 Track 1 — inert in an admin city-launch preview: the previewed city is fixed by
    * the route (cityId/revisionId), so switching city here would be meaningless/misleading. */
   disabled?: boolean;
+  /** True only when the collapsed desktop header hosts this bar — protects this trigger's width in the tighter row. Defaults to false (matches main) for standalone/panel usage. */
+  hostsHeaderControls?: boolean;
 }
 
-function CityDropdown({ cities, selectedCity, onSelectCity, disabled = false }: CityDropdownProps) {
+function CityDropdown({ cities, selectedCity, onSelectCity, disabled = false, hostsHeaderControls = false }: CityDropdownProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   // Issue #1953 FIX2 — the listbox below is portaled to document.body, so it
@@ -155,7 +157,7 @@ function CityDropdown({ cities, selectedCity, onSelectCity, disabled = false }: 
   const selected = cities.find((c) => c.key === selectedCity);
 
   return (
-    <div ref={containerRef} className="relative" data-testid="control-bar-city-select">
+    <div ref={containerRef} className={cn('relative', hostsHeaderControls && 'shrink-0')} data-testid="control-bar-city-select">
       <button
         type="button"
         aria-haspopup="listbox"
@@ -244,9 +246,11 @@ export interface AreaAutocompleteProps {
   areas: DiscoverArea[];
   journey: DiscoverJourney | null;
   onSelectArea: (areaKey: string) => void;
+  /** True only when the collapsed desktop header hosts this bar — applies the header-only min-width floor. Defaults to false (matches main) for standalone/panel usage. */
+  hostsHeaderControls?: boolean;
 }
 
-export function AreaAutocomplete({ areas, journey, onSelectArea }: AreaAutocompleteProps) {
+export function AreaAutocomplete({ areas, journey, onSelectArea, hostsHeaderControls = false }: AreaAutocompleteProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -328,7 +332,11 @@ export function AreaAutocomplete({ areas, journey, onSelectArea }: AreaAutocompl
       // Issue #1953 FIX1 — full width on its own wrapped line at <lg widths
       // (see DiscoverControlBar's outer flex-wrap row); back to flex-1 inline
       // alongside city/Buy-Rent/trigger at lg+.
-      className="relative w-full lg:w-auto lg:flex-1"
+      className={cn(
+        'relative w-full lg:w-auto lg:flex-1',
+        // Header-only min-width floor keeps the search input legible in the tighter collapsed desktop header row; unset elsewhere so this matches main exactly.
+        hostsHeaderControls && 'lg:min-w-[280px]',
+      )}
       data-testid="control-bar-area-autocomplete"
     >
       <div className="relative">
@@ -457,9 +465,21 @@ export interface DiscoverControlBarProps {
     /** Forwarded to useMobileMapOverlayShell so focus returns here on close. */
     triggerRef?: React.Ref<HTMLButtonElement>;
   };
+  /**
+   * True only when the collapsed desktop header hosts this bar — threaded from
+   * the single computed source (useDiscoverPageContext.ts's `hostsHeaderControls`)
+   * via each mount site (PublicHeader, RightPanelFrame, DiscoverJourneyPanelShell),
+   * rather than this component deriving it itself with its own
+   * `useDiscoverHeaderHostsControls` call — every OTHER consumer of that boolean
+   * already reads the single threaded value, and this was the one remaining
+   * self-fetch. Defaults to `false` (matches main) for a mount site that only
+   * ever renders below the threshold (DiscoverPageShell's mobile row) and for
+   * standalone/test usage.
+   */
+  hostsHeaderControls?: boolean;
 }
 
-export function DiscoverControlBar({ mobileMapTrigger }: DiscoverControlBarProps = {}) {
+export function DiscoverControlBar({ mobileMapTrigger, hostsHeaderControls = false }: DiscoverControlBarProps = {}) {
   const nav = useDiscoverNav();
   const actions = useDiscoverActions();
   // Node-only URL (no `city=` param) leaves nav.city === '', which would
@@ -481,6 +501,7 @@ export function DiscoverControlBar({ mobileMapTrigger }: DiscoverControlBarProps
   // #2151 Track 1 — the city switcher is inert in an admin city-launch preview: the
   // previewed city is fixed by the route, not user-selectable.
   const citySwitcherDisabled = useDiscoverSource().mode === 'preview';
+  // When the header hosts this bar it owns naming via its own aria-label; otherwise (mobile, or narrow desktop where the panel renders it) the visible label matches main.
 
   const handleSelectCity = (city: ControlBarCity) => {
     if (citySwitcherDisabled) return;
@@ -572,7 +593,11 @@ export function DiscoverControlBar({ mobileMapTrigger }: DiscoverControlBarProps
       // as city + Buy/Rent + the map trigger, so it always drops to its own
       // line rather than being clipped or scrolled off. `lg:flex-nowrap`
       // restores the original single-line desktop layout unchanged.
-      className="flex flex-wrap items-center gap-2 lg:flex-nowrap lg:gap-3"
+      className={cn(
+        'flex flex-wrap items-center gap-2 lg:flex-nowrap',
+        // Header-only tighter gap (matches step 1 of the compression order); unset elsewhere so this matches main's `lg:gap-3` exactly.
+        hostsHeaderControls ? 'lg:gap-2' : 'lg:gap-3',
+      )}
       data-testid="discover-control-bar"
     >
       <CityDropdown
@@ -580,23 +605,15 @@ export function DiscoverControlBar({ mobileMapTrigger }: DiscoverControlBarProps
         selectedCity={nav.city}
         onSelectCity={handleSelectCity}
         disabled={citySwitcherDisabled}
+        hostsHeaderControls={hostsHeaderControls}
       />
-      {/* Issue #1953 build step 6 — distinct testId: DiscoverRightPanel/
-          GuidedEntryPanel each render their OWN IntentSelector at
-          'intent-selector' depending on panel state; since this control bar
-          is now persistently mounted alongside them, sharing that testid
-          would collide (two elements matching a single-result query) at
-          every state where both are visible.
-          Issue #1953 FIX1 — labelClassName hides the "Looking to" text at
-          <lg widths (it, city label, and the map trigger all sharing one
-          358px-wide line otherwise). aria-label duplicates the group's own
-          role="group" aria-label="Looking to" so this stays accessible
-          with the visible label gone. */}
+      {/* Distinct testId to avoid colliding with per-panel IntentSelector instances; label hidden only when the header hosts this bar (its own aria-label already names it there) — otherwise matches main's "hidden lg:inline". */}
       <IntentSelector
         intent={nav.intent}
         onIntentChange={actions.setIntent}
         testId="control-bar-intent-selector"
-        labelClassName="hidden lg:inline"
+        labelClassName={hostsHeaderControls ? 'hidden' : 'hidden lg:inline'}
+        className={hostsHeaderControls ? 'shrink-0' : undefined}
       />
       {mobileMapTrigger && (
         // Issue #2408 AC — the mock's Map/List control is a segmented
@@ -634,7 +651,12 @@ export function DiscoverControlBar({ mobileMapTrigger }: DiscoverControlBarProps
           </button>
         </div>
       )}
-      <AreaAutocomplete areas={areas} journey={nav.journey} onSelectArea={handleSelectArea} />
+      <AreaAutocomplete
+        areas={areas}
+        journey={nav.journey}
+        onSelectArea={handleSelectArea}
+        hostsHeaderControls={hostsHeaderControls}
+      />
     </div>
   );
 }

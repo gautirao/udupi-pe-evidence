@@ -78,7 +78,7 @@ function makeProps(overrides: {
   const goToNodeAndClearSchoolSelection = overrides.goToNodeAndClearSchoolSelection ?? vi.fn();
 
   const view: SchoolFirstJourneyPanelView = {
-    pageContext: { isMobileShell: false },
+    pageContext: { isMobileShell: false, hostsHeaderControls: false, headerHostsJourneyTabs: false },
     routing: { city: 'bangalore' },
     geography: { discoverAreas: overrides.discoverAreas ?? [] },
     navigation: {

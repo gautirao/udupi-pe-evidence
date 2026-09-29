@@ -18,7 +18,7 @@
  * one supplementary sweep over MORE non-locality states for extra confidence
  * only — it does not duplicate the existing pair.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
@@ -28,6 +28,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { AuthModalProvider } from '@/contexts/AuthModalContext';
 import { renderWithProviders } from '@/test/renderWithProviders';
+import { mockMatchMediaWidth } from '@/test-utils/mockMatchMediaWidth';
 import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftContext';
 import { DiscoverRightPanel } from '@/features/discover/right-panel/testing/flatPropsRightPanel';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
@@ -353,6 +354,7 @@ describe('G1 — region-guide helper text (DiscoverRightPanel.tsx ~2136-2142)', 
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('G2 — activeJourney inference (journey ?? inferJourneyFromPanelContent)', () => {
+  // RightPanelFrame no longer renders the desktop compact tab strip for non-guided-entry content, so these exercise the same derivation via the mobile strip instead.
   it('journey-less area-school-combined infers school-first as the active tab', () => {
     const area = makeArea('IN|KA|Udupi|Manipal', 'Manipal');
     renderPanel(
@@ -365,6 +367,7 @@ describe('G2 — activeJourney inference (journey ?? inferJourneyFromPanelConten
         schoolListingsLoading={false}
         radiusKm={3}
         onRadiusChange={vi.fn()}
+        isMobileShell
       />,
     );
     expect(screen.getByTestId('journey-card-school-first')).toHaveAttribute('aria-selected', 'true');
@@ -385,6 +388,7 @@ describe('G2 — activeJourney inference (journey ?? inferJourneyFromPanelConten
         schoolListingsLoading={false}
         radiusKm={3}
         onRadiusChange={vi.fn()}
+        isMobileShell
       />,
     );
     expect(screen.getByTestId('journey-card-area-first')).toHaveAttribute('aria-selected', 'true');
@@ -400,18 +404,78 @@ describe('G2 — activeJourney inference (journey ?? inferJourneyFromPanelConten
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// G3 — DiscoverControlBar desktop gate (:2173)
+// G3 — DiscoverControlBar / desktop journey tabs ownership (:2173)
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('G3 — DiscoverControlBar desktop-only gate', () => {
-  it('renders DiscoverControlBar when isMobileShell is false', () => {
-    renderPanel(<DiscoverRightPanel {...baseProps} panelContent="guided-entry" isMobileShell={false} />);
-    expect(screen.getByTestId('discover-control-bar')).toBeInTheDocument();
+describe('G3 — DiscoverControlBar and the desktop compact journey-tab strip moved to the shared header', () => {
+  // Wide enough for the header to host the control bar + journey tabs; the panel must never render its own copy.
+  describe('wide desktop (header hosts controls)', () => {
+    let matchMediaMock: { restore: () => void };
+    beforeEach(() => {
+      matchMediaMock = mockMatchMediaWidth(1366);
+    });
+    afterEach(() => {
+      matchMediaMock.restore();
+    });
+
+    it('never renders DiscoverControlBar itself', () => {
+      renderPanel(<DiscoverRightPanel {...baseProps} panelContent="guided-entry" isMobileShell={false} />);
+      expect(screen.queryByTestId('discover-control-bar')).not.toBeInTheDocument();
+    });
+
+    it('does not render the compact journey-tab strip for a non-landing panel state (the header owns it)', () => {
+      renderPanel(
+        <DiscoverRightPanel {...baseProps} panelContent="area-selected" isMobileShell={false} />,
+      );
+      expect(screen.queryByRole('tablist', { name: /choose how you want to search/i })).not.toBeInTheDocument();
+    });
+
+    it('does not render its own JourneySwitcher on the guided-entry landing either — the header is now the sole selector there too', () => {
+      renderPanel(<DiscoverRightPanel {...baseProps} panelContent="guided-entry" isMobileShell={false} />);
+      expect(screen.queryByRole('tablist', { name: /choose how you want to search/i })).not.toBeInTheDocument();
+    });
   });
 
-  it('does NOT render DiscoverControlBar when isMobileShell is true', () => {
+  // Below the header's threshold: the header has no room for it, so the panel falls back to rendering its own copy — exactly as before the header existed. Regression coverage for the gap between isMobileShell (≤820px) and the header's own width threshold.
+  describe('narrow desktop (below the header threshold — panel falls back to its own copy)', () => {
+    let matchMediaMock: { restore: () => void };
+    beforeEach(() => {
+      matchMediaMock = mockMatchMediaWidth(900);
+    });
+    afterEach(() => {
+      matchMediaMock.restore();
+    });
+
+    it('renders exactly one DiscoverControlBar for a non-landing panel state', () => {
+      renderPanel(
+        <DiscoverRightPanel {...baseProps} panelContent="area-selected" isMobileShell={false} />,
+      );
+      expect(screen.getAllByTestId('discover-control-bar')).toHaveLength(1);
+    });
+
+    it('renders exactly one DiscoverControlBar on the guided-entry landing too', () => {
+      renderPanel(<DiscoverRightPanel {...baseProps} panelContent="guided-entry" isMobileShell={false} />);
+      expect(screen.getAllByTestId('discover-control-bar')).toHaveLength(1);
+    });
+
+    it('still renders the compact journey-tab strip for a non-landing panel state (the header does not own it at this width)', () => {
+      renderPanel(
+        <DiscoverRightPanel {...baseProps} panelContent="area-selected" isMobileShell={false} />,
+      );
+      expect(screen.getByRole('tablist', { name: /choose how you want to search/i })).toBeInTheDocument();
+    });
+  });
+
+  it('never renders DiscoverControlBar itself when isMobileShell is true, at any width', () => {
     renderPanel(<DiscoverRightPanel {...baseProps} panelContent="guided-entry" isMobileShell />);
     expect(screen.queryByTestId('discover-control-bar')).not.toBeInTheDocument();
+  });
+
+  it('still renders the compact journey-tab strip on mobile for every panel state (unchanged)', () => {
+    renderPanel(
+      <DiscoverRightPanel {...baseProps} panelContent="area-selected" isMobileShell />,
+    );
+    expect(screen.getByRole('tablist', { name: /choose how you want to search/i })).toBeInTheDocument();
   });
 });
 

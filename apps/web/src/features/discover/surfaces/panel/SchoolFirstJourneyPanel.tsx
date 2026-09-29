@@ -17,6 +17,10 @@ export interface SchoolFirstJourneyPanelView {
   pageContext: {
     /** Gates the shell's desktop-only DiscoverControlBar mount (Issue #2108). */
     isMobileShell: boolean;
+    /** Single computed source (useDiscoverPageContext) — see DiscoverJourneyPanelShellProps. */
+    hostsHeaderControls: boolean;
+    /** Single computed source (useDiscoverPageContext) — see DiscoverJourneyPanelShellProps. */
+    headerHostsJourneyTabs: boolean;
   };
   routing: Pick<DiscoverPanelSurfaceView['routing'], 'city'>;
   geography: Pick<DiscoverPanelSurfaceView['geography'], 'discoverAreas'>;
@@ -63,7 +67,7 @@ export function SchoolFirstJourneyPanel({ view, commands }: SchoolFirstJourneyPa
   // Issue #2142 SOLID follow-up (commit 2, PLAN REVIEW correction 3) — was a
   // `useDiscoverActions()` call until this commit; same object, now injected.
   const { actions: urlActions } = commands.pageContext;
-  const { isMobileShell } = view.pageContext;
+  const { isMobileShell, hostsHeaderControls, headerHostsJourneyTabs } = view.pageContext;
 
   const isSchoolsFirstCityRoot = areasNavigationJourney.node?.nodeKey === ROOT_NODE_KEY;
   const schoolsFirstCityLabel = CITY_CONFIG[city]?.label ?? city;
@@ -71,6 +75,8 @@ export function SchoolFirstJourneyPanel({ view, commands }: SchoolFirstJourneyPa
     <DiscoverJourneyPanelShell
       testId="discover-schools-journey-panel-shell"
       isMobileShell={isMobileShell}
+      hostsHeaderControls={hostsHeaderControls}
+      headerHostsJourneyTabs={headerHostsJourneyTabs}
       compact={!isSchoolsFirstCityRoot}
       activeJourney="school-first"
       onSelectJourney={selectJourney}

@@ -68,7 +68,13 @@ export function buildRightPanelView(view: DiscoverPanelSurfaceView, extras: Righ
 
   return {
     frame: {
-      layout: { panelContent: view.navigation.resolvedPanelContent, isMobileShell: view.pageContext.isMobileShell, footer: extras.footer },
+      layout: {
+        panelContent: view.navigation.resolvedPanelContent,
+        isMobileShell: view.pageContext.isMobileShell,
+        hostsHeaderControls: view.pageContext.hostsHeaderControls,
+        headerHostsJourneyTabs: view.pageContext.headerHostsJourneyTabs,
+        footer: extras.footer,
+      },
       counts: {
         totalProperties: view.routing.cityTotal,
         areasCount: view.geography.discoverAreas.filter((a) => (a.listingCount ?? 0) > 0).length,

@@ -79,7 +79,15 @@ import type { useDiscoverMobilePresentationController } from '@/features/discove
  */
 type PageContextSlice = Pick<
   ReturnType<typeof useDiscoverPageContext>,
-  'navigate' | 'isAuthenticated' | 'nav' | 'actions' | 'isMobileShell' | 'mobileView' | 'isAreaSetDraftOpen'
+  | 'navigate'
+  | 'isAuthenticated'
+  | 'nav'
+  | 'actions'
+  | 'isMobileShell'
+  | 'hostsHeaderControls'
+  | 'headerHostsJourneyTabs'
+  | 'mobileView'
+  | 'isAreaSetDraftOpen'
 >;
 type PageStateSlice = Pick<
   ReturnType<typeof useDiscoverPageStateController>,
@@ -389,7 +397,10 @@ type PanelFields = PageContextSlice &
  * URL-action facade), keeping the 1:1 view/commands group symmetry every other
  * group in this file uses.
  */
-type PanelPageContextView = Pick<PanelFields, 'nav' | 'isMobileShell' | 'mobileView' | 'isAreaSetDraftOpen'>;
+type PanelPageContextView = Pick<
+  PanelFields,
+  'nav' | 'isMobileShell' | 'hostsHeaderControls' | 'headerHostsJourneyTabs' | 'mobileView' | 'isAreaSetDraftOpen'
+>;
 type PanelPageContextCommands = Pick<PanelFields, 'actions'>;
 
 type PanelRoutingView = Pick<
@@ -589,7 +600,15 @@ export interface DiscoverPanelSurfaceCommands {
 
 export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): DiscoverPanelSurfaceView {
   const {
-    pageContext: { isAuthenticated, nav, isMobileShell, mobileView, isAreaSetDraftOpen },
+    pageContext: {
+      isAuthenticated,
+      nav,
+      isMobileShell,
+      hostsHeaderControls,
+      headerHostsJourneyTabs,
+      mobileView,
+      isAreaSetDraftOpen,
+    },
     pageState: { city, filters, selectedSchool, page, resolvedPanelContent, effectiveSelectedArea },
     navigation: {
       hoveredNavigationNodeKey,
@@ -675,7 +694,7 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
 
 
   return {
-    pageContext: { nav, isMobileShell, mobileView, isAreaSetDraftOpen },
+    pageContext: { nav, isMobileShell, hostsHeaderControls, headerHostsJourneyTabs, mobileView, isAreaSetDraftOpen },
     routing: { city, cityTotal, cityHasNoListings, trendsHref },
     geography: {
       discoverAreas,

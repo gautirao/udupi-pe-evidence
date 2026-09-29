@@ -1,6 +1,7 @@
 import type { ComponentProps, ReactNode } from 'react';
-import { DiscoverControlBar } from '@/components/discover/DiscoverControlBar';
 import { JourneySwitcher } from '@/components/discover/JourneySwitcher';
+import { JourneySummaryStrip } from '@/components/discover/JourneySummaryStrip';
+import { DiscoverControlBar } from '@/components/discover/DiscoverControlBar';
 
 type JourneySwitcherProps = ComponentProps<typeof JourneySwitcher>;
 
@@ -24,6 +25,10 @@ export interface DiscoverJourneyPanelShellProps
    * `surfaces/panel/**` may reach into the Discover context facade.
    */
   isMobileShell: boolean;
+  /** Single computed source (useDiscoverPageContext), threaded through the caller's `view.pageContext` — never re-derived here. */
+  hostsHeaderControls: boolean;
+  /** Single computed source (useDiscoverPageContext) — whether the header actually RENDERS journey tabs (`hostsHeaderControls` minus an unresolved admin preview). Gates the switcher/summary-strip; `hostsHeaderControls` alone still gates the control bar (it stays in the header regardless of preview resolution). */
+  headerHostsJourneyTabs: boolean;
   /** The journey's own panel content, rendered inside the bounded scroll wrapper. */
   children: ReactNode;
 }
@@ -61,6 +66,8 @@ export interface DiscoverJourneyPanelShellProps
 export function DiscoverJourneyPanelShell({
   testId,
   isMobileShell,
+  hostsHeaderControls,
+  headerHostsJourneyTabs,
   activeJourney,
   compact,
   cityLabel,
@@ -81,26 +88,28 @@ export function DiscoverJourneyPanelShell({
           sibling journeys already have. The border-b here is also AC7's
           divider rule separating the switcher block from the list below. */}
       <div className="flex flex-col gap-3 shrink-0 border-b border-border px-4 pb-2 pt-4">
-        {/* Issue #2108 (shell fix) — this shell is the canonical navigation
-            journey's OWN copy of the "switcher mounts first" header (R6
-            above), parallel to the legacy `DiscoverRightPanel` root's
-            identical block. It needs the SAME desktop-only DiscoverControlBar
-            mount that block just got, for the same reason: the approved mock's
-            `global-control-bar` sits above the mode-selector at every journey
-            state, this canonical journey included. Gated on the same real
-            `isMobileShell` flag, so it stays mutually exclusive with
-            MapDiscovery.tsx's mobile-only `discover-control-bar-row` exactly
-            like the legacy shell. */}
-        {!isMobileShell && <DiscoverControlBar />}
-        <JourneySwitcher
-          compact={compact}
-          activeJourney={activeJourney}
-          onSelectJourney={onSelectJourney}
-          cityLabel={cityLabel}
-          totalProperties={totalProperties}
-          areasCount={areasCount}
-          prefersReducedMotion={prefersReducedMotion}
-        />
+        {/* Only when the header doesn't have room for its own copy (mobile, or a desktop width below the header's threshold). Keyed on hostsHeaderControls (not headerHostsJourneyTabs): the control bar stays in the header even while an unresolved preview suppresses the header's journey tabs. */}
+        {!isMobileShell && !hostsHeaderControls && <DiscoverControlBar hostsHeaderControls={hostsHeaderControls} />}
+        {/* The header is the sole journey selector (including the full-card city-root density) whenever it actually RENDERS the journey tabs; the panel falls back to its own copy below that width, or while an admin city-launch preview leaves the header's tabs suppressed — see useDiscoverPageContext.ts's headerHostsJourneyTabs doc comment. */}
+        {!headerHostsJourneyTabs && (
+          <JourneySwitcher
+            compact={compact}
+            activeJourney={activeJourney}
+            onSelectJourney={onSelectJourney}
+            cityLabel={cityLabel}
+            totalProperties={totalProperties}
+            areasCount={areasCount}
+            prefersReducedMotion={prefersReducedMotion}
+          />
+        )}
+        {/* The header hosting the switcher does not host the summary strip too (no room, and it isn't a selector) — restore it here alone, in the exact spot and density condition (non-compact / city-root) the hidden switcher would have shown it. Keyed on headerHostsJourneyTabs: while an unresolved preview suppresses the header's tabs the switcher above is shown instead, so this standalone strip must stay hidden (its content already lives inside that switcher). */}
+        {headerHostsJourneyTabs && !compact && activeJourney && (
+          <JourneySummaryStrip
+            journey={activeJourney}
+            totalProperties={totalProperties}
+            areasCount={areasCount}
+          />
+        )}
       </div>
       {/* R5 — a bounded scroll container for the panel states whose own
           root is still a bare `p-4` div with no scroll ancestry of its own

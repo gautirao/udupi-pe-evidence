@@ -229,7 +229,10 @@ function buildParams(refetchAnonViewport: () => void): BuildPanelSurfaceModelPar
       nav,
       actions: URL_ACTIONS,
       isMobileShell: false,
+      hostsHeaderControls: false,
+      headerHostsJourneyTabs: false,
       mobileView: 'LIST',
+      isAreaSetDraftOpen: false,
     },
     pageState: {
       city: nav.city,

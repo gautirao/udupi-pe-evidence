@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAuthModal } from '@/contexts/AuthModalContext';
@@ -96,12 +96,97 @@ const userRoleNavigation = [
   { name: 'Notifications', href: '/notifications', icon: Bell },
 ];
 
+export type NavRoleItem = {
+  name: string;
+  href: string;
+  icon: typeof MapPin;
+  /** Optional override for non-navigating actions (e.g. opening the auth modal). */
+  onClick?: (e: MouseEvent) => void;
+};
+
+/** Dedupes overflow-menu items by href, keeping the first label seen (some nav lists share a destination under different labels). */
+export function dedupeNavByHref(items: NavRoleItem[]): NavRoleItem[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.href)) return false;
+    seen.add(item.href);
+    return true;
+  });
+}
+
+/** Appends a "Trends" entry to an overflow-menu item list when `discoverTrendsHref` is given; no-op otherwise. */
+export function withTrends(items: NavRoleItem[], discoverTrendsHref: string | undefined): NavRoleItem[] {
+  if (!discoverTrendsHref) return items;
+  return [...items, { name: 'Trends', href: discoverTrendsHref, icon: BarChart3 }];
+}
+
+/** The collapsed desktop Discover header's compact role-actions trigger — same destinations/active styling as the nav it replaces. */
+function RoleActionsOverflowMenu({
+  label,
+  isActive,
+  items,
+  currentPathname,
+}: {
+  label: string;
+  isActive: boolean;
+  items: NavRoleItem[];
+  currentPathname: string;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          data-testid="role-actions-overflow-trigger"
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors h-auto',
+            isActive
+              ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground'
+              : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+          )}
+        >
+          {label}
+          <ChevronDown className="h-3.5 w-3.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-52">
+        {items.map((item) => {
+          const active = currentPathname.startsWith(item.href);
+          return (
+            <DropdownMenuItem key={item.href} asChild>
+              <Link
+                to={item.href}
+                onClick={item.onClick}
+                className={cn('flex items-center gap-2 w-full', active ? 'text-primary font-medium' : '')}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.name}
+              </Link>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
+
+export interface RoleAwareHeaderProps {
+  selectedCity?: string;
+  suppressPublicDiscoveryNav?: boolean;
+  /** When set, replaces Zone 2's public-discovery nav; only `PublicHeader` passes this, on desktop `/discover` only. */
+  discoverHeaderExtras?: React.ReactNode;
+  /** "Trends" destination URL, folded into each role's Zone 3 trigger (see `zone3FoldsTrends`) or shown as a standalone link. */
+  discoverTrendsHref?: string;
+}
 
 export function RoleAwareHeader({
   selectedCity,
   suppressPublicDiscoveryNav = false,
-}: { selectedCity?: string; suppressPublicDiscoveryNav?: boolean } = {}) {
+  discoverHeaderExtras,
+  discoverTrendsHref,
+}: RoleAwareHeaderProps = {}) {
   const { user, isAdmin, isBroker, signOut, isLoading } = useAuth();
   const { openAuthModal } = useAuthModal();
   const { toast } = useToast();
@@ -261,9 +346,17 @@ export function RoleAwareHeader({
     </div>
   );
 
+  /** Whether Zone 3 already folds Trends into its own overflow trigger, so the Zone 2 standalone link should stay hidden. */
+  const zone3FoldsTrends = Boolean(discoverHeaderExtras) && !isLoading && (
+    !user
+      ? navVisibility.showListProperty
+      : navVisibility.showAdminConsole || navVisibility.showBrokerWorkspace || navVisibility.showConsumerActivity
+  );
+
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-sm font-sans">
-        <div className="flex h-14 items-center px-4 gap-4">
+        {/* Tighter padding/gap for the collapsed desktop Discover header only. */}
+        <div className={cn('flex h-14 items-center', discoverHeaderExtras ? 'px-3 gap-2' : 'px-4 gap-4')}>
           {/* Mobile menu */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild className="lg:hidden">
@@ -288,102 +381,121 @@ export function RoleAwareHeader({
             </SheetContent>
           </Sheet>
 
-          {/* Zone 1: Brand Logo */}
-          <Link to="/discover" className="flex items-center gap-2">
+          {/* Zone 1: Brand Logo. Subtitle hidden in the collapsed Discover header. */}
+          <Link to="/discover" className="flex items-center gap-2 shrink-0">
             <div className="p-1.5 rounded-lg bg-primary/10">
               <MapPin className="h-5 w-5 text-primary" />
             </div>
             <div className="hidden sm:flex flex-col">
               <span className="font-semibold leading-tight">PropertySignal</span>
-              <span className="text-xs text-muted-foreground leading-tight">Real Estate Trends</span>
+              <span className={cn('text-xs text-muted-foreground leading-tight', discoverHeaderExtras && 'hidden')}>
+                Real Estate Trends
+              </span>
             </div>
           </Link>
 
-          {/* Zone 2: Public discovery nav */}
-          {!suppressPublicDiscoveryNav && (
-            <nav aria-label="Public discovery" className="hidden lg:flex items-center gap-1 ml-6">
-              {publicDiscoveryNavigation.map((item) => (
-                <NavItem key={item.name} item={item} />
-              ))}
-            </nav>
+          {/* Zone 2: public discovery nav, replaced by `discoverHeaderExtras` when supplied. */}
+          {discoverHeaderExtras ? (
+            // No `min-w-0`: lets children keep their own shrink-0 minimums instead of overflowing into Zone 3.
+            // No `lg:` gate either: presence is already decided by useDiscoverHeaderHostsControls (JS) — a second, CSS-only breakpoint here could disagree with it.
+            <div className="flex flex-1 items-center gap-2 ml-4">
+              {discoverHeaderExtras}
+              {/* Standalone Trends link — fallback only for whatever Zone 3 state doesn't already fold Trends into its own overflow trigger. */}
+              {discoverTrendsHref && !zone3FoldsTrends && (
+                <Link
+                  to={discoverTrendsHref}
+                  className="shrink-0 whitespace-nowrap text-xs font-semibold text-muted-foreground hover:text-foreground px-2"
+                >
+                  Trends
+                </Link>
+              )}
+            </div>
+          ) : (
+            !suppressPublicDiscoveryNav && (
+              <nav aria-label="Public discovery" className="hidden lg:flex items-center gap-1 ml-6">
+                {publicDiscoveryNavigation.map((item) => (
+                  <NavItem key={item.name} item={item} />
+                ))}
+              </nav>
+            )
           )}
 
-          {/* Spacer */}
-          <div className="flex-1" />
+          {/* Spacer — omitted when discoverHeaderExtras already owns the flexible middle zone. */}
+          {!discoverHeaderExtras && <div className="flex-1" />}
 
-          {/* Admin badge */}
-          {isAdmin && (
-            <div className="hidden sm:flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
+          {/* Admin badge — suppressed in the collapsed Discover header; the role trigger already conveys it there. */}
+          {isAdmin && !discoverHeaderExtras && (
+            <div className="hidden sm:flex shrink-0 items-center gap-1 px-2 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
               <Shield className="h-3 w-3" />
               Admin
             </div>
           )}
 
-          {/* Zone 3: Role/workspace actions */}
-          <div aria-label="Role actions" className="hidden lg:flex items-center gap-1">
+          {/* Zone 3: Role/workspace actions — shrink-0 so it never compresses below its content width. */}
+          <div aria-label="Role actions" className="hidden lg:flex shrink-0 items-center gap-1">
             {isLoading ? null : !user ? (
               navVisibility.showListProperty ? (
-                <Link
-                  to="/auth?redirect=/broker/listings/new&returnTo=/broker/listings/new"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    openAuthModal({ redirect: '/broker/listings/new', returnTo: '/broker/listings/new' });
-                  }}
-                  className="text-sm font-semibold text-foreground hover:bg-secondary transition-colors px-3 py-1.5 rounded-md border border-input"
-                >
-                  List property
-                </Link>
+                discoverHeaderExtras ? (
+                  // Collapsed header: fold anon CTA + Trends into one "Menu" trigger — same label the signed-in Buyer trigger uses, since this menu also holds Trends.
+                  <RoleActionsOverflowMenu
+                    label="Menu"
+                    isActive={false}
+                    items={withTrends(
+                      [
+                        {
+                          name: 'List property',
+                          href: '/auth?redirect=/broker/listings/new&returnTo=/broker/listings/new',
+                          icon: Plus,
+                          onClick: (e) => {
+                            e.preventDefault();
+                            openAuthModal({ redirect: '/broker/listings/new', returnTo: '/broker/listings/new' });
+                          },
+                        },
+                      ],
+                      discoverTrendsHref,
+                    )}
+                    currentPathname={location.pathname}
+                  />
+                ) : (
+                  <Link
+                    to="/auth?redirect=/broker/listings/new&returnTo=/broker/listings/new"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      openAuthModal({ redirect: '/broker/listings/new', returnTo: '/broker/listings/new' });
+                    }}
+                    className="text-sm font-semibold text-foreground hover:bg-secondary transition-colors px-3 py-1.5 rounded-md border border-input"
+                  >
+                    List property
+                  </Link>
+                )
               ) : null
             ) : navVisibility.showAdminConsole ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    className={cn(
-                      'flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors h-auto',
-                      location.pathname.startsWith('/admin')
-                        ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground'
-                        : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-                    )}
-                  >
-                    Admin Console
-                    <ChevronDown className="h-3.5 w-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52">
-                  {adminNavigation.map((item) => {
-                    const active = location.pathname.startsWith(item.href);
-                    return (
-                      <DropdownMenuItem key={item.name} asChild>
-                        <Link
-                          to={item.href}
-                          className={cn('flex items-center gap-2 w-full', active ? 'text-primary font-medium' : '')}
-                        >
-                          <item.icon className="h-4 w-4" />
-                          {item.name}
-                        </Link>
-                      </DropdownMenuItem>
-                    );
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : navVisibility.showBrokerWorkspace ? (
-              <>
-                {brokerRoleNavigation.map((item) => (
-                  <NavItem key={item.name} item={item} />
-                ))}
+              discoverHeaderExtras ? (
+                // Collapsed Discover header: fold Admin Console into one compact trigger (compression order — secondary actions before search).
+                <RoleActionsOverflowMenu
+                  label="Admin"
+                  isActive={location.pathname.startsWith('/admin')}
+                  items={withTrends(adminNavigation, discoverTrendsHref)}
+                  currentPathname={location.pathname}
+                />
+              ) : (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-muted-foreground hover:bg-secondary hover:text-foreground h-auto"
+                      className={cn(
+                        'flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors h-auto',
+                        location.pathname.startsWith('/admin')
+                          ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground'
+                          : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                      )}
                     >
-                      Broker workspace
+                      Admin Console
                       <ChevronDown className="h-3.5 w-3.5" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-52">
-                    {brokerDetailedNavigation.map((item) => {
+                    {adminNavigation.map((item) => {
                       const active = location.pathname.startsWith(item.href);
                       return (
                         <DropdownMenuItem key={item.name} asChild>
@@ -399,11 +511,67 @@ export function RoleAwareHeader({
                     })}
                   </DropdownMenuContent>
                 </DropdownMenu>
-              </>
+              )
+            ) : navVisibility.showBrokerWorkspace ? (
+              discoverHeaderExtras ? (
+                // Collapsed Discover header: fold the broker nav + workspace dropdown into one compact trigger (compression order — secondary actions before search).
+                <RoleActionsOverflowMenu
+                  label="Workspace"
+                  isActive={location.pathname.startsWith('/broker')}
+                  items={withTrends(
+                    dedupeNavByHref([...brokerRoleNavigation, ...brokerDetailedNavigation]),
+                    discoverTrendsHref,
+                  )}
+                  currentPathname={location.pathname}
+                />
+              ) : (
+                <>
+                  {brokerRoleNavigation.map((item) => (
+                    <NavItem key={item.name} item={item} />
+                  ))}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-muted-foreground hover:bg-secondary hover:text-foreground h-auto"
+                      >
+                        Broker workspace
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-52">
+                      {brokerDetailedNavigation.map((item) => {
+                        const active = location.pathname.startsWith(item.href);
+                        return (
+                          <DropdownMenuItem key={item.name} asChild>
+                            <Link
+                              to={item.href}
+                              className={cn('flex items-center gap-2 w-full', active ? 'text-primary font-medium' : '')}
+                            >
+                              <item.icon className="h-4 w-4" />
+                              {item.name}
+                            </Link>
+                          </DropdownMenuItem>
+                        );
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              )
             ) : navVisibility.showConsumerActivity ? (
-              userRoleNavigation.map((item) => (
-                <NavItem key={item.name} item={item} />
-              ))
+              discoverHeaderExtras ? (
+                // Collapsed Discover header: fold Buyer's nav links + Trends into one compact trigger (compression order — secondary actions before search).
+                <RoleActionsOverflowMenu
+                  label="Menu"
+                  isActive={userRoleNavigation.some((item) => location.pathname.startsWith(item.href))}
+                  items={withTrends(userRoleNavigation, discoverTrendsHref)}
+                  currentPathname={location.pathname}
+                />
+              ) : (
+                userRoleNavigation.map((item) => (
+                  <NavItem key={item.name} item={item} />
+                ))
+              )
             ) : null}
           </div>
 
@@ -416,7 +584,7 @@ export function RoleAwareHeader({
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="relative h-9 w-9 rounded-full"
+                  className="relative h-9 w-9 shrink-0 rounded-full"
                   data-testid="user-menu"
                 >
                   <Avatar className="h-9 w-9">
@@ -449,7 +617,7 @@ export function RoleAwareHeader({
                 e.preventDefault();
                 openAuthModal({ returnTo: location.pathname + location.search });
               }}
-              className="text-sm font-semibold text-foreground hover:bg-secondary transition-colors px-3 py-1.5 rounded-md border border-input"
+              className="shrink-0 text-sm font-semibold text-foreground hover:bg-secondary transition-colors px-3 py-1.5 rounded-md border border-input"
             >
               Sign in
             </Link>

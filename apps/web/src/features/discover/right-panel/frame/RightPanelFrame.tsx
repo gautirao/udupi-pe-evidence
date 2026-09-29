@@ -1,5 +1,6 @@
 import React from 'react';
 import { JourneySwitcher } from '@/components/discover/JourneySwitcher';
+import { JourneySummaryStrip } from '@/components/discover/JourneySummaryStrip';
 import { DiscoverControlBar } from '@/components/discover/DiscoverControlBar';
 import { inferJourneyFromPanelContent } from '@/features/discover/utils/discoverPanelState';
 // Issue #2657 R2 — this file only needs the panelContent union; indexed off
@@ -44,53 +45,60 @@ export interface RightPanelFrameProps {
 }
 
 /**
- * Issue #2657 C7 — the VERBATIM DRP root (architect plan §2/§3). Owns: the
- * root div classes + testid, the desktop-only DiscoverControlBar gate, the
- * persistent JourneySwitcher (compact derivation, activeJourney inference,
- * region-guide ring/nonce/reduced-motion), the top chip strip
- * (PANELS_WITH_INLINE_CHIPS), and the footer slot. Renders `children` for
- * the journey body — it never decides WHICH journey panel to render (that
- * stays in DiscoverRightPanel's dispatcher).
- *
- * Does NOT reuse DiscoverJourneyPanelShell — see architect plan §2 for the
- * visual-diff rationale (different root classes, no region-guide props, no
- * chip strip, no footer slot there).
+ * The DRP root. Owns: root div classes + testid, the persistent JourneySwitcher, the top
+ * chip strip (PANELS_WITH_INLINE_CHIPS), and the footer slot; renders `children` for the
+ * journey body. `DiscoverControlBar` and the compact journey-tab strip live in the shared
+ * desktop header once it's wide enough to host them (`useDiscoverHeaderHostsControls`);
+ * below that width (including mobile) this panel renders its own copy of both, exactly as
+ * before the header owned them. Does NOT reuse DiscoverJourneyPanelShell (different root
+ * classes, no region-guide props, no chip strip, no footer slot there).
  */
 export function RightPanelFrame({ view, context, chrome, onSelectJourney, children }: RightPanelFrameProps) {
-  const { panelContent, isMobileShell, footer } = view.layout;
+  const { panelContent, isMobileShell, hostsHeaderControls, headerHostsJourneyTabs, footer } = view.layout;
 
   const showTopChipStrip = chrome.activeContextChips != null && !PANELS_WITH_INLINE_CHIPS.has(panelContent);
+  // The header is the sole journey selector — including guided-entry — whenever it actually RENDERS the journey tabs (headerHostsJourneyTabs). Below that width, or while an admin city-launch preview leaves the header's tabs suppressed, the panel shows its own copy, for every panel state — see useDiscoverPageContext.ts's headerHostsJourneyTabs doc comment.
+  const showJourneySwitcher = !headerHostsJourneyTabs;
+  // Same "header doesn't have room" condition, minus guided-entry (that state never showed the control bar here even on desktop pre-header). Keyed on hostsHeaderControls (not headerHostsJourneyTabs): the control bar stays in the header even while an unresolved preview suppresses the header's journey tabs.
+  const showControlBarInPanel = !isMobileShell && !hostsHeaderControls;
 
   return (
     <div
       className="flex flex-col lg:w-1/2 border-l border-border bg-background overflow-hidden order-2 lg:order-2"
       data-testid="discover-right-panel"
     >
-      <div className="flex flex-col gap-3 px-4 pt-4 pb-2 shrink-0">
-        {/* Issue #2108 (shell fix) — DESKTOP-ONLY render of the shared city +
-            Buy/Rent + area-search control bar; gated on the real
-            `isMobileShell` prop (not a Tailwind breakpoint) so it and
-            MapDiscovery.tsx's own mobile-only control-bar row stay mutually
-            exclusive in both a real browser and jsdom. */}
-        {!isMobileShell && <DiscoverControlBar />}
-        <JourneySwitcher
-          // Density tracks the ACTUAL rendered panel state, not the raw
-          // `journey` URL param — see DiscoverRightPanel's pre-C7 history for
-          // the full rationale (Issue #1953 follow-up, Issue #2408 mobile).
-          compact={isMobileShell || panelContent !== 'guided-entry'}
-          // `journey` still wins when present; otherwise infer the
-          // equivalent journey from panelContent (Issue #1953 density fix).
-          activeJourney={context.journey ?? inferJourneyFromPanelContent(panelContent)}
-          onSelectJourney={onSelectJourney}
-          cityLabel={context.cityLabel ?? context.city}
-          totalProperties={view.counts.totalProperties}
-          areasCount={view.counts.areasCount}
-          regionGuideRingActive={view.regionGuide.ringActive}
-          regionGuideHelperText={view.regionGuide.helperText}
-          regionGuideNonce={view.regionGuide.nonce}
-          prefersReducedMotion={view.regionGuide.prefersReducedMotion}
-        />
-      </div>
+      {showJourneySwitcher && (
+        <div className="flex flex-col gap-3 px-4 pt-4 pb-2 shrink-0">
+          {showControlBarInPanel && <DiscoverControlBar hostsHeaderControls={hostsHeaderControls} />}
+          <JourneySwitcher
+            // Density tracks the ACTUAL rendered panel state, not the raw
+            // `journey` URL param — see DiscoverRightPanel's pre-C7 history for
+            // the full rationale (Issue #1953 follow-up, Issue #2408 mobile).
+            compact={isMobileShell || panelContent !== 'guided-entry'}
+            // `journey` still wins when present; otherwise infer the
+            // equivalent journey from panelContent (Issue #1953 density fix).
+            activeJourney={context.journey ?? inferJourneyFromPanelContent(panelContent)}
+            onSelectJourney={onSelectJourney}
+            cityLabel={context.cityLabel ?? context.city}
+            totalProperties={view.counts.totalProperties}
+            areasCount={view.counts.areasCount}
+            regionGuideRingActive={view.regionGuide.ringActive}
+            regionGuideHelperText={view.regionGuide.helperText}
+            regionGuideNonce={view.regionGuide.nonce}
+            prefersReducedMotion={view.regionGuide.prefersReducedMotion}
+          />
+        </div>
+      )}
+      {/* The header hosting the switcher does not host the summary strip too — restore it here alone, in the same density condition (`guided-entry`, non-mobile) the hidden switcher would have shown it under. Keyed on headerHostsJourneyTabs, not hostsHeaderControls: while an unresolved preview suppresses the header's tabs the switcher above is shown instead, so this standalone strip must stay hidden (its content already lives inside that switcher). */}
+      {headerHostsJourneyTabs && !isMobileShell && panelContent === 'guided-entry' && (
+        <div className="flex flex-col px-4 pb-2 shrink-0">
+          <JourneySummaryStrip
+            journey={context.journey ?? inferJourneyFromPanelContent(panelContent) ?? 'area-first'}
+            totalProperties={view.counts.totalProperties}
+            areasCount={view.counts.areasCount}
+          />
+        </div>
+      )}
       {showTopChipStrip && (
         <div className="flex flex-wrap items-center gap-1.5 px-4 py-2 border-b border-border shrink-0">
           {chrome.activeContextChips}

@@ -11,6 +11,8 @@ import {
 } from '@/features/discover/context/useDiscoverContext';
 import { computeDiscoverLayer, toLayerInput } from '@/features/discover/selectors/mapLayerCategory';
 import { projectUrlFilters } from '@/features/discover/selectors/urlFiltersProjection';
+import { useDiscoverHeaderHostsControls } from '@/features/discover/state/useDiscoverHeaderHostsControls';
+import { usePreviewCityIdentity } from '@/features/discover/state/usePreviewCityIdentity';
 import type { DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 
@@ -60,6 +62,25 @@ export function useDiscoverPageContext() {
   // overlay shell.
   const { mobileView, isMobileShell, setMobileView, isAreaSetDraftOpen } = useDiscoverShell();
   const mobileMapOpen = isMobileShell && mobileView === 'MAP';
+  // Single source of truth for "header has room for the control bar + journey tabs" —
+  // computed once here so header and panel consumers read the same value in the same commit.
+  const hostsHeaderControls = useDiscoverHeaderHostsControls(isMobileShell);
+  // `hostsHeaderControls` alone is NOT "the header renders journey tabs":
+  // PublicHeader also suppresses
+  // DiscoverHeaderJourneyTabs while an admin city-launch preview's city is still
+  // unresolved (`isUnresolvedPreview`), even though it keeps hosting the control
+  // bar in that state. Without this second signal, a wide-enough unresolved
+  // preview would hide the panel's own JourneySwitcher (gated on
+  // `hostsHeaderControls`) while the header renders no tabs either — zero journey
+  // selectors, which the owner's review of PR #2758 ruled out ("never remove a
+  // panel selector unless its equivalent is available in the header for that
+  // state/role"). Computed ONCE here, alongside `hostsHeaderControls`, so the
+  // header's tab gate and the panel's switcher/strip gates can never
+  // transiently disagree — see PublicHeader.tsx and RightPanelFrame.tsx /
+  // DiscoverJourneyPanelShell.tsx, which both read this same boolean instead of
+  // re-deriving `!isUnresolvedPreview` locally.
+  const { isUnresolvedPreview } = usePreviewCityIdentity();
+  const headerHostsJourneyTabs = hostsHeaderControls && !isUnresolvedPreview;
   // A stable command, so the page shell's trigger prop does not get a fresh
   // identity every render. Presentation-only: mobileView is plain component
   // state and this never touches the URL or history (issue #2088/#1953 —
@@ -145,6 +166,8 @@ export function useDiscoverPageContext() {
     actions,
     mobileView,
     isMobileShell,
+    hostsHeaderControls,
+    headerHostsJourneyTabs,
     setMobileView,
     // Issue #2017 (owner-directed desktop rework) — threaded through the same
     // page-context facade as isMobileShell/mobileView above, down to

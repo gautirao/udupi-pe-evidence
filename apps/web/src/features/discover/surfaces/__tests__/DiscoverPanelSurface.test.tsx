@@ -509,7 +509,10 @@ function toModelParams(g: PanelFlatFixture): BuildPanelSurfaceModelParams {
       nav: BASE_URL_STATE,
       actions: URL_ACTIONS,
       isMobileShell: false,
+      hostsHeaderControls: false,
+      headerHostsJourneyTabs: false,
       mobileView: 'LIST',
+      isAreaSetDraftOpen: false,
     },
     pageState: {
       city: g.city,

@@ -26,6 +26,10 @@ export interface AreaFirstJourneyPanelView {
     nav: Pick<DiscoverNavContextValue, 'nodeListings' | 'radiusKm'>;
     /** Gates the shell's desktop-only DiscoverControlBar mount (Issue #2108). */
     isMobileShell: boolean;
+    /** Single computed source (useDiscoverPageContext) — see DiscoverJourneyPanelShellProps. */
+    hostsHeaderControls: boolean;
+    /** Single computed source (useDiscoverPageContext) — see DiscoverJourneyPanelShellProps. */
+    headerHostsJourneyTabs: boolean;
   };
   routing: Pick<DiscoverPanelSurfaceView['routing'], 'city'>;
   navigation: Pick<
@@ -156,7 +160,7 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
   // ambient-facade deviation) until this commit. Same objects, same values,
   // now supplied by the assembly layer through `view`/`commands` so this
   // renderer no longer reaches into the Discover context as a service locator.
-  const { nav: urlState, isMobileShell } = view.pageContext;
+  const { nav: urlState, isMobileShell, hostsHeaderControls, headerHostsJourneyTabs } = view.pageContext;
   const { actions: urlActions } = commands.pageContext;
 
   const isAreaFirstCityRoot = areasNavigationJourney.node?.nodeKey === ROOT_NODE_KEY;
@@ -165,6 +169,8 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
     <DiscoverJourneyPanelShell
       testId="discover-areas-journey-panel-shell"
       isMobileShell={isMobileShell}
+      hostsHeaderControls={hostsHeaderControls}
+      headerHostsJourneyTabs={headerHostsJourneyTabs}
       // CQ2 — FULL cards ONLY at the area-first CITY ROOT (the
       // guided-entry analogue); COMPACT tab-strip at every deeper node
       // (Direction/Local-Destination/Area), so the switcher never

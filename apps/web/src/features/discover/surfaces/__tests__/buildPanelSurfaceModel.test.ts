@@ -38,7 +38,10 @@ function makeParams(overrides: DeepPartial<BuildPanelSurfaceModelParams> = {}): 
       nav: {} as BuildPanelSurfaceModelParams['pageContext']['nav'],
       actions: {} as BuildPanelSurfaceModelParams['pageContext']['actions'],
       isMobileShell: false,
+      hostsHeaderControls: false,
+      headerHostsJourneyTabs: false,
       mobileView: 'LIST',
+      isAreaSetDraftOpen: false,
     },
     pageState: {
       city: 'bangalore',

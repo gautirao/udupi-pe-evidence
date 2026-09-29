@@ -18,6 +18,7 @@ import type { RegionScopedAreaGroup } from '@/hooks/useRegionScopedAreaGroups';
 import type { ScopeNamespaces } from '@/features/discover/presentation/resolveScope';
 import { prettifyZoneSlug } from '@/components/discover/SchoolRadiusMapOverlay';
 import { resolveAreaRegionName } from '@/features/discover/selectors/areaRegionName';
+import { useDiscoverHeaderHostsControls } from '@/features/discover/state/useDiscoverHeaderHostsControls';
 import { resolveAreaSelectedResults } from '@/features/discover/selectors/areaSelectedResults';
 import { buildRegionGuideHelperText } from '@/features/discover/selectors/regionGuideHelperText';
 import type { RightPanelView, RightPanelCommands } from '@/features/discover/right-panel/contracts';
@@ -606,7 +607,18 @@ export function flatPropsToRightPanel(flat: FlatRightPanelTestFixture): {
 
   const view: RightPanelView = {
     frame: {
-      layout: { panelContent: flat.panelContent, isMobileShell: flat.isMobileShell ?? true, footer: flat.footerContent },
+      layout: {
+        panelContent: flat.panelContent,
+        isMobileShell: flat.isMobileShell ?? true,
+        // Placeholder — the real value is computed in the `DiscoverRightPanel` component
+        // below (a hook call cannot live in this pure builder function) and spliced in.
+        hostsHeaderControls: false,
+        // This legacy flat-fixture adapter has no notion of an unresolved
+        // admin preview, so headerHostsJourneyTabs is spliced in identical to
+        // hostsHeaderControls below (the two coincide outside preview mode).
+        headerHostsJourneyTabs: false,
+        footer: flat.footerContent,
+      },
       counts: { totalProperties: flat.totalProperties ?? 0, areasCount: flat.areasCount ?? 0 },
       regionGuide: {
         ringActive: flat.regionGuideRingActive ?? false,
@@ -776,5 +788,11 @@ export function flatPropsToRightPanel(flat: FlatRightPanelTestFixture): {
  */
 export function DiscoverRightPanel(flat: FlatRightPanelTestFixture) {
   const { view, commands } = flatPropsToRightPanel(flat);
+  // Same real hook production reads (useDiscoverHeaderHostsControls), so tests that mock
+  // matchMedia width (mockMatchMediaWidth) exercise the actual threshold instead of a fixture
+  // stand-in. Suites that provision neither get the same false default as before this field existed.
+  const hostsHeaderControls = useDiscoverHeaderHostsControls(flat.isMobileShell ?? true);
+  view.frame.layout.hostsHeaderControls = hostsHeaderControls;
+  view.frame.layout.headerHostsJourneyTabs = hostsHeaderControls;
   return React.createElement(RealDiscoverRightPanel, { view, commands });
 }

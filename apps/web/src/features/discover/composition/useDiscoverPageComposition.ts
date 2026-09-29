@@ -28,9 +28,13 @@ import { useDiscoverMarkerPopoverController } from '@/features/discover/controll
 import { useDiscoverMobilePresentationController } from '@/features/discover/controllers/useDiscoverMobilePresentationController';
 import { useDiscoverDebugBridge } from '@/features/discover/controllers/useDiscoverDebugBridge';
 import { assembleDiscoverSurfaceProps } from '@/features/discover/composition/assembleDiscoverSurfaceProps';
+// Reused verbatim so the header's journey tabs carry the same region-guide signal RightPanelFrame already computes.
+import { buildRegionGuideHelperText } from '@/features/discover/selectors/regionGuideHelperText';
+import { deriveShellRegionGuideRingActive } from '@/features/discover/selectors/shellRegionGuideRingActive';
 import type { DiscoverMapSurfaceView, DiscoverMapSurfaceCommands } from '@/features/discover/surfaces/buildMapSurfaceModel';
 import type { DiscoverPanelSurfaceView, DiscoverPanelSurfaceCommands } from '@/features/discover/surfaces/buildPanelSurfaceModel';
 import type { DiscoverOverlaySurfaceView, DiscoverOverlaySurfaceCommands } from '@/features/discover/surfaces/buildOverlaySurfaceModel';
+import type { DiscoverHeaderRegionGuide } from '@/components/discover/DiscoverHeaderJourneyTabs';
 /**
  * THE DISCOVER PAGE'S COMPOSITION HOOK.
  *
@@ -62,10 +66,16 @@ export type DiscoverPageComposition =
       status: 'ready';
       shell: {
         isMobileShell: boolean;
+        /** Single source of truth for whether the header hosts the control bar + journey tabs (vs. the panel falling back to its own copy) — see useDiscoverHeaderHostsControls. */
+        hostsHeaderControls: boolean;
+        /** Single source of truth for whether the header actually RENDERS journey tabs (`hostsHeaderControls` minus an unresolved admin preview) — see useDiscoverPageContext.ts. */
+        headerHostsJourneyTabs: boolean;
         mobileMapOpen: boolean;
         onOpenMobileMap: () => void;
         mobileMapTriggerRef: React.RefObject<HTMLButtonElement>;
         mapContainerRef: React.RefObject<HTMLDivElement | null>;
+        /** See DiscoverHeaderJourneyTabs.tsx's doc comment. */
+        regionGuide: DiscoverHeaderRegionGuide;
       };
       map: { view: DiscoverMapSurfaceView; commands: DiscoverMapSurfaceCommands };
       panel: { view: DiscoverPanelSurfaceView; commands: DiscoverPanelSurfaceCommands };
@@ -84,6 +94,8 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     actions,
     mobileView,
     isMobileShell,
+    hostsHeaderControls,
+    headerHostsJourneyTabs,
     setMobileView,
     mobileMapOpen,
     openMobileMap,
@@ -603,12 +615,33 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     mapLayerCategory,
     isTopGroupedAgri,
     isRegionOverview,
+    regionOverviewMarkerKind,
   } = mapLayerController;
 
   const regionGuideController = useDiscoverRegionGuideController({ isRegionOverview });
   const {
     armRegionSelect,
   } = regionGuideController;
+
+  // See deriveShellRegionGuideRingActive's doc comment for the guided-entry suppression rule.
+  const shellRegionGuideRingActive = deriveShellRegionGuideRingActive(
+    regionGuideController.regionGuideRingActive,
+    resolvedPanelContent,
+    headerHostsJourneyTabs,
+  );
+
+  // Same regionGuide frame RightPanelFrame builds for JourneySwitcher, exposed here for the header too.
+  const shellRegionGuide = {
+    ringActive: shellRegionGuideRingActive,
+    markerKind: regionOverviewMarkerKind,
+    nonce: regionGuideController.regionSelectNonce,
+    prefersReducedMotion: regionGuideController.prefersReducedMotion,
+    helperText: buildRegionGuideHelperText({
+      summaryRegions,
+      scope: nav.scope,
+      markerKind: regionOverviewMarkerKind,
+    }),
+  };
 
   const overviewNavigationController = useDiscoverOverviewNavigationController({
     isTopGroupedAgri,
@@ -750,10 +783,13 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
     status: 'ready',
     shell: {
       isMobileShell,
+      hostsHeaderControls,
+      headerHostsJourneyTabs,
       mobileMapOpen,
       onOpenMobileMap: openMobileMap,
       mobileMapTriggerRef,
       mapContainerRef,
+      regionGuide: shellRegionGuide,
     },
     map: { view: mapView, commands: mapCommands },
     panel: { view: panelView, commands: panelCommands },

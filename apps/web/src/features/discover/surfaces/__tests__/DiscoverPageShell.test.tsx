@@ -21,6 +21,8 @@ vi.mock('@/components/discover/DiscoverControlBar', () => ({
 function baseProps() {
   return {
     isMobileShell: false,
+    hostsHeaderControls: false,
+    headerHostsJourneyTabs: false,
     mobileMapOpen: false,
     mobileMapTrigger: undefined,
     mapSurface: <div data-testid="map-surface-slot" />,

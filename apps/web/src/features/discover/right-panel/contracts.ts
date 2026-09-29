@@ -131,6 +131,10 @@ type AgriSelectedRegion = string | null;
 export interface RightPanelFrameLayoutView {
   panelContent: SurfaceView['navigation']['resolvedPanelContent'];
   isMobileShell: SurfaceView['pageContext']['isMobileShell'];
+  /** Single computed source (useDiscoverPageContext) — never re-derived per consumer, so header/panel never transiently disagree mid-resize. */
+  hostsHeaderControls: SurfaceView['pageContext']['hostsHeaderControls'];
+  /** Single computed source (useDiscoverPageContext) — whether the header actually RENDERS journey tabs (`hostsHeaderControls` minus an unresolved admin preview). Gates the panel's JourneySwitcher/JourneySummaryStrip so exactly one journey selector always exists. */
+  headerHostsJourneyTabs: SurfaceView['pageContext']['headerHostsJourneyTabs'];
   footer: RightPanelViewExtras['footer'];
 }
 

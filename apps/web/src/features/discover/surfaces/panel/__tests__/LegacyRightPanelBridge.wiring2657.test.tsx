@@ -269,6 +269,8 @@ function buildParams(overrides: BuildOverrides = {}): BuildPanelSurfaceModelPara
       nav,
       actions: urlActions,
       isMobileShell: false,
+      hostsHeaderControls: false,
+      headerHostsJourneyTabs: false,
       mobileView: 'LIST',
       isAreaSetDraftOpen: false,
     },

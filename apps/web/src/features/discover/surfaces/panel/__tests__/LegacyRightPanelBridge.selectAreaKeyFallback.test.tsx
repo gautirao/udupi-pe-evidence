@@ -202,7 +202,10 @@ function buildParams(overrides: {
       nav,
       actions,
       isMobileShell: false,
+      hostsHeaderControls: false,
+      headerHostsJourneyTabs: false,
       mobileView: 'LIST',
+      isAreaSetDraftOpen: false,
     },
     pageState: {
       city: nav.city,

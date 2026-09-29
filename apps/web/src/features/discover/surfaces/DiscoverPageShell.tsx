@@ -1,6 +1,7 @@
 import type { ReactNode, RefObject } from 'react';
 import { PublicDiscoverLayout } from '@/components/layout/PublicDiscoverLayout';
 import { DiscoverControlBar } from '@/components/discover/DiscoverControlBar';
+import type { DiscoverHeaderRegionGuide } from '@/components/discover/DiscoverHeaderJourneyTabs';
 
 export interface DiscoverPageShellMobileMapTrigger {
   onOpenMap: () => void;
@@ -9,11 +10,17 @@ export interface DiscoverPageShellMobileMapTrigger {
 
 export interface DiscoverPageShellProps {
   isMobileShell: boolean;
+  /** Single source of truth, forwarded to `PublicHeader`; see useDiscoverHeaderHostsControls. */
+  hostsHeaderControls: boolean;
+  /** Single source of truth, forwarded to `PublicHeader`; see useDiscoverPageContext.ts's headerHostsJourneyTabs doc comment. */
+  headerHostsJourneyTabs: boolean;
   mobileMapOpen: boolean;
   mobileMapTrigger: DiscoverPageShellMobileMapTrigger | undefined;
   mapSurface: ReactNode;
   panelSurface: ReactNode;
   overlaySurface: ReactNode;
+  /** Pass-through of the region-guide ring/aria-live signal to `PublicHeader`'s journey tabs; optional for callers that don't need it. */
+  regionGuide?: DiscoverHeaderRegionGuide;
 }
 
 /**
@@ -31,21 +38,29 @@ export interface DiscoverPageShellProps {
  */
 export function DiscoverPageShell({
   isMobileShell,
+  hostsHeaderControls,
+  headerHostsJourneyTabs,
   mobileMapOpen,
   mobileMapTrigger,
   mapSurface,
   panelSurface,
   overlaySurface,
+  regionGuide,
 }: DiscoverPageShellProps) {
   return (
-    <PublicDiscoverLayout>
+    <PublicDiscoverLayout
+      regionGuide={regionGuide}
+      hostsHeaderControls={hostsHeaderControls}
+      headerHostsJourneyTabs={headerHostsJourneyTabs}
+    >
       <div className="flex h-full flex-col">
         {isMobileShell && (
           <div
             className="shrink-0 border-b border-border bg-card px-4 py-2.5"
             data-testid="discover-control-bar-row"
           >
-            <DiscoverControlBar mobileMapTrigger={mobileMapTrigger} />
+            {/* This row only ever mounts while isMobileShell — always below the header's control-bar threshold — so hostsHeaderControls is a fixed `false` here rather than a threaded prop. */}
+            <DiscoverControlBar mobileMapTrigger={mobileMapTrigger} hostsHeaderControls={false} />
           </div>
         )}
         <div className="min-h-0 flex-1 flex flex-col lg:flex-row relative">

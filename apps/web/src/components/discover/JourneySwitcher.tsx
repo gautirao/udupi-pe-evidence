@@ -1,17 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ArrowRight,
-  Building,
   Check,
   ChevronRight,
   GraduationCap,
   Layers,
   MapPin,
   Sprout,
-  TrendingUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
+import { getJourneyDescription } from './journeyGuidanceCopy';
+import { JourneySummaryStrip } from './JourneySummaryStrip';
 
 interface JourneySwitcherProps {
   onSelectJourney: (journey: DiscoverJourney) => void;
@@ -36,14 +36,17 @@ interface JourneySwitcherProps {
    */
   areasCount?: number | null;
   /**
-   * Issue #1953 build step 6 (AC27/AC9) — this component is now the SOLE,
-   * PERSISTENT mode-selection control (previously duplicated: once here, once
-   * as GuidedEntryPanel's landing-only "journey-switcher-section"). The
-   * landing-only copy was removed from GuidedEntryPanel; this component now
-   * mounts once in the shared shell (DiscoverRightPanel) and stays reachable
-   * at every panel state. `activeJourney` drives `aria-selected` on each tab
-   * — null/undefined (no journey chosen yet, e.g. bare city landing) means no
-   * tab is selected.
+   * Issue #1953 build step 6 (AC27/AC9) — this component is the SOLE
+   * mode-selection control within the PANEL (previously duplicated: once
+   * here, once as GuidedEntryPanel's landing-only "journey-switcher-section",
+   * now removed from GuidedEntryPanel). At desktop widths wide enough for the
+   * shared header to host its own compact journey tabs (`DiscoverHeaderJourneyTabs`,
+   * `useDiscoverHeaderHostsControls`), the header is the sole selector instead
+   * and this component does not mount at all — see RightPanelFrame /
+   * DiscoverJourneyPanelShell. Below that width, and on mobile, this stays the
+   * only selector, reachable at every panel state. `activeJourney` drives
+   * `aria-selected` on each tab — null/undefined (no journey chosen yet, e.g.
+   * bare city landing) means no tab is selected.
    */
   activeJourney?: DiscoverJourney | null;
   /**
@@ -88,7 +91,6 @@ type JourneyDef = {
   title: string;
   primary: boolean;
   desc: string;
-  chips: ChipContent[];
   cta: string;
   cardHover: string;
   tile: string;
@@ -97,38 +99,7 @@ type JourneyDef = {
   accentBorder: string;
   accentBg: string;
   checkBg: string;
-  metaBg: string;
-  metaIcon: string;
 };
-
-type ChipContent = { label: string; loading?: boolean };
-
-const METADATA_ITEM_ICONS = [MapPin, Building, TrendingUp] as const;
-
-function MetaItem({
-  icon: Icon,
-  iconClassName,
-  loading = false,
-  children,
-}: {
-  icon: typeof Layers;
-  iconClassName: string;
-  loading?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <span
-      aria-busy={loading || undefined}
-      className={cn(
-        'inline-flex items-center gap-[5px] whitespace-nowrap text-[11.5px] font-semibold text-[hsl(var(--text-body))]',
-        loading && 'italic opacity-70',
-      )}
-    >
-      <Icon className={cn('h-[13px] w-[13px] shrink-0', iconClassName)} aria-hidden="true" />
-      {children}
-    </span>
-  );
-}
 
 export function JourneySwitcher({
   onSelectJourney,
@@ -150,14 +121,7 @@ export function JourneySwitcher({
       Icon: MapPin,
       title: 'Explore by area',
       primary: true,
-      desc: `Start with the neighbourhood. Explore ${cityLabel} localities. See properties, schools and insights`,
-      chips: [
-        areasCount == null ? { label: 'Loading areas…', loading: true } : { label: `${areasCount} areas` },
-        totalProperties == null
-          ? { label: 'Loading properties…', loading: true }
-          : { label: `${totalProperties} properties` },
-        { label: 'Locality insights' },
-      ],
+      desc: getJourneyDescription('area-first', cityLabel),
       cta: 'Explore areas',
       cardHover: 'hover:border-[hsl(var(--copper))]',
       tile: 'bg-[hsl(var(--copper-tint))] text-[hsl(var(--copper))]',
@@ -166,8 +130,6 @@ export function JourneySwitcher({
       accentBorder: 'border-[hsl(var(--copper))]',
       accentBg: 'bg-[hsl(var(--copper-tint))]',
       checkBg: 'bg-[hsl(var(--copper))] text-white',
-      metaBg: 'bg-[hsl(var(--copper-tint))]',
-      metaIcon: 'text-[hsl(var(--copper))]',
     },
     {
       key: 'school-first',
@@ -176,8 +138,7 @@ export function JourneySwitcher({
       Icon: GraduationCap,
       title: 'Search near a school',
       primary: false,
-      desc: 'Pick a school as your anchor and see only the homes within a commute radius',
-      chips: [{ label: '5 or 10 km radius' }, { label: 'Homes near schools' }],
+      desc: getJourneyDescription('school-first', cityLabel),
       cta: 'Find homes near schools',
       cardHover: 'hover:border-slate-400',
       tile: 'bg-purple-100 group-hover:bg-purple-200',
@@ -186,8 +147,6 @@ export function JourneySwitcher({
       accentBorder: 'border-[hsl(var(--plum))]',
       accentBg: 'bg-[hsl(var(--plum-tint))]',
       checkBg: 'bg-[hsl(var(--plum))] text-white',
-      metaBg: 'bg-[hsl(var(--plum-tint))]',
-      metaIcon: 'text-[hsl(var(--plum))]',
     },
     {
       key: 'agri-first',
@@ -196,8 +155,7 @@ export function JourneySwitcher({
       Icon: Sprout,
       title: 'Find agricultural land',
       primary: false,
-      desc: 'Looking for farmland instead? Search parcels by corridor, direction and distance from town',
-      chips: [{ label: 'By corridor & direction' }, { label: 'Farmland only' }],
+      desc: getJourneyDescription('agri-first', cityLabel),
       cta: 'Search farmland',
       cardHover: 'hover:border-slate-400',
       tile: 'bg-emerald-100 group-hover:bg-emerald-200',
@@ -206,8 +164,6 @@ export function JourneySwitcher({
       accentBorder: 'border-[hsl(var(--evergreen))]',
       accentBg: 'bg-[hsl(var(--evergreen-tint))]',
       checkBg: 'bg-[hsl(var(--evergreen))] text-white',
-      metaBg: 'bg-[hsl(var(--evergreen-tint))]',
-      metaIcon: 'text-[hsl(var(--evergreen))]',
     },
   ];
 
@@ -251,7 +207,7 @@ export function JourneySwitcher({
   };
 
   const isCompact = compact;
-  const metadataJourney = journeys.find((j) => j.key === activeJourney) ?? journeys[0];
+  const metadataJourney = activeJourney ?? 'area-first';
 
   return (
     <div
@@ -383,36 +339,13 @@ export function JourneySwitcher({
           );
         })}
       </div>
-      {/* Issue #2108 follow-up — visible metadata strip beneath the card
-          row, reserved for the landing (non-compact) density only, same as
-          the mock's placement directly under its `mode-selector`. Renders
-          ONLY the counts/labels this component already computes (no
-          invented "Up to 3 selected areas"/"Browse all listings" — this app
-          has neither a multi-area-selection feature nor an all-listings
-          browse link in this context). */}
+      {/* Issue #2108 follow-up — visible metadata strip beneath the card row (now JourneySummaryStrip), reserved for the landing (non-compact) density only, same as the mock's placement directly under its `mode-selector`. */}
       {!isCompact && (
-        <div
-          data-testid="journey-metadata-strip"
-          className={cn(
-            'flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-lg px-[11px] py-[7px]',
-            metadataJourney.metaBg,
-          )}
-        >
-          {metadataJourney.chips.map((c, chipIndex) => (
-            <React.Fragment key={chipIndex}>
-              {chipIndex > 0 && (
-                <span aria-hidden="true" className="h-[3px] w-[3px] shrink-0 rounded-full bg-gray-400" />
-              )}
-              <MetaItem
-                icon={METADATA_ITEM_ICONS[chipIndex % METADATA_ITEM_ICONS.length]}
-                iconClassName={metadataJourney.metaIcon}
-                loading={c.loading}
-              >
-                {c.label}
-              </MetaItem>
-            </React.Fragment>
-          ))}
-        </div>
+        <JourneySummaryStrip
+          journey={metadataJourney}
+          totalProperties={totalProperties}
+          areasCount={areasCount}
+        />
       )}
     </div>
   );

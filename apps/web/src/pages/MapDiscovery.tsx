@@ -47,7 +47,10 @@ export default function MapDiscovery() {
     <AreaSetDraftProvider>
       <DiscoverPageShell
         isMobileShell={shell.isMobileShell}
+        hostsHeaderControls={shell.hostsHeaderControls}
+        headerHostsJourneyTabs={shell.headerHostsJourneyTabs}
         mobileMapOpen={shell.mobileMapOpen}
+        regionGuide={shell.regionGuide}
         mobileMapTrigger={
           !shell.mobileMapOpen
             ? { onOpenMap: shell.onOpenMobileMap, triggerRef: shell.mobileMapTriggerRef }

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
@@ -7,6 +7,8 @@ import Onboarding from '../../../pages/Onboarding';
 import { AppLayout } from '../AppLayout';
 import { PublicDiscoverLayout } from '../PublicDiscoverLayout';
 import { makeTestQueryClient } from '@/test/renderWithProviders';
+import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
+import { mockMatchMediaWidth } from '@/test-utils/mockMatchMediaWidth';
 
 // ─── Polyfills for jsdom ─────────────────────────────────
 
@@ -326,19 +328,32 @@ describe('AppLayout — onboarding redirect for dealers', () => {
 });
 
 describe('PublicDiscoverLayout — /discover route behaviour', () => {
+  // These tests assert the collapsed desktop header's own behaviour, which only builds once the viewport is wide enough to host it — simulate that width here.
+  let matchMediaMock: { restore: () => void };
+  beforeEach(() => {
+    matchMediaMock = mockMatchMediaWidth(1366);
+  });
+  afterEach(() => {
+    matchMediaMock.restore();
+  });
+
+  // PublicHeader reads useDiscoverNav/useDiscoverShell directly and is always mounted inside DiscoverProvider in production, so this render helper matches that.
   function renderDiscover(url = '/discover?city=udupi') {
     return render(
       <QueryClientProvider client={makeTestQueryClient()}>
         <MemoryRouter initialEntries={[url]}>
-          <PublicDiscoverLayout>
-            <div>discover map surface</div>
-          </PublicDiscoverLayout>
+          <DiscoverProvider>
+            <PublicDiscoverLayout>
+              <div>discover map surface</div>
+            </PublicDiscoverLayout>
+          </DiscoverProvider>
         </MemoryRouter>
       </QueryClientProvider>,
     );
   }
 
-  it('1. Broker on /discover?city=udupi sees all public nav and broker actions', () => {
+  // Neither test below opens the overflow trigger via userEvent (Radix DropdownMenu click hangs in this environment); they check the structural fix directly instead.
+  it('1. Broker on /discover?city=udupi sees the collapsed header journey tabs, Trends, and a compact Workspace overflow menu (not the wide broker actions)', () => {
     mockAuth = baseAuth({
       user: { email: 'broker@test.com' },
       userRole: 'dealer',
@@ -346,19 +361,25 @@ describe('PublicDiscoverLayout — /discover route behaviour', () => {
     });
     renderDiscover();
 
-    expect(screen.getByRole('link', { name: /^discover$/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /^schools$/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /^agricultural land$/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /^trends$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /explore by area/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /search near a school/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /find agricultural land/i })).toBeInTheDocument();
 
-    expect(screen.getByRole('link', { name: /broker dashboard/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /new listing/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /notifications/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /broker workspace/i })).toBeInTheDocument();
+    // The old wide Zone 3 (3 separate links + a "Broker workspace" dropdown)
+    // is REPLACED by one compact "Workspace" overflow trigger in the
+    // collapsed header — real-browser evidence showed the wide version
+    // overlapping the journey tabs at 1366×768.
+    expect(screen.queryByRole('link', { name: /broker dashboard/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^broker workspace$/i })).not.toBeInTheDocument();
+    const trigger = screen.getByTestId('role-actions-overflow-trigger');
+    expect(trigger).toHaveTextContent('Workspace');
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
     expect(screen.getByRole('button', { name: /^BR$/i })).toBeInTheDocument();
+    // "Trends" folds into the "Workspace" overflow menu instead of a standalone link (see `withTrends`/dedupeNavByHref.test.ts).
+    expect(screen.queryByRole('link', { name: /^trends$/i })).not.toBeInTheDocument();
   });
 
-  it('2. Admin on /discover?city=udupi sees Admin Console visible without opening avatar', () => {
+  it('2. Admin on /discover?city=udupi sees a compact "Admin" overflow trigger (not the wide Admin Console + badge)', () => {
     mockAuth = baseAuth({
       user: { email: 'admin@test.com' },
       userRole: 'admin',
@@ -366,63 +387,81 @@ describe('PublicDiscoverLayout — /discover route behaviour', () => {
     });
     renderDiscover();
 
-    expect(screen.getByRole('link', { name: /^discover$/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /^schools$/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /^agricultural land$/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /^trends$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /explore by area/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /search near a school/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /find agricultural land/i })).toBeInTheDocument();
 
-    expect(screen.getByRole('button', { name: /admin console/i })).toBeInTheDocument();
+    // The redundant standalone "Admin" badge and the wide "Admin Console"
+    // trigger are REPLACED by one compact "Admin" overflow trigger — real
+    // browser evidence showed both overlapping the journey tabs at 1366×768.
+    expect(screen.queryByRole('button', { name: /^admin console$/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Admin$/, { selector: 'div' })).not.toBeInTheDocument();
+    // "Trends" folds into the "Admin" overflow menu instead of a standalone link (see `withTrends`).
+    expect(screen.queryByRole('link', { name: /^trends$/i })).not.toBeInTheDocument();
+    const trigger = screen.getByTestId('role-actions-overflow-trigger');
+    expect(trigger).toHaveTextContent('Admin');
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
     expect(screen.getByRole('button', { name: /notifications bell/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^AD$/i })).toBeInTheDocument();
   });
 
-  it('3. Normal user on /discover?city=udupi sees consumer actions', () => {
+  it('3. Normal user on /discover?city=udupi sees a compact "Menu" overflow trigger (not the wide consumer-activity links)', () => {
     mockAuth = baseAuth({
       user: { email: 'user@test.com' },
       userRole: 'user',
     });
     renderDiscover();
 
-    expect(screen.getByRole('link', { name: /^discover$/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /^schools$/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /^agricultural land$/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /^trends$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /explore by area/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /search near a school/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /find agricultural land/i })).toBeInTheDocument();
 
-    expect(screen.getByRole('link', { name: /list property/i })).toBeInTheDocument();
-    // Issue #1566 — two distinct "Saved" links now exist (saved areas + saved homes);
-    // anchor the regex so each assertion targets exactly one.
-    expect(screen.getByRole('link', { name: /^saved$/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /saved homes/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /my bookings/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /notifications/i })).toBeInTheDocument();
+    // The wide Zone 3 (List property/Saved/Saved homes/My bookings/Notifications
+    // links + a standalone Trends link) is replaced by one compact "Menu"
+    // overflow trigger — same destinations, covered at the data level by
+    // dedupeNavByHref.test.ts's withTrends coverage.
+    expect(screen.queryByRole('link', { name: /^saved$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /list property/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^trends$/i })).not.toBeInTheDocument();
+    const trigger = screen.getByTestId('role-actions-overflow-trigger');
+    expect(trigger).toHaveTextContent('Menu');
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
     expect(screen.getByRole('button', { name: /^US$/i })).toBeInTheDocument();
   });
 
-  it('4. Anonymous user on /discover?city=udupi sees public links, List property, Sign in', () => {
+  it('4. Anonymous user on /discover?city=udupi sees the header journey tabs, a compact "Menu" overflow trigger, and Sign in', () => {
     renderDiscover();
 
-    expect(screen.getByRole('link', { name: /^discover$/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /^schools$/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /^agricultural land$/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /^trends$/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /list property/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /explore by area/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /search near a school/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /find agricultural land/i })).toBeInTheDocument();
+    // Anon's CTA + Trends fold into one compact trigger, same as Dealer/Admin.
+    expect(screen.queryByRole('link', { name: /list property/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^trends$/i })).not.toBeInTheDocument();
+    const trigger = screen.getByTestId('role-actions-overflow-trigger');
+    expect(trigger).toHaveTextContent('Menu');
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
     expect(screen.getByRole('link', { name: /sign in/i })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /^saved$/i })).not.toBeInTheDocument();
   });
 
-  it('5. Active tab state marks correct journey active', () => {
+  it('5. Active journey link state marks the correct header journey link aria-current="page"', () => {
+    // No journey= param resolves to the canonical area-first default (same
+    // as useDiscoverNav().journey elsewhere in the app), so "By area" is the
+    // active link here — unlike JourneySwitcher's journey-LESS landing state
+    // (panelContent === 'guided-entry'), which has no equivalent in a bare
+    // URL check and does mark no link current.
     const { unmount: u1 } = renderDiscover('/discover?city=udupi');
-    expect(screen.getByRole('link', { name: /^discover$/i })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('link', { name: /^schools$/i })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('link', { name: /explore by area/i })).toHaveAttribute('aria-current', 'page');
     u1();
 
     const { unmount: u2 } = renderDiscover('/discover?city=udupi&journey=school-first');
-    expect(screen.getByRole('link', { name: /^discover$/i })).not.toHaveAttribute('aria-current');
-    expect(screen.getByRole('link', { name: /^schools$/i })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: /explore by area/i })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('link', { name: /search near a school/i })).toHaveAttribute('aria-current', 'page');
     u2();
 
     renderDiscover('/discover?city=udupi&journey=agri-first');
-    expect(screen.getByRole('link', { name: /^agricultural land$/i })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: /find agricultural land/i })).toHaveAttribute('aria-current', 'page');
   });
 });
 

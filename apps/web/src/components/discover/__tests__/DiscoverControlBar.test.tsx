@@ -92,10 +92,12 @@ const { BASE_NAV, ACTIONS } = vi.hoisted(() => {
 });
 
 let currentNav: DiscoverUrlState = BASE_NAV;
+let currentIsMobileShell = false;
 
 vi.mock('@/features/discover/context/useDiscoverContext', () => ({
   useDiscoverNav: () => currentNav,
   useDiscoverActions: () => ACTIONS,
+  useDiscoverShell: () => ({ isMobileShell: currentIsMobileShell }),
 }));
 
 const AREAS: DiscoverArea[] = [
@@ -163,6 +165,7 @@ describe('DiscoverControlBar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     currentNav = BASE_NAV;
+    currentIsMobileShell = false;
     mockResolveIsPending = false;
     mockUseDiscoverAreas.mockReturnValue({ data: { city: 'bangalore', areas: AREAS } });
   });
@@ -591,6 +594,30 @@ describe('DiscoverControlBar', () => {
       expect(onSelectArea).toHaveBeenCalledWith('area:koramangala');
       await waitFor(() => expect(input).toHaveFocus());
       expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    });
+  });
+
+  // ─── "Looking to" label — hidden only when the header hosts this bar ──
+  // jsdom carries no real stylesheet, so class tokens (not computed visibility)
+  // are what these assert: `lg:inline` present means the label is shown at
+  // lg+ real-browser widths, exactly main's "hidden lg:inline" class — its
+  // absence is what makes the label permanently hidden for the header's copy.
+  // The component no longer derives `hostsHeaderControls` itself (it is
+  // threaded from the single computed source at each mount site), so these
+  // assert directly on the prop rather than mocking a viewport width.
+  describe('"Looking to" label visibility', () => {
+    it('with hostsHeaderControls omitted (defaults false, matches every mount site below the header threshold), the label keeps main\'s "hidden lg:inline" class (visible at lg+)', () => {
+      render(<DiscoverControlBar />);
+      const label = screen.getByText('Looking to');
+      expect(label).toBeInTheDocument();
+      expect(label).toHaveClass('lg:inline');
+    });
+
+    it('with hostsHeaderControls=true (the header mount site), the label loses the lg:inline override and stays hidden (the header owns naming via its own aria-label)', () => {
+      render(<DiscoverControlBar hostsHeaderControls />);
+      const label = screen.getByText('Looking to');
+      expect(label).toHaveClass('hidden');
+      expect(label).not.toHaveClass('lg:inline');
     });
   });
 });
