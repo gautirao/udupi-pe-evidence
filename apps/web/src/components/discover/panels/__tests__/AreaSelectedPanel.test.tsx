@@ -277,14 +277,77 @@ describe('AreaSelectedPanel', () => {
         closeAreaSetDraft: vi.fn(),
         fitAreaSet: vi.fn(),
         focusAreaSetMember: vi.fn(),
+        // Pre-existing gap this mock already had (Issue #2419 PR-2 required member) — added here,
+        // not fixed elsewhere, purely so this file's typecheck delta doesn't shift when the
+        // property list nearby changes; behaviourally unrelated to #2729.
+        startDrawSearchArea: vi.fn(),
         registerAreaSetCameraActions: vi.fn(),
         getAreaSetCameraRestoreRequest: vi.fn(() => null),
         setAreaSetCameraRestoreRequest: vi.fn(),
+        // Issue #2729 (R1 fix) — new required shell member (see context/types.ts). Without this,
+        // AreaSelectedPanel's canonical-scope-label broadcast effect throws
+        // "shell.setCanonicalScopeLabel is not a function" for every test in this file that runs
+        // AFTER this one (this `vi.spyOn` mock is not restored between tests in this suite).
+        canonicalScopeLabel: null,
+        setCanonicalScopeLabel: vi.fn(),
       });
       renderPanel();
       fireEvent.click(screen.getByTestId('area-set-add-nearby-tile'));
       expect(openAreaSetDraft).toHaveBeenCalledTimes(1);
       expect(setMobileView).not.toHaveBeenCalledWith('MAP');
+    });
+  });
+
+  // Issue #2729 (post-merge fix-verify, NIT) — cheap regression for the broadcast effect's own
+  // cleanup: `shell.setCanonicalScopeLabel(null)` on unmount (see AreaSelectedPanel.tsx's
+  // "Cleared on unmount so a stale label never survives navigating away" comment). Without this,
+  // a canonical label broadcast by one AreaSelectedPanel instance could survive into whatever
+  // renders next in its place (school-first/agri-first/journey-less, which correctly show no
+  // canonical value) until a DIFFERENT AreaSelectedPanel happens to overwrite it.
+  describe('canonicalScopeLabel broadcast lifecycle (#2729)', () => {
+    it('clears the shell canonical scope label on unmount', () => {
+      const setCanonicalScopeLabel = vi.fn();
+      vi.spyOn(DiscoverContextHooks, 'useDiscoverShell').mockReturnValue({
+        mobileView: 'LIST',
+        setMobileView: vi.fn(),
+        isMobileShell: false,
+        isAreaSetDraftOpen: false,
+        openAreaSetDraft: vi.fn(),
+        closeAreaSetDraft: vi.fn(),
+        fitAreaSet: vi.fn(),
+        focusAreaSetMember: vi.fn(),
+        startDrawSearchArea: vi.fn(),
+        registerAreaSetCameraActions: vi.fn(),
+        getAreaSetCameraRestoreRequest: vi.fn(() => null),
+        setAreaSetCameraRestoreRequest: vi.fn(),
+        canonicalScopeLabel: null,
+        setCanonicalScopeLabel,
+      });
+
+      const { view, commands } = toAreaSelectedPanelContract({
+        selectedArea: mockArea,
+        areaListings: [mockListing],
+        filters: {},
+        onFiltersChange: vi.fn(),
+        onSelectJourney: vi.fn(),
+        onAddSchool: vi.fn(),
+      });
+      const { unmount } = renderWithProviders(
+        <DiscoverProvider>
+          <AreaSetDraftProvider>
+            <AreaSelectedPanel view={view} commands={commands} />
+          </AreaSetDraftProvider>
+        </DiscoverProvider>,
+        { router: 'browser' },
+      );
+
+      // Broadcasts a non-null label on mount (this fixture's `mockArea.areaLabel`).
+      expect(setCanonicalScopeLabel).toHaveBeenCalledWith('Test Area');
+      setCanonicalScopeLabel.mockClear();
+
+      unmount();
+
+      expect(setCanonicalScopeLabel).toHaveBeenCalledWith(null);
     });
   });
 

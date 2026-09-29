@@ -9,12 +9,16 @@
 // `PropertyFilterGroups` itself is deliberately presentational only (no internal hook call, no
 // local state): every value and handler it renders comes in as a prop, sourced from a single
 // `usePropertyFilterGroups` call (controllers/usePropertyFilterGroups.ts) the caller owns.
+import type { ReactNode } from 'react';
+import { ChevronDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { getPropertyTypeLabel } from '@/lib/propertyTypeConfig';
 import { shouldSubmitBedrooms } from '@/features/discover/filters/bedroomApplicability';
 import type { CommercialSubtype } from '@/lib/listing-constants';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import { COMMERCIAL_FAMILY_TOKENS } from '@/features/discover/buyer-filters/selectors/familyTokens';
 import type { UsePropertyFilterGroupsResult } from '@/features/discover/buyer-filters/controllers/usePropertyFilterGroups';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { FamilyRow } from './FamilyRow';
 import { ResidentialTypeRow } from './ResidentialTypeRow';
 import { CommercialSubtypeRow } from './CommercialSubtypeRow';
@@ -22,9 +26,10 @@ import { BedroomsRow } from './BedroomsRow';
 import { AreaSizeRow } from './AreaSizeRow';
 import { BudgetRow } from './BudgetRow';
 import { SelectedFilterChips } from './SelectedFilterChips';
+import { CompactFilterToolbar } from './CompactFilterToolbar';
 
 const QUICK_PROPERTY_TYPES = ['apartment', 'villa', 'residential_plot'] as const;
-const QUICK_BEDROOMS = [2, 3] as const;
+export const QUICK_BEDROOMS = [2, 3] as const;
 
 /**
  * Issue #2555 — the mock's AREA (SQ FT) presets.
@@ -33,14 +38,14 @@ const QUICK_BEDROOMS = [2, 3] as const;
  * it is the absence of a narrowing rather than a fourth size. Mirrors how "All commercial" and
  * "Any price" express the same idea elsewhere in this file.
  */
-const QUICK_AREA_PRESETS: readonly { testId: string; label: string; min: number | undefined }[] = [
+export const QUICK_AREA_PRESETS: readonly { testId: string; label: string; min: number | undefined }[] = [
   { testId: 'quick-chip-area-any', label: 'Any size', min: undefined },
   { testId: 'quick-chip-area-1000', label: '1,000+ sq ft', min: 1000 },
   { testId: 'quick-chip-area-2500', label: '2,500+ sq ft', min: 2500 },
   { testId: 'quick-chip-area-5000', label: '5,000+ sq ft', min: 5000 },
 ];
 
-const PROPERTY_TYPE_LABELS: Record<string, string> = {
+export const PROPERTY_TYPE_LABELS: Record<string, string> = {
   apartment: 'Apartments',
   villa: 'Villas',
   residential_plot: 'Plots',
@@ -49,7 +54,7 @@ const PROPERTY_TYPE_LABELS: Record<string, string> = {
 // Issue #2658 (C3) — the {value, label} shape ResidentialTypeRow renders,
 // derived once from the two constants above rather than re-typed at the
 // call site.
-const RESIDENTIAL_TYPE_CHOICES = QUICK_PROPERTY_TYPES.map((value) => ({
+export const RESIDENTIAL_TYPE_CHOICES = QUICK_PROPERTY_TYPES.map((value) => ({
   value,
   label: PROPERTY_TYPE_LABELS[value],
 }));
@@ -60,7 +65,7 @@ const RESIDENTIAL_TYPE_CHOICES = QUICK_PROPERTY_TYPES.map((value) => ({
  * DELIBERATELY NOT `COMMERCIAL_SUBTYPE_LABELS` from propertyTypeConfig.ts, which renders SHOP as
  * "Commercial Shop" and OFFICE as "Commercial Office". `value: null` is the "All commercial" chip.
  */
-const COMMERCIAL_SUBTYPE_CHOICES: readonly {
+export const COMMERCIAL_SUBTYPE_CHOICES: readonly {
   testId: string;
   label: string;
   value: CommercialSubtype | null;
@@ -77,6 +82,71 @@ export interface PropertyFilterGroupsProps extends UsePropertyFilterGroupsResult
   filters: PropertyFilters;
   isCommercialSubtypeSupported?: boolean;
   isReadyToMoveSupported?: boolean;
+  /**
+   * Issue #2729 §4 — 'stacked' (default, unchanged) is the vertical quick-filter card every
+   * existing consumer (MapFilterSheet, and any caller that omits this prop) keeps rendering
+   * byte-for-byte. 'compact' is the NEW single-row desktop toolbar (AreaSelectedPanel only,
+   * gated ≥1366 by the caller) — same state/handlers, same sub-row components
+   * (FamilyRow/ResidentialTypeRow/CommercialSubtypeRow/BedroomsRow/AreaSizeRow/BudgetRow, all
+   * UNMODIFIED), just a different PLACEMENT: EVERY group is its own compact pill that opens a
+   * Popover containing the existing row (D3 fix — an earlier revision rendered the full stacked
+   * rows inline, which measured 123px/3 lines in the real browser, not one row). This is a
+   * deterministic priority split, not a measured/ResizeObserver overflow collapse — DoD
+   * explicitly allows either ("measured overflow collapse is optional").
+   */
+  layout?: 'stacked' | 'compact';
+}
+
+/**
+ * Issue #2729 §4 — one compact filter-group pill (Family/Type/Subtype/BHK/Budget/Area), each
+ * opening a `Popover` containing the group's existing, unmodified row component — the SAME
+ * pattern "More filters" already used, just applied per-group instead of only to the overflow.
+ * Built on the repo's `Popover` primitive (Radix), which supplies `aria-haspopup`/`aria-expanded`
+ * on the trigger and Escape/outside-click dismissal + focus-restore for free.
+ */
+export function FilterPill({
+  label,
+  isActive,
+  /**
+   * Issue #2729 R4 fix — 'tinted' (default) is the accent-tint/border-only active state every
+   * OTHER pill uses; 'filled' is the mock's solid-accent/white-text style, reserved for the
+   * Family pill (its value is never "unset" — Residential/Commercial is always a real choice,
+   * unlike the other pills' "Any …" idle state, so the mock gives it the stronger treatment).
+   */
+  variant = 'tinted',
+  testId,
+  children,
+}: {
+  label: string;
+  isActive?: boolean;
+  variant?: 'tinted' | 'filled';
+  testId: string;
+  children: ReactNode;
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          data-testid={testId}
+          className={cn(
+            'inline-flex h-[34px] shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-3 text-xs font-semibold transition-colors',
+            isActive && variant === 'filled'
+              ? 'border-copper bg-copper text-copper-foreground hover:bg-copper-hover'
+              : isActive
+                ? 'border-copper bg-copper-tint text-copper'
+                : 'border-border text-foreground hover:border-border-strong',
+          )}
+        >
+          <span className="max-w-[110px] truncate">{label}</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[280px]" data-testid={`${testId}-popover`}>
+        {children}
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 /**
@@ -90,6 +160,7 @@ export function PropertyFilterGroups(props: PropertyFilterGroupsProps) {
     filters,
     isCommercialSubtypeSupported = false,
     isReadyToMoveSupported = true,
+    layout = 'stacked',
     activeFamily,
     activePropertyTypes,
     activeBedrooms,
@@ -120,6 +191,108 @@ export function PropertyFilterGroups(props: PropertyFilterGroupsProps) {
     handleRemoveBedroom,
     handleRemoveReadyToMove,
   } = props;
+
+  // Issue #2729 §4 — the selected-chip list is IDENTICAL in both layouts (built once, reused by
+  // both branches below) — "active filter count/selection remains visible" holds regardless of
+  // which groups are inline vs under More filters, and there is exactly one chip-removal surface,
+  // never two.
+  const selectedChipsNode = (() => {
+    const selectedChips: {
+      key: string;
+      label: string;
+      testId: string;
+      onRemove: () => void;
+    }[] = [];
+
+    const propertyTypeChips = filters.propertyTypes ?? [];
+    const isDerivedCommercialFamilySelection =
+      (filters.commercialSubtypes?.length ?? 0) === 0 &&
+      propertyTypeChips.length === COMMERCIAL_FAMILY_TOKENS.length &&
+      COMMERCIAL_FAMILY_TOKENS.every((token) => propertyTypeChips.includes(token));
+
+    if (!isDerivedCommercialFamilySelection) {
+      propertyTypeChips.forEach((type) => {
+        selectedChips.push({
+          key: `type-${type}`,
+          label: getPropertyTypeLabel(type),
+          testId: `selected-chip-type-${type}`,
+          onRemove: () => handleRemovePropertyType(type),
+        });
+      });
+    }
+
+    if (isCommercialSubtypeSupported) {
+      (filters.commercialSubtypes ?? []).forEach((subtype) => {
+        selectedChips.push({
+          key: `subtype-${subtype}`,
+          label: COMMERCIAL_SUBTYPE_CHOICES.find((c) => c.value === subtype)?.label ?? subtype,
+          testId: `selected-chip-subtype-${subtype}`,
+          onRemove: () => handleRemoveSubtype(subtype),
+        });
+      });
+    }
+
+    if (shouldSubmitBedrooms(filters)) {
+      (filters.bedrooms ?? []).forEach((bed) => {
+        selectedChips.push({
+          key: `bedrooms-${bed}`,
+          label: `${bed} BHK`,
+          testId: `selected-chip-bedrooms-${bed}`,
+          onRemove: () => handleRemoveBedroom(bed),
+        });
+      });
+    }
+
+    if (filters.readyToMove && isReadyToMoveSupported) {
+      selectedChips.push({
+        key: 'ready-to-move',
+        label: possessionLabel,
+        testId: 'selected-chip-ready-to-move',
+        onRemove: handleRemoveReadyToMove,
+      });
+    }
+
+    if (activePriceMax != null) {
+      selectedChips.push({
+        key: 'budget',
+        label:
+          activeBudgetBands.find((b) => b.max === activePriceMax)?.label ??
+          `≤ ₹${activePriceMax.toLocaleString('en-IN')}${budgetIntent === 'rent' ? '/month' : ''}`,
+        testId: 'selected-chip-budget',
+        onRemove: handleRemoveBudget,
+      });
+    }
+
+    if (activeAreaMin != null || filters.areaMaxSqft != null) {
+      const fmt = (n: number) => n.toLocaleString('en-IN');
+      const range =
+        activeAreaMin != null && filters.areaMaxSqft != null
+          ? `${fmt(activeAreaMin)} – ${fmt(filters.areaMaxSqft)} sq ft`
+          : activeAreaMin != null
+            ? `${fmt(activeAreaMin)}+ sq ft`
+            : `Up to ${fmt(filters.areaMaxSqft!)} sq ft`;
+      selectedChips.push({
+        key: 'area',
+        label:
+          areaControl.disclosure != null
+            ? `${areaControl.shortLabel}: ${range} — ${areaControl.disclosure}`
+            : `${areaControl.shortLabel}: ${range}`,
+        testId: 'selected-chip-area',
+        onRemove: handleRemoveArea,
+      });
+    }
+
+    return <SelectedFilterChips chips={selectedChips} />;
+  })();
+
+  if (layout === 'compact') {
+    // Issue #2729 §4/V1 — the compact toolbar's overflow collapse needs a `ResizeObserver` +
+    // local state, which would break THIS component's own documented "no internal hook call, no
+    // local state" contract (shared by AreaSelectedPanel AND MapFilterSheet). Extracted to
+    // `CompactFilterToolbar`, which owns that state itself; this component stays hook-free and
+    // just delegates, passing through every prop unchanged plus the already-built chip list.
+    return <CompactFilterToolbar {...props} selectedChipsNode={selectedChipsNode} />;
+  }
 
   return (
     <>

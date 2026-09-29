@@ -116,6 +116,16 @@ export interface HierarchyBackButtonProps {
    */
   historyAdjacencyLog: readonly HistoryAdjacencyEntry[];
   className?: string;
+  /**
+   * Issue #2729 V2b — renders a short "‹ Back" label instead of the full
+   * "Back to {displayLabel}" text. Used ONLY for the compact instance placed
+   * on the breadcrumb row at the desktop-reskin floor (see
+   * `AreaLeafListingsSurface.tsx`); the standalone row below that floor keeps
+   * the full label. The full destination name is never lost — it stays on
+   * `aria-label` and `title` regardless of this flag, and the POP/REPLACE
+   * navigation mechanism below is completely unchanged by it.
+   */
+  compact?: boolean;
 }
 
 export function HierarchyBackButton({
@@ -124,6 +134,7 @@ export function HierarchyBackButton({
   cityLabel,
   historyAdjacencyLog,
   className,
+  compact = false,
 }: HierarchyBackButtonProps) {
   const navigate = useNavigate();
 
@@ -170,8 +181,9 @@ export function HierarchyBackButton({
             }
           : undefined
       }
-      data-testid="areas-hierarchy-back"
+      data-testid={compact ? 'areas-hierarchy-back-compact' : 'areas-hierarchy-back'}
       aria-label={`Back to ${destination.displayLabel}`}
+      title={compact ? `Back to ${destination.displayLabel}` : undefined}
       className={cn(
         'inline-flex items-center gap-1 text-sm font-medium text-muted-foreground',
         'hover:text-foreground transition-colors rounded',
@@ -180,7 +192,7 @@ export function HierarchyBackButton({
       )}
     >
       <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
-      <span className="truncate">Back to {destination.displayLabel}</span>
+      {compact ? <span>Back</span> : <span className="truncate">Back to {destination.displayLabel}</span>}
     </Link>
   );
 }

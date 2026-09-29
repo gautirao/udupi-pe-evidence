@@ -331,16 +331,35 @@ export function AreaLeafListingsSurface({ view, commands }: AreaLeafListingsSurf
     // `DiscoverRightPanel` root uses, so AreaSelectedPanel's own `flex-1
     // overflow-y-auto` root actually scrolls inside the panel instead of the
     // whole document growing past the mobile viewport. Desktop is unaffected.
+    // Issue #2729 D5 — additive `min-[1366px]:` tightening only (every existing class stays, at
+    // every width, for the mobile/tablet regression guard): real-browser verification at the
+    // desktop-reskin floor found ~140px of vertical chrome (this back-link row, the sticky
+    // breadcrumb, a standalone Trends row inside AreaSelectedPanel's Toolbar) ahead of "Properties
+    // in …", failing the "first card row visible at 1366×768 without scrolling" requirement. This
+    // wrapper's own `p-4` top inset and the back-button's `mb-3` bottom margin are reduced at that
+    // floor; Trends itself moves into `CompactResultsHeader`'s right cluster (see
+    // AreaSelectedPanel.tsx's `<Toolbar trendsHref={...}>` call — it now omits `trendsHref` at the
+    // desktop-reskin floor so the link is not shown twice) rather than being deleted from
+    // anywhere — every destination stays reachable, nothing is removed.
     <div
-      className="flex h-full min-h-0 flex-1 flex-col overflow-hidden p-4"
+      className="flex h-full min-h-0 flex-1 flex-col overflow-hidden p-4 min-[1366px]:pt-1"
       data-testid="areas-journey-panel-listings"
     >
+      {/* Issue #2729 V2b — hidden at the desktop-reskin floor (≥1366) only: its DESTINATION node
+          is identical to the breadcrumb's own rightmost crumb below (both resolve from the same
+          `node.ancestry[node.ancestry.length - 1]`, see `resolveHierarchyBackDestination`), but its
+          NAVIGATION MECHANISM is not — this component's module doc (`HierarchyBackButton.tsx`,
+          "FIX-VERIFY CYCLE" comments) establishes across 4 documented defect cycles that its
+          guarded real-browser POP (vs a breadcrumb click's PUSH via `selectNode`) is load-bearing
+          for Forward-restorability, so it is MOVED (compact, on the breadcrumb row below via
+          `view.area.hierarchyBackButton`), never simply hidden/deleted. Below 1366 this standalone
+          row is completely unchanged. */}
       <HierarchyBackButton
         node={node}
         buildHref={buildNodeHref}
         cityLabel={CITY_CONFIG[nav.city]?.label ?? nav.city}
         historyAdjacencyLog={historyAdjacencyLog}
-        className="mb-3 shrink-0"
+        className="mb-3 shrink-0 min-[1366px]:hidden"
       />
       {isAreaSetDraftOpen ? (
         <AreaSetDraftPanel />
@@ -358,6 +377,20 @@ export function AreaLeafListingsSurface({ view, commands }: AreaLeafListingsSurf
             // Issue #1956 PR-5 (AC5.9) — breadcrumb region/group, see above.
             regionName,
             groupName,
+            // Issue #2729 V2b — the SAME HierarchyBackButton/handler as the standalone row above
+            // (same node/buildHref/cityLabel/historyAdjacencyLog, so the identical POP/REPLACE
+            // guard applies), just rendered compact on the breadcrumb row at ≥1366. See the
+            // standalone instance's comment above for why this is a move, not a duplication of
+            // logic — `compact` only changes the rendered label/title, never the handler.
+            hierarchyBackButton: (
+              <HierarchyBackButton
+                node={node}
+                buildHref={buildNodeHref}
+                cityLabel={CITY_CONFIG[nav.city]?.label ?? nav.city}
+                historyAdjacencyLog={historyAdjacencyLog}
+                compact
+              />
+            ),
           },
           results: {
             listings: areaListingsForPanel,

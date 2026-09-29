@@ -7,7 +7,13 @@ export type PropertyFamily = 'residential' | 'commercial';
 export interface FamilyRowProps {
   activeFamily: PropertyFamily;
   onSelectFamily: (family: PropertyFamily) => void;
-  possession: PossessionChipProps;
+  /**
+   * Issue #2729 R3 fix — `null` renders no possession chip at all (a genuine "no-render" option,
+   * not a disabled/decorative one). Added for the compact desktop toolbar, where the possession
+   * toggle moves to "More filters" instead of sitting inside this pill's popover — every
+   * pre-existing caller keeps passing a real object here and is completely unaffected.
+   */
+  possession: PossessionChipProps | null;
 }
 
 /**
@@ -75,7 +81,7 @@ export function FamilyRow({ activeFamily, onSelectFamily, possession }: FamilyRo
         >
           Commercial
         </Button>
-        <PossessionChip {...possession} />
+        {possession && <PossessionChip {...possession} />}
       </div>
     </div>
   );

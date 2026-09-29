@@ -28,7 +28,10 @@ export function WorkflowGroup({ areaLabel, searchQuery, onSearchChange, areaReco
   if (onSearchChange == null && areaRecommendationTiles == null) return null;
 
   return (
-    <div className="flex flex-col gap-2 border-b border-border px-4 py-2.5">
+    // Issue #2729 V2/V2c fix — additive `min-[1366px]:` tightening (py-2.5→py-1); part of the
+    // vertical-chrome recovery — see Toolbar.tsx's matching comment for the running total. V2c
+    // (Commercial single-area, 1px over budget at exactly 1366×768) took the last 2px/side here.
+    <div className="flex flex-col gap-2 border-b border-border px-4 py-2.5 min-[1366px]:py-1">
       {onSearchChange && (
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

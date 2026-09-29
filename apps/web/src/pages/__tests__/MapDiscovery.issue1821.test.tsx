@@ -136,6 +136,9 @@ vi.mock('@/features/discover/context/useDiscoverContext', () => ({
     registerAreaSetCameraActions: vi.fn(),
     getAreaSetCameraRestoreRequest: vi.fn(() => null),
     setAreaSetCameraRestoreRequest: vi.fn(),
+    // Issue #2729 (R1 fix) — new required shell member (see context/types.ts).
+    canonicalScopeLabel: null,
+    setCanonicalScopeLabel: vi.fn(),
   }),
 }));
 

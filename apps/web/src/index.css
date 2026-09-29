@@ -784,7 +784,20 @@
      `.grid-cols-1` utility at equal specificity — `components` always loses
      to `utilities` regardless of source order. The 560px threshold mirrors
      the ReTrends mock's own panel-width breakpoint for switching the listing
-     grid to two columns (VISUAL_RULES.md §1). */
+     grid to two columns (VISUAL_RULES.md §1).
+
+     Issue #2729 P2 fix (pre-push reviewer, HIGH) — the §6 revision below
+     REVERTS this rule to its ORIGINAL fixed `repeat(2, ...)`/12px gap. The
+     §6 attempt applied the mock's auto-fill formula HERE, gated only by this
+     560px CONTAINER-width threshold — but a container query reads the
+     PANEL's width, which reaches 560px at ordinary tablet/narrow-desktop
+     VIEWPORT widths well below 1366 (measured: a 900×768 Playwright frame
+     rendered 3 columns where BEFORE rendered 2), leaking the density change
+     below the desktop-reskin floor the issue requires unchanged. The
+     auto-fill/14px-gap formula now lives in a SEPARATE, VIEWPORT-width rule
+     immediately below, gated at literal 1366px (the same
+     `DISCOVER_HEADER_HOSTS_CONTROLS_MIN_WIDTH` value the JS `isDesktopReskin`
+     gate uses) — not a second breakpoint, the same one expressed in CSS. */
   .area-panel-container {
     container-type: inline-size;
   }
@@ -792,6 +805,19 @@
   @container (min-width: 560px) {
     .area-listings-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  /* Issue #2729 §6/P2 — the mock's `repeat(auto-fill, minmax(250px, 1fr))` / 14px-gap density,
+     scoped to the ACTUAL desktop-reskin floor (viewport ≥1366px, not panel ≥560px — see the
+     comment above). A plain `@media` rule, not a container query, deliberately: it must key off
+     the SAME signal `isDesktopReskin` uses (viewport width), and it is placed AFTER the 560px
+     container-query block above in this same `utilities` layer so it wins the cascade-layer tie
+     on the (rare) width where both could apply — later source order wins at equal specificity. */
+  @media (min-width: 1366px) {
+    .area-listings-grid {
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 14px;
     }
   }
 }

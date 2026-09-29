@@ -217,8 +217,13 @@ export function ListingsBody({
             )}
             {/* Intent-aware verified result summary (Issue #1494 / #1606) */}
             {/* a4 — warm evergreen-tint/60 strip instead of near-invisible bg-muted/20 */}
+            {/* Issue #2729 V2/V2b fix — additive `min-[1366px]:` tightening (py-2→py-0.5, was
+                py-1 after V2); still comfortably fits the h-4 icon (16px) with 4px total vertical
+                padding — part of the vertical-chrome recovery, see Toolbar.tsx's matching
+                comment for the running total. Explicitly NOT the verified strip's removal — the
+                issue's own instruction was "don't remove the verified strip", only tighten it. */}
             <div
-              className="flex items-center gap-1.5 border-b border-border bg-evergreen-tint/60 px-4 py-2"
+              className="flex items-center gap-1.5 border-b border-border bg-evergreen-tint/60 px-4 py-2 min-[1366px]:py-0.5"
               data-testid="area-result-summary"
             >
               <ShieldCheck className="h-4 w-4 shrink-0 text-evergreen" aria-hidden="true" />
@@ -238,7 +243,10 @@ export function ListingsBody({
                 in src/index.css. Issue #2596 — closes the dead band between controls and
                 results (the grid keeps its full side/bottom padding, only loses the
                 redundant top inset). */}
-            <div className="area-listings-grid grid grid-cols-1 gap-3 px-4 pb-4 pt-2">
+            {/* Issue #2729 V2/V2c fix — additive `min-[1366px]:` tightening (pt-2→pt-0.5); part
+                of the vertical-chrome recovery — see Toolbar.tsx's matching comment for the
+                running total. */}
+            <div className="area-listings-grid grid grid-cols-1 gap-3 px-4 pb-4 pt-2 min-[1366px]:pt-0.5">
               {areaListings.map((listing) => (
                 <div key={listing.id} ref={registerCardRef(listing.id)}>
                   <PropertyCard

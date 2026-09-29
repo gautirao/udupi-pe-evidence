@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import {
   useDiscoverActions,
   useDiscoverNav,
+  useDiscoverShell,
 } from '@/features/discover/context/useDiscoverContext';
 import { useDiscoverAreas, type DiscoverArea } from '@/hooks/useDiscoverAreas';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
@@ -248,11 +249,42 @@ export interface AreaAutocompleteProps {
   onSelectArea: (areaKey: string) => void;
   /** True only when the collapsed desktop header hosts this bar — applies the header-only min-width floor. Defaults to false (matches main) for standalone/panel usage. */
   hostsHeaderControls?: boolean;
+  /**
+   * Issue #2729 §1 — the committed area/hierarchy scope this search represents right now
+   * (e.g. "Hebbal"), sourced by the caller from the SAME nav state the Results heading reads
+   * (`nav.areaKey` via `useDiscoverAreas`), never a second lookup. Shown as the input's IDLE
+   * value; undefined/null when no committed area applies (no misleading placeholder is invented
+   * — the field simply falls back to the existing empty-placeholder behaviour).
+   */
+  canonicalAreaLabel?: string | null;
 }
 
-export function AreaAutocomplete({ areas, journey, onSelectArea, hostsHeaderControls = false }: AreaAutocompleteProps) {
+export function AreaAutocomplete({
+  areas,
+  journey,
+  onSelectArea,
+  hostsHeaderControls = false,
+  canonicalAreaLabel = null,
+}: AreaAutocompleteProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
+  // Issue #2729 §1 — idle/draft/revert. IDLE (not editing): the input shows the committed
+  // canonical scope, never a stale/misleading placeholder. Focusing starts a DRAFT (the typed
+  // `query`); Escape/blur/outside-click without a selection discards the draft and falls back to
+  // the canonical value again. Selecting a result is unaffected — `onSelectArea` below already
+  // commits the new scope through the existing navigation path, and the NEXT render's
+  // `canonicalAreaLabel` reflects it.
+  //
+  // Issue #2729 (post-merge fix-verify, BLOCKING) — this entire draft/revert behaviour is
+  // gated on `hostsHeaderControls`: it is ONLY the header-hosted instance (the one mount site
+  // that shows an idle canonical label at all — `canonicalAreaLabel` is always null at the other
+  // two) that gets the new blur/Escape/idle-value semantics. At the panel-row (1024–1365) and
+  // mobile-row instances, `draftEnabled` is false and every branch below collapses back to the
+  // exact 3dd9e26f (pre-#2729) behaviour: `value` is always `query`, there is no `onBlur` handler
+  // at all, and Escape only closes the listbox + refocuses — it never clears typed text.
+  const draftEnabled = hostsHeaderControls;
+  const [isEditing, setIsEditing] = useState(false);
+  const displayValue = draftEnabled ? (isEditing ? query : (canonicalAreaLabel ?? '')) : query;
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -294,7 +326,25 @@ export function AreaAutocomplete({ areas, journey, onSelectArea, hostsHeaderCont
   const commitSelection = (area: DiscoverArea) => {
     onSelectArea(area.areaKey);
     setQuery('');
+    // Issue #2729 R2 fix — leaves draft mode on selection so the field shows the CANONICAL value
+    // again (briefly the old one, until the async navigation resolves and `canonicalAreaLabel`
+    // updates — never blank). Previously `isEditing` stayed true after a commit, so the field
+    // showed an empty draft indefinitely even though a real selection had just been made.
+    // Gated on `draftEnabled` (see its doc above) — `isEditing` is display-inert at the other two
+    // mount sites, but setting it unconditionally would still be a needless divergence from base.
+    if (draftEnabled) setIsEditing(false);
     closeAndRefocus();
+  };
+
+  // Issue #2729 §1 — discards an abandoned draft and returns the field to the canonical value.
+  // Shared by blur, outside-click (native blur already fires there) and Escape, so all three
+  // "abandon" paths agree on one behaviour instead of drifting apart. ONLY wired up (via `onBlur`
+  // below, and the `draftEnabled` branch of Escape) at the header-hosted instance — see
+  // `draftEnabled`'s doc above.
+  const revertDraft = () => {
+    setOpen(false);
+    setIsEditing(false);
+    setQuery('');
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -316,7 +366,22 @@ export function AreaAutocomplete({ areas, journey, onSelectArea, hostsHeaderCont
       const area = filteredAreas[highlightedIndex];
       if (area) commitSelection(area);
     } else if (e.key === 'Escape') {
-      if (open) {
+      // Issue #2729 (post-merge fix-verify, BLOCKING) — gated on `draftEnabled`. At the
+      // header-hosted instance, Escape now ABANDONS the draft: `revertDraft` flips `isEditing`
+      // back to false (so the field shows the canonical value again) and clears the typed text.
+      // At the other two mount sites this must behave EXACTLY as 3dd9e26f: Escape only closes
+      // the listbox and refocuses (via `closeAndRefocus`) — it never touches `query`, so typed
+      // text survives Escape there, matching pre-#2729 behaviour byte-for-byte.
+      if (draftEnabled) {
+        if (open || query) {
+          e.preventDefault();
+          // The pre-#2729 AC8 contract ("Escape closes the listbox and returns focus to the
+          // input") still holds unchanged — focus was never taken away in the first place here,
+          // so there is nothing to refocus; only `closeAndRefocus`'s redundant `.focus()` call
+          // is gone.
+          revertDraft();
+        }
+      } else if (open) {
         e.preventDefault();
         closeAndRefocus();
       }
@@ -356,22 +421,41 @@ export function AreaAutocomplete({ areas, journey, onSelectArea, hostsHeaderCont
           aria-label={copy.label}
           placeholder={copy.placeholder}
           data-testid="control-bar-area-input"
-          value={query}
+          data-editing={draftEnabled && isEditing ? true : undefined}
+          value={displayValue}
           onChange={(e) => {
+            if (draftEnabled) setIsEditing(true);
             setQuery(e.target.value);
             setOpen(true);
           }}
           onFocus={() => {
+            // Issue #2729 §1 — focusing always starts a fresh draft; the canonical value shown
+            // while idle is not itself an editable query (typing after focus searches from
+            // scratch, exactly like the pre-#2729 empty-idle behaviour). Gated on `draftEnabled`
+            // — see its doc above.
+            if (draftEnabled) setIsEditing(true);
             if (query.trim()) setOpen(true);
           }}
+          // Issue #2729 (post-merge fix-verify, BLOCKING) — `onBlur` is ONLY wired up at the
+          // header-hosted instance. At the other two mount sites there must be NO blur handler at
+          // all, matching 3dd9e26f exactly — `revertDraft` clears `query`, which would otherwise
+          // wipe a typed-but-not-yet-selected search below the 1366 invariant.
+          onBlur={draftEnabled ? revertDraft : undefined}
           onKeyDown={handleKeyDown}
           className="h-11 w-full rounded-lg border border-border bg-card pl-9 pr-9 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
-        {query && (
+        {(draftEnabled ? isEditing : true) && query && (
           <button
             type="button"
             aria-label="Clear area search"
             data-testid="control-bar-area-clear"
+            // Issue #2729 §1 — without this, the button's own mousedown blurs the input FIRST
+            // (native focus-move-on-mousedown), which would fire `revertDraft` and wipe the
+            // draft this button is trying to only partially clear. Gated on `draftEnabled` —
+            // there is no `onBlur` handler at all at the other two mount sites (see its doc
+            // above), so this guard is only meaningful, and only added, where that handler
+            // exists.
+            onMouseDown={draftEnabled ? (e) => e.preventDefault() : undefined}
             onClick={() => {
               setQuery('');
               inputRef.current?.focus();
@@ -427,6 +511,11 @@ export function AreaAutocomplete({ areas, journey, onSelectArea, hostsHeaderCont
                     aria-selected={index === highlightedIndex}
                     data-testid={`control-bar-area-option-${area.areaKey}`}
                     onMouseEnter={() => setHighlightedIndex(index)}
+                    // Issue #2729 §1 — see the clear button's identical guard: without this the
+                    // option's own mousedown blurs (and reverts) the input before its click fires,
+                    // and `revertDraft` closing the listbox on blur would drop the click entirely.
+                    // Gated on `draftEnabled` — same reasoning as the clear button above.
+                    onMouseDown={draftEnabled ? (e) => e.preventDefault() : undefined}
                     onClick={() => commitSelection(area)}
                     className={cn(
                       'flex w-full items-center justify-between px-3.5 py-2 text-left text-sm text-foreground',
@@ -487,6 +576,36 @@ export function DiscoverControlBar({ mobileMapTrigger, hostsHeaderControls = fal
   // `nav.city || DEFAULT_CITY` idiom.
   const { data } = useDiscoverAreas(nav.city || DEFAULT_CITY);
   const areas = data?.areas ?? [];
+  // Issue #2729 §1 (D1/R1 fix) — the FIRST-priority source is
+  // `DiscoverShellContextValue.canonicalScopeLabel`, the EXACT string `AreaSelectedPanel`
+  // broadcasts as the SAME value the Results heading is rendering right now ("Properties in
+  // {this}", or the joined AREA_SET names). This replaces an earlier, WRONG attempt that
+  // independently re-derived the label from `nav.resultScope` (the committed `rscope`/`rareas`
+  // result-scope payload): round-2 browser verification found that param can be STALE relative to
+  // the current hierarchy position (`node=`) — e.g. after picking a new area from this very
+  // search, `node` moves but the committed result-scope payload does not, until a fresh commit —
+  // so the title (which follows `node`) and the search (which followed `resultScope`) visibly
+  // disagreed. Reading the panel's own broadcast instead of a second, independent URL-param
+  // derivation is what makes them structurally unable to disagree, whichever URL field ends up
+  // authoritative for the title in a given state; a PRE-EXISTING staleness in the underlying
+  // `rareas` param itself (the title being "wrong" relative to the intended scope) is unaffected
+  // by this and out of scope here (flagged separately, not silently fixed).
+  //
+  // `null` whenever no `AreaSelectedPanel` is mounted (school-first/agri-first/journey-less/
+  // landing) — the shell field itself is `null` there, so the search correctly falls back to its
+  // placeholder with no separate journey check needed here any more.
+  //
+  // Issue #2729 P1 fix (pre-push reviewer, BLOCKING) — `hostsHeaderControls` gates this too.
+  // `AreaSelectedPanel` broadcasts `canonicalScopeLabel` UNCONDITIONALLY (correctly — it doesn't
+  // know or care which of this control bar's THREE mount sites is active), but this component
+  // itself also mounts below the desktop-reskin floor: the 1024–1365 panel row
+  // (`DiscoverJourneyPanelShell.tsx`) and the mobile row (`DiscoverPageShell.tsx`), both with
+  // `hostsHeaderControls=false`. Reading the broadcast unconditionally leaked the idle canonical
+  // label into those two rows, which the issue requires to stay byte-for-byte unchanged below
+  // 1366. Only the header-hosted instance (`hostsHeaderControls=true`, the ONE mount site that
+  // actually replaces the old two-row layout with the compact single-row header) shows it.
+  const shell = useDiscoverShell();
+  const canonicalAreaLabel = hostsHeaderControls ? shell.canonicalScopeLabel : null;
   const { toast } = useToast();
   // Issue #1956 PR 6 ([rulings.option_a_search_convergence_2026_08_03]) — the
   // in-app area-search control used to write the legacy `areaKey=` param
@@ -656,6 +775,7 @@ export function DiscoverControlBar({ mobileMapTrigger, hostsHeaderControls = fal
         journey={nav.journey}
         onSelectArea={handleSelectArea}
         hostsHeaderControls={hostsHeaderControls}
+        canonicalAreaLabel={canonicalAreaLabel}
       />
     </div>
   );

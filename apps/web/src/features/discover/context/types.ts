@@ -156,4 +156,24 @@ export interface DiscoverShellContextValue {
   getAreaSetCameraRestoreRequest: () => AreaSetCameraRestoreRequest | null;
   /** Sets (or, with `null`, clears) the pending restore request above. */
   setAreaSetCameraRestoreRequest: (request: AreaSetCameraRestoreRequest | null) => void;
+  /**
+   * Issue #2729 (R1 fix) — the EXACT scope-name string the Results heading is currently
+   * rendering ("Properties in {this}", or the joined AREA_SET names), broadcast by
+   * `AreaSelectedPanel` (the single production writer) so the global area search
+   * (`DiscoverControlBar`) can show the SAME value when idle instead of independently
+   * re-deriving it from a possibly-stale URL param (the bug: `node=` can move — e.g. picking a
+   * new area from the global search — while the committed `rscope`/`rareas` result-scope payload
+   * stays behind, a PRE-EXISTING divergence this field does not fix, only stops the search field
+   * from contradicting the title about it). `null` whenever no AreaSelectedPanel is mounted
+   * (school-first/agri-first/journey-less/landing), matching the pre-existing "no canonical value
+   * there" behaviour for those journeys.
+   *
+   * DELIBERATELY a level (like `isAreaSetDraftOpen` above), not an edge — the header and the
+   * panel can mount/remount independently across navigations, so a level the consumer reads on
+   * every render (rather than a one-shot event) is what keeps the two from ever going stale
+   * relative to each other.
+   */
+  canonicalScopeLabel: string | null;
+  /** Sets (or, with `null`, clears) the label above. `AreaSelectedPanel` is the only writer. */
+  setCanonicalScopeLabel: (label: string | null) => void;
 }

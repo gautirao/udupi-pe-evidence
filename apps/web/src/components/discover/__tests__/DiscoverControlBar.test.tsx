@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import type { DiscoverUrlState, DiscoverUrlActions } from '@/hooks/useDiscoverUrlState';
@@ -93,11 +93,19 @@ const { BASE_NAV, ACTIONS } = vi.hoisted(() => {
 
 let currentNav: DiscoverUrlState = BASE_NAV;
 let currentIsMobileShell = false;
+// Issue #2729 R1 fix — `canonicalAreaLabel` now reads `shell.canonicalScopeLabel` (the value
+// `AreaSelectedPanel` broadcasts, matching the Results title exactly) instead of independently
+// re-deriving it from `nav`. Settable here so tests can drive it directly.
+let currentCanonicalScopeLabel: string | null = null;
 
 vi.mock('@/features/discover/context/useDiscoverContext', () => ({
   useDiscoverNav: () => currentNav,
   useDiscoverActions: () => ACTIONS,
-  useDiscoverShell: () => ({ isMobileShell: currentIsMobileShell }),
+  useDiscoverShell: () => ({
+    isMobileShell: currentIsMobileShell,
+    canonicalScopeLabel: currentCanonicalScopeLabel,
+    setCanonicalScopeLabel: () => {},
+  }),
 }));
 
 const AREAS: DiscoverArea[] = [
@@ -166,6 +174,7 @@ describe('DiscoverControlBar', () => {
     vi.clearAllMocks();
     currentNav = BASE_NAV;
     currentIsMobileShell = false;
+    currentCanonicalScopeLabel = null;
     mockResolveIsPending = false;
     mockUseDiscoverAreas.mockReturnValue({ data: { city: 'bangalore', areas: AREAS } });
   });
@@ -354,6 +363,26 @@ describe('DiscoverControlBar', () => {
       await user.click(screen.getByTestId('control-bar-area-option-area:koramangala'));
 
       expect(mockResolveMutate).not.toHaveBeenCalled();
+    });
+
+    // Issue #2729 (post-merge fix-verify, reviewer-required) — keyboard selection (ArrowDown then
+    // Enter) never goes through the mousedown/mouseup/click sequence `isSelectingRef` guards at
+    // all (it calls `commitSelection` directly from `handleKeyDown`'s Enter branch), so this
+    // proves the new guard didn't accidentally couple keyboard selection to pointer-gesture state.
+    it('keyboard selection (ArrowDown, Enter) still commits, independent of the pointer-gesture guard', async () => {
+      currentNav = { ...BASE_NAV, journey: 'area-first' };
+      const user = userEvent.setup();
+      render(<DiscoverControlBar />);
+      const input = screen.getByTestId('control-bar-area-input');
+      await user.type(input, 'koramangala');
+      await user.keyboard('{ArrowDown}');
+      await user.keyboard('{Enter}');
+
+      expect(mockResolveMutate).toHaveBeenCalledTimes(1);
+      expect(mockResolveMutate).toHaveBeenCalledWith(
+        { city: 'bangalore', areaKey: 'area:koramangala' },
+        expect.anything(),
+      );
     });
 
     // Issue #2203 (Option A') — the canonical resolve seam above is now
@@ -618,6 +647,191 @@ describe('DiscoverControlBar', () => {
       const label = screen.getByText('Looking to');
       expect(label).toHaveClass('hidden');
       expect(label).not.toHaveClass('lg:inline');
+    });
+  });
+
+  // ─── Issue #2729 §1/R1/P1 — idle canonical area / draft / revert ────
+  describe('idle canonical area / draft / revert (#2729 §1, R1 fix, P1 mobile-leak fix)', () => {
+    // Issue #2729 R1 fix — round-2 browser verification found the FIRST fix (deriving the label
+    // from `nav.resultScope`) could disagree with the Results title: `resultScope`/`rareas` is
+    // the COMMITTED result scope, which can be STALE relative to the current hierarchy position
+    // (`node=`, which the title follows) — e.g. right after picking a new area from this very
+    // search, before a fresh scope commit lands. `canonicalAreaLabel` now reads
+    // `shell.canonicalScopeLabel`, the EXACT string `AreaSelectedPanel` broadcasts as what the
+    // Results heading is rendering, so the two can never independently disagree — these tests
+    // drive that shared value directly instead of reconstructing `nav.resultScope`/`nav.areaKey`.
+    //
+    // Issue #2729 P1 fix (pre-push reviewer, BLOCKING) — `AreaSelectedPanel` broadcasts
+    // `canonicalScopeLabel` unconditionally, but THIS component mounts at THREE sites
+    // (`hostsHeaderControls=true` in the shared header at ≥1366; `false` in the 1024–1365 panel
+    // row and the mobile row), and only the header-hosted instance may show the idle label — the
+    // issue requires the other two byte-for-byte unchanged below 1366. Every test below now
+    // renders with `hostsHeaderControls` explicitly, and a new "mobile/panel-row leak" block
+    // covers the `false` instances.
+    it('idle (header-hosted instance): shows the canonical scope label AreaSelectedPanel broadcast, not a blank field', () => {
+      currentCanonicalScopeLabel = 'Koramangala';
+      render(<DiscoverControlBar hostsHeaderControls />);
+      const input = screen.getByTestId('control-bar-area-input') as HTMLInputElement;
+      expect(input.value).toBe('Koramangala');
+    });
+
+    it('idle with no canonical scope (no AreaSelectedPanel mounted — school-first/agri-first/journey-less/landing) falls back to the empty field', () => {
+      currentCanonicalScopeLabel = null;
+      render(<DiscoverControlBar hostsHeaderControls />);
+      const input = screen.getByTestId('control-bar-area-input') as HTMLInputElement;
+      expect(input.value).toBe('');
+    });
+
+    it('MUTATION CHECK: without the idle branch (canonicalAreaLabel treated as always null) this first assertion fails — proves the idle display is actually gated on shell.canonicalScopeLabel, not a static default', () => {
+      currentCanonicalScopeLabel = 'Koramangala';
+      render(<DiscoverControlBar hostsHeaderControls />);
+      const input = screen.getByTestId('control-bar-area-input') as HTMLInputElement;
+      expect(input.value).not.toBe(''); // would read '' if the gating were mutated out
+      expect(input.value).toBe('Koramangala');
+    });
+
+    it('focusing the idle field starts a draft: typing shows the typed text, not the canonical value', async () => {
+      currentCanonicalScopeLabel = 'Koramangala';
+      const user = userEvent.setup();
+      render(<DiscoverControlBar hostsHeaderControls />);
+      const input = screen.getByTestId('control-bar-area-input') as HTMLInputElement;
+      await user.click(input);
+      await user.type(input, 'white');
+      expect(input.value).toBe('white');
+    });
+
+    it('Escape after typing an abandoned draft reverts the field to the canonical area', async () => {
+      currentCanonicalScopeLabel = 'Koramangala';
+      const user = userEvent.setup();
+      render(<DiscoverControlBar hostsHeaderControls />);
+      const input = screen.getByTestId('control-bar-area-input') as HTMLInputElement;
+      await user.click(input);
+      await user.type(input, 'white');
+      expect(input.value).toBe('white');
+      await user.keyboard('{Escape}');
+      expect(input.value).toBe('Koramangala');
+    });
+
+    it('blurring (outside click) an abandoned draft reverts the field to the canonical area', async () => {
+      currentCanonicalScopeLabel = 'Koramangala';
+      const user = userEvent.setup();
+      render(
+        <div>
+          <DiscoverControlBar hostsHeaderControls />
+          <button type="button">elsewhere</button>
+        </div>,
+      );
+      const input = screen.getByTestId('control-bar-area-input') as HTMLInputElement;
+      await user.click(input);
+      await user.type(input, 'white');
+      expect(input.value).toBe('white');
+      await user.click(screen.getByRole('button', { name: 'elsewhere' }));
+      expect(input.value).toBe('Koramangala');
+    });
+
+    it('selecting a result still commits the new scope through the navigation-path resolver (draft/canonical wiring does not change the existing selection seam)', async () => {
+      currentNav = { ...BASE_NAV, journey: 'area-first' };
+      currentCanonicalScopeLabel = 'Koramangala';
+      const user = userEvent.setup();
+      render(<DiscoverControlBar hostsHeaderControls />);
+      const input = screen.getByTestId('control-bar-area-input') as HTMLInputElement;
+      await user.click(input);
+      await user.type(input, 'whitefield');
+      await user.click(screen.getByTestId('control-bar-area-option-area:whitefield'));
+      expect(mockResolveMutate).toHaveBeenCalledWith(
+        { city: 'bangalore', areaKey: 'area:whitefield' },
+        expect.anything(),
+      );
+    });
+
+    // Issue #2729 R2 fix — previously `isEditing` stayed true after a commit, so the field showed
+    // an empty DRAFT indefinitely even though a real selection had just been made. It now leaves
+    // draft mode on selection, so the field shows the CANONICAL value again immediately — here
+    // that's still the OLD "Koramangala" (this static mock never round-trips a real navigation),
+    // which is the honestly correct behaviour: never blank, and the NEXT render (once the async
+    // selection resolves and `canonicalScopeLabel` updates for real) is what shows "Whitefield".
+    it('R2 FIX: after selecting a result, the field leaves draft mode and shows the (still-current) canonical value — never blank', async () => {
+      currentNav = { ...BASE_NAV, journey: 'area-first' };
+      currentCanonicalScopeLabel = 'Koramangala';
+      const user = userEvent.setup();
+      render(<DiscoverControlBar hostsHeaderControls />);
+      const input = screen.getByTestId('control-bar-area-input') as HTMLInputElement;
+      await user.click(input);
+      await user.type(input, 'whitefield');
+      await user.click(screen.getByTestId('control-bar-area-option-area:whitefield'));
+      expect(input.value).toBe('Koramangala');
+      expect(input.value).not.toBe('');
+    });
+  });
+
+  // ─── Issue #2729 P1 fix — mobile/1024-1365 panel-row leak regression guard ──
+  describe('P1 fix — canonical idle label does NOT leak below the desktop-reskin floor', () => {
+    it('panel-row instance (1024–1365, hostsHeaderControls=false): idle field stays empty even with a real canonical scope broadcast', () => {
+      currentCanonicalScopeLabel = 'Koramangala';
+      render(<DiscoverControlBar />); // default hostsHeaderControls=false — the panel-row/mobile-row shape
+      const input = screen.getByTestId('control-bar-area-input') as HTMLInputElement;
+      expect(input.value).toBe('');
+    });
+
+    it('mobile-row instance (hostsHeaderControls=false, explicit): idle field stays empty too — same component, same gate', () => {
+      currentCanonicalScopeLabel = 'Koramangala';
+      render(<DiscoverControlBar hostsHeaderControls={false} />);
+      const input = screen.getByTestId('control-bar-area-input') as HTMLInputElement;
+      expect(input.value).toBe('');
+    });
+
+    it('MUTATION CHECK: the SAME canonicalScopeLabel produces OPPOSITE idle values purely as a function of hostsHeaderControls — proves the leak fix is a real gate, not incidental', () => {
+      currentCanonicalScopeLabel = 'Koramangala';
+      const { unmount } = render(<DiscoverControlBar hostsHeaderControls={false} />);
+      expect((screen.getByTestId('control-bar-area-input') as HTMLInputElement).value).toBe('');
+      unmount();
+
+      render(<DiscoverControlBar hostsHeaderControls />);
+      expect((screen.getByTestId('control-bar-area-input') as HTMLInputElement).value).toBe('Koramangala');
+    });
+
+    // Issue #2729 (post-merge fix-verify, BLOCKING) — the delta reviewer found the new
+    // draft/revert semantics (§1) were only gated on `canonicalAreaLabel` (already null below
+    // 1366), NOT on the blur/Escape BEHAVIOUR itself. At 3dd9e26f (pre-#2729) the input had no
+    // `onBlur` at all and `value` was always `query`, so typing a partial name then blurring KEPT
+    // the text. These two tests prove that invariant now holds again at a non-header instance.
+    it('non-header instance (hostsHeaderControls=false): typing a partial query then blurring KEEPS the text, matching 3dd9e26f (no onBlur wipe)', () => {
+      currentCanonicalScopeLabel = 'Koramangala';
+      render(
+        <div>
+          <div data-testid="outside-target">outside</div>
+          <DiscoverControlBar /> {/* default hostsHeaderControls=false */}
+        </div>,
+      );
+      const input = screen.getByTestId('control-bar-area-input') as HTMLInputElement;
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: 'White' } });
+      expect(input.value).toBe('White');
+      fireEvent.blur(input);
+      // 3dd9e26f had no onBlur handler at all — blurring never touched `query`, so the typed
+      // text survives. At `hostsHeaderControls=true` this same gesture would revert to the
+      // canonical value; here it must not.
+      expect(input.value).toBe('White');
+    });
+
+    it('non-header instance (hostsHeaderControls=false): Escape closes the listbox and refocuses WITHOUT clearing the typed query, matching 3dd9e26f exactly', async () => {
+      currentCanonicalScopeLabel = 'Koramangala';
+      const user = userEvent.setup();
+      render(<DiscoverControlBar />); // default hostsHeaderControls=false
+      const input = screen.getByTestId('control-bar-area-input') as HTMLInputElement;
+      await user.click(input);
+      await user.type(input, 'White');
+      expect(input.value).toBe('White');
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+
+      await user.keyboard('{Escape}');
+
+      // 3dd9e26f's Escape only closed the listbox and refocused (`closeAndRefocus`) — it never
+      // touched `query`. At `hostsHeaderControls=true` Escape now ABANDONS the draft and clears
+      // the text; at the non-header instance it must not.
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      expect(input.value).toBe('White');
+      await waitFor(() => expect(input).toHaveFocus());
     });
   });
 });

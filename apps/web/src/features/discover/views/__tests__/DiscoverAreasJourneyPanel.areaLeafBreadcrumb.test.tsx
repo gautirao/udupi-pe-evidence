@@ -83,6 +83,9 @@ vi.mock('@/features/discover/context/useDiscoverContext', () => ({
     registerAreaSetCameraActions: vi.fn(),
     getAreaSetCameraRestoreRequest: vi.fn(() => null),
     setAreaSetCameraRestoreRequest: vi.fn(),
+    // Issue #2729 (R1 fix) — new required shell member (see context/types.ts).
+    canonicalScopeLabel: null,
+    setCanonicalScopeLabel: vi.fn(),
   }),
 }));
 
@@ -213,6 +216,31 @@ describe('DiscoverAreasJourneyPanel — AC5.9 full breadcrumb at the canonical A
     await user.click(screen.getByTestId('breadcrumb-city'));
     expect(selectNode).toHaveBeenNthCalledWith(2, 'root');
     expect(selectNode).toHaveBeenCalledTimes(2);
+  });
+
+  // Issue #2729 V2b — the standalone `HierarchyBackButton` row above this panel is hidden at the
+  // desktop-reskin floor (≥1366) via CSS only (jsdom applies no media queries, so BOTH instances
+  // are always in the DOM here); a compact instance of the SAME component/handler now also renders
+  // on the breadcrumb row via `AreaSelectedPanel`'s `view.area.hierarchyBackButton` slot. This
+  // proves they are the SAME destination (same href), not two independently-derived back affordances.
+  it('V2b: the compact breadcrumb-row back button targets the SAME destination href as the standalone row', () => {
+    const buildNodeHref = (key: string) => `/discover?node=${key}`;
+    renderWithProviders(
+      <FlatPropsAreasJourneyPanel
+        journey={makeJourney({ node: makeFullDepthAreaLeafNode() })}
+        buildNodeHref={buildNodeHref}
+      />,
+    );
+    const standalone = screen.getByTestId('areas-hierarchy-back');
+    const compact = screen.getByTestId('areas-hierarchy-back-compact');
+    expect(standalone).toHaveAttribute('href', '/discover?node=c:w:university-belt');
+    expect(compact).toHaveAttribute('href', '/discover?node=c:w:university-belt');
+    // Same accessible name (full destination), even though the compact instance's VISIBLE text is
+    // the short "Back" label — the full name is never lost, only its on-screen rendering shrinks.
+    expect(standalone).toHaveAttribute('aria-label', 'Back to University Belt');
+    expect(compact).toHaveAttribute('aria-label', 'Back to University Belt');
+    expect(compact).toHaveTextContent('Back');
+    expect(compact).not.toHaveTextContent('Back to University Belt');
   });
 
   it('omits the Group crumb (but keeps Region) for a depth-1 AREA leaf with no Local Destination ancestor', () => {

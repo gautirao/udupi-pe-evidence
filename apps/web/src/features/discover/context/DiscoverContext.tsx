@@ -288,6 +288,11 @@ export function DiscoverProvider({ children }: DiscoverProviderProps) {
     setIsAreaSetDraftOpen(false);
   }, []);
 
+  // Issue #2729 (R1 fix) — see DiscoverShellContextValue.canonicalScopeLabel's doc. A level
+  // (useState, not a ref) since it must actually trigger a re-render in whatever consumer reads
+  // it (DiscoverControlBar), unlike the one-shot camera-restore request below.
+  const [canonicalScopeLabel, setCanonicalScopeLabel] = useState<string | null>(null);
+
   // Issue #2017 (Fit all / focus-one) — same ref-indirection idiom as
   // `actionsRef`/`buildStableActions` above: `useDiscoverMapDataController`
   // is a DESCENDANT of this provider (it needs `nav`, itself sourced from
@@ -347,6 +352,8 @@ export function DiscoverProvider({ children }: DiscoverProviderProps) {
       registerAreaSetCameraActions,
       getAreaSetCameraRestoreRequest,
       setAreaSetCameraRestoreRequest,
+      canonicalScopeLabel,
+      setCanonicalScopeLabel,
     }),
     [
       mobileView,
@@ -360,6 +367,8 @@ export function DiscoverProvider({ children }: DiscoverProviderProps) {
       registerAreaSetCameraActions,
       getAreaSetCameraRestoreRequest,
       setAreaSetCameraRestoreRequest,
+      canonicalScopeLabel,
+      setCanonicalScopeLabel,
     ],
   );
 

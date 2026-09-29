@@ -1,11 +1,13 @@
 import { useMemo, type ReactNode } from 'react';
-import { ChevronRight, GraduationCap, MapPin, X } from 'lucide-react';
+import { ChevronRight, GraduationCap, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDiscoverAreas, type DiscoverArea } from '@/hooks/useDiscoverAreas';
 import { useDiscoverSummary } from '@/hooks/useDiscoverSummary';
 import { useDiscoverNav } from '@/features/discover/context/useDiscoverContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { DEFAULT_CITY } from '@/lib/localityUtils';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { CommittedAreaChips } from '@/features/discover/area-selected/sections/CommittedAreaChips';
 import {
   resolveDrawSearchAreaEligibility,
   DRAW_SEARCH_AREA_ELIGIBLE_TITLE,
@@ -69,6 +71,14 @@ export interface DrawSearchAreaEntryProps {
   hasResidentialListingScope: boolean;
   onDrawSearchArea?: () => void;
   onRevealMap?: () => void;
+  /**
+   * Issue #2729 §3 — when true, renders as a `DropdownMenuItem` (a direct child of
+   * `DropdownMenuContent`, satisfying Radix's roving-focus/arrow-key-nav structural
+   * requirement) instead of the standalone `EPGhost` pill. Every hook call, the eligibility
+   * derivation and the reveal-then-arm click ordering are UNCHANGED — only the rendered
+   * element differs, so there is exactly one "Draw search area" implementation either way.
+   */
+  asMenuItem?: boolean;
 }
 
 /**
@@ -90,6 +100,7 @@ export function DrawSearchAreaEntry({
   hasResidentialListingScope,
   onDrawSearchArea,
   onRevealMap,
+  asMenuItem = false,
 }: DrawSearchAreaEntryProps) {
   const nav = useDiscoverNav();
   let user = null;
@@ -118,24 +129,42 @@ export function DrawSearchAreaEntry({
 
   if (eligibility.status === 'HIDDEN') return null;
 
+  const isDisabled = eligibility.status === 'UNAVAILABLE';
+  const title = isDisabled
+    ? DRAW_SEARCH_AREA_UNAVAILABLE_TITLE[eligibility.reason]
+    : DRAW_SEARCH_AREA_ELIGIBLE_TITLE;
+  const handleClick = () => {
+    // Reveal the map FIRST on the mobile shell. Below `lg` the map canvas
+    // is not mounted until the shopper opens the Map view, so arming the
+    // draw tool without this would put them in draw mode on a surface
+    // they cannot see. A no-op on desktop.
+    onRevealMap?.();
+    onDrawSearchArea?.();
+  };
+
+  if (asMenuItem) {
+    // Issue #2729 (post-merge fix-verify, SHOULD-FIX) — no `e.preventDefault()` here. Every
+    // sibling item in `ScopeActionsMenu` (`Edit areas`, `Clear selected areas`, `Fit all`,
+    // `Redraw`, `Return`) calls `onSelect={handler}` with no `preventDefault`, so Radix's default
+    // "select closes the menu" behaviour applies to all of them; this one used to be the sole
+    // exception, leaving the menu open after "Draw search area" while its siblings all close it.
+    // No concrete reason to keep it open was found — `handleClick`'s reveal-then-arm ordering
+    // (`onRevealMap` before `onDrawSearchArea`) only cares about call order, not about the menu's
+    // open state — so this now matches every sibling.
+    return (
+      <DropdownMenuItem
+        disabled={isDisabled}
+        onSelect={handleClick}
+        title={title}
+        data-testid="area-set-draw-area"
+      >
+        Draw search area
+      </DropdownMenuItem>
+    );
+  }
+
   return (
-    <EPGhost
-      disabled={eligibility.status === 'UNAVAILABLE'}
-      onClick={() => {
-        // Reveal the map FIRST on the mobile shell. Below `lg` the map canvas
-        // is not mounted until the shopper opens the Map view, so arming the
-        // draw tool without this would put them in draw mode on a surface
-        // they cannot see. A no-op on desktop.
-        onRevealMap?.();
-        onDrawSearchArea?.();
-      }}
-      title={
-        eligibility.status === 'UNAVAILABLE'
-          ? DRAW_SEARCH_AREA_UNAVAILABLE_TITLE[eligibility.reason]
-          : DRAW_SEARCH_AREA_ELIGIBLE_TITLE
-      }
-      testId="area-set-draw-area"
-    >
+    <EPGhost disabled={isDisabled} onClick={handleClick} title={title} testId="area-set-draw-area">
       Draw search area
     </EPGhost>
   );
@@ -297,30 +326,8 @@ export function AreaSetSelectedHeader({
           Removing the LAST area clears the scope rather than committing an empty AREA_SET, which
           is not a state the rest of the app models. */}
       {selectedAreas.length > 0 && (
-        <div
-          className="mt-2 flex flex-wrap items-center gap-1.5"
-          role="group"
-          aria-label="Selected areas"
-          data-testid="area-set-panel-committed-chips"
-        >
-          {selectedAreas.map((area) => (
-            <span
-              key={area.areaKey}
-              className="inline-flex items-center gap-1 rounded-full border border-copper/40 bg-accent-tint px-2.5 py-1 text-xs font-medium text-foreground"
-              data-testid={`area-set-panel-committed-chip-${area.areaKey}`}
-            >
-              {area.name}
-              <button
-                type="button"
-                onClick={() => onRemoveArea(area.areaKey)}
-                aria-label={`Remove ${area.name} from the selected areas`}
-                data-testid={`area-set-panel-committed-chip-${area.areaKey}-dismiss`}
-                className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-              >
-                <X className="h-3 w-3" aria-hidden="true" />
-              </button>
-            </span>
-          ))}
+        <div className="mt-2">
+          <CommittedAreaChips selectedAreas={selectedAreas} onRemoveArea={onRemoveArea} />
         </div>
       )}
 
@@ -517,7 +524,11 @@ export function AreaSetTwoTileRow({
           // these tiles to `var(--radius-md)`, which its own tokens/spacing.css defines as
           // 8px — so `rounded-md` is an exact match, and the Tailwind default scale (where
           // `rounded-md` would be 6px) does not apply here.
-          'flex items-center gap-[9px] rounded-md border border-plum/20 bg-plum-tint px-[11px] py-[9px] text-left transition-colors',
+          // Issue #2729 V2c — additive `min-[1366px]:py-[6px]` only (mobile/tablet `py-[9px]`
+          // byte-identical): Commercial single-area measured 1px over the 768px budget at exactly
+          // 1366×768; the two-line text and the 30px icon tile are UNCHANGED, only the button's
+          // own vertical padding shrinks.
+          'flex items-center gap-[9px] rounded-md border border-plum/20 bg-plum-tint px-[11px] py-[9px] min-[1366px]:py-[6px] text-left transition-colors',
           onAddSchool ? 'hover:border-plum/50' : 'cursor-not-allowed opacity-60',
         )}
       >
@@ -556,7 +567,8 @@ export function AreaSetTwoTileRow({
         onClick={onAddNearbyAreas}
         data-testid="area-set-add-nearby-tile"
         // `rounded-md` = 8px here — see the schools tile above for the token derivation.
-        className="flex items-center gap-[9px] rounded-md border border-border bg-card px-[11px] py-[9px] text-left transition-colors hover:border-copper/40"
+        // Issue #2729 V2c — same additive `min-[1366px]:py-[6px]` as the schools tile above.
+        className="flex items-center gap-[9px] rounded-md border border-border bg-card px-[11px] py-[9px] min-[1366px]:py-[6px] text-left transition-colors hover:border-copper/40"
       >
         {/* Issue #2604 — `rounded-md` = 8px here, same token derivation as the schools tile. */}
         <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground">

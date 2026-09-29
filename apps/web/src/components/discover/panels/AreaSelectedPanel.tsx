@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, type ReactNode } from 'react';
+import React, { useCallback, useEffect, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
@@ -7,7 +7,8 @@ import type { DiscoverJourney, DiscoverIntent } from '@/hooks/useDiscoverUrlStat
 import { useDiscoverNav, useDiscoverShell } from '@/features/discover/context/useDiscoverContext';
 import { AreaSetTwoTileRow } from './AreaSetSelectedExtras';
 import { DEFAULT_CITY } from '@/lib/localityUtils';
-import type { CommercialSubtype } from '@/lib/listing-constants';
+import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
+import { resolveAreaSetTitle } from '@/features/discover/area-selected/selectors/areaSetTitle';
 import { usePropertyFilterGroups } from '@/features/discover/buyer-filters/controllers/usePropertyFilterGroups';
 import { PropertyFilterGroups } from '@/features/discover/buyer-filters/sections/PropertyFilterGroups';
 import { withoutCommercialFamilyTokens } from '@/features/discover/buyer-filters/selectors/familyTokens';
@@ -19,9 +20,11 @@ import { Breadcrumb } from '@/features/discover/area-selected/sections/Breadcrum
 import { Toolbar } from '@/features/discover/area-selected/sections/Toolbar';
 import { ViewportSchoolCta } from '@/features/discover/area-selected/sections/ViewportSchoolCta';
 import { ResultHeading } from '@/features/discover/area-selected/sections/ResultHeading';
+import { CompactResultsHeader } from '@/features/discover/area-selected/sections/CompactResultsHeader';
 import { WorkflowGroup } from '@/features/discover/area-selected/sections/WorkflowGroup';
 import { TrustStrip } from '@/features/discover/area-selected/sections/TrustStrip';
 import { ListingsBody } from '@/features/discover/area-selected/sections/ListingsBody';
+import { useDiscoverHeaderHostsControls } from '@/features/discover/state/useDiscoverHeaderHostsControls';
 
 // Quick filter options (hardcoded MVP). 'All' is a virtual chip that clears the
 // property-type selection — it is not a property_type value.
@@ -63,6 +66,16 @@ export interface AreaSelectedPanelViewProps {
     /** City slug — drives the in-panel city selector. */
     city?: string;
     journey?: DiscoverJourney | null;
+    /**
+     * Issue #2729 V2b — an optional compact hierarchy-back control rendered on
+     * the breadcrumb row (≥1366 only) instead of a redundant standalone row
+     * above this panel. See `Breadcrumb.tsx`'s `backButton` doc for why this
+     * is a slot, not a derived-here action: only the node-hierarchy journey
+     * (`AreaLeafListingsSurface`) has a canonical parent NODE distinct from
+     * the breadcrumb's own crumbs, and only it can build the real POP/REPLACE
+     * `<HierarchyBackButton compact />` for it.
+     */
+    hierarchyBackButton?: ReactNode;
   };
   /** The listings result set this panel is rendering, and its loading/error/scope state. */
   results: {
@@ -201,7 +214,7 @@ interface AreaSelectedPanelProps {
 
 export function AreaSelectedPanel({ view, commands }: AreaSelectedPanelProps) {
   const {
-    area: { point: selectedArea, cityLabel, groupName, regionName, city, journey },
+    area: { point: selectedArea, cityLabel, groupName, regionName, city, journey, hierarchyBackButton },
     results: {
       listings: areaListings,
       summaryText: areaResultSummaryText,
@@ -363,6 +376,12 @@ export function AreaSelectedPanel({ view, commands }: AreaSelectedPanelProps) {
   // single-area JSX renders completely unchanged.
   const nav = useDiscoverNav();
   const shell = useDiscoverShell();
+  // Issue #2729 — the SAME desktop-reskin signal #2728's shared header already gates on
+  // (`useDiscoverHeaderHostsControls`, ≥1366px, "no second breakpoint"). Drives the compact
+  // Results header/menu/toolbar/grid; every branch below falls back to the pre-#2729 layout when
+  // this is false, which is also this hook's real value in every existing test (the shared test
+  // setup's `matchMedia` stub always reports `matches: false`).
+  const isDesktopReskin = useDiscoverHeaderHostsControls(shell.isMobileShell);
 
   // Issue #2658 (C2) — activeScope / resultScopeKind (Issue #2018 slice 3) /
   // previousAreas / returnLabel (Issue #2478 step 1) / multiAreaKeys, plus
@@ -374,6 +393,31 @@ export function AreaSelectedPanel({ view, commands }: AreaSelectedPanelProps) {
   const { activeScope, resultScopeKind, returnLabel, multiAreaKeys } = resultScope;
   const handleReturnToPreviousScope = resultScope.commands.returnToPrevious;
   const handleClearAreas = resultScope.commands.clearAreas;
+
+  // Issue #2729 R1/R5 fix — resolve the committed AREA_SET's joined title using the SAME pure
+  // `resolveAreaSetTitle` function `CompactResultsHeader` calls, off a self-sourced
+  // `useDiscoverAreas` call at the SAME cache key `AreaSetTwoTileRow`/`AreaSetSelectedHeader`/
+  // `CompactResultsHeader` already use for this city (never a second request). Single-area (and
+  // every non-AREA_SET) scope uses `areaLabel` — already exactly what the Results heading itself
+  // renders for those cases.
+  const { data: areaSetAreasForLabel } = useDiscoverAreas(
+    multiAreaKeys ? resolveAreasCity(city, nav.city, DEFAULT_CITY) : '',
+  );
+  const canonicalScopeLabel = multiAreaKeys
+    ? resolveAreaSetTitle(multiAreaKeys, areaSetAreasForLabel?.areas ?? [])
+    : areaLabel;
+
+  // Broadcasts the EXACT string the Results heading renders so the global area search
+  // (`DiscoverControlBar`) shows the SAME value when idle instead of independently re-deriving it
+  // from a URL param that can diverge from the current hierarchy position — see
+  // `DiscoverShellContextValue.canonicalScopeLabel`'s doc for the full R1 reasoning. Cleared on
+  // unmount so a stale label never survives navigating away from every AreaSelectedPanel render
+  // site (school-first/agri-first/journey-less correctly show no canonical value).
+  useEffect(() => {
+    shell.setCanonicalScopeLabel(canonicalScopeLabel);
+    return () => shell.setCanonicalScopeLabel(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setCanonicalScopeLabel is a stable useState setter (see DiscoverContext.tsx)
+  }, [canonicalScopeLabel, shell.setCanonicalScopeLabel]);
 
   // Issue #2658 (C2) — the AREA_SET draft/edit/remove-area commands (Issues
   // #2017, #2596) now live in useAreaSetScopeCommands.
@@ -453,6 +497,7 @@ export function AreaSelectedPanel({ view, commands }: AreaSelectedPanelProps) {
         onCity={onCrumbCity}
         onRegion={regionName ? onCrumbRegion : undefined}
         onGroup={groupName ? onCrumbGroup : undefined}
+        backButton={hierarchyBackButton}
       />
 
       {/* Toolbar — journey pill + Trends / Filters / Back / Start over.
@@ -464,64 +509,127 @@ export function AreaSelectedPanel({ view, commands }: AreaSelectedPanelProps) {
           heading section further down. */}
       <Toolbar
         journey={journey}
-        trendsHref={trendsHref}
+        // Issue #2729 D5 — at the desktop-reskin floor Trends moves into CompactResultsHeader's
+        // right cluster (same href, same destination) so this row's separate ~45px Trends link
+        // is not ALSO shown, doubling the control.
+        trendsHref={isDesktopReskin ? undefined : trendsHref}
         filtersContent={filtersContent}
+        // Issue #2729 V2 fix — the compact sticky toolbar already shows every filter group
+        // inline at this floor, so the mobile Sheet here would be dead weight, never reachable
+        // filter capability being removed.
+        hideFiltersSheet={isDesktopReskin}
         onBack={onBack}
         onStartOver={onStartOver}
         cityLabel={resolvedCityLabel || areaLabel}
       />
 
-      <PropertyFilterGroups
-        filters={filters}
-        isCommercialSubtypeSupported={isCommercialSubtypeSupported}
-        isReadyToMoveSupported={isReadyToMoveSupported}
-        {...propertyFilterGroups}
-      />
+      {/* Issue #2729 D2 fix — ORDER now branches with `isDesktopReskin`. Real-browser verification
+          against the mock found the filter toolbar rendering ABOVE "Properties in …" at ≥1366; the
+          mock's order is results header (title/count/scope-menu) -> sticky filter toolbar ->
+          shortcuts -> verified line -> grid. Below the reskin floor the ORIGINAL #2596 order
+          (filters BEFORE the heading — "filters must never trail the search/recommendation
+          workflow") is completely unchanged; `filterToolbarNode`/`headerNode` below are the exact
+          same elements either way, just sequenced differently. */}
+      {(() => {
+        // Issue #2729 (post-merge fix-verify) — the sticky wrapper is now CONDITIONAL on
+        // `isDesktopReskin`, not merely CSS-inert below it. A getComputedStyle probe (real
+        // Playwright, BEFORE 3dd9e26f vs AFTER 768b4591 at 1365×768/900×768) proved that even
+        // though every `min-[1366px]:*` class on the wrapper is inert below that floor, the
+        // wrapper DIV ITSELF was always mounted — so below 1366 `PropertyFilterGroups` gained a
+        // new parent (`display:block`, no longer a direct flex item of `.area-panel-container`),
+        // which changed its computed `min-height`/`min-width` from `auto` to `0px` and shifted a
+        // sibling's sub-pixel rasterisation. Below 1366 this branch now renders
+        // `PropertyFilterGroups` as the direct child again — byte-for-byte the merge-base
+        // structure, not merely visually inert styling on an extra node.
+        const filterToolbarNode = isDesktopReskin ? (
+          // Issue #2729 §4 — compact sticky filter toolbar, LISTING RESULTS ONLY, ≥1366 only. This
+          // wrapper exists only in AreaSelectedPanel — MapFilterSheet.tsx (the filter-owner's other
+          // production consumer) renders `PropertyFilterGroups` completely unwrapped, so sticky
+          // positioning can never leak onto the map filter sheet or any non-Results surface
+          // (issue §7). `top-11` (44px) matches the sticky Breadcrumb's height — GUARANTEED, not
+          // approximated: `Breadcrumb.tsx` forces `min-[1366px]:h-11` at this same floor (P3).
+          <div
+            className="sticky top-11 z-10 bg-background"
+            data-testid="area-filters-sticky"
+          >
+            <PropertyFilterGroups
+              filters={filters}
+              isCommercialSubtypeSupported={isCommercialSubtypeSupported}
+              isReadyToMoveSupported={isReadyToMoveSupported}
+              layout="compact"
+              {...propertyFilterGroups}
+            />
+          </div>
+        ) : (
+          <PropertyFilterGroups
+            filters={filters}
+            isCommercialSubtypeSupported={isCommercialSubtypeSupported}
+            isReadyToMoveSupported={isReadyToMoveSupported}
+            layout="stacked"
+            {...propertyFilterGroups}
+          />
+        );
 
-      {/* Heading section — result-scope eyebrow, headline, count, sub-copy.
-          Issue #2596 FILTER PLACEMENT: this block now renders AFTER the
-          quick-filter card, not before it. The kit puts the filters in the
-          panel's fixed top section on desktop (ExpPanel.jsx L886) and at the
-          very top of the scrolling body on mobile (L894-898); in BOTH cases
-          they precede `EPHeading`. The filters must never trail the
-          search/recommendation workflow, which is what this file did before.
+        const headerNode = isDesktopReskin ? (
+          <CompactResultsHeader
+            multiAreaKeys={multiAreaKeys}
+            resolvedAreasCity={resolveAreasCity(city, nav.city, DEFAULT_CITY)}
+            count={count}
+            isLoadingListings={isLoadingListings}
+            headingNoun={headingNoun}
+            countNoun={countNoun}
+            areaLabel={areaLabel}
+            resultScopeKind={resultScopeKind}
+            isViewportScope={isViewportScope}
+            search={onSearchChange ? { query: searchQuery, onChange: onSearchChange } : undefined}
+            trendsHref={trendsHref}
+            onRemoveArea={handleRemoveCommittedArea}
+            scopeActions={{
+              onEditAreas: handleEditAreas,
+              onClearAreas: handleClearAreas,
+              onFitAll: shell.fitAreaSet,
+              onDrawSearchArea: shell.startDrawSearchArea,
+              onRevealMap: shell.isMobileShell ? () => shell.setMobileView('MAP') : undefined,
+              onRedrawPolygon,
+              returnLabel,
+              onReturn: handleReturnToPreviousScope,
+            }}
+          />
+        ) : (
+          <ResultHeading
+            multiAreaKeys={multiAreaKeys}
+            resolvedAreasCity={resolveAreasCity(city, nav.city, DEFAULT_CITY)}
+            count={count}
+            intentNoun={intentNoun}
+            isLoadingListings={isLoadingListings}
+            onEditAreas={handleEditAreas}
+            onClearAreas={handleClearAreas}
+            onRemoveArea={handleRemoveCommittedArea}
+            shell={shell}
+            isViewportScope={isViewportScope}
+            resultScopeKind={resultScopeKind}
+            headingNoun={headingNoun}
+            countNoun={countNoun}
+            areaLabel={areaLabel}
+            returnLabel={returnLabel}
+            onReturn={handleReturnToPreviousScope}
+            onRedrawPolygon={onRedrawPolygon}
+            activeContextChips={activeContextChips}
+          />
+        );
 
-          RESIDUAL DEVIATION, disclosed rather than papered over: this panel is
-          a SINGLE scroll column (`area-panel-container ... overflow-y-auto`),
-          so the DESKTOP treatment reproduced here is the kit's ORDERING, not
-          its PINNING. The kit's desktop filters sit in a `flex: none` header
-          that does not scroll away; ours scroll with the body. Making them
-          genuinely sticky means restructuring this panel into fixed + scroll
-          regions, which is app-shell work this issue does not own. */}
-      {/* Issue #2596 density (owner follow-up) — `pb-4 pt-3.5` -> `pb-2.5 pt-2.5`. MEASURED at
-          1366×768: this section rendered 152px against the kit's 64px `scope-bar`. Most of that
-          difference is CONTENT this surface carries and the kit does not (the sub-copy line and
-          the intent helper), which a spacing-only pass must not delete — so what is reclaimed
-          here is the section padding and the two dead margins above, not the copy. */}
-      {/* Result heading — result-scope eyebrow, headline, count, sub-copy and
-          intent helper (Issues #2159, #2596, #2461, #2419, #2478). See
-          ResultHeading's own comment for the full reasoning this preserves
-          verbatim, including the "Controls card removed" #1953 note. */}
-      <ResultHeading
-        multiAreaKeys={multiAreaKeys}
-        resolvedAreasCity={resolveAreasCity(city, nav.city, DEFAULT_CITY)}
-        count={count}
-        intentNoun={intentNoun}
-        isLoadingListings={isLoadingListings}
-        onEditAreas={handleEditAreas}
-        onClearAreas={handleClearAreas}
-        onRemoveArea={handleRemoveCommittedArea}
-        shell={shell}
-        isViewportScope={isViewportScope}
-        resultScopeKind={resultScopeKind}
-        headingNoun={headingNoun}
-        countNoun={countNoun}
-        areaLabel={areaLabel}
-        returnLabel={returnLabel}
-        onReturn={handleReturnToPreviousScope}
-        onRedrawPolygon={onRedrawPolygon}
-        activeContextChips={activeContextChips}
-      />
+        return isDesktopReskin ? (
+          <>
+            {headerNode}
+            {filterToolbarNode}
+          </>
+        ) : (
+          <>
+            {filterToolbarNode}
+            {headerNode}
+          </>
+        );
+      })()}
 
       {/* VIEWPORT-scope school CTA — its own bordered strip, directly below the
           heading and ABOVE the search, exactly as at the merge base. Rendered
@@ -563,10 +671,14 @@ export function AreaSelectedPanel({ view, commands }: AreaSelectedPanelProps) {
           inter-section gap 0), so the section keeps padding rather than losing its separation
           entirely. The inner `gap-2` is the kit's own 8px and is unchanged, as is the tile
           height — those were measured to parity in the density pass and are not to regress. */}
+      {/* Issue #2729 §2 — at the desktop-reskin floor the in-scope search box now lives in
+          `CompactResultsHeader` (same `searchQuery`/`onSearchChange`, one input, never two);
+          `onSearchChange` is omitted here so `WorkflowGroup` renders its recommendation tiles
+          only (its own "no search handler -> no search box" branch), not a duplicate input. */}
       <WorkflowGroup
         areaLabel={areaLabel}
         searchQuery={searchQuery}
-        onSearchChange={onSearchChange}
+        onSearchChange={isDesktopReskin ? undefined : onSearchChange}
         areaRecommendationTiles={areaRecommendationTiles}
       />
 

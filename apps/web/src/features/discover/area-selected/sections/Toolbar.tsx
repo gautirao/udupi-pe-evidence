@@ -13,6 +13,12 @@ export interface ToolbarProps {
   onBack?: () => void;
   onStartOver?: () => void;
   cityLabel: string;
+  /** Issue #2729 V2 fix — at the desktop-reskin floor the compact sticky toolbar already shows
+   * every filter group inline (never inside this row's mobile Sheet), so the Sheet trigger here
+   * is functionally dead weight — no filter capability is lost by hiding it, unlike `onBack`/
+   * `onStartOver`, which stay reachable at every width. Defaults `false` (byte-identical to
+   * every pre-existing caller that omits this prop). */
+  hideFiltersSheet?: boolean;
 }
 
 /**
@@ -27,9 +33,24 @@ export interface ToolbarProps {
  * (`hasSubstantialState`) — Issue #1817 AC8, because an area is selected
  * (deeper than a region) whenever this toolbar renders.
  */
-export function Toolbar({ journey, trendsHref, filtersContent, onBack, onStartOver, cityLabel }: ToolbarProps) {
+export function Toolbar({
+  journey,
+  trendsHref,
+  filtersContent,
+  onBack,
+  onStartOver,
+  cityLabel,
+  hideFiltersSheet = false,
+}: ToolbarProps) {
   return (
-    <div className="px-4 pb-2 pt-3.5">
+    // Issue #2729 V2 fix — additive `min-[1366px]:` padding tightening only (every existing class
+    // stays at every width, mobile/tablet byte-identical). Real-browser measurement found ~85px
+    // of chrome needed recovering above the first card row at 1366×768 for the tallest
+    // (Commercial) case; this row alone recovers 14px (pt-3.5→pt-1, pb-2→pb-1) — see
+    // AreaSelectedPanel.tsx/CompactResultsHeader.tsx/WorkflowGroup.tsx/ListingsBody.tsx for the
+    // matching tightening elsewhere, and the caller's own report for the running total and the
+    // disclosed residual gap.
+    <div className="px-4 pb-2 pt-3.5 min-[1366px]:pb-1 min-[1366px]:pt-1">
       {/* No `mb-*` here: this row is the section's only child, so the
           container's own `pb-3` supplies the whole gap. */}
       <div className="flex items-center justify-between gap-2">
@@ -50,7 +71,7 @@ export function Toolbar({ journey, trendsHref, filtersContent, onBack, onStartOv
               </Link>
             </Button>
           )}
-          {filtersContent && (
+          {filtersContent && !hideFiltersSheet && (
             <Sheet>
               <SheetTrigger asChild>
                 <Button variant="outline" size="icon" className="h-7 w-7">
