@@ -49,6 +49,7 @@ function ExpAgriView(st, act) {
     v.showBack = true; v.backLabel = "Back to towns in " + (EXJ.DIR_WORD[corridor.dir] || corridor.short);
     v.sheetTitle = items.length + " parcels in " + town.name;
     v.sheetRows = items.slice(0, 5).map((p) => ({ key: p.id, label: p.title, meta: p.acres + " ac", onClick: () => act.agriActivate(p.id) }));
+    v.info = { total: items.length, noun: "verified agricultural parcels", noun1: "verified agricultural parcel", tone: EVER, prep: "in", where: town.name };
     v.paintKey = ["agri-parcels", a.clusterId, a.query, JSON.stringify(a.filters)].join("|");
     return v;
   }
@@ -79,6 +80,7 @@ function ExpAgriView(st, act) {
     v.showBack = true; v.backLabel = "Back to directions";
     v.sheetTitle = towns.length + " towns within " + a.maxKm + " km";
     v.sheetRows = towns.slice(0, 6).map((t) => ({ key: t.id, label: t.name, meta: AG.townProps(t.id) + " parcels", onClick: () => act.agriPickTown(t.id) }));
+    v.info = { total: v.parcelCount, noun: "verified agricultural parcels", noun1: "verified agricultural parcel", tone: EVER, prep: "along", where: "the " + (v.dirWord || corridor.short) + " corridor" };
     v.paintKey = ["agri-towns", a.corridorId, a.maxKm, a.originKey || "", a.query].join("|");
     return v;
   }
@@ -98,6 +100,7 @@ function ExpAgriView(st, act) {
   };
   v.sheetTitle = nodes.length + " outbound directions";
   v.sheetRows = nodes.map((n) => ({ key: n.key, label: n.label, meta: n.n + " parcels", onClick: () => act.agriPickCorridor(n.key) }));
+  v.info = { total: AG.totalParcels, noun: "verified agricultural parcels", noun1: "verified agricultural parcel", tone: EVER, prep: "around", where: origin ? origin.name : "Bangalore" };
   v.paintKey = "agri-corridors|" + (a.originKey || "city");
   return v;
 }
@@ -172,7 +175,8 @@ function ExpAgriPanel({ view, st, act, isMobile }) {
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         <div data-design-component="scope-bar" style={{ display: "inline-flex", alignItems: "center", gap: "7px", alignSelf: "flex-start", padding: "5px 10px", borderRadius: "var(--radius-xs)", border: "1px solid var(--evergreen-100, #CFE6D9)", background: "var(--evergreen-50)", fontSize: "11.5px", fontWeight: 700, color: EVER_DARK }}>Result scope — {view.scopeLabel}</div>
         <AJSearch st={st} act={act} placeholder="Search these parcels…" />
-        <window.DPAgriFilters f={a.filters} setF={act.setAgriFilters} onClear={() => act.setAgriFilters(window.DP_AGRI_DEFAULTS)} />
+        {/* desktop: the shared FilterBar renders above (ExpPanel) — this block is mobile only */}
+        {isMobile && <window.DPAgriFilters f={a.filters} setF={act.setAgriFilters} onClear={() => act.setAgriFilters(window.DP_AGRI_DEFAULTS)} />}
         {parcels.length === 0
           ? <window.DPEmpty accent="agri" icon="sliders-horizontal" title="No parcels match" body="Widen the size or price, or clear the search."
             actions={<AJGhost strong onClick={() => { act.setAgriFilters(window.DP_AGRI_DEFAULTS); act.setAgriQuery(""); }}>Clear search &amp; filters</AJGhost>} />

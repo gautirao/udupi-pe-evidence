@@ -20,6 +20,12 @@ const EXP_CENTRED = (list) => (list || []).filter((x) => x && EXP_OK(x.center));
 const EM = new Proxy({}, { get: (_t, k) => (window.EXP ? window.EXP[k] : undefined), has: (_t, k) => !!window.EXP && k in window.EXP });
 
 const MG = {
+  building: (c, s) => `<svg width="${s || 12}" height="${s || 12}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M9 7h1M14 7h1M9 11h1M14 11h1M9 15h1M14 15h1M10 21v-3h4v3"/></svg>`,
+  house: (c, s) => `<svg width="${s || 12}" height="${s || 12}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 4l9 7"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5h4v5"/></svg>`,
+  plot: (c, s) => `<svg width="${s || 12}" height="${s || 12}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1" stroke-dasharray="3 2.5"/><path d="M12 8v8M8 12h8"/></svg>`,
+  store: (c, s) => `<svg width="${s || 12}" height="${s || 12}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9 5.5 4h13L20 9"/><path d="M4 9h16v2a3 3 0 0 1-5.3 1.9A3 3 0 0 1 12 14a3 3 0 0 1-2.7-1.1A3 3 0 0 1 4 11z"/><path d="M5.5 14v6h13v-6"/></svg>`,
+  sprout: (c, s) => `<svg width="${s || 12}" height="${s || 12}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21v-9"/><path d="M12 12C12 7 8.5 4.5 4 4.5 4 9 7 12 12 12z"/><path d="M12 14c0-4 3-6.5 8-6.5 0 4-3 6.5-8 6.5z"/></svg>`,
+  route: (c, s) => `<svg width="${s || 12}" height="${s || 12}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19H16a3.5 3.5 0 0 0 0-7H8a3.5 3.5 0 0 1 0-7h7.5"/></svg>`,
   zoom: (c) => `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M20 20l-3.5-3.5"/></svg>`,
   pin: (c) => `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`,
   // "Explore" identity glyph — compass, distinct from the magnifier (Zoom) and home (View homes)
@@ -179,16 +185,38 @@ function areaPinHTML(o) {
 // Commercial identity on the map: the SAME leaf pin, carrying the subtype label
 // instead of a price — nothing price-gated ever reaches the map layer. Footprint,
 // tail, selected treatment, clustering and camera behaviour are unchanged.
+// ---- property-type markers: ONE registry, shared by pins, clusters-free legend and every journey ----
+const MAP_TYPES = {
+  apartment: { label: "Apartments", color: "var(--navy-800)", icon: "building" },
+  house: { label: "Houses", color: "var(--copper-500)", icon: "house" },
+  plot: { label: "Plots", color: "var(--ochre-600)", icon: "plot" },
+  commercial: { label: "Commercial", color: "#8A6A22", icon: "store" },
+  parcel: { label: "Agricultural parcels", color: "var(--evergreen-600)", icon: "sprout" },
+  school: { label: "Schools", color: "var(--plum-600)", icon: "cap" },
+  corridor: { label: "Corridors", color: "var(--evergreen-600)", icon: "route" },
+  village: { label: "Village clusters", color: "var(--evergreen-600)", icon: "pin" }
+};
+function mapTypeOf(l) {
+  if (l.kind === "commercial") return "commercial";
+  const t = l.propType || "";
+  if (t === "Plot") return "plot";
+  if (t === "Villa" || t === "Independent House") return "house";
+  return "apartment";
+}
+function typeTileHTML(k, size, on) {
+  const t = MAP_TYPES[k], s = size || 18;
+  return `<span data-map-type="${k}" style="flex:none;display:inline-grid;place-items:center;width:${s}px;height:${s}px;border-radius:50%;background:${on ? "#fff" : t.color};">${MG[t.icon](on ? t.color : "#fff", Math.round(s * 0.62))}</span>`;
+}
 function pricePinHTML(l, on, f) {
   if (l.kind === "commercial") {
     const gold = "#8A6A22";
     return `<div style="transform:translate(-50%,-100%);font-family:var(--font-sans);text-align:center;">
       <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:var(--radius-full);background:${on ? gold : "var(--paper)"};color:${on ? "#fff" : "var(--navy-800)"};border:1px solid ${on ? gold : "rgba(138,106,34,0.32)"};box-shadow:${on ? "var(--shadow-lg)" : "var(--shadow-sm)"};font-size:11.5px;font-weight:700;white-space:nowrap;">
-        <span style="width:7px;height:7px;border-radius:50%;background:${on ? "#fff" : gold};flex:none;"></span>${EM.comLabel(l.comSub)}</span>
+        ${typeTileHTML("commercial", 18, on)}${EM.comLabel(l.comSub)}</span>
     </div>`;
   }
   return `<div style="transform:translate(-50%,-100%);font-family:var(--font-sans);">
-    <span style="display:inline-block;padding:5px 10px;border-radius:var(--radius-full);background:${on ? "var(--accent)" : "var(--paper)"};color:${on ? "#fff" : "var(--navy-800)"};border:${on ? "none" : "1px solid var(--border)"};box-shadow:${on ? "var(--shadow-lg)" : "var(--shadow-sm)"};font-family:var(--font-mono);font-size:11.5px;font-weight:700;white-space:nowrap;">${EM.priceText(l, f)}</span>
+    <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px 3px 3px;border-radius:var(--radius-full);background:${on ? "var(--accent)" : "var(--paper)"};color:${on ? "#fff" : "var(--navy-800)"};border:${on ? "1px solid var(--accent)" : "1px solid var(--border)"};box-shadow:${on ? "var(--shadow-lg)" : "var(--shadow-sm)"};font-family:var(--font-mono);font-size:11.5px;font-weight:700;white-space:nowrap;">${typeTileHTML(mapTypeOf(l), 18, on)}${EM.priceText(l, f)}</span>
   </div>`;
 }
 function discHTML(n) {
@@ -264,7 +292,7 @@ function townDiscHTML(o) {
 }
 function parcelPinHTML(p, on) {
   return `<div style="transform:translate(-50%,-100%);font-family:var(--font-sans);">
-    <span style="display:inline-block;padding:5px 10px;border-radius:var(--radius-full);background:${on ? "var(--evergreen-600)" : "var(--paper)"};color:${on ? "#fff" : "var(--evergreen-700,#1F694A)"};border:${on ? "none" : "1px solid var(--evergreen-100,#CFE6D9)"};box-shadow:${on ? "var(--shadow-lg)" : "var(--shadow-sm)"};font-family:var(--font-mono);font-size:11.5px;font-weight:700;white-space:nowrap;">${p.acres} ac · ${EM.inrShort(p.price)}</span>
+    <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px 3px 3px;border-radius:var(--radius-full);background:${on ? "var(--evergreen-600)" : "var(--paper)"};color:${on ? "#fff" : "var(--evergreen-700,#1F694A)"};border:${on ? "1px solid var(--evergreen-600)" : "1px solid var(--evergreen-100,#CFE6D9)"};box-shadow:${on ? "var(--shadow-lg)" : "var(--shadow-sm)"};font-family:var(--font-mono);font-size:11.5px;font-weight:700;white-space:nowrap;">${typeTileHTML("parcel", 18, on)}${p.acres} ac · ${EM.inrShort(p.price)}</span>
   </div>`;
 }
 function originPinHTML(name) {
@@ -286,10 +314,19 @@ const CLUSTER_PX = 46;
 // Node names are never truncated away: labels wrap to at most 2 lines.
 const dockPin = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>';
 const dockAim = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>';
+// MapContextStatus — ONE component for every journey. Journeys supply only view.info:
+//   { total, noun, noun1, prep, where, tone }   (defaults = By area wording)
+//   By area       Showing N verified properties across <area>        · Recenter on <area>
+//   Near a school Showing N schools in <area> | N verified properties near <school>
+//   Agricultural  Showing N verified agricultural parcels in <town>  · Recenter on <town>
+// `where` is always the deepest/current context, so only one recenter ever exists.
 function ExpMapInfoDock({ view, signedIn, onSignIn, compact, embedded }) {
-  if (!view || view.journey !== "areas" || !view.info) return null;
-  const i = view.info, guide = !signedIn && !view.listingCapable;
+  if (!view || !view.info) return null;
+  const i = view.info, guide = view.journey === "areas" && !signedIn && !view.listingCapable;
   const n = (i.total || 0).toLocaleString("en-IN");
+  const noun = i.total === 1 ? (i.noun1 || "verified property") : (i.noun || "verified properties");
+  const prep = i.prep || "across";
+  const pinSvg = i.tone ? dockPin.replace("var(--accent)", i.tone) : dockPin;
   const recenter = () => window.dispatchEvent(new CustomEvent("exp:recenter"));
   const signIn = <button onClick={onSignIn} style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "inherit", fontWeight: 700, color: "var(--accent)", textDecoration: "underline", textUnderlineOffset: "2px" }}>sign in</button>;
   const aimBtn = (extra) => (
@@ -311,20 +348,56 @@ function ExpMapInfoDock({ view, signedIn, onSignIn, compact, embedded }) {
       {compact ? (
         <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: embedded ? 0 : "6px 6px 6px 12px" }}>
           <div data-design-component="map-count" style={{ flex: 1, minWidth: 0, lineHeight: 1.3 }}>
-            <div style={{ fontSize: "12.5px", color: "var(--text-body)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}><strong style={{ fontFamily: "var(--font-mono)", color: "var(--text-strong)" }}>{n}</strong> verified properties</div>
-            <div style={{ fontSize: "11.5px", color: "var(--text-muted)", overflow: "hidden", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2, overflowWrap: "anywhere" }}>across {i.where}</div>
+            <div style={{ fontSize: "12.5px", color: "var(--text-body)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}><strong style={{ fontFamily: "var(--font-mono)", color: "var(--text-strong)" }}>{n}</strong> {noun}</div>
+            <div style={{ fontSize: "11.5px", color: "var(--text-muted)", overflow: "hidden", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2, overflowWrap: "anywhere" }}>{prep} {i.where}</div>
           </div>
           {aimBtn({ flex: "0 1 auto", maxWidth: "56%", minHeight: "44px", padding: "6px 12px", borderRadius: "var(--radius-md)", background: "var(--surface-subtle)", boxShadow: "inset 0 0 0 1px var(--border-strong)" })}
         </div>
       ) : (
         <>
           <div data-design-component="map-count" style={{ display: "flex", gap: "8px", alignItems: "flex-start", padding: "10px 12px", fontSize: "12.5px", lineHeight: 1.4, color: "var(--text-body)" }}>
-            <span style={{ flex: "none", display: "flex", marginTop: "1px" }} dangerouslySetInnerHTML={{ __html: dockPin }} />
-            <span style={{ minWidth: 0 }}>Showing <strong style={{ fontFamily: "var(--font-mono)", color: "var(--text-strong)" }}>{n}</strong> verified properties across <strong style={{ color: "var(--text-strong)" }}>{i.where}</strong></span>
+            <span style={{ flex: "none", display: "flex", marginTop: "1px" }} dangerouslySetInnerHTML={{ __html: pinSvg }} />
+            <span style={{ minWidth: 0 }}>Showing <strong style={{ fontFamily: "var(--font-mono)", color: "var(--text-strong)" }}>{n}</strong> {noun} {prep} <strong style={{ color: "var(--text-strong)" }}>{i.where}</strong></span>
           </div>
           {aimBtn({ width: "100%", minHeight: "40px", padding: "8px 12px", background: "transparent", borderTop: "1px solid var(--border)", textAlign: "left" })}
         </>
       )}
+    </div>
+  );
+}
+
+// ---- MapTypeLegend — one legend card for every journey ------------------------
+// Journeys never build their own legend: the rows are derived from what the map is
+// actually drawing, using the same MAP_TYPES registry as the markers themselves.
+function mapLegendRows(view) {
+  const L = view.level;
+  const cnt = (arr) => { const o = {}; arr.forEach((l) => { const k = mapTypeOf(l); o[k] = (o[k] || 0) + 1; }); return ["apartment", "house", "plot", "commercial"].filter((k) => o[k]).map((k) => ({ k, n: o[k] })); };
+  if (view.journey === "agri") {
+    if (L === "agri-parcels") return { title: "Land type", rows: [{ k: "parcel", n: (view.parcelPins || []).length }] };
+    if (L === "agri-towns") return { title: "Map shows", rows: [{ k: "village", n: (view.townDiscs || []).length }] };
+    return { title: "Map shows", rows: [{ k: "corridor", n: (view.navCards || []).length }, { k: "village", n: null }] };
+  }
+  if (view.journey === "schools") {
+    if (L === "schools-homes") return { title: "Property type", rows: cnt(view.results || []).concat([{ k: "school", n: null, label: "Selected school" }]) };
+    return { title: "Map shows", rows: [{ k: "school", n: view.info ? view.info.total : null }] };
+  }
+  if (!(view.pins || []).length) return null; // nav levels draw destinations, not properties
+  const rows = cnt(view.results && view.results.length ? view.results : view.pins);
+  return rows.length ? { title: "Property type", rows } : null;
+}
+function ExpMapLegend({ view }) {
+  const d = mapLegendRows(view);
+  if (!d || !d.rows.length) return null;
+  return (
+    <div data-design-component="map-type-legend" style={{ alignSelf: "flex-start", display: "flex", flexDirection: "column", gap: "7px", padding: "10px 12px", background: "var(--paper)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-md)", fontFamily: "var(--font-sans)" }}>
+      <span style={{ fontSize: "10.5px", fontWeight: 700, letterSpacing: "var(--tracking-caps)", textTransform: "uppercase", color: "var(--text-muted)" }}>{d.title}</span>
+      {d.rows.map((r) => (
+        <span key={r.k} style={{ display: "flex", alignItems: "center", gap: "9px", minHeight: "24px" }}>
+          <span style={{ display: "flex" }} dangerouslySetInnerHTML={{ __html: typeTileHTML(r.k, 24) }} />
+          <span style={{ flex: 1, fontSize: "13px", fontWeight: 600, color: "var(--text-strong)", whiteSpace: "nowrap" }}>{r.label || MAP_TYPES[r.k].label}</span>
+          {r.n != null && <span style={{ paddingLeft: "10px", fontFamily: "var(--font-mono)", fontSize: "12px", fontWeight: 700, color: "var(--text-muted)" }}>{r.n.toLocaleString("en-IN")}</span>}
+        </span>
+      ))}
     </div>
   );
 }
@@ -666,7 +739,8 @@ function ExpMap({ signedIn, onSignIn, lead, view, isMobile, onPick, onCluster, o
         </div>
       )}
       {!isMobile && (
-        <div data-design-component="map-info-dock-anchor" style={{ position: "absolute", left: "14px", bottom: "14px", zIndex: 500, width: "min(288px, calc(50% - 92px))" }}>
+        <div data-design-component="map-info-dock-anchor" style={{ position: "absolute", left: "14px", bottom: "14px", zIndex: 500, width: "min(288px, calc(50% - 118px))", display: "flex", flexDirection: "column", gap: "8px" }}>
+          <ExpMapLegend view={view} />
           <ExpMapInfoDock view={view} signedIn={signedIn} onSignIn={onSignIn} />
         </div>
       )}
@@ -677,4 +751,4 @@ function ExpMap({ signedIn, onSignIn, lead, view, isMobile, onPick, onCluster, o
   );
 }
 
-Object.assign(window, { ExpMap, ExpMapInfoDock });
+Object.assign(window, { ExpMap, ExpMapInfoDock, ExpMapLegend, MAP_TYPES });

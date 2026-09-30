@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MapContextStatus — five contexts side by side</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+html,body{margin:0;background:var(--canvas-200);font-family:var(--font-sans);color:var(--text-strong)}
+a{color:var(--accent)}a:hover{color:var(--accent-hover)}
+.wrap{padding:20px 24px 32px;display:flex;flex-direction:column;gap:16px}
+h1{margin:0;font-size:20px;font-weight:700}
+p{margin:0;font-size:13px;color:var(--text-body);max-width:900px;line-height:1.5;text-wrap:pretty}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px}
+.col{display:flex;flex-direction:column;gap:8px;min-width:0}
+.lab{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-muted)}
+.dot{width:10px;height:10px;border-radius:50%}
+.frame{position:relative;width:100%;aspect-ratio:1366/940;overflow:hidden;border-radius:var(--radius-lg);border:1px solid var(--border);background:#fff;box-shadow:var(--shadow-sm)}
+.frame iframe{position:absolute;top:0;left:0;width:1366px;height:940px;border:0;transform-origin:0 0}
+.spec{background:var(--surface-card);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px 14px;font-size:12.5px;line-height:1.55;max-width:900px}
+code{font-family:var(--font-mono);font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>MapContextStatus — one map status component, three journeys</h1>
+<p>Each frame is the live experience. Look at the card at the bottom left of each map: it's the same component in the same position, with the same width, divider, padding and shadow. Only the wording and the pin tint change.</p>
+<div class="row">
+<div class="col"><span class="lab"><span class="dot" style="background:var(--copper-500)"></span>1 · By area — Hebbal (reference)</span><div class="frame"><iframe src="experience.html?journey=ms-area" title="By area"></iframe></div></div>
+<div class="col"><span class="lab"><span class="dot" style="background:#5E5286"></span>2 · Near a school — Bangalore</span><div class="frame"><iframe src="experience.html?journey=ms-sch-city" title="Schools city"></iframe></div></div>
+<div class="col"><span class="lab"><span class="dot" style="background:#5E5286"></span>3 · Near a school — selected school</span><div class="frame"><iframe src="experience.html?journey=ms-sch-sel" title="Schools selected"></iframe></div></div>
+<div class="col"><span class="lab"><span class="dot" style="background:var(--evergreen-600)"></span>4 · Agricultural land — Bangalore origin</span><div class="frame"><iframe src="experience.html?journey=ms-agri-city" title="Agri city"></iframe></div></div>
+<div class="col"><span class="lab"><span class="dot" style="background:var(--evergreen-600)"></span>5 · Agricultural land — Yelahanka Rural</span><div class="frame"><iframe src="experience.html?journey=ms-agri-town" title="Agri town"></iframe></div></div>
+</div>
+<div class="spec"><b>Component:</b> <code>ExpMapInfoDock</code> (MapContextStatus) in ExpMap.jsx, with a result-summary row and a recenter row. Each journey sets only <code>view.info = { total, noun, noun1, prep, where, tone }</code>. <code>where</code> is always the deepest current context, and Recenter flies to the current view's bounds, so only one recenter action exists at any level.</div>
+</div>
+<script>
+function fit(){document.querySelectorAll('.frame').forEach(function(f){f.querySelector('iframe').style.transform='scale('+(f.clientWidth/1366)+')';});}
+window.addEventListener('resize',fit);fit();
+</script>
+</body>
+</html>

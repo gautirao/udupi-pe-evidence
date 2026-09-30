@@ -337,7 +337,7 @@
         frame: {
           crumb: ["Bangalore", "North Bangalore", "Hebbal · Yelahanka", "Hebbal"],
           map: { preset: "trio", offset: [-58, 34], viewportRect: true, markers: [disc(52, 30, 42)] },
-          panel: { blocks: [{ t: "confirm", title: "Search the visible map area instead?", body: "This replaces Hebbal, Nagawara and Jakkur with whatever is on screen. Your filters are kept, and you can return to the three areas.", primary: "Search this area", secondary: "Keep selected areas" }] }
+          panel: { blocks: [{ t: "note", tone: "ok", text: "Showing the visible map area. Filters kept — return to Hebbal + Nagawara + Jakkur any time." }] }
         }
       },
       {

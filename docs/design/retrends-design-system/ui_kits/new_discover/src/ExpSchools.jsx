@@ -64,6 +64,7 @@ function ExpSchoolsView(st, act) {
     v.showBack = true; v.backLabel = multi ? "Back to schools in selected areas" : "Back to schools in " + sel.area;
     v.sheetTitle = homes.length + " homes within " + s.radiusKm + " km";
     v.sheetRows = homes.slice(0, 5).map((l) => ({ key: l.id, label: l.title, meta: SJ.priceText(l, st.filters), onClick: () => act.openListing(l.id) }));
+    v.info = { total: homes.length, noun: "verified properties", noun1: "verified property", prep: "near", where: shortName, tone: PLUM };
     v.paintKey = ["sch-homes", sel.id, s.radiusKm, SJ.filterLabels(st.filters).join(",")].join("|");
     return v;
   }
@@ -98,6 +99,7 @@ function ExpSchoolsView(st, act) {
         : "Back to areas in " + (areaObjs[0].local ? SJ.locals.find((l) => l.key === areaObjs[0].local).label : SJ.directions.find((d) => d.key === areaObjs[0].direction).short);
     v.sheetTitle = list.length + " schools in " + (multi ? "selected areas" : names[0]);
     v.sheetRows = list.slice(0, 6).map((x) => ({ key: x.id, label: x.name, meta: multi ? x.area : x.board, onClick: () => act.selectSchool(x.id) }));
+    v.info = { total: list.length, noun: "schools", noun1: "school", prep: "in", where: names.join(" & "), tone: PLUM };
     v.paintKey = ["sch-area", keys.join(","), s.query, s.boards.join(","), s.levels.join(",")].join("|");
     return v;
   }
@@ -137,6 +139,7 @@ function ExpSchoolsView(st, act) {
   if (parent) { v.showBack = true; v.backLabel = "Back to " + chain[chain.length - 2].label; }
   v.sheetTitle = areaKids ? kids.length + " areas with schools" : kids.length + " destinations";
   v.sheetRows = (v.areaList.length ? v.areaList : kids).slice(0, 6).map((k) => ({ key: k.key, label: k.label, meta: k.n + " schools", onClick: () => (k.kind === "area" ? act.pickSchoolArea(k.key) : act.schoolsPickNode(k)) }));
+  v.info = { total, noun: "schools", noun1: "school", prep: s.nodeKey === "blr" ? "across" : "in", where: last, tone: PLUM };
   v.paintKey = ["sch-nav", s.nodeKey, s.clusterFocus ? s.clusterFocus.key : ""].join("|");
   return v;
 }

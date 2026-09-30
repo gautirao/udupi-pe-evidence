@@ -302,7 +302,60 @@ function EPPop({ label, children }) {
     </div>
   );
 }
-function EPFiltersCompact({ st, act }) {
+// ---- FilterBar: THE one desktop right-panel filter system -------------------
+// Every journey (By area · Near a school · Agricultural land) renders this same
+// component. Journeys supply DEFINITIONS only — never their own pill, spacing,
+// popover or More-filters treatment:
+//   primary  { dc, label, tone, pop }            filled selector, always first, never collapses
+//   groups   [{ k, drop, active, dc, label, pop }] drop 0 = never collapses; higher collapses first
+//   more     node                                  specialist filters, always behind More filters
+//   moreActive number                              how many of `more` are set (badge)
+//   tone/tint                                      journey accent for active pills
+function FilterBar({ ariaLabel, primary, groups, more, moreActive, tone, tint }) {
+  const rowRef = React.useRef(null);
+  const [nHide, setNHide] = React.useState(0);
+  const sig = groups.map((g) => g.k + ":" + g.label).join("|");
+  const collapsible = groups.filter((g) => g.drop > 0).sort((a, b) => b.drop - a.drop);
+  const hidden = collapsible.slice(0, nHide).map((g) => g.k);
+  React.useLayoutEffect(() => { setNHide(0); }, [sig]);
+  React.useLayoutEffect(() => {
+    const el = rowRef.current;
+    if (el && el.scrollWidth > el.clientWidth + 1 && nHide < collapsible.length) setNHide(nHide + 1);
+  });
+  React.useEffect(() => {
+    const el = rowRef.current;
+    if (!el || !window.ResizeObserver) return;
+    let w = el.clientWidth;
+    const ro = new ResizeObserver(() => { if (Math.abs(el.clientWidth - w) > 1) { w = el.clientWidth; setNHide(0); } });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const moved = groups.filter((g) => hidden.indexOf(g.k) !== -1);
+  const count = (moreActive || 0) + moved.filter((g) => g.active).length;
+  return (
+    <div ref={rowRef} data-design-component="filter-toolbar" data-filterbar="FilterBar" role="toolbar" aria-label={ariaLabel} style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "nowrap", minWidth: 0 }}>
+      <EPDrop dc={primary.dc} label={primary.label} filled tone={primary.tone}>{primary.pop}</EPDrop>
+      {groups.filter((g) => hidden.indexOf(g.k) === -1).map((g) => (
+        <EPDrop key={g.k} dc={g.dc} label={g.label} active={g.active} tone={tone} tint={tint}>{g.pop}</EPDrop>
+      ))}
+      <span style={{ flex: "1 0 0px" }} />
+      <EPDrop dc="standing-toggles-group" label="More filters" icon="sliders-horizontal" count={count} align="right">
+        {moved.map((g) => <React.Fragment key={g.k}>{g.pop}</React.Fragment>)}
+        {more}
+      </EPDrop>
+    </div>
+  );
+}
+// the sticky strip FilterBar sits in — same offset, padding and hairline in every journey
+function FilterBarStrip({ children }) {
+  return (
+    <div data-design-component="sticky-filter-row" style={{ position: "sticky", top: "-12px", zIndex: 20, margin: "0 -20px", padding: "8px 20px", background: "var(--background)", borderBottom: "1px solid var(--border)" }}>{children}</div>
+  );
+}
+// ---- journey definition: residential / commercial property filters ----------
+// Used by By area AND Near a school. `accent` lets a journey recolour the
+// Residential selector + active pills (Schools → plum) without a new component.
+function EPFiltersCompact({ st, act, accent, accentTint }) {
   const f = st.filters;
   const rent = f.purpose === "Rent";
   const com = f.family === "Commercial";
@@ -316,8 +369,8 @@ function EPFiltersCompact({ st, act }) {
   const budgetList = budgets.slice();
   if (budgetVal && !budgetList.some((b) => b.k === budgetVal)) budgetList.push({ k: budgetVal, l: EP.budgetLabel(f, budgetVal) });
   const readyLabel = rent ? "Available now" : com ? "Ready to occupy" : "Ready to move";
-  const tone = com ? COM_GOLD : undefined;
-  const tint = com ? "var(--gold-100)" : undefined;
+  const tone = com ? COM_GOLD : accent;
+  const tint = com ? "var(--gold-100)" : accentTint;
   const sqft = (n) => n.toLocaleString("en-IN") + "+ sq ft";
   const typeLabel = com ? (subs.length === 0 ? "All types" : subs.length === 1 ? EP.comLabel(subs[0]) : subs.length + " types") : (f.ptype === "Any type" ? "All types" : f.ptype + "s");
   // Every group, in the same order as before. `drop` = collapse priority: when the row
@@ -354,42 +407,15 @@ function EPFiltersCompact({ st, act }) {
     pop: <EPPop label={epShortArea(EP.comAreaLabel(f))}>{EP.COM_AREAS.map((a) => <EPChip key={"a" + a.k} label={a.l} on={(f.comArea || 0) === a.k} onClick={() => act.setFilters({ comArea: a.k })} tone={COM_GOLD} />)}</EPPop> });
   groups.push({ k: "budget", drop: 0, active: budgetVal > 0, dc: "budget-group", label: budgetVal ? EP.budgetLabel(f, budgetVal) : rent ? "Monthly rent" : "Budget",
     pop: <EPPop label={rent ? "Monthly rent" : "Budget"}>{budgetList.map((b) => <EPChip key={"p" + b.k} label={b.l} on={budgetVal === b.k} onClick={() => setBudget(b.k)} />)}</EPPop> });
-  // collapse loop: measured, never guessed. Reset on any width change or when the
-  // group set changes; each layout pass that still overflows moves one more group.
-  const rowRef = React.useRef(null);
-  const [nHide, setNHide] = React.useState(0);
-  const sig = groups.map((g) => g.k + ":" + g.label).join("|");
-  const collapsible = groups.filter((g) => g.drop > 0).sort((a, b) => b.drop - a.drop);
-  const hidden = collapsible.slice(0, nHide).map((g) => g.k);
-  React.useLayoutEffect(() => { setNHide(0); }, [sig]);
-  React.useLayoutEffect(() => {
-    const el = rowRef.current;
-    if (el && el.scrollWidth > el.clientWidth + 1 && nHide < collapsible.length) setNHide(nHide + 1);
-  });
-  React.useEffect(() => {
-    const el = rowRef.current;
-    if (!el || !window.ResizeObserver) return;
-    let w = el.clientWidth;
-    const ro = new ResizeObserver(() => { if (Math.abs(el.clientWidth - w) > 1) { w = el.clientWidth; setNHide(0); } });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  const moved = groups.filter((g) => hidden.indexOf(g.k) !== -1);
-  const more = (f.ready ? 1 : 0) + (f.verified ? 1 : 0) + moved.filter((g) => g.active).length;
-  return (
-    <div ref={rowRef} data-design-component="filter-toolbar" role="toolbar" aria-label="Property filters" style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "nowrap", minWidth: 0 }}>
-      <EPDrop dc="property-family-row" label={com ? "Commercial" : "Residential"} filled tone={com ? COM_GOLD : "var(--accent)"}>
-        <EPPop label="Property family">
-          <EPChip label="Residential" on={!com} onClick={() => act.setFamily("Residential")} />
-          <EPChip label="Commercial" on={com} onClick={() => act.setFamily("Commercial")} tone={COM_GOLD} />
-        </EPPop>
-      </EPDrop>
-      {groups.filter((g) => hidden.indexOf(g.k) === -1).map((g) => (
-        <EPDrop key={g.k} dc={g.dc} label={g.label} active={g.active} tone={tone} tint={tint}>{g.pop}</EPDrop>
-      ))}
-      <span style={{ flex: "1 0 0px" }} />
-      <EPDrop dc="standing-toggles-group" label="More filters" icon="sliders-horizontal" count={more} align="right">
-        {moved.map((g) => <React.Fragment key={g.k}>{g.pop}</React.Fragment>)}
+  const primary = { dc: "property-family-row", label: com ? "Commercial" : "Residential", tone: com ? COM_GOLD : (accent || "var(--accent)"),
+    pop: (
+      <EPPop label="Property family">
+        <EPChip label="Residential" on={!com} onClick={() => act.setFamily("Residential")} tone={accent} />
+        <EPChip label="Commercial" on={com} onClick={() => act.setFamily("Commercial")} tone={COM_GOLD} />
+      </EPPop>
+    ) };
+  const more = (
+    <>
         <EPPop label="Only show">
           <EPChip label={readyLabel} on={f.ready} onClick={() => act.setFilters({ ready: !f.ready })} />
           <EPChip label="Broker identity verified" on={f.verified} onClick={() => act.setFilters({ verified: !f.verified })} tone="var(--evergreen-600)" />
@@ -399,9 +425,50 @@ function EPFiltersCompact({ st, act }) {
             <EPGhost onClick={() => act.setFilters({ comSubs: [], comMaxPrice: 0, comArea: 0, verified: false })}>Reset commercial filters</EPGhost>
           </span>
         )}
-      </EPDrop>
-    </div>
+    </>
   );
+  return <FilterBar ariaLabel="Property filters" primary={primary} groups={groups} more={more} moreActive={(f.ready ? 1 : 0) + (f.verified ? 1 : 0)} tone={tone} tint={tint} />;
+}
+// ---- journey definition: agricultural land ---------------------------------
+// Same FilterBar. Size · Budget · Soil are the everyday decisions; road access and
+// water are specialist land checks and live behind More filters.
+const EP_AG_SIZES = [{ k: "any", l: "Any size" }, { k: "u1", l: "< 1 ac" }, { k: "1-3", l: "1–3 ac" }, { k: "3-5", l: "3–5 ac" }, { k: "5p", l: "5 ac+" }];
+const EP_AG_PRICES = [{ k: "any", l: "Any price" }, { k: "u1", l: "< ₹1 Cr" }, { k: "1-2", l: "₹1–2 Cr" }, { k: "2p", l: "₹2 Cr+" }];
+const EP_AG_SOILS = ["Any soil", "Red loam", "Red gravel", "Alluvial"];
+function EPAgriFiltersCompact({ st, act }) {
+  const f = st.ag.filters;
+  const set = (p) => act.setAgriFilters({ ...f, ...p });
+  const EV = "var(--evergreen-600)", EVT = "var(--evergreen-50)";
+  const lab = (list, k) => (list.filter((x) => x.k === k)[0] || list[0]).l;
+  const primary = { dc: "land-journey", label: "Agricultural land", tone: EV,
+    pop: (
+      <>
+        <EPPop label="Looking for">
+          <EPChip label="Agricultural land" on tone={EV} onClick={() => {}} />
+          <EPChip label="Homes & commercial" on={false} onClick={() => act.setJourney("areas")} />
+        </EPPop>
+        <span style={{ fontSize: "11.5px", lineHeight: 1.4, color: "var(--text-muted)" }}>Agricultural land is its own journey with its own counts — homes and commercial open in By area.</span>
+      </>
+    ) };
+  const groups = [
+    { k: "size", drop: 2, active: f.size !== "any", dc: "agri-size-group", label: f.size !== "any" ? lab(EP_AG_SIZES, f.size) : "Land size",
+      pop: <EPPop label="Land size">{EP_AG_SIZES.map((o) => <EPChip key={o.k} label={o.l} on={f.size === o.k} onClick={() => set({ size: o.k })} tone={EV} />)}</EPPop> },
+    { k: "price", drop: 0, active: f.price !== "any", dc: "agri-budget-group", label: f.price !== "any" ? lab(EP_AG_PRICES, f.price) : "Budget",
+      pop: <EPPop label="Budget">{EP_AG_PRICES.map((o) => <EPChip key={o.k} label={o.l} on={f.price === o.k} onClick={() => set({ price: o.k })} tone={EV} />)}</EPPop> },
+    { k: "soil", drop: 3, active: f.soil !== "Any soil", dc: "agri-soil-group", label: f.soil !== "Any soil" ? f.soil : "Soil",
+      pop: <EPPop label="Soil / cultivation">{EP_AG_SOILS.map((s) => <EPChip key={s} label={s} on={f.soil === s} onClick={() => set({ soil: s })} tone={EV} />)}</EPPop> }
+  ];
+  const anyActive = f.size !== "any" || f.price !== "any" || f.road || f.water || f.soil !== "Any soil";
+  const more = (
+    <>
+      <EPPop label="Land access & water">
+        <EPChip label="Road access" on={f.road} onClick={() => set({ road: !f.road })} tone={EV} />
+        <EPChip label="Water available" on={f.water} onClick={() => set({ water: !f.water })} tone={EV} />
+      </EPPop>
+      {anyActive && <span style={{ display: "flex" }}><EPGhost onClick={() => act.setAgriFilters(window.DP_AGRI_DEFAULTS)}>Reset land filters</EPGhost></span>}
+    </>
+  );
+  return <FilterBar ariaLabel="Agricultural land filters" primary={primary} groups={groups} more={more} moreActive={(f.road ? 1 : 0) + (f.water ? 1 : 0)} tone={EV} tint={EVT} />;
 }
 // menu of scope operations — every action the old chip row had, one click deeper
 function EPMenu({ label, items, dc }) {
@@ -1156,11 +1223,14 @@ function ExpPanel({ view, st, act, isMobile }) {
   // (ExpDesktop), filters collapse into one sticky dropdown row inside the scroller.
   const skin = !isMobile && expListingSkin(st, view);
   const [sort, setSort] = React.useState("rel");
-  const stickyFilters = skin && showFilters ? (
-    <div data-design-component="sticky-filter-row" style={{ position: "sticky", top: "-12px", zIndex: 20, margin: "0 -20px", padding: "8px 20px", background: "var(--background)", borderBottom: "1px solid var(--border)" }}>
-      <EPFiltersCompact st={st} act={act} />
-    </div>
-  ) : null;
+  const stickyFilters = skin && showFilters ? <FilterBarStrip><EPFiltersCompact st={st} act={act} /></FilterBarStrip> : null;
+  // Near a school + Agricultural land: the SAME FilterBar in the same strip, fed their own definitions
+  const schoolBar = !isMobile && journey === "schools" && view.level === "schools-homes";
+  const agriBar = !isMobile && journey === "agri" && view.level === "agri-parcels";
+  const compact = skin || schoolBar || agriBar;
+  const journeyFilters = !st.detail && !st.alertDraft && st.view !== "alerts" && (schoolBar
+    ? <FilterBarStrip><EPFiltersCompact st={st} act={act} accent="var(--plum-600)" accentTint="var(--plum-tint)" /></FilterBarStrip>
+    : agriBar ? <FilterBarStrip><EPAgriFiltersCompact st={st} act={act} /></FilterBarStrip> : null);
   // the list keeps its place across a detail round trip: the offset is stored against the
   // result state it belongs to, and restored only when that same state comes back.
   const scRef = React.useRef(null);
@@ -1182,13 +1252,13 @@ function ExpPanel({ view, st, act, isMobile }) {
         <div style={{ flex: "none", padding: "10px 14px", borderBottom: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "9px" }}>
           <window.ExpModeBar st={st} act={act} view={view} isMobile />
         </div>
-      ) : (view.journeyRoot || (showFilters && !skin)) && (
+      ) : (view.journeyRoot || (showFilters && !skin && !schoolBar)) && (
         <div style={{ flex: "none", padding: "10px 20px", borderBottom: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "9px" }}>
           <window.ExpModeBar st={st} act={act} view={view} isMobile={false} part="cues" />
-          {showFilters && !skin && <EPFilters st={st} act={act} isMobile={false} />}
+          {showFilters && !skin && !schoolBar && <EPFilters st={st} act={act} isMobile={false} />}
         </div>
       )}
-      <div className="upt-scroll" ref={scRef} onScroll={onScroll} key={view.paintKey} style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: isMobile ? "12px 14px 108px" : skin ? "12px 20px 26px" : "14px 20px 26px", display: "flex", flexDirection: "column", gap: skin ? "10px" : "12px", animation: "expFade var(--dur-normal) var(--ease-out)" }}>
+      <div className="upt-scroll" ref={scRef} onScroll={onScroll} key={view.paintKey} style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: isMobile ? "12px 14px 108px" : compact ? "12px 20px 26px" : "14px 20px 26px", display: "flex", flexDirection: "column", gap: compact ? "10px" : "12px", animation: "expFade var(--dur-normal) var(--ease-out)" }}>
         {/* On mobile the filter groups stack at full tap height, which is taller than a
             phone can spare from a fixed header. They ride at the top of the scrolling
             body instead: every group is reachable by the scroll a phone user already
@@ -1212,6 +1282,7 @@ function ExpPanel({ view, st, act, isMobile }) {
               <>
                 {backBtn}
                 <EPHeading eyebrow={heading.eyebrow} title={heading.title} sub={heading.sub} stat={heading.stat} tint={tint} />
+                {journeyFilters}
                 {view.notes.map((n, i) => <EPNote key={i} tone={n.tone} action={n.action} onAction={n.onAction}>{n.text}</EPNote>)}
                 <window.ExpSchoolsPanel view={view} st={st} act={act} isMobile={isMobile} />
               </>
@@ -1219,6 +1290,7 @@ function ExpPanel({ view, st, act, isMobile }) {
               <>
                 {backBtn}
                 <EPHeading eyebrow={heading.eyebrow} title={heading.title} sub={heading.sub} stat={heading.stat} tint={tint} />
+                {journeyFilters}
                 {view.notes.map((n, i) => <EPNote key={i} tone={n.tone} action={n.action} onAction={n.onAction}>{n.text}</EPNote>)}
                 <window.ExpAgriPanel view={view} st={st} act={act} isMobile={isMobile} />
               </>
@@ -1284,4 +1356,4 @@ function ExpPanel({ view, st, act, isMobile }) {
   );
 }
 
-Object.assign(window, { ExpPanel, ExpListingsGrid, EPFilters, EPFiltersCompact, EPChip, EPGroup, EPToolLabel, expListingSkin });
+Object.assign(window, { ExpPanel, ExpListingsGrid, EPFilters, EPFiltersCompact, FilterBar, FilterBarStrip, EPAgriFiltersCompact, EPChip, EPGroup, EPToolLabel, expListingSkin });

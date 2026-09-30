@@ -94,7 +94,17 @@ const SCENARIOS = [
   { id: "mf-13", label: "13 Rent only", group: "mf" },
   { id: "mf-14", label: "14 Schools · homes", group: "mf" },
   { id: "mf-15", label: "15 Schools · sheet", group: "mf" },
-  { id: "mf-16", label: "16 Schools · applied", group: "mf" }
+  { id: "mf-16", label: "16 Schools · applied", group: "mf" },
+  // One FilterBar, three journeys — compare the row directly under each heading.
+  { id: "fb-area", label: "By area · Hebbal", group: "fb" },
+  { id: "fb-school", label: "Near a school · DPS", group: "fb" },
+  { id: "fb-agri", label: "Agricultural · Yelahanka Rural", group: "fb" },
+  // One MapContextStatus, five contexts — compare the bottom-left map card.
+  { id: "ms-area", label: "By area · Hebbal", group: "ms" },
+  { id: "ms-sch-city", label: "Schools · Bangalore", group: "ms" },
+  { id: "ms-sch-sel", label: "Schools · selected school", group: "ms" },
+  { id: "ms-agri-city", label: "Agri · Bangalore", group: "ms" },
+  { id: "ms-agri-town", label: "Agri · Yelahanka Rural", group: "ms" }
 ];
 const SCENARIO_GROUPS = [
   { key: null, label: "Existing Discover" },
@@ -103,7 +113,9 @@ const SCENARIO_GROUPS = [
   { key: "attr", label: "Contextual attributes" },
   { key: "carea", label: "Commercial area & budget" },
   { key: "pre", label: "Preserved behaviour" },
-  { key: "mf", label: "Map filters · #2627" }
+  { key: "mf", label: "Map filters · #2627" },
+  { key: "fb", label: "FilterBar · 3 journeys" },
+  { key: "ms", label: "Map status · 3 journeys" }
 ];
 const TRIO = ["hebbal", "nagawara", "jakkur"];
 // Commercial review scopes — real areas from the canonical catalogue, chosen because
@@ -235,9 +247,27 @@ function scenarioState(id) {
     }
     else if (id === "mf-11") { s.filters = { ...resEd }; const first = EX.inAreas(TRIO, resEd)[0]; s.peek = first ? first.id : null; }
   }
+  const msMap = { "ms-area": "fb-area", "ms-sch-sel": "fb-school", "ms-agri-town": "fb-agri" };
+  if (msMap[id]) { const n = scenarioState(msMap[id]); n.scenario = id; return n; }
+  if (id === "ms-sch-city") Object.assign(s, { journey: "schools" });
+  else if (id === "ms-agri-city") Object.assign(s, { journey: "agri" });
+  if (id === "fb-area") Object.assign(s, { nodeKey: "hebbal", scope: { kind: "AREA_SET", areaKeys: ["hebbal"] }, committed: ["hebbal"] });
+  else if (id === "fb-school") {
+    const list = window.EXJ.schoolsIn("hebbal");
+    const sel = list.filter((x) => /Delhi Public School/.test(x.name))[0] || list[0];
+    Object.assign(s, { journey: "schools", nodeKey: "hebbal", sch: { ...schBase(), nodeKey: sel.areaKey, areaKey: sel.areaKey, areaKeys: [sel.areaKey], selId: sel.id, radiusKm: 5 } });
+  } else if (id === "fb-agri") Object.assign(s, { journey: "agri", ag: { ...agBase(), corridorId: "n-doddaballapur", clusterId: "t-yelahanka-rural" } });
   return s;
 }
 const HINTS = {
+  "ms-area": () => "Reference: MapContextStatus bottom-left — Showing N verified properties across Hebbal · Recenter on Hebbal.",
+  "ms-sch-city": () => "Same MapContextStatus: Showing N schools across Bangalore · Recenter on Bangalore. Pick a direction — the one recenter is replaced.",
+  "ms-sch-sel": () => "Selected school: the status describes the PROPERTIES on the map — verified properties near the school · Recenter on it.",
+  "ms-agri-city": () => "Same MapContextStatus: verified agricultural parcels around Bangalore · Recenter on Bangalore.",
+  "ms-agri-town": () => "Town level: parcels in Yelahanka Rural · Recenter on Yelahanka Rural — the only recenter on the map.",
+  "fb-area": () => "Reference: the FilterBar under the Hebbal heading. Same component renders in the next two frames.",
+  "fb-school": () => "Same FilterBar, residential definitions, plum accent. School scope, radius and Back to schools are unchanged below it.",
+  "fb-agri": () => "Same FilterBar, land definitions: Land size · Budget · Soil visible; Road access + Water behind More filters.",
   "mf-01": () => "Map, no filters: Filters leads the top-left row — outlined, labelled, 44px, clear of zoom and the results sheet. Tap it.",
   "mf-02": () => "Keyboard focus on the entry. Its accessible name states the count: “Filters, none active”. Enter opens the sheet and focus moves to its heading.",
   "mf-03": () => "Modal bottom sheet over a dimmed, inert map. The same List groups, all open. Buy/Rent sits first because the List control bar is not on Map.",
@@ -523,8 +553,24 @@ function Experience() {
       set({ polyDraft: poly, note: null });
     },
     usePoly: () => set({ confirm: { kind: "poly", title: "Replace your current search area with this drawn area?", body: (st.committed.length ? st.committed.map((k) => EX.byKey[k].name).join(", ") + " will be removed from the search. " : "The city-wide list will be replaced. ") + "Your filters stay as they are, and you can return.", primary: "Use drawn area", secondary: "Cancel" } }),
-    searchThisArea: () => set({ confirm: { kind: "viewport", title: "Search the visible map area instead?", body: (st.scope && st.scope.kind === "AREA_SET" ? st.committed.map((k) => EX.byKey[k].name).join(", ") + " will be replaced by whatever is on screen. " : "") + "Filters are kept, and the return target stays available.", primary: "Search this area", secondary: "Keep current scope" } }),
-    // a scope of one KIND becoming a scope of another KIND is always confirmed
+    // Scope-replacement rule:
+    //   destructive / non-obvious replacement (Use drawn area, Replace with selected
+    //   areas, Clear selected areas) → confirmation may be required.
+    //   Search this area → IMMEDIATE, no confirmation: the action is explicit (the user
+    //   moved the map, then pressed the button), feedback is immediate, filters are
+    //   preserved, and the previous scope is restorable via "Return to …" (prevScope).
+    // It previously opened a confirm card in the results panel, which could be off-screen
+    // from the map button and made the button appear broken.
+    searchThisArea: () => {
+      if (!st.dirtyBounds) return;
+      const prevLabel = st.scope && st.scope.kind === "AREA_SET" ? st.committed.map((k) => EX.byKey[k].name).join(" + ") : null;
+      commit({ scope: { kind: "VIEWPORT", bounds: st.dirtyBounds }, prevScope: st.scope && st.scope.kind !== "VIEWPORT" ? st.scope : st.prevScope, confirm: null, phase: "loading", focusChip: null, detail: null, shown: 8, dirty: false,
+        note: "Showing the visible map area. Filters kept" + (prevLabel ? " — return to " + prevLabel + " any time." : ".") });
+      later(520, () => set({ phase: "idle" }));
+    },
+    // Replacing a drawn-area or visible-map scope with selected areas is non-obvious
+    // (the current boundary is discarded), so it is confirmed. See the scope-replacement
+    // rule above searchThisArea — Search this area itself is the immediate exception.
     replaceWithAreas: (keys) => set({ confirm: { kind: "toareas", keys: keys.slice(), title: "Replace this search with selected areas?", body: (st.scope && st.scope.kind === "POLYGON" ? "Your drawn area" : "The visible-map search") + " will be removed and " + keys.map((k) => EX.byKey[k].name).join(", ") + " will become the search scope. Your filters stay as they are.", primary: "Use selected areas", secondary: "Keep current scope" } }),
     // widening a visible-map search stays a visible-map search
     expandVisible: () => {
@@ -539,9 +585,6 @@ function Experience() {
       if (c.kind === "poly") {
         commit({ scope: { kind: "POLYGON", poly: st.polyDraft }, prevScope: st.scope, polyDraft: null, confirm: null, phase: "loading", focusChip: null, shown: 8, dirty: false });
         later(420, () => set({ phase: "idle" }));
-      } else if (c.kind === "viewport") {
-        commit({ scope: { kind: "VIEWPORT", bounds: st.dirtyBounds }, prevScope: st.scope, confirm: null, phase: "loading", focusChip: null, shown: 8, dirty: false });
-        later(520, () => set({ phase: "idle" }));
       } else if (c.kind === "clear") {
         const p = EX.parentOf(st.nodeKey) || "blr";
         commit({ nodeKey: p, scope: null, committed: [], confirm: null, focusChip: null, dirty: false });
@@ -1079,7 +1122,7 @@ function ExpSheet({ st, view, act }) {
     <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 700, padding: "10px 14px 18px", background: "var(--paper)", borderRadius: "16px 16px 0 0", borderTop: "1px solid var(--border)", boxShadow: "0 -8px 26px rgba(20,26,40,0.16)", transition: "transform var(--dur-normal) var(--ease-out)" }}>
       {/* mobile info dock is the sheet's first block: the sheet is already the bottom info zone, so the dock adds no floating layer over markers or zoom */}
       <div style={{ width: "38px", height: "4px", borderRadius: "999px", background: "var(--stone-400)", margin: "0 auto 10px" }} />
-      {window.ExpMapInfoDock && view.journey === "areas" && <div style={{ marginBottom: "8px", paddingBottom: "8px", borderBottom: "1px solid var(--border)" }}><window.ExpMapInfoDock view={view} signedIn={st.signedIn} onSignIn={act.toggleSignedIn} compact embedded /></div>}
+      {window.ExpMapInfoDock && view.info && <div style={{ marginBottom: "8px", paddingBottom: "8px", borderBottom: "1px solid var(--border)" }}><window.ExpMapInfoDock view={view} signedIn={st.signedIn} onSignIn={act.toggleSignedIn} compact embedded /></div>}
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "10px" }}>
         <span data-design-component="map-result-heading" style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-strong)" }}>{sheetTitle}</span>
         {view.clusterFocus

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FilterBar — three journeys side by side</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+html,body{margin:0;background:var(--canvas-200);font-family:var(--font-sans);color:var(--text-strong)}
+a{color:var(--accent)}a:hover{color:var(--accent-hover)}
+.wrap{padding:20px 24px 32px;display:flex;flex-direction:column;gap:16px}
+h1{margin:0;font-size:20px;font-weight:700}
+p{margin:0;font-size:13px;color:var(--text-body);max-width:900px;line-height:1.5;text-wrap:pretty}
+.row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.col{display:flex;flex-direction:column;gap:8px;min-width:0}
+.lab{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-muted)}
+.dot{width:10px;height:10px;border-radius:50%}
+.frame{position:relative;width:100%;aspect-ratio:1366/940;overflow:hidden;border-radius:var(--radius-lg);border:1px solid var(--border);background:#fff;box-shadow:var(--shadow-sm)}
+.frame iframe{position:absolute;top:0;left:0;width:1366px;height:940px;border:0;transform-origin:0 0}
+.spec{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;font-size:12.5px;line-height:1.5}
+.spec div{background:var(--surface-card);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px 14px}
+code{font-family:var(--font-mono);font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>FilterBar — one component, three journey definitions</h1>
+<p>Each frame is the live Discover experience. The row under each heading is the same <code>FilterBar</code> (same 34px pills, 6px gap, filled primary selector, measured collapse, More filters at the right). Only the definitions and the accent change.</p>
+<div class="row">
+<div class="col"><span class="lab"><span class="dot" style="background:var(--copper-500)"></span>1 · By area — Hebbal (reference)</span><div class="frame"><iframe src="experience.html?journey=fb-area" title="By area"></iframe></div></div>
+<div class="col"><span class="lab"><span class="dot" style="background:#5E5286"></span>2 · Near a school — Delhi Public School</span><div class="frame"><iframe src="experience.html?journey=fb-school" title="Near a school"></iframe></div></div>
+<div class="col"><span class="lab"><span class="dot" style="background:var(--evergreen-600)"></span>3 · Agricultural land — Yelahanka Rural</span><div class="frame"><iframe src="experience.html?journey=fb-agri" title="Agricultural land"></iframe></div></div>
+</div>
+<div class="spec">
+<div><b>FilterBar</b> (ExpPanel.jsx)<br><code>primary</code> filled selector · <code>groups[]</code> with <code>drop</code> priority · <code>more</code> specialist filters · <code>tone/tint</code>. Rendered inside <code>FilterBarStrip</code> (sticky, 8px/20px, hairline).</div>
+<div><b>EPFiltersCompact</b> — residential/commercial definitions<br>By area: default accent. Near a school: <code>accent="plum"</code>. Residential ▾ · Type · BHK · Carpet area · Budget · More filters (Ready to move, Verified).</div>
+<div><b>EPAgriFiltersCompact</b> — land definitions<br>Agricultural land ▾ · Land size · Budget · Soil · More filters (Road access, Water available, Reset). Evergreen accent.</div>
+</div>
+</div>
+<script>
+function fit(){document.querySelectorAll('.frame').forEach(function(f){f.querySelector('iframe').style.transform='scale('+(f.clientWidth/1366)+')';});}
+window.addEventListener('resize',fit);fit();
+</script>
+</body>
+</html>
