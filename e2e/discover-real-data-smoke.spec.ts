@@ -767,6 +767,129 @@ test.describe('Discover real-data smoke', () => {
   });
 
   // -------------------------------------------------------------------------
+  // #2766 — desktop (>=1366, reskin active) School-selected: exactly ONE legend
+  // -------------------------------------------------------------------------
+
+  test.describe('#2766 — desktop school-selected legend', () => {
+    test.use({ viewport: { width: 1400, height: 900 } });
+
+    test('#2766 — school-selected desktop renders exactly one school-radius legend', async ({ page }) => {
+      const schoolId = assertSchoolFixturePresent('#2766');
+
+      await page.goto(
+        `/discover?city=${CITY}&schoolId=${encodeURIComponent(schoolId)}` +
+          `&radiusKm=${SCHOOL_RADIUS_KM}&journey=school-first`,
+      );
+
+      await page.waitForSelector('[data-testid="discover-right-panel"]', { timeout: 15_000 });
+      // Homes loaded => the School-selected map chrome has fully settled.
+      await page.waitForSelector('[data-testid="listing-card"]', { timeout: 15_000 });
+
+      const legend = page.getByTestId('school-radius-legend');
+      await expect(legend).toHaveCount(1);
+      await expect(legend).toBeVisible();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // #2762 — mobile (390x844) School-selected map: the inline school-radius
+  // legend must not sit on top of the Map Info Dock's "Recenter on <school>" row
+  // -------------------------------------------------------------------------
+
+  test.describe('#2762 — mobile school-selected map legend/dock', () => {
+    test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+
+    /** Open the mobile School-selected Map and wait for the dock + radius legend. */
+    async function openMobileSchoolMap(page: Page, journey: string, radiusKm: number = SCHOOL_RADIUS_KM) {
+      const schoolId = assertSchoolFixturePresent(journey);
+      await page.goto(
+        `/discover?city=${CITY}&schoolId=${encodeURIComponent(schoolId)}` +
+          `&radiusKm=${radiusKm}&journey=school-first`,
+      );
+      const mapTrigger = page.getByTestId('control-bar-map-trigger');
+      await expect(mapTrigger).toBeVisible({ timeout: 15_000 });
+      await mapTrigger.tap();
+      const dock = page.getByTestId('map-info-dock');
+      const radiusLegend = page.getByTestId('school-radius-legend');
+      await expect(dock).toBeVisible({ timeout: 15_000 });
+      await expect(radiusLegend).toBeVisible({ timeout: 15_000 });
+      return { dock, radiusLegend };
+    }
+
+    async function boxOf(locator: Locator, what: string): Promise<BoundingBox> {
+      const box = await locator.boundingBox();
+      expect(box, `#2762: ${what} must have a bounding box`).not.toBeNull();
+      return box as BoundingBox;
+    }
+
+    /** The dock's recenter control must stay visible and topmost at its centre. */
+    async function expectRecenterUncovered(dock: Locator): Promise<void> {
+      const recenter = dock.getByRole('button', { name: /^Recenter on / });
+      await expect(recenter).toBeVisible();
+      const rb = await boxOf(recenter, 'the dock recenter button');
+      const centreHit = await recenter.evaluate((el, [cx, cy]) => {
+        const hit = document.elementFromPoint(cx, cy);
+        return hit !== null && el.contains(hit);
+      }, [rb.x + rb.width / 2, rb.y + rb.height / 2]);
+      expect(centreHit, '#2762: the centre of the dock recenter button must not be covered by another element').toBe(true);
+    }
+
+    test('#2762 — mobile school-selected: school-radius legend does not overlap the Map Info Dock', async ({ page }) => {
+      const { dock, radiusLegend } = await openMobileSchoolMap(page, '#2762 mobile');
+      await expectRecenterUncovered(dock);
+
+      const dockBox = await boxOf(dock, 'the Map Info Dock');
+      const legendBox = await boxOf(radiusLegend, 'the school-radius legend');
+      expect(
+        intersects(dockBox, legendBox),
+        `#2762: the school-radius legend ${JSON.stringify(legendBox)} must not intersect the Map Info Dock ${JSON.stringify(dockBox)}`,
+      ).toBe(false);
+    });
+
+    async function expectZoomedLegendsPairwiseClear(page: Page, journey: string, radiusKm: number): Promise<number> {
+      const { dock, radiusLegend } = await openMobileSchoolMap(page, journey, radiusKm);
+      const propertyLegend = page.getByLabel('Property type legend');
+
+      // Zoom in until individual homes render (which is what mounts the property-type
+      // legend) — asserted visible below so this test can never pass vacuously.
+      for (let i = 0; i < 6 && !(await propertyLegend.isVisible()); i += 1) {
+        await clickMapZoomIn(page);
+        await propertyLegend.waitFor({ state: 'visible', timeout: 2_500 }).catch(() => {
+          // Not yet: zoom once more.
+        });
+      }
+      await expect(propertyLegend, '#2762: the property-type legend must be visible (homes on the map)').toBeVisible();
+      await expectRecenterUncovered(dock);
+
+      const boxes: Array<[string, BoundingBox]> = [
+        ['school-radius legend', await boxOf(radiusLegend, 'the school-radius legend')],
+        ['property-type legend', await boxOf(propertyLegend, 'the property-type legend')],
+        ['map info dock', await boxOf(dock, 'the Map Info Dock')],
+        ['zoom control', await boxOf(page.locator('.leaflet-control-zoom'), 'the Leaflet zoom control')],
+      ];
+      for (let i = 0; i < boxes.length; i += 1) {
+        for (let j = i + 1; j < boxes.length; j += 1) {
+          expect(
+            intersects(boxes[i][1], boxes[j][1]),
+            `#2762: ${boxes[i][0]} ${JSON.stringify(boxes[i][1])} must not intersect ${boxes[j][0]} ${JSON.stringify(boxes[j][1])}`,
+          ).toBe(false);
+        }
+      }
+      return propertyLegend.locator('p ~ div > div').count();
+    }
+
+    test('#2762 — mobile school-selected, homes zoomed in: radius legend, property-type legend, dock and zoom control are pairwise clear', async ({ page }) => {
+      await expectZoomedLegendsPairwiseClear(page, '#2762 mobile zoomed', SCHOOL_RADIUS_KM);
+    });
+
+    test('#2762 — mobile school-selected, 10 km radius (more property types): legends stay pairwise clear', async ({ page }) => {
+      const rows = await expectZoomedLegendsPairwiseClear(page, '#2762 mobile zoomed 10km', 10);
+      // Non-vacuous: the height cap only matters once the legend has >= 3 rows.
+      expect(rows, '#2762: the 10 km state must show >= 3 property-type rows').toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // J3 — school-first auth
   // -------------------------------------------------------------------------
 

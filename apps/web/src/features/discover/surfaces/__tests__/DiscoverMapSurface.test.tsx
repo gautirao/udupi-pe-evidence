@@ -18,7 +18,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRef } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { UseInfiniteQueryResult, InfiniteData } from '@tanstack/react-query';
@@ -27,6 +27,7 @@ import type {
   DiscoverJourneyTransitionsCommands,
 } from '@/features/discover/state/useDiscoverJourneyTransitions';
 import type { SchoolsByAreaResponse } from '@/hooks/useSchoolsByArea';
+import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { DiscoverBadgeResult } from '@/features/discover/presentation/discoverBadge';
 import type { DiscoverShellContextValue, DiscoverNavContextValue } from '@/features/discover/context/types';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
@@ -627,5 +628,185 @@ describe('DiscoverMapSurface — desktop areas-recenter-button width cap (#2724 
     });
     expect(buttonByName).toBe(button);
     expect(button).toHaveAttribute('title', `Recenter on ${LONG_AREA_NAME}`);
+  });
+});
+
+// Issue #2762 PR-C (review fix, BLOCKING) — `handleDockRecenter` previously fell through to
+// `areasNavigationJourney.node`/city-centre logic for EVERY journey, including the School/Agri
+// leaf (listing-capable) states where that node is null (isSchoolsNavNodeLevel/isAgriNavNodeLevel
+// both go false once a school is selected / an agri locality is drilled into — see
+// useDiscoverNavigationController.ts). The dock's own button still read "Recenter on
+// <school/locality>" in those states, so clicking it silently recentred on the CITY instead —
+// the exact bug an independent code-reviewer caught. These tests assert the camera intent
+// actually PUBLISHED targets the school/parcel focus, not the city centre, proving the fix (a
+// test that only checked "some intent was published" would pass on the pre-fix city-fallback
+// too).
+describe('DiscoverMapSurface — dock recenter targets the School/Agri leaf state, not the city (#2762 PR-C review fix)', () => {
+  let portalContainer: HTMLDivElement;
+  const CITY_CENTER: [number, number] = [12.97, 77.59];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    portalContainer = document.createElement('div');
+    document.body.appendChild(portalContainer);
+  });
+
+  afterEach(() => {
+    document.body.removeChild(portalContainer);
+  });
+
+  it('school-selected state recenters on the SELECTED SCHOOL, not the city', async () => {
+    mockShell({ isMobileShell: false, mobileView: 'LIST' });
+    const publishCameraIntent = vi.fn();
+    const SELECTED_SCHOOL: SchoolResult = {
+      id: 's1',
+      name: 'Manipal Academy',
+      board: null,
+      boardType: null,
+      latitude: 13.5,
+      longitude: 74.5,
+      address: '',
+      distanceKm: 1,
+    };
+
+    renderSurface({
+      mapReady: true,
+      mapContainerRef: { current: portalContainer } as unknown as React.RefObject<HTMLDivElement>,
+      navJourney: 'school-first',
+      selectedSchool: SELECTED_SCHOOL,
+      cityCenter: CITY_CENTER,
+      publishCameraIntent,
+      activeAreasNavigationJourney: { ...JOURNEY, node: null },
+      cameraController: {
+        agriGroupFocusBounds: null,
+        isColdNavigate: false,
+        isSelectedNodeOutOfView: false,
+        schoolFocusTick: 0,
+        // Issue #2762 — the field the fix reads (view.schools.selectedSchoolLat/Lon), deliberately
+        // DIFFERENT from cityCenter above so a city-fallback regression is distinguishable.
+        selectedSchoolLat: 13.501,
+        selectedSchoolLon: 74.502,
+        handleRecenterOnSelectedNode: vi.fn(),
+      },
+    });
+
+    const button = await screen.findByTestId('map-info-dock-recenter');
+    expect(button).toHaveAccessibleName('Recenter on Manipal Academy');
+    fireEvent.click(button);
+
+    expect(publishCameraIntent).toHaveBeenCalledTimes(1);
+    const intent = publishCameraIntent.mock.calls[0][0];
+    expect(intent.geo_center_lat).toBe(13.501);
+    expect(intent.geo_center_lon).toBe(74.502);
+    // The regression this test guards: silently recentring on the city instead.
+    expect(intent.geo_center_lat).not.toBe(CITY_CENTER[0]);
+    expect(intent.geo_center_lon).not.toBe(CITY_CENTER[1]);
+  });
+
+  it('agri parcel-level state recenters on the parcel/locality focus bounds, not the city', async () => {
+    mockShell({ isMobileShell: false, mobileView: 'LIST' });
+    const publishCameraIntent = vi.fn();
+    const AGRI_BOUNDS: [[number, number], [number, number]] = [
+      [13.4, 74.9],
+      [13.42, 74.92],
+    ];
+
+    renderSurface({
+      mapReady: true,
+      mapContainerRef: { current: portalContainer } as unknown as React.RefObject<HTMLDivElement>,
+      navJourney: 'agri-first',
+      isAgriJourney: true,
+      resolvedPanelContent: 'agri-group-selected',
+      cityCenter: CITY_CENTER,
+      publishCameraIntent,
+      activeAreasNavigationJourney: { ...JOURNEY, node: null },
+      agriController: {
+        selectedRegion: 'N',
+        selectedMaxKm: 25,
+        filteredAgriListings: [{ id: 'l1' } as unknown as never],
+      },
+      cameraController: {
+        // Issue #2762 — the field the fix reads (view.camera.agriGroupFocusBounds), deliberately
+        // NOT overlapping cityCenter above so a city-fallback regression is distinguishable.
+        agriGroupFocusBounds: AGRI_BOUNDS,
+        isColdNavigate: false,
+        isSelectedNodeOutOfView: false,
+        schoolFocusTick: 0,
+        selectedSchoolLat: undefined,
+        selectedSchoolLon: undefined,
+        handleRecenterOnSelectedNode: vi.fn(),
+      },
+    });
+
+    const button = await screen.findByTestId('map-info-dock-recenter');
+    fireEvent.click(button);
+
+    expect(publishCameraIntent).toHaveBeenCalledTimes(1);
+    const intent = publishCameraIntent.mock.calls[0][0];
+    expect(intent.bbox).toEqual(AGRI_BOUNDS);
+    expect(intent.geo_center_lat).toBeCloseTo(13.41, 5);
+    expect(intent.geo_center_lon).toBeCloseTo(74.91, 5);
+    // The regression this test guards: silently recentring on the city instead.
+    expect(intent.geo_center_lat).not.toBeCloseTo(CITY_CENTER[0], 1);
+    expect(intent.geo_center_lon).not.toBeCloseTo(CITY_CENTER[1], 1);
+  });
+});
+
+// Issue #2762 / #2766 — the Map Info Dock now mounts the desktop legend slot for EVERY journey
+// (PR-C), but the slot's school-radius chrome was hardcoded `isAreaFirstJourney: true`, so on a
+// desktop School-selected state BOTH this slot call AND DiscoverMapCanvas's own inline call
+// (`isAreaFirstJourney: nav.journey === 'area-first'`, false here) rendered
+// `school-radius-legend` — two legends. DiscoverMapCanvas is mocked in this suite, so anything
+// this surface renders IS the slot's contribution: School-first must contribute none (the inline
+// canvas call owns it -> exactly one overall), Areas-first (combined state) must keep its one.
+describe('DiscoverMapSurface — desktop school-radius legend has exactly one owner (#2762, #2766)', () => {
+  let portalContainer: HTMLDivElement;
+  const SELECTED_SCHOOL: SchoolResult = {
+    id: 's1',
+    name: 'Manipal Academy',
+    board: null,
+    boardType: null,
+    latitude: 13.5,
+    longitude: 74.5,
+    address: '',
+    distanceKm: 1,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    portalContainer = document.createElement('div');
+    document.body.appendChild(portalContainer);
+  });
+
+  afterEach(() => {
+    document.body.removeChild(portalContainer);
+  });
+
+  it('school-first + school selected: the dock slot does NOT render a school-radius legend (canvas inline call owns it)', async () => {
+    mockShell({ isMobileShell: false, mobileView: 'LIST' });
+    renderSurface({
+      mapReady: true,
+      mapContainerRef: { current: portalContainer } as unknown as React.RefObject<HTMLDivElement>,
+      navJourney: 'school-first',
+      selectedSchool: SELECTED_SCHOOL,
+      schoolRadiusOverlay: true,
+      activeAreasNavigationJourney: { ...JOURNEY, node: null },
+    });
+    await screen.findByTestId('map-info-dock');
+    expect(screen.queryAllByTestId('school-radius-legend')).toHaveLength(0);
+  });
+
+  it('control: area-first combined state keeps exactly one slot-owned school-radius legend', async () => {
+    mockShell({ isMobileShell: false, mobileView: 'LIST' });
+    renderSurface({
+      mapReady: true,
+      mapContainerRef: { current: portalContainer } as unknown as React.RefObject<HTMLDivElement>,
+      navJourney: 'area-first',
+      selectedSchool: SELECTED_SCHOOL,
+      schoolRadiusOverlay: true,
+      activeAreasNavigationJourney: { ...JOURNEY, node: null },
+    });
+    await screen.findByTestId('map-info-dock');
+    expect(screen.getAllByTestId('school-radius-legend')).toHaveLength(1);
   });
 });

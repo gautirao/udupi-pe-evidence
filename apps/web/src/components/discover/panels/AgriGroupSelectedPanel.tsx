@@ -30,6 +30,8 @@ import { landCategoryLabel, waterSourceLabel } from './agriFilterOptions';
 import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import { formatPrice } from '@/lib/formatters';
 import { PanelColumn } from './_shared';
+import { CompactFilterBar } from '@/features/discover/buyer-filters/sections/CompactFilterBar';
+import { useAgriFilterBarGroups } from './useAgriFilterBarGroups';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -123,6 +125,16 @@ interface AgriGroupSelectedPanelProps {
   corridorName?: string | null;
   /** Issue #1771 — corridor direction code (e.g. "N") for the breadcrumb + summary band. */
   directionCode?: string | null;
+  /**
+   * Issue #2762 PR-B — desktop-reskin signal (the SAME `useDiscoverHeaderHostsControls`-derived
+   * boolean AreaSelectedPanel.tsx's `isDesktopReskin` already gates its own compact FilterBar
+   * switch on), threaded as a PROP rather than read via a context hook in this leaf component —
+   * this file already avoids `useDiscoverNav()` for the same reason (see `citySlugForDestinations`'s
+   * own comment: throws outside a DiscoverProvider, which would crash existing standalone-render
+   * tests). Default `false` preserves every existing caller/test's behaviour unchanged (the
+   * Sheet-trigger stays the filter UI) until a caller explicitly opts in.
+   */
+  isDesktop?: boolean;
 }
 
 // ─── Skeleton row ─────────────────────────────────────────────────────────────
@@ -176,6 +188,7 @@ export function AgriGroupSelectedPanel({
   citySlug,
   corridorName = null,
   directionCode = null,
+  isDesktop = false,
 }: AgriGroupSelectedPanelProps) {
   // Sort distance tiers ascending by maxKm for consistent display order.
   const sortedTiers = availableMaxDistances
@@ -354,6 +367,24 @@ export function AgriGroupSelectedPanel({
 
   const activeFilterCount = activeFilterChips.length;
 
+  // Issue #2762 PR-B — always computed (React hooks rule: unconditional call), only RENDERED via
+  // CompactFilterBar when `isDesktop`. Reuses AgriFiltersPanel's existing, unmodified form as a
+  // single render-slot group — see useAgriFilterBarGroups's own doc comment for why this isn't
+  // split into several pills.
+  const agriFilterBarGroups = useAgriFilterBarGroups({
+    acresMin: agriAcresMin,
+    acresMax: agriAcresMax,
+    priceMinRupees: agriPriceMin,
+    priceMaxRupees: agriPriceMax,
+    isAuthenticated,
+    onApply: onApplyFilters,
+    onClear: onClearFilters,
+    agriLandCategory,
+    agriFarmhouseAvailable,
+    agriFencingDone,
+    agriWaterSource,
+  });
+
   const hasActiveFilters =
     agriAcresMin != null || agriAcresMax != null || agriPriceMin != null || agriPriceMax != null
     || agriLandCategory != null || agriFarmhouseAvailable != null || agriFencingDone != null || agriWaterSource != null;
@@ -459,48 +490,53 @@ export function AgriGroupSelectedPanel({
               Distance from city
             </p>
 
-            {/* Filters drawer trigger — icon + label + active-filter count so the
-                button itself signals that hidden advanced filters are applied. */}
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 text-xs h-7 px-2 shrink-0"
-                  data-testid="agri-filters-trigger"
-                >
-                  <SlidersHorizontal className="h-3.5 w-3.5" />
-                  Filters
-                  {activeFilterCount > 0 && (
-                    <span
-                      data-testid="agri-filters-count"
-                      aria-label={`${activeFilterCount} active filters`}
-                      className="rounded-full bg-evergreen text-evergreen-foreground text-[10px] font-semibold px-1.5 py-0.5 leading-none"
-                    >
-                      {activeFilterCount}
-                    </span>
-                  )}
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="right" className="w-80 p-0 overflow-y-auto">
-                <SheetHeader className="sr-only">
-                  <SheetTitle>Agricultural land filters</SheetTitle>
-                </SheetHeader>
-                <AgriFiltersPanel
-                  acresMin={agriAcresMin}
-                  acresMax={agriAcresMax}
-                  priceMinRupees={agriPriceMin}
-                  priceMaxRupees={agriPriceMax}
-                  isAuthenticated={isAuthenticated}
-                  onApply={onApplyFilters}
-                  onClear={onClearFilters}
-                  agriLandCategory={agriLandCategory}
-                  agriFarmhouseAvailable={agriFarmhouseAvailable}
-                  agriFencingDone={agriFencingDone}
-                  agriWaterSource={agriWaterSource}
-                />
-              </SheetContent>
-            </Sheet>
+            {/* Issue #2762 PR-B — desktop: shared compact FilterBar (per locked OQ1, desktop
+                only). Mobile (isDesktop=false, the default): BYTE-IDENTICAL Sheet+Button,
+                unchanged from before this extraction. */}
+            {isDesktop ? (
+              <CompactFilterBar accent="agri" groups={agriFilterBarGroups} />
+            ) : (
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-xs h-7 px-2 shrink-0"
+                    data-testid="agri-filters-trigger"
+                  >
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                    Filters
+                    {activeFilterCount > 0 && (
+                      <span
+                        data-testid="agri-filters-count"
+                        aria-label={`${activeFilterCount} active filters`}
+                        className="rounded-full bg-evergreen text-evergreen-foreground text-[10px] font-semibold px-1.5 py-0.5 leading-none"
+                      >
+                        {activeFilterCount}
+                      </span>
+                    )}
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-80 p-0 overflow-y-auto">
+                  <SheetHeader className="sr-only">
+                    <SheetTitle>Agricultural land filters</SheetTitle>
+                  </SheetHeader>
+                  <AgriFiltersPanel
+                    acresMin={agriAcresMin}
+                    acresMax={agriAcresMax}
+                    priceMinRupees={agriPriceMin}
+                    priceMaxRupees={agriPriceMax}
+                    isAuthenticated={isAuthenticated}
+                    onApply={onApplyFilters}
+                    onClear={onClearFilters}
+                    agriLandCategory={agriLandCategory}
+                    agriFarmhouseAvailable={agriFarmhouseAvailable}
+                    agriFencingDone={agriFencingDone}
+                    agriWaterSource={agriWaterSource}
+                  />
+                </SheetContent>
+              </Sheet>
+            )}
           </div>
 
           {/* ── Distance chips (Issue #1445) — counts + check on selected ─────── */}

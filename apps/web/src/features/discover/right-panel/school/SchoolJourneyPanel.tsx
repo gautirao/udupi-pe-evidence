@@ -49,6 +49,14 @@ export interface SchoolJourneyPanelProps {
   onSelectJourney: SharedChromeCommands['selectJourney'];
   onSelectResultListing: SharedCardsCommands['select'];
   onHoverResultListing: SharedCardsCommands['hover'];
+  /**
+   * Issue #2762 PR-B — the desktop-reskin signal for the shared compact FilterBar (per locked
+   * OQ1, desktop only), forwarded straight through to SchoolSelectedPanel/AreaSchoolCombinedPanel.
+   * Plain data threaded from RightPanelFrameLayoutView.hostsHeaderControls (DiscoverRightPanel's
+   * own `view.frame.layout.hostsHeaderControls`) — never a hook call in this file. Default `false`
+   * preserves every existing caller/test's behaviour unchanged.
+   */
+  isDesktop?: boolean;
 }
 
 /**
@@ -79,6 +87,7 @@ export function SchoolJourneyPanel({
   onSelectJourney,
   onSelectResultListing,
   onHoverResultListing,
+  isDesktop = false,
 }: SchoolJourneyPanelProps): React.ReactNode {
   switch (panelContent) {
     case 'school-browse':
@@ -205,6 +214,7 @@ export function SchoolJourneyPanel({
     case 'school-selected':
       return (
         <SchoolSelectedPanel
+          isDesktop={isDesktop}
           view={{
             chrome: {
               journey: context.journey,
@@ -239,6 +249,7 @@ export function SchoolJourneyPanel({
     case 'area-school-combined':
       return (
         <AreaSchoolCombinedPanel
+          isDesktop={isDesktop}
           view={{
             chrome: {
               journey: context.journey,

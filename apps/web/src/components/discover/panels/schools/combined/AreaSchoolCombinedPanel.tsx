@@ -23,6 +23,9 @@ import { useCallback, useMemo } from 'react';
 import { PanelHeader } from '../../../PanelHeader';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useDiscoverNav } from '@/features/discover/context/useDiscoverContext';
+import { usePropertyFilterGroups } from '@/features/discover/buyer-filters/controllers/usePropertyFilterGroups';
+import { useSchoolFilterBarGroups } from '@/features/discover/right-panel/school/useSchoolFilterBarGroups';
+import { CompactFilterBar } from '@/features/discover/buyer-filters/sections/CompactFilterBar';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
@@ -88,9 +91,18 @@ export interface AreaSchoolCombinedPanelCommands {
 export interface AreaSchoolCombinedPanelProps {
   view: AreaSchoolCombinedPanelView;
   commands: AreaSchoolCombinedPanelCommands;
+  /**
+   * Issue #2762 PR-B — the desktop-reskin signal for the shared compact FilterBar (per locked
+   * OQ1, desktop only). Threaded as a PLAIN PROP, not read via `useDiscoverShell()` directly in
+   * this component — that was tried first and reverted after it crashed
+   * `SchoolJourneyPanels.testidInventory.test.tsx`, which partially mocks
+   * `@/features/discover/context/useDiscoverContext` without a `useDiscoverShell` export. Default
+   * `false` preserves every existing caller/test's behaviour unchanged.
+   */
+  isDesktop?: boolean;
 }
 
-export function AreaSchoolCombinedPanel({ view, commands }: AreaSchoolCombinedPanelProps) {
+export function AreaSchoolCombinedPanel({ view, commands, isDesktop = false }: AreaSchoolCombinedPanelProps) {
   const {
     chrome: { journey, activeContextChips, filtersContent },
     viewer: { intent = 'buy', isAuthenticated = false },
@@ -110,6 +122,21 @@ export function AreaSchoolCombinedPanel({ view, commands }: AreaSchoolCombinedPa
   // Issue #1953 (build step 2) — consumes the DiscoverProvider facade instead
   // of calling useDiscoverUrlState() directly (state plumbing only; read-only).
   const urlState = useDiscoverNav();
+
+  // Issue #2762 PR-B — Rules of Hooks: called unconditionally, above the early-return below,
+  // same as useSelectedCardScroll/sortedListingsWithDistance already are in this file.
+  const propertyFilterGroups = usePropertyFilterGroups({
+    filters,
+    onFiltersChange,
+    intent,
+    isReadyToMoveSupported: true,
+    isCommercialSubtypeSupported: false,
+  });
+  const { groups: schoolFilterBarGroups, overflowOnly: schoolFilterBarOverflow } = useSchoolFilterBarGroups({
+    groups: propertyFilterGroups,
+    isCommercialSubtypeSupported: false,
+    isReadyToMoveSupported: true,
+  });
 
   // Issue #1547 — scroll selected card into view when selection changes.
   // Rules of Hooks: called unconditionally, above the early-return below.
@@ -180,6 +207,17 @@ export function AreaSchoolCombinedPanel({ view, commands }: AreaSchoolCombinedPa
         activeContextChips={activeContextChips}
         actions={<SchoolFiltersSheet filtersContent={filtersContent} testId="combined-filters-trigger" />}
       />
+
+      {/* Issue #2762 PR-B — desktop-reskin only (per locked OQ1). SchoolFiltersSheet above is
+          UNCHANGED either way. Mobile (isDesktopReskin=false): byte-identical to before. */}
+      {isDesktop && (
+        <CompactFilterBar
+          accent="schools"
+          groups={schoolFilterBarGroups}
+          overflowOnly={schoolFilterBarOverflow}
+          testIdPrefix="combined-filter-toolbar"
+        />
+      )}
 
       {/* Single continuous scroll region (school-results-polish): only the PanelHeader
           stays pinned. Summary band, radius chips, result heading and listings scroll

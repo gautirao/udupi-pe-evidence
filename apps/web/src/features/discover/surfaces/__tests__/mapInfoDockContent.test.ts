@@ -282,3 +282,162 @@ describe('deriveMapInfoDockContent — hideDuplicateCountBadge option (#2698, AD
     expect(result?.where).toBe('RR Nagar');
   });
 });
+
+/**
+ * Issue #2762 PR-C — School/Agri deriver coverage + the scopeKey remount contract. Minimal
+ * fixtures (like `buildView` above) rather than the full `DiscoverMapSurfaceView` shape.
+ */
+describe('deriveMapInfoDockContent — school-first (#2762 PR-C)', () => {
+  function buildSchoolView(overrides: {
+    selectedSchool?: { id: string; name: string } | null;
+    schoolListings?: unknown[];
+    schoolJourneySegments?: { label: string }[];
+    resolvedPanelContent?: string;
+    schoolFirstZoneSchoolCount?: number | null;
+    schoolFirstAreaSchoolCount?: number | null;
+    schoolFirstLandingSchoolCount?: number | null;
+  }): DiscoverMapSurfaceView {
+    return {
+      navigation: {
+        journey: 'school-first',
+        city: 'bangalore',
+        resolvedPanelContent: overrides.resolvedPanelContent ?? 'school-browse',
+        schoolJourneySegments: overrides.schoolJourneySegments ?? [],
+      },
+      schools: {
+        selectedSchool: overrides.selectedSchool ?? null,
+        schoolListings: overrides.schoolListings ?? [],
+        schoolFirstZoneSchoolCount: overrides.schoolFirstZoneSchoolCount ?? null,
+        schoolFirstAreaSchoolCount: overrides.schoolFirstAreaSchoolCount ?? null,
+        schoolFirstLandingSchoolCount: overrides.schoolFirstLandingSchoolCount ?? null,
+      },
+      status: {},
+    } as unknown as DiscoverMapSurfaceView;
+  }
+
+  it('browsing state (no school selected): count from schoolFirst*Count, where from the deepest breadcrumb segment, not listingCapable', () => {
+    const result = deriveMapInfoDockContent(
+      buildSchoolView({
+        schoolJourneySegments: [{ label: 'Bangalore' }, { label: 'Koramangala' }],
+        schoolFirstZoneSchoolCount: 35,
+      }),
+    );
+    expect(result?.where).toBe('Koramangala');
+    expect(result?.countText).toBe('Showing 35 schools across Koramangala');
+    expect(result?.listingCapable).toBe(false);
+  });
+
+  it('selected-school state: count from schoolListings.length (the SAME array the panel body renders from), listingCapable true, where = school name', () => {
+    const result = deriveMapInfoDockContent(
+      buildSchoolView({
+        selectedSchool: { id: 'sch-1', name: 'Delhi Public School' },
+        schoolListings: [{}, {}, {}],
+      }),
+    );
+    expect(result?.where).toBe('Delhi Public School');
+    expect(result?.countText).toBe('Showing 3 verified properties near Delhi Public School');
+    expect(result?.listingCapable).toBe(true);
+  });
+
+  it('browsing vs. selected produce DIFFERENT scopeKeys (remount contract) even when other fields coincide', () => {
+    const browsing = deriveMapInfoDockContent(buildSchoolView({ schoolJourneySegments: [{ label: 'X' }] }));
+    const selected = deriveMapInfoDockContent(
+      buildSchoolView({ selectedSchool: { id: 'sch-9', name: 'X' }, schoolListings: [] }),
+    );
+    expect(browsing?.scopeKey).not.toBe(selected?.scopeKey);
+  });
+
+  it('two different selected schools produce different scopeKeys', () => {
+    const a = deriveMapInfoDockContent(
+      buildSchoolView({ selectedSchool: { id: 'sch-1', name: 'School A' }, schoolListings: [] }),
+    );
+    const b = deriveMapInfoDockContent(
+      buildSchoolView({ selectedSchool: { id: 'sch-2', name: 'School B' }, schoolListings: [] }),
+    );
+    expect(a?.scopeKey).not.toBe(b?.scopeKey);
+  });
+
+  /**
+   * Issue #2762 PR-C (review fix, MEDIUM) — the browsing-state scopeKey previously keyed
+   * SOLELY on the breadcrumb's display LABEL (`where`), not enforced unique anywhere in this
+   * codebase. Two distinct real areas/zones that happen to share a label would silently collide
+   * on the same scopeKey and skip the remount `scopeKey` exists to force. The fix prefers a
+   * stable id (`areas.selectedArea.areaKey` / `navigation.focusedGroup.id`, already on this same
+   * `view`) over the label whenever one is available.
+   */
+  it('two different areas with the SAME breadcrumb label produce DIFFERENT scopeKeys (stable areaKey wins over the label)', () => {
+    const view = (overrides: { areaKey: string }) =>
+      ({
+        navigation: {
+          journey: 'school-first',
+          city: 'bangalore',
+          resolvedPanelContent: 'school-browse',
+          schoolJourneySegments: [{ label: 'Bangalore' }, { label: 'Same Label' }],
+        },
+        areas: { selectedArea: { areaKey: overrides.areaKey } },
+        schools: { selectedSchool: null, schoolListings: [] },
+        status: {},
+      }) as unknown as DiscoverMapSurfaceView;
+
+    const a = deriveMapInfoDockContent(view({ areaKey: 'area-1' }));
+    const b = deriveMapInfoDockContent(view({ areaKey: 'area-2' }));
+    expect(a?.where).toBe('Same Label');
+    expect(b?.where).toBe('Same Label');
+    expect(a?.scopeKey).not.toBe(b?.scopeKey);
+  });
+
+  it('no stable area/group id available: falls back to the label (unchanged pre-fix behavior)', () => {
+    const result = deriveMapInfoDockContent(buildSchoolView({ schoolJourneySegments: [{ label: 'Region Only' }] }));
+    expect(result?.scopeKey).toBe('school:browsing:school-browse:Region Only');
+  });
+});
+
+describe('deriveMapInfoDockContent — agri-first (#2762 PR-C)', () => {
+  function buildAgriView(overrides: {
+    selectedRegion?: string | null;
+    filteredAgriListings?: unknown[] | null;
+    resolvedPanelContent?: string;
+  }): DiscoverMapSurfaceView {
+    return {
+      navigation: {
+        journey: 'agri-first',
+        city: 'bangalore',
+        resolvedPanelContent: overrides.resolvedPanelContent ?? 'agri-landing',
+      },
+      agri: {
+        selectedRegion: overrides.selectedRegion ?? null,
+        filteredAgriListings: overrides.filteredAgriListings ?? null,
+      },
+      status: {},
+    } as unknown as DiscoverMapSurfaceView;
+  }
+
+  it('corridor/landing level (agri-landing): no count row, not listingCapable', () => {
+    const result = deriveMapInfoDockContent(buildAgriView({ resolvedPanelContent: 'agri-landing' }));
+    expect(result?.countText).toBeNull();
+    expect(result?.listingCapable).toBe(false);
+  });
+
+  it('parcel-result level (agri-group-selected): count from filteredAgriListings.length, listingCapable true', () => {
+    const result = deriveMapInfoDockContent(
+      buildAgriView({
+        resolvedPanelContent: 'agri-group-selected',
+        selectedRegion: 'N',
+        filteredAgriListings: [{}, {}, {}, {}],
+      }),
+    );
+    expect(result?.where).toBe('N');
+    expect(result?.countText).toBe('Showing 4 verified agricultural parcels in N');
+    expect(result?.listingCapable).toBe(true);
+  });
+
+  it('corridor vs. parcel-result at the SAME region produce different scopeKeys (remount contract)', () => {
+    const corridor = deriveMapInfoDockContent(
+      buildAgriView({ resolvedPanelContent: 'agri-landing', selectedRegion: 'N' }),
+    );
+    const parcel = deriveMapInfoDockContent(
+      buildAgriView({ resolvedPanelContent: 'agri-group-selected', selectedRegion: 'N', filteredAgriListings: [] }),
+    );
+    expect(corridor?.scopeKey).not.toBe(parcel?.scopeKey);
+  });
+});

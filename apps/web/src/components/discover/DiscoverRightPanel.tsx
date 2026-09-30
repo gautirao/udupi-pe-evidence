@@ -130,6 +130,10 @@ export function DiscoverRightPanel({ view, commands }: DiscoverRightPanelProps) 
             area={view.shared.area}
             selectedListingId={view.shared.cards.selectedListingId}
             onStartOver={commands.shared.chrome.startOver}
+            // Issue #2762 PR-B — RightPanelFrameLayoutView's own doc comment: "Single
+            // computed source (useDiscoverPageContext) — never re-derived per consumer".
+            // Plain data off `view`, not a new hook call inside AgriJourneyPanel.
+            isDesktop={view.frame.layout.hostsHeaderControls}
           />
         );
 
@@ -177,6 +181,8 @@ export function DiscoverRightPanel({ view, commands }: DiscoverRightPanelProps) 
             onSelectJourney={commands.shared.chrome.selectJourney}
             onSelectResultListing={commands.shared.cards.select}
             onHoverResultListing={commands.shared.cards.hover}
+            // Issue #2762 PR-B — see the AgriJourneyPanel call site above for the same field.
+            isDesktop={view.frame.layout.hostsHeaderControls}
           />
         );
 

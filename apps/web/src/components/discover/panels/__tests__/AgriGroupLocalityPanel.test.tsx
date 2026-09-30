@@ -12,11 +12,57 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { AgriGroupLocalityPanel } from '../AgriGroupLocalityPanel';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
+
+// Same Radix Popover mock as useAgriFilterBarGroups.test.tsx: a real open Popover stalls the jsdom worker.
+vi.mock('@radix-ui/react-popover', async () => {
+  const ReactActual = await vi.importActual<typeof import('react')>('react');
+  const OpenCtx = ReactActual.createContext<{ open: boolean; setOpen: (next: boolean) => void }>({
+    open: false,
+    setOpen: () => {},
+  });
+  const Root = (props: { children?: React.ReactNode }) => {
+    const [open, setOpen] = ReactActual.useState(false);
+    return ReactActual.createElement(OpenCtx.Provider, { value: { open, setOpen } }, props.children);
+  };
+  const Trigger = ReactActual.forwardRef<HTMLElement, { asChild?: boolean; children: React.ReactElement }>(
+    (props, ref) => {
+      const ctx = ReactActual.useContext(OpenCtx);
+      return ReactActual.cloneElement(props.children, {
+        ref,
+        onClick: (event: MouseEvent) => {
+          (props.children.props as { onClick?: (e: MouseEvent) => void }).onClick?.(event);
+          ctx.setOpen(!ctx.open);
+        },
+        'aria-haspopup': 'dialog',
+        'aria-expanded': ctx.open,
+      });
+    },
+  );
+  const Portal = (props: { children?: React.ReactNode }) => props.children;
+  const Content = ReactActual.forwardRef<HTMLDivElement, Record<string, unknown>>((props, ref) => {
+    const ctx = ReactActual.useContext(OpenCtx);
+    const domProps = { ...props };
+    delete domProps.align;
+    delete domProps.sideOffset;
+    if (!ctx.open) return null;
+    return ReactActual.createElement('div', { ...domProps, ref, role: 'dialog' });
+  });
+  const Anchor = (props: { children?: React.ReactNode }) => props.children;
+  const Close = (props: { children?: React.ReactNode }) => props.children;
+  return { Root, Trigger, Portal, Content, Anchor, Close };
+});
+
+const openPopover = (testId: string) => {
+  const trigger = screen.getByTestId(testId);
+  fireEvent.pointerDown(trigger, { button: 0, pointerType: 'mouse' });
+  fireEvent.pointerUp(trigger, { button: 0, pointerType: 'mouse' });
+  fireEvent.click(trigger);
+};
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -252,5 +298,39 @@ describe('AgriGroupLocalityPanel — selected state + chips', () => {
     expect(screen.getByText('Borewell')).toBeInTheDocument();
     expect(screen.getByText('Farmhouse')).toBeInTheDocument();
     expect(screen.queryByText('Fenced')).not.toBeInTheDocument();
+  });
+});
+
+describe('AgriGroupLocalityPanel — desktop CompactFilterBar (#2762)', () => {
+  it('isDesktop=false (default) renders the existing inline FilterPill rows unchanged', () => {
+    render(<AgriGroupLocalityPanel {...baseProps} listings={[makeListing('a')]} />);
+    expect(screen.getByTestId('agri-locality-filters')).toBeInTheDocument();
+    expect(screen.queryByRole('toolbar')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('filter-pill-agri-locality-filters')).not.toBeInTheDocument();
+  });
+
+  it('isDesktop=true renders the shared CompactFilterBar with a single "Land filters" pill, accent="agri"', () => {
+    render(<AgriGroupLocalityPanel {...baseProps} listings={[makeListing('a')]} isDesktop />);
+    expect(screen.queryByTestId('agri-locality-filters')).not.toBeInTheDocument();
+    const toolbar = screen.getByRole('toolbar');
+    expect(toolbar.closest('[data-accent]')).toHaveAttribute('data-accent', 'agri');
+    expect(screen.getByTestId('filter-pill-agri-locality-filters')).toHaveTextContent('Land filters');
+  });
+
+  it('selecting a size filter via the desktop popover still filters the displayed parcels', () => {
+    const small = makeListing('small', { landArea: 0.5, landAreaUnit: 'acre' });
+    const big = makeListing('big', { landArea: 2, landAreaUnit: 'acre' });
+    render(<AgriGroupLocalityPanel {...baseProps} listings={[small, big]} isDesktop />);
+    expect(screen.getAllByTestId('agri-locality-listing-row')).toHaveLength(2);
+
+    openPopover('filter-pill-agri-locality-filters');
+    const popover = screen.getByTestId('filter-pill-agri-locality-filters-popover');
+    expect(screen.getByTestId('filter-pill-agri-locality-filters')).not.toHaveClass('border-copper');
+    fireEvent.click(within(popover).getByRole('button', { name: '< 1 ac' }));
+
+    expect(within(popover).getByRole('button', { name: '< 1 ac' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('filter-pill-agri-locality-filters')).toHaveClass('border-copper');
+    const rows = screen.getAllByTestId('agri-locality-listing-row');
+    expect(rows).toHaveLength(1);
   });
 });

@@ -18,6 +18,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { PanelHeader } from '../../../PanelHeader';
 import { useDiscoverNav } from '@/features/discover/context/useDiscoverContext';
+import { usePropertyFilterGroups } from '@/features/discover/buyer-filters/controllers/usePropertyFilterGroups';
+import { useSchoolFilterBarGroups } from '@/features/discover/right-panel/school/useSchoolFilterBarGroups';
+import { CompactFilterBar } from '@/features/discover/buyer-filters/sections/CompactFilterBar';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { snapRadiusKm } from '../radius/radiusOptions';
@@ -94,9 +97,19 @@ export interface SchoolSelectedPanelCommands {
 export interface SchoolSelectedPanelProps {
   view: SchoolSelectedPanelView;
   commands: SchoolSelectedPanelCommands;
+  /**
+   * Issue #2762 PR-B — the desktop-reskin signal for the shared compact FilterBar (per locked
+   * OQ1, desktop only). Threaded as a PLAIN PROP, not read via `useDiscoverShell()` directly in
+   * this component — that was tried first and reverted after it crashed
+   * `SchoolJourneyPanels.testidInventory.test.tsx`, which partially mocks
+   * `@/features/discover/context/useDiscoverContext` without a `useDiscoverShell` export. Default
+   * `false` preserves every existing caller/test's behaviour (mobile-style single filter trigger)
+   * unchanged.
+   */
+  isDesktop?: boolean;
 }
 
-export function SchoolSelectedPanel({ view, commands }: SchoolSelectedPanelProps) {
+export function SchoolSelectedPanel({ view, commands, isDesktop = false }: SchoolSelectedPanelProps) {
   const {
     chrome: { journey, activeContextChips, filtersContent },
     viewer: { intent = 'buy', isAuthenticated = false },
@@ -118,6 +131,23 @@ export function SchoolSelectedPanel({ view, commands }: SchoolSelectedPanelProps
   // of calling useDiscoverUrlState() directly (state plumbing only). Only
   // nav fields are read in this panel; no actions are called here.
   const urlState = useDiscoverNav();
+
+  // Issue #2762 PR-B — usePropertyFilterGroups called EXACTLY ONCE for this panel (see that
+  // hook's own header comment: a second call creates a conflicting family-override state). Its
+  // `onFiltersChange` is the SAME `commands.propertyFilters.replace` SchoolFiltersSheet's own
+  // content (MapFilters, threaded via `filtersContent`) already writes through.
+  const propertyFilterGroups = usePropertyFilterGroups({
+    filters,
+    onFiltersChange,
+    intent,
+    isReadyToMoveSupported: true,
+    isCommercialSubtypeSupported: false,
+  });
+  const { groups: schoolFilterBarGroups, overflowOnly: schoolFilterBarOverflow } = useSchoolFilterBarGroups({
+    groups: propertyFilterGroups,
+    isCommercialSubtypeSupported: false,
+    isReadyToMoveSupported: true,
+  });
 
   // Issue #1547 — scroll selected card into view when selection changes.
   const cardRefs = useSelectedCardScroll(selectedListingId);
@@ -210,6 +240,19 @@ export function SchoolSelectedPanel({ view, commands }: SchoolSelectedPanelProps
         activeContextChips={activeContextChips}
         actions={<SchoolFiltersSheet filtersContent={filtersContent} testId="school-filters-trigger" />}
       />
+
+      {/* Issue #2762 PR-B — desktop-reskin only (per locked OQ1). SchoolFiltersSheet above is
+          UNCHANGED either way — it stays the trigger for seller type/listing status/date range
+          (MapFilters' remaining sections), now read as "More filters" alongside this row rather
+          than hidden. Mobile (isDesktopReskin=false): byte-identical to before this change. */}
+      {isDesktop && (
+        <CompactFilterBar
+          accent="schools"
+          groups={schoolFilterBarGroups}
+          overflowOnly={schoolFilterBarOverflow}
+          testIdPrefix="school-filter-toolbar"
+        />
+      )}
 
       {/* Single continuous scroll region (school-results-polish): only the PanelHeader
           stays pinned. The school summary band, radius chips, bounded-search controls,

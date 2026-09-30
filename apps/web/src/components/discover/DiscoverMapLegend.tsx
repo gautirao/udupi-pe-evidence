@@ -35,7 +35,8 @@ import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
  * column with `gap` adapts to the dock's ACTUAL rendered height with no
  * measurement/ResizeObserver, so the two calls now divide the work:
  *  - DiscoverMapCanvas's calls (`renderMode` omitted/'inline') render every
- *    variant at its own historical `bottom-10`/`bottom-24` offset, UNLESS
+ *    variant at its own `bottom-10` (mobile; desktop School/Agri use
+ *    DOCK_CLEARANCE_LEGEND_ANCHOR, see below) offset, UNLESS
  *    the variant is one of the three Areas-journey ones AND we're on
  *    desktop (`journey==='area-first' && !isMobileMapOverlay`) — then it
  *    renders NOTHING for that variant, because the slot call below owns it.
@@ -44,6 +45,22 @@ import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
  *    absolute) flex children — positioning is the wrapping flex column's
  *    job now, not this component's.
  * Every other journey/mobile is unaffected either way.
+ *
+ * Issue #2762 PR-D — PR-C (above) only broadened WHERE the legend renders (the
+ * `desktopDockSlotOwnsLegend` gate, now covering School/Agri's Map Info Dock too);
+ * it deliberately left WHICH legend content renders untouched. This pass fixes the
+ * one real content gap that broadening exposed: `journey === 'school-first'` used
+ * to show NOTHING from this switch once a school was selected and its homes were
+ * on the map (`schoolRadiusOverlay`, suppressed on purpose to avoid duplicating the
+ * separate SchoolRadiusLegend chrome's Schools/Homes/radius swatches) — but the
+ * issue's own requirement is that stage shows the SAME property-type legend as the
+ * Areas journey (derived from the actual rendered markers, `currentMapMarkerListings`),
+ * with the selected school kept distinct via the untouched chrome. See the new block
+ * below. The Agri branch is unchanged: `MapAgriLegend`'s existing stage derivation
+ * (landing/corridor from `selectedRegion`, locality from `selectedLocality`) already
+ * satisfies "corridor-context legend while browsing, Land-type legend once parcel
+ * results are shown" — it never falls back to the generic property-type legend, so
+ * there was nothing to fix there.
  */
 export interface DiscoverMapLegendProps {
   /** Radius legend chrome (~L2957-2963). Omit to render nothing for this call. */
@@ -78,12 +95,24 @@ export interface DiscoverMapLegendProps {
     selectedLocality: string | null;
     selectedRegion: string | null;
     /**
-     * DESKTOP-ONLY split point (mobile keeps its own untouched `bottom-10`
-     * footprint, per the owner's "Mobile is unchanged" note): without this
+     * DESKTOP-ONLY split point (mobile keeps its own `bottom-10` bottom-left
+     * footprint; #2762: the school-selected property legend sits beside the radius chrome): without this
      * the Areas-journey legend would try to move into the (nonexistent, on
      * mobile) dock slot too.
      */
     isMobileMapOverlay: boolean;
+    /**
+     * Issue #2762 PR-D — the SAME listings actually rendered as map markers
+     * (`<PropertyMap listings={currentMapMarkerListings} .../>` in
+     * DiscoverMapCanvas.tsx), used to derive the school-selected property-type
+     * legend below. Deliberately NOT `areaMarkerListings` (that's the
+     * Areas-journey area-marker set, a different query) — "the actual item
+     * rendered, not the journey" (issue #2762's own wording) means this must
+     * be the school-radius result set, which is what `currentMapMarkerListings`
+     * already is for the school-first journey (see PropertyMap's `listings` prop
+     * in DiscoverMapCanvas.tsx).
+     */
+    currentMapMarkerListings: Array<{ property_type: string }>;
   } | null;
   /**
    * 'inline' (default) — this call's own historical `bottom-10`/`bottom-24`
@@ -95,6 +124,52 @@ export interface DiscoverMapLegendProps {
 }
 
 const DEFAULT_LEGEND_ANCHOR = 'absolute bottom-10 left-4 z-[1000]';
+/**
+ * Issue #2762 (visual-review fix, post PR-D) — PR-C broadened `desktopDockSlotOwnsLegend` so
+ * the Map Info Dock now renders for the School/Agri journeys too (not just Areas), but the
+ * School/Agri legend variant blocks below stayed `!slot`-only — i.e. they never moved into the
+ * dock's flex column and kept their historical fixed `bottom-10` offset regardless of whether a
+ * dock is now ALSO rendered at `bottom-[14px]` right below them. For the two branches where the
+ * legend content is tall enough to reach that low (school-selected-with-homes' property-type
+ * MapMarkerLegend, and agri's locality-stage MapAgriLegend), the two fixed-position boxes
+ * geometrically overlap on desktop (confirmed via live `getBoundingClientRect()`, 1440x900).
+ *
+ * Fix: reuse the SAME worst-case dock-height clearance this codebase already computed and
+ * documented for this exact dock (round 4's `bottom-[264px]`, DiscoverMapSurface.tsx's own doc
+ * comment) instead of deriving a new number — desktop-only (`!isMobileMapOverlay`); mobile's
+ * dock sits at a different anchor (`bottom-[150px]`, centered) and its own legend positioning is
+ * untouched, per the existing "Mobile is unchanged" contract already documented on this file.
+ *
+ * Independent code-review (post-merge, HIGH severity) — `!isMobileMapOverlay` is true not only
+ * at full desktop widths but also across the 821–1023px "narrow desktop shell" band (the same
+ * band DiscoverMapSurface.tsx's own `max-h-[calc(100%-14px)] lg:max-h-none` dock clamp exists
+ * for — see that file's "round 6/7" doc comment: the map container can shrink to as little as
+ * ~78–106px tall there). Live-measured (`getBoundingClientRect()`, both confirmed real, not
+ * theoretical):
+ *  - School-selected-with-homes, 900×700 (bangalore, Koramangala, an actual seeded school+homes):
+ *    legend top -190.85 / bottom -108.85 (container top 57, height ~78–84) — entirely above the
+ *    map container and the viewport, never visible.
+ *  - Agri locality/parcel-results, 900×700 (bangalore, SW corridor → RR Nagar, real seeded
+ *    parcels): legend top -174.80 / bottom -136.80 — same failure mode.
+ *  - Both confirmed FIXED at 1024×768 (the `lg` floor): school top 245/bottom 327, agri top
+ *    289/bottom 327 — fully on-canvas, no clamp needed there.
+ * A `max-height` clamp alone does NOT fix this: the box is positioned via `bottom-[264px]` with
+ * no `top`, so its top edge is `containerHeight - 264 - height` — shrinking `height` still leaves
+ * the box (or, once height hits 0, its anchor point) hundreds of px above a ~80px container;
+ * only REPOSITIONING (not just resizing) the box would keep it on-canvas, and repositioning
+ * without a fixed reference is exactly what DiscoverMapSurface's flex-column mechanism gives the
+ * Areas-journey legend — but that mechanism isn't available here without extra plumbing
+ * (`DiscoverMapSurfaceView.navigation` has no `selectedLocality` field yet; see that file's own
+ * "KNOWN GAP (disclosed...)" comment next to its `variants` prop — re-keying the slot for Agri
+ * today would silently render the wrong (non-locality) legend stage, a content regression worse
+ * than a position one). So instead of inventing new positioning math here, this hides the
+ * decorative legend content below `lg` and restores the exact, already-correct `bottom-[264px]`
+ * anchor at `lg` and above — the same OUTCOME the Areas-journey legend already has in this band
+ * (DiscoverMapSurface.tsx: `min-h-0 overflow-hidden` shrinks it to 0px when there's truly no
+ * room), just reached without a flex ancestor to shrink against. Mobile (`isMobileMapOverlay`)
+ * is untouched, per the ternaries this constant feeds into.
+ */
+const DOCK_CLEARANCE_LEGEND_ANCHOR = 'hidden lg:block lg:absolute lg:bottom-[264px] lg:left-4 lg:z-[1000]';
 /**
  * Owner feedback (round 6) — `desktopAreaFirstSlot` mode's wrapper divs used to carry NO
  * class at all, and DiscoverMapSurface wrapped `<DiscoverMapLegend>` in its own extra
@@ -140,16 +215,45 @@ export function DiscoverMapLegend({
   const chromeOwnedByDesktopSlot = !!schoolRadiusChrome?.isAreaFirstJourney && !schoolRadiusChrome?.isMobileMapOverlay;
   const renderSchoolRadiusChromeHere = schoolRadiusChrome && (slot ? chromeOwnedByDesktopSlot : !chromeOwnedByDesktopSlot);
 
-  // Same split for the three Areas-journey variant branches below.
-  const areaFirstDesktop = variants?.journey === 'area-first' && !variants.isMobileMapOverlay;
-  const renderAreaFirstVariantsHere = variants && (slot ? areaFirstDesktop : !areaFirstDesktop);
+  // Issue #2762 PR-C — broadened from `variants?.journey === 'area-first'` to any resolved
+  // journey: the Map Info Dock (mapInfoDockContent.ts) now covers all three journeys, not just
+  // Areas, and DiscoverMapSurface.tsx only ever supplies `variants` for a call at all when its
+  // own `mapInfoDockContent` is non-null — so "a journey is present" here already means "the dock
+  // is rendering for it". Re-gating only the DOCK (mapInfoDockContent.ts) and leaving THIS split
+  // at 'area-first' would leave School/Agri's existing legend rendering at its old inline
+  // position while the new dock renders on top of it — the exact overlap this re-gate exists to
+  // prevent. The variant-SELECTION switch below this point is unchanged (PR-D's remit, not
+  // this PR's) — only which call site (inline vs. slot) owns the render moves.
+  const desktopDockSlotOwnsLegend = variants != null && !variants.isMobileMapOverlay;
+  const renderAreaFirstVariantsHere = variants && (slot ? desktopDockSlotOwnsLegend : !desktopDockSlotOwnsLegend);
 
   return (
     <>
       {/* Radius legend — bottom-left, raised above the Leaflet zoom control (bottomleft).
-          Only the selected-school radius state; swatches match the real map markers/ring. */}
+          Only the selected-school radius state; swatches match the real map markers/ring.
+          Issue #2762 (visual-review fix) — this INLINE (`!slot`) branch only ever renders when
+          `chromeOwnedByDesktopSlot` is false, i.e. desktop + a non-area-first journey (school-
+          first) or mobile (any journey). On desktop that's now exactly a journey the Map Info
+          Dock ALSO renders for (PR-C broadened the dock to all three journeys), so this chrome's
+          historical `bottom-24` collides with the dock at `bottom-[14px]` the same way the
+          MapMarkerLegend/MapAgriLegend variant blocks below did — confirmed live via
+          `getBoundingClientRect()` (school-selected-with-homes, 1440x900: chrome y:601-683 vs.
+          dock y:662-765, a real 21px overlap). Mobile's dock sits at a different anchor
+          (`bottom-[150px]`); this chrome's mobile position is `bottom-10` (moved from
+          `bottom-24`, which reached into the mobile dock — see the mobile branch below). */}
       {renderSchoolRadiusChromeHere && schoolRadiusChrome && (
-        <div data-testid="discover-map-legend" className={slot ? SLOT_LEGEND_ITEM : 'absolute bottom-24 left-4 z-[1000]'}>
+        <div
+          data-testid="discover-map-legend"
+          className={
+            slot
+              ? SLOT_LEGEND_ITEM
+              : schoolRadiusChrome.isMobileMapOverlay
+                ? // #2762: `bottom-10` (was `bottom-24`, which reached into the mobile dock at
+                  // `bottom-[150px]`); the school-selected property-type legend sits beside it.
+                  'absolute bottom-10 left-4 z-[1000]'
+                : DOCK_CLEARANCE_LEGEND_ANCHOR
+          }
+        >
           <SchoolRadiusLegend
             radiusKm={clampSchoolRadiusKm(schoolRadiusChrome.schoolRadiusKm ?? DEFAULT_SCHOOL_RADIUS_KM)}
             className={slot ? SLOT_LEGEND_CHILD : undefined}
@@ -217,7 +321,21 @@ export function DiscoverMapLegend({
               locality selected → Parcels. Never part of the desktop slot split — cannot
               co-occur with `journey==='area-first'`. */}
           {variants.journey === 'agri-first' && !variants.schoolRadiusOverlay && !slot && (
-            <div data-testid="discover-map-legend" className="absolute bottom-10 left-4 z-[1000]">
+            <div
+              data-testid="discover-map-legend"
+              className={
+                // Issue #2762 (visual-review fix) — live `getBoundingClientRect()` measurement
+                // (1440x900, desktop) found ALL THREE agri stages colliding with the Map Info
+                // Dock at the historical `bottom-10` offset once the dock started rendering for
+                // this journey too (PR-C), not only the originally-reported locality/parcel-
+                // results stage — landing (y:701-739 vs. dock y:723-765, 16px overlap) and
+                // corridor (y:679-739 vs. dock y:723-765, 16px overlap) collide just as much as
+                // locality did. Applying the same DOCK_CLEARANCE_LEGEND_ANCHOR to every stage
+                // (desktop only) closes the whole bug class in this one block rather than
+                // leaving two of its three stages still broken. Mobile unchanged, as elsewhere.
+                variants.isMobileMapOverlay ? 'absolute bottom-10 left-4 z-[1000]' : DOCK_CLEARANCE_LEGEND_ANCHOR
+              }
+            >
               <MapAgriLegend
                 stage={
                   variants.selectedLocality
@@ -238,7 +356,17 @@ export function DiscoverMapLegend({
               !schoolRadiusOverlay to avoid a redundant/competing bottom-left legend. Never
               part of the desktop slot split — cannot co-occur with `journey==='area-first'`. */}
           {variants.journey === 'school-first' && !variants.schoolRadiusOverlay && !slot && (
-            <div data-testid="discover-map-legend" className="absolute bottom-10 left-4 z-[1000]">
+            <div
+              data-testid="discover-map-legend"
+              className={
+                // Issue #2762 (visual-review fix) — same root cause and same live-measured
+                // collision as the agri block above (landing stage: legend y:701-739 vs. dock
+                // y:687-765, 38px overlap) — the dock now renders for this journey too (PR-C)
+                // while this legend kept its historical fixed offset. See
+                // DOCK_CLEARANCE_LEGEND_ANCHOR's doc comment for the shared fix.
+                variants.isMobileMapOverlay ? 'absolute bottom-10 left-4 z-[1000]' : DOCK_CLEARANCE_LEGEND_ANCHOR
+              }
+            >
               <MapSchoolLegend
                 stage={
                   ((): SchoolLegendStage => {
@@ -248,6 +376,37 @@ export function DiscoverMapLegend({
                   })()
                 }
               />
+            </div>
+          )}
+
+          {/* Issue #2762 PR-D — school-first, a school IS selected and its homes-within-radius
+              are on the map (`schoolRadiusOverlay`): the markers on the map at this stage are
+              real property listings (`currentMapMarkerListings`, the SAME array passed to
+              `<PropertyMap listings=.../>`), not school pins — the issue's own requirement is
+              "property-type legend/markers (same grammar as By-area)" here, not the Schools-only
+              MapSchoolLegend above (which is correctly suppressed for this stage) and not a
+              redundant re-statement of the school/radius swatches SchoolRadiusLegend (the
+              `schoolRadiusChrome` call, above) already renders — that chrome is what keeps the
+              selected school visibly distinct from the property markers; this block only adds
+              the per-type breakdown of the homes themselves, mirroring the Areas-journey
+              MapMarkerLegend block below byte-for-byte (same component, same empty-array no-op
+              via MapMarkerLegend's own `rows.length === 0` guard). Never part of the desktop
+              slot split, matching every other school/agri branch in this switch. */}
+          {variants.journey === 'school-first' && variants.schoolRadiusOverlay && !slot && (
+            <div
+              data-testid="discover-map-legend"
+              className={
+                // Issue #2762 (visual-review fix) — see DOCK_CLEARANCE_LEGEND_ANCHOR's doc
+                // comment above: the dock now also renders for this journey/stage, and this
+                // property-type legend is tall enough to reach its footprint at bottom-10.
+                // Mobile (#2762): sit beside the ~107px radius chrome (`left-[8.5rem]`), capped
+                // (100px tall, clear of the zoom control) so it never reaches the dock (150px).
+                variants.isMobileMapOverlay
+                  ? 'absolute bottom-10 left-[8.5rem] z-[1000] max-h-[6.25rem] max-w-[calc(100%-12rem)] overflow-y-auto'
+                  : DOCK_CLEARANCE_LEGEND_ANCHOR
+              }
+            >
+              <MapMarkerLegend listings={variants.currentMapMarkerListings} />
             </div>
           )}
         </>

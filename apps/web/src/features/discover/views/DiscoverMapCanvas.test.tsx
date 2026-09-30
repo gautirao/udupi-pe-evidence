@@ -1784,18 +1784,18 @@ describe('Issue #2698 — mobile Map bottom chrome', () => {
       expect(recenterColumn).not.toHaveClass('bottom-60', 'ml-2');
     });
 
-    it("journey 'agri-first' on guided-entry with cityTotal > 0: isLandingCountBadgeVisible's journey guard is false, so NOT paired", () => {
+    it("journey 'agri-first': map-recenter-city-button no longer renders (Issue #2762 PR-C — deleted for agri-first, superseded by the Map Info Dock's own recenter row)", () => {
       const originalJourney = BASE_NAV.journey;
       BASE_NAV.journey = 'agri-first';
       try {
         renderCanvas(<DiscoverMapCanvas {...baseProps({ cityTotal: 19 })} />);
 
-        const recenterColumn = screen.getByTestId('map-recenter-city-button').parentElement;
-        expect(recenterColumn).toHaveClass('bottom-48', 'left-1/2', '-translate-x-1/2');
-        // Code review (Finding, pass 4) — 'right-4' dropped: it belongs to the third,
-        // mutually-exclusive area-selected variant (never reachable from this state's
-        // ternary branch), so asserting its absence here proved nothing.
-        expect(recenterColumn).not.toHaveClass('bottom-60', 'ml-2');
+        // Issue #2762 PR-C — this button's own `nav.journey !== 'area-first' && !== 'school-first'
+        // && !== 'agri-first'` gate now excludes agri-first, since MapInfoDock (rendered by
+        // DiscoverMapSurface.tsx, a sibling component not mounted by this test's `renderCanvas`
+        // harness) owns recenter for this journey instead — asserting absence here, not a
+        // positioning class, is the correct regression coverage post-deletion.
+        expect(screen.queryByTestId('map-recenter-city-button')).not.toBeInTheDocument();
       } finally {
         BASE_NAV.journey = originalJourney;
       }

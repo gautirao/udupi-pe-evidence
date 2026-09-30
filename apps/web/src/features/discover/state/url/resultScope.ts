@@ -166,6 +166,9 @@ function readActiveScope(urlParams: URLSearchParams, city?: string | null): Resu
  */
 export function applyResultScopeCommit(next: URLSearchParams, scope: ResultScope): void {
   const outgoing = readActiveScope(next);
+  // Issue #2762 PR-E — captured BEFORE delete so a VIEWPORT->VIEWPORT commit
+  // can preserve whatever NAMED scope this already held (see below).
+  const existingRprev = next.get('rprev');
 
   next.delete('rscope');
   next.delete('rareas');
@@ -173,8 +176,30 @@ export function applyResultScopeCommit(next: URLSearchParams, scope: ResultScope
   next.delete('rvp');
   next.delete('rprev');
 
-  if (outgoing) {
-    next.set('rprev', encodeForPrev(outgoing));
+  // Issue #2762 PR-E fix — a transient VIEWPORT scope going out must never
+  // clobber an already-saved NAMED scope (AREA_SET/POLYGON) in `rprev`;
+  // otherwise a second consecutive "Search this area" commit loses the
+  // area the user actually came from (see bug_reproduction_gate in the
+  // approved plan for the full trace). Only overwrite when the outgoing
+  // scope is itself NAMED, or when there's no existing rprev to preserve.
+  const candidateRprev =
+    outgoing && outgoing.kind !== 'VIEWPORT'
+      ? encodeForPrev(outgoing)
+      : existingRprev
+        ? existingRprev
+        : outgoing
+          ? encodeForPrev(outgoing)
+          : null;
+
+  // Issue #2762 PR-E code-review fix (cycle 1) — the preservation above made
+  // rprev self-referential on "Return to <area>": AREA_SET(Hebbal) -> VIEWPORT
+  // (rprev=Hebbal, correct) -> Return re-commits AREA_SET(Hebbal) as the new
+  // active scope, and outgoing there is VIEWPORT with existingRprev still
+  // "Hebbal" — so the preserved candidate equals the scope simultaneously
+  // being committed as active. Never write rprev to point at the scope it
+  // would be identical to right now.
+  if (candidateRprev && !(scope && encodeForPrev(scope) === candidateRprev)) {
+    next.set('rprev', candidateRprev);
   }
 
   if (scope) {

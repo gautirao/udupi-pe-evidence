@@ -41,6 +41,15 @@ export interface AgriJourneyPanelProps {
   area: Pick<SharedAreaView, 'point'>;
   selectedListingId: SharedCardsView['selectedListingId'];
   onStartOver: SharedChromeCommands['startOver'];
+  /**
+   * Issue #2762 PR-B — the desktop-reskin signal for the shared compact FilterBar (per locked
+   * OQ1, desktop only). Threaded as a PLAIN PROP, not read via `useDiscoverShell()` in this
+   * component — this file is rendered standalone without a `DiscoverProvider` in the existing
+   * `DiscoverRightPanel.agri*.test.tsx` suites (confirmed: adding that hook call directly here
+   * crashed 37 of those tests with "useDiscoverShell must be used within a <DiscoverProvider>").
+   * Default `false` preserves every existing caller/test's behaviour (mobile Sheet) unchanged.
+   */
+  isDesktop?: boolean;
 }
 
 /**
@@ -59,6 +68,7 @@ export function AgriJourneyPanel({
   area,
   selectedListingId,
   onStartOver,
+  isDesktop = false,
 }: AgriJourneyPanelProps): React.ReactNode {
   const navigate = useNavigate();
 
@@ -150,6 +160,7 @@ export function AgriJourneyPanel({
         <>
           <PanelHeader title="Agricultural land" journey="agri-first" onStartOver={onStartOver} />
           <AgriGroupLocalityPanel
+            isDesktop={isDesktop}
             localityName={selectedLocalityDisplayName}
             listings={localityListings}
             isLoading={view.groupListings.loading ?? false}
@@ -180,6 +191,7 @@ export function AgriJourneyPanel({
         <>
           <PanelHeader title="Agricultural land" journey="agri-first" onStartOver={onStartOver} />
           <AgriGroupSelectedPanel
+            isDesktop={isDesktop}
             groupLabel={view.selection.groupLabel ?? 'Agricultural land'}
             listings={view.groupListings.data}
             listingCount={view.groupListings.data?.length ?? 0}

@@ -10,6 +10,7 @@ import { DiscoverMapLegend } from '@/components/discover/DiscoverMapLegend';
 import { DEFAULT_CITY } from '@/lib/localityUtils';
 import { deriveMapInfoDockContent } from './mapInfoDockContent';
 import type { DiscoverMapSurfaceView, DiscoverMapSurfaceCommands } from './buildMapSurfaceModel';
+import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 
 /**
  * Issue #2142 Commit 4 — renamed from DiscoverMapMount.tsx (per the approved
@@ -63,10 +64,9 @@ export function DiscoverMapSurface({ view, commands, mapContainerRef }: Discover
     !!commands.filters.onFiltersChange &&
     (view.navigation.isAreaFirstSelectedAreaState || view.schools.schoolRadiusActive);
 
-  // Issue #2748 — the ONE Map Info Dock (guidance → count → recenter), Areas-journey only.
-  // Null outside that journey, so every other journey's map info stays exactly as it was
-  // (DiscoverMapCanvas's own count/guidance/city-recenter, unchanged, and this file's legacy
-  // `areas-recenter-button` below).
+  // Issue #2762 PR-C — the ONE Map Info Dock (guidance → count → recenter), now generalized to
+  // all three journeys (`deriveMapInfoDockContent` dispatches per `view.navigation.journey`; see
+  // that file). Null only for a journey/panel state none of the three derivers claim.
   const mapInfoDockContent = deriveMapInfoDockContent(view, { hideDuplicateCountBadge });
 
   // Issue #2748 (lane review, pass 3) — `handleRecenterOnSelectedNode` (behind
@@ -76,9 +76,56 @@ export function DiscoverMapSurface({ view, commands, mapContainerRef }: Discover
   // exactly one WORKING recenter at all times. Rather than hiding the row (the
   // issue's own preference is a working fallback over hiding it), fall back to
   // the exact city-centre camera intent the legacy "Recenter on <city>" button
-  // used (`DiscoverMapCanvas.tsx`, now removed for this journey) whenever there
-  // is no resolved node yet but a city centre is already known.
+  // used (`DiscoverMapCanvas.tsx`, now deleted for all three journeys) whenever
+  // there is no resolved node yet but a city centre is already known.
+  //
+  // Issue #2762 PR-C (review fix) — the earlier version of this comment claimed the
+  // `areasNavigationJourney?.node`/city-fallback branch below "needed no structural change to
+  // serve all three journeys" — WRONG, caught by an independent code-reviewer of this PR.
+  // `areasNavigationJourney.node` is populated by `useAreasNavigationJourney` only while
+  // `showAreasNavigationJourney` is true, which useDiscoverNavigationController.ts gates off
+  // (among other things) `isSchoolsNavNodeLevel = journey === 'school-first' && !areaKey &&
+  // !schoolId` and `isAgriNavNodeLevel = journey === 'agri-first' && !selectedLocality` — BOTH
+  // false once a school is selected or an agri locality is drilled into, i.e. exactly the two
+  // leaf/listing-capable states `deriveSchoolDock`/`deriveAgriDock` cover (`listingCapable:
+  // true`). In those states `node` is null, so the branch below fell into the city fallback and
+  // recentred on the CITY while the dock's own button still read "Recenter on <school/locality>"
+  // (label sourced from `mapInfoDockContent.where`, computed above) — a real label/behavior
+  // mismatch. Fixed by resolving the target from `mapInfoDockContent`'s own journey +
+  // `listingCapable` discriminants FIRST, using the already-available per-journey camera fields
+  // (`schools.selectedSchoolLat/selectedSchoolLon`, `camera.agriGroupFocusBounds` — both already
+  // threaded onto this surface's view for the camera-fit effects in
+  // useDiscoverCameraController.ts/useDiscoverCameraOrchestration.ts), before falling through to
+  // the untouched Areas node/city-fallback logic.
   const handleDockRecenter = () => {
+    if (view.navigation.journey === 'school-first' && mapInfoDockContent?.listingCapable) {
+      const { selectedSchool, selectedSchoolLat, selectedSchoolLon } = view.schools;
+      if (selectedSchoolLat != null && selectedSchoolLon != null) {
+        commands.camera.publishCameraIntent({
+          areaKey: selectedSchool?.id ?? mapInfoDockContent.where,
+          areaLabel: mapInfoDockContent.where,
+          geo_center_lat: selectedSchoolLat,
+          geo_center_lon: selectedSchoolLon,
+          bbox: null,
+        });
+        return;
+      }
+    }
+
+    if (view.navigation.journey === 'agri-first' && mapInfoDockContent?.listingCapable) {
+      const bounds = view.camera.agriGroupFocusBounds;
+      if (bounds) {
+        commands.camera.publishCameraIntent({
+          areaKey: mapInfoDockContent.where,
+          areaLabel: mapInfoDockContent.where,
+          geo_center_lat: (bounds[0][0] + bounds[1][0]) / 2,
+          geo_center_lon: (bounds[0][1] + bounds[1][1]) / 2,
+          bbox: bounds,
+        });
+        return;
+      }
+    }
+
     const node = view.navigation.areasNavigationJourney?.node;
     const cityCenter = view.camera.cityCenter;
     if (!node && cityCenter) {
@@ -93,7 +140,6 @@ export function DiscoverMapSurface({ view, commands, mapContainerRef }: Discover
     }
     commands.overlays.onRecenter();
   };
-  const isAreaFirstJourney = view.navigation.journey === 'area-first';
 
   // Issue #2659 (D3) — DiscoverMapCanvas now takes the nested `{ view, commands,
   // mapContainerRef }` contract directly; this surface no longer reconstructs a
@@ -132,71 +178,14 @@ export function DiscoverMapSurface({ view, commands, mapContainerRef }: Discover
           <LazyDiscoverMapCanvas view={canvasView} commands={canvasCommands} mapContainerRef={mapContainerRef} />
         </Suspense>
       )}
-      {/* Issue #2748 — this legacy portalled button is superseded by the Map Info Dock's own
-          recenter row for the Areas journey (rendered below), which is unconditional whenever
-          the dock renders rather than gated on out-of-view/ROOT like this one. Left completely
-          unchanged for every other journey (e.g. school-first), which this issue does not touch
-          (PR #2757 clarification, Interpretation 3). */}
-      {!isAreaFirstJourney &&
-        view.overlays.recenter.visible &&
-        view.overlays.recenter.portalTarget &&
-        createPortal(
-          <button
-            type="button"
-            data-testid="areas-recenter-button"
-            onClick={commands.overlays.onRecenter}
-            // Issue #2724 (code review, pass 4) — unlike the count pill this button has no
-            // width cap, so a long area name ("Jayaprakash Narayana Extension & Kodihalli
-            // Layout Cross") wraps to 3 lines at 1024px and, being bottom-anchored, grows
-            // UPWARD toward the tip pill/other overlays instead of staying inside its row.
-            // Capped to the SAME max-w-[220px] the pill already uses (DiscoverMapCountBadge.tsx)
-            // and the label clamped to 2 lines so it can never exceed the pill's own worst-case
-            // height. The full "Recenter on <area>" text stays the button's accessible name
-            // (line-clamp is purely visual — the DOM text node is untouched) and is repeated in
-            // `title` for a hover tooltip on the clamped case. Desktop only; mobile (#2727,
-            // out of scope here) is untouched.
-            title={`Recenter on ${view.overlays.recenter.label}`}
-            // Issue #2698 — centred at bottom-20 it covered the bottom-left map legend at
-            // 375–412px. On the mobile Map it stacks in the right-hand column instead,
-            // directly above the canvas's own "Recenter on <city>" button (bottom-[100px]).
-            // Issue #2714 — desktop kept the centred bottom-20 placement, which sits in the
-            // bottom-centre column #2714 reserves for the tip pill + count badge (and, at
-            // narrower map widths than the #2698 evidence captured, risked reaching the
-            // bottom-left legend the same way the mobile case above already had to move away
-            // from). Per #2714's placement boundaries the bottom-right column stacks, bottom to
-            // top: attribution, zoom, "Recenter on <city>" (now bottom-48), the school-radius
-            // "more" hint (bottom-28, but taller — live-measured top edge 178px), the count
-            // badge's right-anchored variant (now bottom-60, live-measured top edge 278px), then
-            // this button — bottom-72 (288px) clears the badge's top edge with a 10px margin
-            // (live-measured via Playwright; the badge, hint, city recenter and this button can
-            // all render together in the anon school-radius "showing first N" + out-of-view-node
-            // state), mirroring the mobile column's own stacking order.
-            //
-            // Issue #2724 (pass 3, area-selected desktop pairing) — this button only ever renders
-            // (`view.overlays.recenter.visible`) when a real area/zone is selected AND out of view
-            // (the ROOT-node exclusion above rules out the city-landing/nothing-selected case), so
-            // on desktop it is ALWAYS in the exact state DiscoverMapCountBadge's
-            // `isAreaRecenterButtonVisible` pairing targets — no extra state check needed here.
-            // Moved from its own right-anchored bottom-72 stack to share the pill's row at
-            // bottom-60, flanking right of centre (`left-1/2 ml-2`) to mirror the pill's `right-1/2
-            // mr-2` (see DiscoverMapCountBadge.tsx's own doc for that side), forming one centred
-            // side-by-side pair instead of two independently-stacked right-column elements. This
-            // button and the count pill are mutually exclusive with the OTHER right-column stack
-            // (zoom, "Recenter on <city>", school-radius hint) this comment above describes, since
-            // that stack's badge variant only renders for the non-area-selected states. Mobile is
-            // untouched.
-            className={
-              isMobileMapOverlay
-                ? 'absolute bottom-[144px] right-[10px] z-[500] rounded-full border border-border bg-background/95 px-4 py-2 text-sm font-medium shadow-md'
-                : 'absolute bottom-60 left-1/2 z-[500] ml-2 max-w-[220px] rounded-full border border-border bg-background/95 px-4 py-2 text-sm font-medium shadow-md'
-            }
-          >
-            <span className={isMobileMapOverlay ? undefined : 'line-clamp-2'}>
-              Recenter on {view.overlays.recenter.label}
-            </span>
-          </button>,
-          view.overlays.recenter.portalTarget,
-        )}
+      {/* Issue #2762 PR-C — this legacy portalled "areas-recenter-button" (despite its name, it
+          was reachable for School/Agri too via `!isAreaFirstJourney` — `showAreasNavigationJourney`
+          in useDiscoverNavigationController.ts already extends `view.overlays.recenter.visible`'s
+          underlying signal to school/agri node levels) is DELETED, not hidden: the Map Info Dock's
+          own recenter row now owns recenter for ALL THREE journeys (see mapInfoDockContent.ts),
+          and this control would otherwise be a second, structurally-possible recenter target
+          whenever both were reachable at once. No replacement needed at this call site — the dock
+          below is unconditional whenever `mapInfoDockContent` is non-null. */}
       {/* Issue #2748 — the Map Info Dock: ONE card owning guidance/count/recenter for the
           Areas journey, replacing the legacy trio (this file's own recenter button above,
           DiscoverMapCanvas's count pill + "Recenter on <city>" button, and MapEmptyGuidance's
@@ -219,7 +208,7 @@ export function DiscoverMapSurface({ view, commands, mapContainerRef }: Discover
           INTO this same column (`DiscoverMapLegend`'s `renderMode="desktopAreaFirstSlot"` — see
           that file's own doc comment) instead of their own independent absolute position.
           Mobile is untouched (the slot only renders `!isMobileMapOverlay`; mobile's own legend
-          keeps its historical inline `bottom-10`/`bottom-24` position, unaffected by this
+          keeps its inline `bottom-10` position (#2762: school-radius chrome moved from `bottom-24`), unaffected by this
           column). Mobile dock: bottom-center at
           `bottom-[150px]` (raised from an initial `bottom-[100px]`, pre-push review finding —
           live-measured at 390x844, area-selected state: `bottom-[100px]` put the dock's own
@@ -326,6 +315,10 @@ export function DiscoverMapSurface({ view, commands, mapContainerRef }: Discover
                 widened to 249.5px, past its own cap, without this). */}
             <div className="w-full shrink-0">
               <MapInfoDock
+                // Issue #2762 PR-C — remounts (not merely re-renders) on scope change, so a
+                // recenter target from the PREVIOUS scope can never linger — see scopeKey's own
+                // doc comment in mapInfoDockContent.ts.
+                key={mapInfoDockContent.scopeKey}
                 where={mapInfoDockContent.where}
                 countText={mapInfoDockContent.countText}
                 listingCapable={mapInfoDockContent.listingCapable}
@@ -352,7 +345,10 @@ export function DiscoverMapSurface({ view, commands, mapContainerRef }: Discover
                   view.schools.schoolRadiusOverlay
                     ? {
                         schoolRadiusKm: view.scope.filters.schoolRadiusKm,
-                        isAreaFirstJourney: true,
+                        // Issue #2762/#2766 — mirror DiscoverMapCanvas's own inline call. This
+                        // slot now mounts for every journey (PR-C), so a hardcoded `true` made
+                        // School-first render the radius legend here AND inline (two legends).
+                        isAreaFirstJourney: view.navigation.journey === 'area-first',
                         isMobileMapOverlay: false,
                       }
                     : null
@@ -369,15 +365,34 @@ export function DiscoverMapSurface({ view, commands, mapContainerRef }: Discover
                   areaMarkerListings: view.markers.areaMarkerListings,
                   isSelectedGroupState: view.navigation.isSelectedGroupState,
                   isAreaFirstCityLanding: view.navigation.isAreaFirstCityLanding,
-                  // `mapInfoDockContent` is non-null only when `view.navigation.journey ===
-                  // 'area-first'` (`deriveMapInfoDockContent`'s sole gate), so this literal is
-                  // always correct here — no `string`-vs-`DiscoverJourney` cast needed.
-                  journey: 'area-first',
-                  // Unused in `desktopAreaFirstSlot` mode (the agri-first branch never
-                  // renders there — see DiscoverMapLegend's own `!slot` guards).
+                  // Issue #2762 PR-C — the REAL journey (previously hardcoded to the literal
+                  // 'area-first', back when this slot only ever owned that one journey). The
+                  // slot now owns the legend for whichever journey `mapInfoDockContent` covers
+                  // (see DiscoverMapLegend's own `desktopDockSlotOwnsLegend` doc comment).
+                  journey: view.navigation.journey as DiscoverJourney,
+                  // KNOWN GAP (disclosed, not silently guessed) — `selectedLocality` (Agri's
+                  // drilled-into locality, used by DiscoverMapCanvas's OWN inline call via
+                  // `nav.selectedLocality` from live context) is not present on
+                  // `DiscoverMapSurfaceView.navigation` today; this `surfaces/**` file cannot
+                  // read `useDiscoverNav()` directly (forbidden — see this file's own header
+                  // comment). Stays `null` here, same as before this change. If the legend's
+                  // variant-selection switch (PR-D's remit, unchanged by this PR) depends on it
+                  // for the agri-parcel-level variant, that variant may render a less-specific
+                  // fallback in the slot position until `selectedLocality` is threaded onto the
+                  // surface view — flagged for PR-D/follow-up, not fixed here.
                   selectedLocality: null,
-                  selectedRegion: null,
+                  selectedRegion: view.agri.selectedRegion,
                   isMobileMapOverlay: false,
+                  // Issue #2762 PR-D — real value, already on the surface view
+                  // (`view.markers.currentMapMarkerListings`, the SAME array
+                  // forwarded to DiscoverMapCanvas's `<PropertyMap listings=.../>`
+                  // via `canvasView`); no view-model widening needed for this one,
+                  // unlike `selectedLocality` above. Read only by the school-selected
+                  // property-type block, which — like every other school/agri branch
+                  // in this switch — is `!slot`-gated and so never actually renders
+                  // from this call; wired through anyway to keep `variants` honest
+                  // (it's a required field) rather than passing a fabricated `[]`.
+                  currentMapMarkerListings: view.markers.currentMapMarkerListings,
                 }}
               />
             )}

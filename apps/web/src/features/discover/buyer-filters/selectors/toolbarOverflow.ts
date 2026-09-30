@@ -83,3 +83,58 @@ export function resolveToolbarCollapse(input: ToolbarOverflowInput): ToolbarOver
   if (totalWidth(true, false) <= availableWidth) return { collapseArea: true, collapseBhk: false };
   return { collapseArea: true, collapseBhk: true };
 }
+
+/** One collapsible pill candidate for {@link resolveCompactFilterBarCollapse}. */
+export interface CollapsibleGroupInput {
+  id: string;
+  label: string;
+}
+
+export interface ResolveCompactFilterBarCollapseInput {
+  /** Pinned pill labels — never collapse, always counted in the width budget. */
+  pinnedLabels: string[];
+  /**
+   * Collapsible pills, in COLLAPSE-PRIORITY order (index 0 collapses first, then index 1, etc.
+   * — the caller sorts, this function does not re-sort, so it stays a pure width-fitting loop).
+   */
+  collapsible: CollapsibleGroupInput[];
+  availableWidth: number | null;
+  gap?: number;
+  moreFiltersWidth?: number;
+}
+
+/**
+ * Issue #2762 PR-B — generalization of {@link resolveToolbarCollapse} from a fixed
+ * Area-then-BHK two-step to an arbitrary-length, priority-ordered collapse loop, so
+ * `CompactFilterBar` can serve journeys with a different pill count/order than By-area's.
+ *
+ * MUST reduce to byte-identical decisions as `resolveToolbarCollapse` for By-area's exact 5-pill
+ * case (Family/Type/Budget pinned, collapsible=[Area, BHK] in that priority order) — verified by
+ * hand: iteration 0 = `totalWidth(true,true)`, iteration 1 (Area collapsed) = `totalWidth(true,
+ * false)`, iteration 2 (both collapsed) = the fallback branch. Does not replace or call
+ * `resolveToolbarCollapse` — that function and its own tests are left untouched; this is an
+ * additive sibling used only by the new generic `CompactFilterBar`.
+ */
+export function resolveCompactFilterBarCollapse(input: ResolveCompactFilterBarCollapseInput): Set<string> {
+  const { pinnedLabels, collapsible, availableWidth, gap = 6, moreFiltersWidth = MORE_FILTERS_TRIGGER_WIDTH } = input;
+  const collapsed = new Set<string>();
+  if (availableWidth == null) return collapsed;
+
+  const pinnedWidth = pinnedLabels.reduce((sum, l) => sum + estimatePillWidth(l), 0);
+
+  const totalWidth = () => {
+    const included = collapsible.filter((g) => !collapsed.has(g.id));
+    const includedWidth = included.reduce((sum, g) => sum + estimatePillWidth(g.label), 0);
+    const pillCount = pinnedLabels.length + included.length + 1; // +1 = "More filters" trigger
+    const gapsWidth = gap * Math.max(0, pillCount - 1);
+    return pinnedWidth + includedWidth + moreFiltersWidth + gapsWidth;
+  };
+
+  if (totalWidth() <= availableWidth) return collapsed;
+
+  for (const g of collapsible) {
+    collapsed.add(g.id);
+    if (totalWidth() <= availableWidth) break;
+  }
+  return collapsed;
+}

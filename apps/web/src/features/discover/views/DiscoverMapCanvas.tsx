@@ -1297,6 +1297,9 @@ export function DiscoverMapCanvas({ mapContainerRef, view, commands }: DiscoverM
           isMobileMapOverlay,
           selectedLocality: nav.selectedLocality,
           selectedRegion,
+          // Issue #2762 PR-D — the school-selected property-type legend block reads this;
+          // the SAME array passed to `<PropertyMap listings=.../>` above.
+          currentMapMarkerListings,
         }}
       />
 
@@ -1533,10 +1536,16 @@ export function DiscoverMapCanvas({ mapContainerRef, view, commands }: DiscoverM
           The selected-area branch below is intentionally UNCHANGED (`bottom-48 right-4`) — already
           measured non-overlapping against every other selected-area element, so it stays put
           rather than being repositioned for a pairing it isn't part of. */}
-      {/* Issue #2748 — this unconditional city-recenter button is superseded, for the Areas
-          journey, by the Map Info Dock's own recenter row (always the CURRENT node, not just
-          the city) rendered by DiscoverMapSurface.tsx. Every other journey is unchanged. */}
-      {nav.journey !== 'area-first' && (
+      {/* Issue #2762 PR-C — this unconditional city-recenter button is superseded, for all three
+          journeys the Map Info Dock now covers (area-first/school-first/agri-first — see
+          mapInfoDockContent.ts), by the dock's own recenter row (always the CURRENT scope, not
+          just the city) rendered by DiscoverMapSurface.tsx. Previously excluded only 'area-first'
+          (the dock's sole journey at the time); School/Agri were reachable here and would now
+          duplicate the dock's own recenter — DELETED for those two, not merely hidden. Left as a
+          defensive fallback only for a journey value none of the three derivers claim (none
+          currently exists, but this button predates the dock and this is not the PR to prove a
+          4th journey can never occur). */}
+      {nav.journey !== 'area-first' && nav.journey !== 'school-first' && nav.journey !== 'agri-first' && (
         <div
           className={
             isMobileMapOverlay

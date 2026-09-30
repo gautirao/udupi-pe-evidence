@@ -38,6 +38,8 @@ import {
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
 import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import { PanelColumn } from './_shared';
+import { CompactFilterBar } from '@/features/discover/buyer-filters/sections/CompactFilterBar';
+import type { FilterBarGroup } from '@/features/discover/buyer-filters/sections/CompactFilterBar';
 
 const FRAUNCES = "font-['Fraunces',_ui-serif,_Georgia,_serif]";
 
@@ -137,6 +139,8 @@ export interface AgriGroupLocalityPanelProps {
   cityLabel?: string;
   /** Issue #1771 — bearing label of the parent corridor (e.g. "North") for breadcrumb + back link. */
   regionLabel?: string | null;
+  /** Issue #2762 — desktop renders filters in the shared CompactFilterBar; default keeps inline rows. */
+  isDesktop?: boolean;
 }
 
 // ─── Skeleton card ────────────────────────────────────────────────────────────
@@ -204,6 +208,7 @@ export function AgriGroupLocalityPanel({
   selectedListingId = null,
   cityLabel,
   regionLabel = null,
+  isDesktop = false,
 }: AgriGroupLocalityPanelProps) {
   // Sort by id ascending — stable, deterministic order across renders.
   // Spread first to avoid mutating the prop array.
@@ -252,6 +257,126 @@ export function AgriGroupLocalityPanel({
     setRoadOnly(false);
     setWaterOnly(false);
   };
+
+  // Shared by the mobile inline block and the desktop CompactFilterBar popover (state is local to this panel).
+  function renderFilterControls() {
+    return (
+      <>
+        <div>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+            Land size
+          </p>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Land size">
+            {SIZE_OPTIONS.map((opt) => (
+              <FilterPill
+                key={opt.key}
+                label={opt.label}
+                selected={sizeFilter === opt.key}
+                onClick={() => setSizeFilter(opt.key)}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+            Price range
+            {!isAuthenticated && <Lock className="h-3 w-3" aria-hidden="true" />}
+          </p>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Price range">
+            {PRICE_OPTIONS.map((opt) => (
+              <FilterPill
+                key={opt.key}
+                label={opt.label}
+                selected={priceFilter === opt.key}
+                onClick={() => setPriceFilter(opt.key)}
+                disabled={!isAuthenticated && opt.key !== 'any'}
+              />
+            ))}
+          </div>
+          {!isAuthenticated && (
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Sign in to filter by price.
+            </p>
+          )}
+        </div>
+
+        {soilOptions.length > 0 && (
+          <div>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+              Soil / cultivation
+            </p>
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Soil type">
+              <FilterPill
+                label="Any soil"
+                selected={soilFilter == null}
+                onClick={() => setSoilFilter(null)}
+              />
+              {soilOptions.map((soil) => (
+                <FilterPill
+                  key={soil}
+                  label={SOIL_TYPE_LABELS[soil] ?? soil}
+                  selected={soilFilter === soil}
+                  onClick={() => setSoilFilter(soilFilter === soil ? null : soil)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-1.5 pt-0.5">
+          <button
+            type="button"
+            onClick={() => setRoadOnly((v) => !v)}
+            aria-pressed={roadOnly}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              roadOnly
+                ? 'border-evergreen bg-evergreen-tint text-evergreen'
+                : 'border-border bg-card text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <Route className="h-3.5 w-3.5" aria-hidden="true" />
+            Road access
+          </button>
+          <button
+            type="button"
+            onClick={() => setWaterOnly((v) => !v)}
+            aria-pressed={waterOnly}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              waterOnly
+                ? 'border-evergreen bg-evergreen-tint text-evergreen'
+                : 'border-border bg-card text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <Droplets className="h-3.5 w-3.5" aria-hidden="true" />
+            Water available
+          </button>
+          {filtersActive && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              data-testid="agri-locality-filters-reset"
+              className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline transition-colors ml-1 self-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+      </>
+    );
+  }
+
+  const localityFilterBarGroups: FilterBarGroup[] = [
+    {
+      id: 'agri-locality-filters',
+      label: 'Land filters',
+      isActive: filtersActive,
+      testId: 'filter-pill-agri-locality-filters',
+      renderPopover: () => <div className="space-y-3.5">{renderFilterControls()}</div>,
+    },
+  ];
 
   // Hero acreage total across the (unfiltered) locality parcels.
   const totalAcres = useMemo(() => {
@@ -403,114 +528,17 @@ export function AgriGroupLocalityPanel({
           </div>
         ) : (
           <>
-            {/* ── Grouped filter block (mock parity, Issue #1771) ────────────── */}
-            <div
-              data-testid="agri-locality-filters"
-              className="rounded-xl border border-border bg-muted/60 p-4 space-y-3.5"
-            >
-              <div>
-                <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Land size
-                </p>
-                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Land size">
-                  {SIZE_OPTIONS.map((opt) => (
-                    <FilterPill
-                      key={opt.key}
-                      label={opt.label}
-                      selected={sizeFilter === opt.key}
-                      onClick={() => setSizeFilter(opt.key)}
-                    />
-                  ))}
-                </div>
+            {/* Grouped filter block (mock parity, #1771); desktop uses shared bar (#2762) */}
+            {isDesktop ? (
+              <CompactFilterBar accent="agri" groups={localityFilterBarGroups} />
+            ) : (
+              <div
+                data-testid="agri-locality-filters"
+                className="rounded-xl border border-border bg-muted/60 p-4 space-y-3.5"
+              >
+                {renderFilterControls()}
               </div>
-
-              <div>
-                <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Price range
-                  {!isAuthenticated && <Lock className="h-3 w-3" aria-hidden="true" />}
-                </p>
-                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Price range">
-                  {PRICE_OPTIONS.map((opt) => (
-                    <FilterPill
-                      key={opt.key}
-                      label={opt.label}
-                      selected={priceFilter === opt.key}
-                      onClick={() => setPriceFilter(opt.key)}
-                      disabled={!isAuthenticated && opt.key !== 'any'}
-                    />
-                  ))}
-                </div>
-                {!isAuthenticated && (
-                  <p className="mt-1.5 text-[11px] text-muted-foreground">
-                    Sign in to filter by price.
-                  </p>
-                )}
-              </div>
-
-              {soilOptions.length > 0 && (
-                <div>
-                  <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Soil / cultivation
-                  </p>
-                  <div className="flex flex-wrap gap-1.5" role="group" aria-label="Soil type">
-                    <FilterPill
-                      label="Any soil"
-                      selected={soilFilter == null}
-                      onClick={() => setSoilFilter(null)}
-                    />
-                    {soilOptions.map((soil) => (
-                      <FilterPill
-                        key={soil}
-                        label={SOIL_TYPE_LABELS[soil] ?? soil}
-                        selected={soilFilter === soil}
-                        onClick={() => setSoilFilter(soilFilter === soil ? null : soil)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="flex flex-wrap gap-1.5 pt-0.5">
-                <button
-                  type="button"
-                  onClick={() => setRoadOnly((v) => !v)}
-                  aria-pressed={roadOnly}
-                  className={cn(
-                    'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    roadOnly
-                      ? 'border-evergreen bg-evergreen-tint text-evergreen'
-                      : 'border-border bg-card text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  <Route className="h-3.5 w-3.5" aria-hidden="true" />
-                  Road access
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWaterOnly((v) => !v)}
-                  aria-pressed={waterOnly}
-                  className={cn(
-                    'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    waterOnly
-                      ? 'border-evergreen bg-evergreen-tint text-evergreen'
-                      : 'border-border bg-card text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  <Droplets className="h-3.5 w-3.5" aria-hidden="true" />
-                  Water available
-                </button>
-                {filtersActive && (
-                  <button
-                    type="button"
-                    onClick={resetFilters}
-                    data-testid="agri-locality-filters-reset"
-                    className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline transition-colors ml-1 self-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-                  >
-                    Clear all
-                  </button>
-                )}
-              </div>
-            </div>
+            )}
 
             {/* ── Parcels header ─────────────────────────────────────────────── */}
             <div className="flex items-center justify-between">
