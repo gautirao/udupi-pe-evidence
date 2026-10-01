@@ -68,8 +68,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(
         controllers = {
                 DiscoverSummaryController.class,
-                DiscoverMarkersController.class,
-                DiscoverListingsController.class,
                 DiscoverEventController.class
         },
         excludeAutoConfiguration = {
@@ -98,12 +96,6 @@ class DiscoverRateLimitFilterTest {
     private DiscoverSummaryPort discoverSummaryPort;
 
     @MockitoBean
-    private DiscoverMarkersPort discoverMarkersPort;
-
-    @MockitoBean
-    private DiscoverListingsPort discoverListingsPort;
-
-    @MockitoBean
     private DiscoverEventService discoverEventService;
 
     @MockitoBean
@@ -111,16 +103,6 @@ class DiscoverRateLimitFilterTest {
 
     @MockitoBean
     private JwtDecoder jwtDecoder;
-
-    // Constructor dependencies the listings/markers controllers acquired after this suite was
-    // written (#2087 NavigationGraphCache, #2420 PolygonGeographicSafetyPolicy). Without them
-    // the @WebMvcTest context fails to load and every test here ERRORs before running — the
-    // suite was silently red on main until #2454 touched the filter's exclusion list.
-    @MockitoBean
-    private com.example.realestate.discover.navigation.NavigationGraphCache navigationGraphCache;
-
-    @MockitoBean
-    private com.example.realestate.discover.PolygonGeographicSafetyPolicy polygonGeographicSafetyPolicy;
 
     private void stubSummaryOk() {
         when(discoverSummaryPort.getSummary(any())).thenReturn(
