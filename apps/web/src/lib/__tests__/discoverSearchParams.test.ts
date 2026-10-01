@@ -127,83 +127,10 @@ describe('discoverSearchParams — parity test', () => {
     vi.clearAllMocks();
   });
 
-  it('proves listing and marker hooks use aligned serialization for overlapping filters', async () => {
-    mockGet.mockResolvedValue({});
+  describe('proves listing and marker hooks use aligned serialization for overlapping filters', () => {
+    let listingUrlParams: URLSearchParams;
+    let markerUrlParams: URLSearchParams;
 
-    const commonFilters: PropertyFilters = {
-      propertyTypes: ['house', 'villa'] as any,
-      localities: ['Manipal'],
-      priceMin: 500000,
-      priceMax: 1500000,
-      dateFrom: new Date('2026-01-01T00:00:00Z'),
-      dateTo: new Date('2026-06-01T00:00:00Z'),
-      bedrooms: [2, 4],
-      sellerTypes: ['OWNER'] as any,
-      backOnMarket: true,
-      newToMarket: true,
-      reraRegistered: true,
-      readyToMove: true,
-      polygon: [[13.3, 74.7], [13.4, 74.8]] as [number, number][],
-      schoolLat: 13.34,
-      schoolLon: 74.74,
-      schoolRadiusKm: 5,
-      // #2431 — set here so the parity assertion below is not vacuous: without a value, both
-      // sides would return an empty array and the key would "match" while proving nothing.
-      commercialSubtypes: ['SHOP', 'OFFICE'] as ['SHOP', 'OFFICE'],
-    };
-
-    const bbox: [number, number, number, number] = [13.341, 74.741, 13.359, 74.759];
-    const q = '   luxury villa   ';
-    const listingPurpose = 'sale';
-    const areaKeys = ['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Karkala'];
-
-    // 1. Render useDiscoverListings
-    const { result: listingResult } = renderHook(
-      () =>
-        useDiscoverListings({
-          city: 'udupi',
-          page: 0,
-          filters: commonFilters,
-          enabled: true,
-          bbox,
-          q,
-          listingPurpose,
-          areaKeys,
-        }),
-      { wrapper: makeWrapper() },
-    );
-
-    await waitFor(() => expect(listingResult.current.isSuccess).toBe(true));
-
-    // 2. Render useDiscoverFilteredMarkers
-    const { result: markerResult } = renderHook(
-      () =>
-        useDiscoverFilteredMarkers(
-          'udupi',
-          commonFilters,
-          true,
-          bbox,
-          q,
-          listingPurpose,
-          undefined, // excludePropertyType
-          areaKeys,
-        ),
-      { wrapper: makeWrapper() },
-    );
-
-    await waitFor(() => expect(markerResult.current.isSuccess).toBe(true));
-
-    // Retrieve URLs requested from mockGet calls
-    expect(mockGet).toHaveBeenCalledTimes(2);
-
-    const [listingCall] = mockGet.mock.calls[0] as [string, unknown];
-    const [markerCall] = mockGet.mock.calls[1] as [string, unknown];
-
-    // Extract search query parameters from the api calls
-    const listingUrlParams = new URLSearchParams(listingCall.split('?')[1]);
-    const markerUrlParams = new URLSearchParams(markerCall.split('?')[1]);
-
-    // Overlapping keys to assert exact matching
     const overlappingKeys = [
       'city',
       'bbox',
@@ -226,18 +153,89 @@ describe('discoverSearchParams — parity test', () => {
       'schoolRadiusKm',
       'q',
       'listingPurpose',
-      // #2431 — cards and markers must ask the server the SAME subtype question, or the map
-      // would show pins the result list omits.
       'commercialSubtypes',
     ];
 
-    // Guard against a vacuous parity assertion: if the builder silently dropped
-    // commercialSubtypes, both sides would be empty and the loop below would still pass.
-    expect(listingUrlParams.getAll('commercialSubtypes')).toEqual(['SHOP', 'OFFICE']);
+    beforeAll(async () => {
+      mockGet.mockResolvedValue({});
 
-    // Assert parity
-    for (const key of overlappingKeys) {
+      const commonFilters: PropertyFilters = {
+        propertyTypes: ['house', 'villa'] as any,
+        localities: ['Manipal'],
+        priceMin: 500000,
+        priceMax: 1500000,
+        dateFrom: new Date('2026-01-01T00:00:00Z'),
+        dateTo: new Date('2026-06-01T00:00:00Z'),
+        bedrooms: [2, 4],
+        sellerTypes: ['OWNER'] as any,
+        backOnMarket: true,
+        newToMarket: true,
+        reraRegistered: true,
+        readyToMove: true,
+        polygon: [[13.3, 74.7], [13.4, 74.8]] as [number, number][],
+        schoolLat: 13.34,
+        schoolLon: 74.74,
+        schoolRadiusKm: 5,
+        commercialSubtypes: ['SHOP', 'OFFICE'] as ['SHOP', 'OFFICE'],
+      };
+
+      const bbox: [number, number, number, number] = [13.341, 74.741, 13.359, 74.759];
+      const q = '   luxury villa   ';
+      const listingPurpose = 'sale';
+      const areaKeys = ['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Karkala'];
+
+      // 1. Render useDiscoverListings
+      const { result: listingResult } = renderHook(
+        () =>
+          useDiscoverListings({
+            city: 'udupi',
+            page: 0,
+            filters: commonFilters,
+            enabled: true,
+            bbox,
+            q,
+            listingPurpose,
+            areaKeys,
+          }),
+        { wrapper: makeWrapper() },
+      );
+
+      await waitFor(() => expect(listingResult.current.isSuccess).toBe(true));
+
+      // 2. Render useDiscoverFilteredMarkers
+      const { result: markerResult } = renderHook(
+        () =>
+          useDiscoverFilteredMarkers(
+            'udupi',
+            commonFilters,
+            true,
+            bbox,
+            q,
+            listingPurpose,
+            undefined, // excludePropertyType
+            { kind: 'areas', areaKeys }, // scope
+          ),
+        { wrapper: makeWrapper() },
+      );
+
+      await waitFor(() => expect(markerResult.current.isSuccess).toBe(true));
+
+      // Extract search query parameters from the api calls
+      const [listingCall] = mockGet.mock.calls[0] as [string, unknown];
+      const [markerCall] = mockGet.mock.calls[1] as [string, unknown];
+
+      listingUrlParams = new URLSearchParams(listingCall.split('?')[1]);
+      markerUrlParams = new URLSearchParams(markerCall.split('?')[1]);
+    });
+
+    it('guard against vacuous parity assertion', () => {
+      // Guard against a vacuous parity assertion: if the builder silently dropped
+      // commercialSubtypes, both sides would be empty and the loop below would still pass.
+      expect(listingUrlParams.getAll('commercialSubtypes')).toEqual(['SHOP', 'OFFICE']);
+    });
+
+    it.each(overlappingKeys)('proves serialization parity for key: %s', (key) => {
       expect(listingUrlParams.getAll(key)).toEqual(markerUrlParams.getAll(key));
-    }
+    });
   });
 });
