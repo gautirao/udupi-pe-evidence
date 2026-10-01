@@ -236,7 +236,7 @@ export function SchoolJourneyPanel({
           commands={{
             chrome: { startOver: onStartOver, back: onBack },
             radius: { change: commands.selected.changeRadius ?? (() => undefined) },
-            listings: { hover: onHoverResultListing },
+            listings: { select: onSelectResultListing, hover: onHoverResultListing },
             propertyFilters: { replace: commands.propertyFilters.replace },
             // G11 — stays undefined (never `{trigger: undefined}`) when absent.
             boundedSearch: commands.selected.boundedSearch
