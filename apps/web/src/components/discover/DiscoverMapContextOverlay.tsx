@@ -171,7 +171,7 @@ export function DiscoverMapContextOverlay({
       ref={rootRef}
       className="pointer-events-none absolute top-4 left-4 z-[1000] [@media(max-width:1023px)]:right-4 [@media(max-width:1023px)]:flex [@media(max-width:1023px)]:items-start [@media(max-width:1023px)]:gap-2"
     >
-      <div className="pointer-events-auto min-w-0 [@media(max-width:1023px)]:flex-1">
+      <div className="pointer-events-none min-w-0 [@media(max-width:1023px)]:flex-1 [&>*]:pointer-events-auto">
         {canonicalNavigationNode ? (
           <AreasBreadcrumbTrail
             node={canonicalNavigationNode}
