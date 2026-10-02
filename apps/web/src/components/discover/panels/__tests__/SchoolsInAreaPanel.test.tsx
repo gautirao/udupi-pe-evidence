@@ -357,3 +357,29 @@ describe('SchoolsInAreaPanel — school-first select branch (regression: unchang
     );
   });
 });
+
+describe('SchoolsInAreaPanel — Start over confirmation city (Issue #2759)', () => {
+  afterEach(() => {
+    mockUrlState.city = 'udupi';
+    mockUrlState.areaKey = 'IN|KA|Udupi|Manipal';
+  });
+
+  it('shows the correct active city in the Start over confirmation popover (Udupi)', () => {
+    renderPanel({ journey: 'school-first', onStartOver: vi.fn() });
+    
+    fireEvent.click(screen.getByTestId('start-over-button'));
+    
+    expect(screen.getByTestId('start-over-confirm-popover')).toHaveTextContent("You’ll return to Udupi.");
+  });
+
+  it('shows the correct active city in the Start over confirmation popover (Bangalore)', () => {
+    mockUrlState.city = 'bangalore';
+    mockUrlState.areaKey = 'IN|KA|Bangalore|Koramangala';
+    
+    renderPanel({ journey: 'school-first', onStartOver: vi.fn() });
+    
+    fireEvent.click(screen.getByTestId('start-over-button'));
+    
+    expect(screen.getByTestId('start-over-confirm-popover')).toHaveTextContent("You’ll return to Bangalore.");
+  });
+});

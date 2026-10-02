@@ -349,6 +349,7 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
         onBack={onBack}
         backLabel={isSchoolFirst && urlState.groupId ? prettifyZoneSlug(urlState.groupId) : areaLabel}
         activeContextChips={activeContextChips}
+        cityLabel={cityLabel}
       />
 
       {/* Single scroll surface: selected-area summary → school filters → school list */}
