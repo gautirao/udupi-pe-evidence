@@ -118,9 +118,9 @@ export function ListingsBody({
         )}
       >
         {isLoadingListings ? (
-          <div className="space-y-3 p-4">
+          <div className="discover-results-grid grid grid-cols-1 gap-3 p-4">
             {/* a4 — rounded-xl skeleton cards for consistency with PropertyCard corners. */}
-            {[0, 1, 2].map((i) => (
+            {[0, 1, 2, 3].map((i) => (
               <div key={i} data-testid="listing-skeleton" className="rounded-xl border border-border p-3">
                 <Skeleton className="mb-3 h-40 w-full rounded-lg" />
                 <Skeleton className="mb-2 h-4 w-2/3" />
@@ -239,14 +239,14 @@ export function ListingsBody({
               </p>
             </div>
             {/* Issue #2159 reskin — the desktop 2-column grid target needs the PANEL's own
-                width, not the viewport's; see `.area-panel-container` / `.area-listings-grid`
+                width, not the viewport's; see `.discover-panel-container` / `.discover-results-grid`
                 in src/index.css. Issue #2596 — closes the dead band between controls and
                 results (the grid keeps its full side/bottom padding, only loses the
                 redundant top inset). */}
             {/* Issue #2729 V2/V2c fix — additive `min-[1366px]:` tightening (pt-2→pt-0.5); part
                 of the vertical-chrome recovery — see Toolbar.tsx's matching comment for the
                 running total. */}
-            <div className="area-listings-grid grid grid-cols-1 gap-3 px-4 pb-4 pt-2 min-[1366px]:pt-0.5">
+            <div className="discover-results-grid grid grid-cols-1 gap-3 px-4 pb-4 pt-2 min-[1366px]:pt-0.5">
               {areaListings.map((listing) => (
                 <div key={listing.id} ref={registerCardRef(listing.id)}>
                   <PropertyCard

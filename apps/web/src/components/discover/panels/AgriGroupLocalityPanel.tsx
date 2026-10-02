@@ -403,9 +403,9 @@ export function AgriGroupLocalityPanel({
   return (
     <div
       data-testid="agri-group-locality-panel"
-      className="flex flex-col h-full bg-muted/20 overflow-y-auto"
+      className="discover-panel-container flex flex-col h-full bg-muted/20 overflow-y-auto"
     >
-      <PanelColumn className="w-full max-w-[720px] px-4 pb-6 pt-4 space-y-4">
+      <PanelColumn className="w-full px-4 pb-6 pt-4 space-y-4">
         {/* ── Back to towns ─────────────────────────────────────────────────── */}
         <button
           type="button"
@@ -476,7 +476,7 @@ export function AgriGroupLocalityPanel({
 
         {/* ── Body ──────────────────────────────────────────────────────────── */}
         {isLoading ? (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3" aria-busy="true">
+          <div className="discover-results-grid grid grid-cols-1 gap-3" aria-busy="true">
             <ListingSkeleton />
             <ListingSkeleton />
             <ListingSkeleton />
@@ -567,7 +567,7 @@ export function AgriGroupLocalityPanel({
             ) : (
               <div
                 data-testid="agri-locality-listings-list"
-                className="grid grid-cols-1 xl:grid-cols-2 gap-3.5"
+                className="discover-results-grid grid grid-cols-1 gap-3.5"
               >
                 {filteredListings.map((item) => {
                   const isSelected = selectedListingId === item.id;

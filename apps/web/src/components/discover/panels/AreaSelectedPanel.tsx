@@ -486,7 +486,7 @@ export function AreaSelectedPanel({ view, commands }: AreaSelectedPanelProps) {
     ) : null;
 
   return (
-    <div className="area-panel-container flex flex-1 flex-col overflow-y-auto">
+    <div className="discover-panel-container flex flex-1 flex-col overflow-y-auto">
       {/* Breadcrumb — sticky, area-first hierarchy: Home › City › Group › Area (Issue #1606) */}
       <Breadcrumb
         cityLabel={resolvedCityLabel || areaLabel}
@@ -536,7 +536,7 @@ export function AreaSelectedPanel({ view, commands }: AreaSelectedPanelProps) {
         // Playwright, BEFORE 3dd9e26f vs AFTER 768b4591 at 1365×768/900×768) proved that even
         // though every `min-[1366px]:*` class on the wrapper is inert below that floor, the
         // wrapper DIV ITSELF was always mounted — so below 1366 `PropertyFilterGroups` gained a
-        // new parent (`display:block`, no longer a direct flex item of `.area-panel-container`),
+        // new parent (`display:block`, no longer a direct flex item of `.discover-panel-container`),
         // which changed its computed `min-height`/`min-width` from `auto` to `0px` and shifted a
         // sibling's sub-pixel rasterisation. Below 1366 this branch now renders
         // `PropertyFilterGroups` as the direct child again — byte-for-byte the merge-base

@@ -102,7 +102,7 @@ export function AreaSetDraftPanel() {
   };
 
   return (
-    <div className="area-panel-container flex flex-1 flex-col overflow-y-auto" data-testid="area-set-draft-panel">
+    <div className="discover-panel-container flex flex-1 flex-col overflow-y-auto" data-testid="area-set-draft-panel">
       <div className="border-b border-border/60 bg-background/95 px-4 py-2.5">
         <button
           type="button"

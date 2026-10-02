@@ -19,7 +19,7 @@ import { toAreaSelectedPanelContract, type AreaSelectedPanelFlatTestProps } from
  *
  * Issue #2729 (post-merge fix-verify) — a real-Playwright `getComputedStyle` probe found the
  * wrapper was ALWAYS mounted (only its `min-[1366px]:*` classes were CSS-inert below that floor),
- * which changed `PropertyFilterGroups`'s parent from a direct flex-item of `.area-panel-container`
+ * which changed `PropertyFilterGroups`'s parent from a direct flex-item of `.discover-panel-container`
  * to a block child of this new div — shifting its computed `min-height`/`min-width` from `auto` to
  * `0px` and moving a sibling by a sub-pixel amount below 1366px. The wrapper is now CONDITIONAL on
  * `isDesktopReskin` (`AreaSelectedPanel.tsx`'s `filterToolbarNode`): mounted with plain (ungated)

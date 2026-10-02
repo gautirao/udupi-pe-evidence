@@ -120,13 +120,13 @@ export function SchoolRadiusListings({
       <div
         data-testid={listingsBodyTestId}
         className={cn(
-          'transition-opacity duration-150',
+          'discover-panel-container transition-opacity duration-150',
           isFetching && !isLoadingListings ? 'opacity-50 pointer-events-none' : 'opacity-100',
         )}
       >
         {isLoadingListings ? (
-          <div className="space-y-3 p-4">
-            {[0, 1, 2].map((i) => (
+          <div className="discover-results-grid grid grid-cols-1 gap-3 p-4">
+            {[0, 1, 2, 3].map((i) => (
               <div key={i} data-testid={listingSkeletonTestId} className="rounded-lg border border-border p-3">
                 <Skeleton className="w-full h-40 rounded-lg mb-3" />
                 <Skeleton className="h-4 w-2/3 mb-2" />
@@ -153,7 +153,7 @@ export function SchoolRadiusListings({
             onClearPropertyFilters={onClearPropertyFilters}
           />
         ) : (
-          <div className="grid grid-cols-1 2xl:grid-cols-2 gap-3 p-3">
+          <div className="discover-results-grid grid grid-cols-1 gap-3 p-3">
             {sortedListingsWithDistance.map(({ listing, distanceKm }) => (
               <div
                 key={listing.id}
