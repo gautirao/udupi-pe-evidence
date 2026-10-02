@@ -173,5 +173,15 @@ export function useDiscoverAgriController({
     selectedGroupListingItem,
     filteredAgriListings,
     agriDestinationMarkers,
+    selectedLocality: nav.selectedLocality ?? null,
+    selectedLocalityName: selectedDestinationAreaKey
+      ? (agriDestinations?.find((d) => d.areaKey === selectedDestinationAreaKey)?.displayName ?? null)
+      : null,
+    selectedLocalityCount: selectedDestinationAreaKey
+      ? (agriDestinations?.find((d) => d.areaKey === selectedDestinationAreaKey)?.parcelCount ?? null)
+      : null,
+    corridorTotalCount: agriDestinations
+      ? agriDestinations.reduce((sum, d) => sum + d.parcelCount, 0)
+      : null,
   };
 }

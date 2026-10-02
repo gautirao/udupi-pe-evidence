@@ -395,6 +395,10 @@ describe('deriveMapInfoDockContent — school-first (#2762 PR-C)', () => {
 describe('deriveMapInfoDockContent — agri-first (#2762 PR-C)', () => {
   function buildAgriView(overrides: {
     selectedRegion?: string | null;
+    selectedLocality?: string | null;
+    selectedLocalityName?: string | null;
+    selectedLocalityCount?: number | null;
+    corridorTotalCount?: number | null;
     filteredAgriListings?: unknown[] | null;
     resolvedPanelContent?: string;
   }): DiscoverMapSurfaceView {
@@ -406,6 +410,10 @@ describe('deriveMapInfoDockContent — agri-first (#2762 PR-C)', () => {
       },
       agri: {
         selectedRegion: overrides.selectedRegion ?? null,
+        selectedLocality: overrides.selectedLocality ?? null,
+        selectedLocalityName: overrides.selectedLocalityName ?? null,
+        selectedLocalityCount: overrides.selectedLocalityCount ?? null,
+        corridorTotalCount: overrides.corridorTotalCount ?? null,
         filteredAgriListings: overrides.filteredAgriListings ?? null,
       },
       status: {},
@@ -418,16 +426,34 @@ describe('deriveMapInfoDockContent — agri-first (#2762 PR-C)', () => {
     expect(result?.listingCapable).toBe(false);
   });
 
-  it('parcel-result level (agri-group-selected): count from filteredAgriListings.length, listingCapable true', () => {
+  it('parcel-result level (agri-group-selected): count from authoritative corridorTotalCount, not filteredAgriListings.length', () => {
     const result = deriveMapInfoDockContent(
       buildAgriView({
         resolvedPanelContent: 'agri-group-selected',
         selectedRegion: 'N',
-        filteredAgriListings: [{}, {}, {}, {}],
+        corridorTotalCount: 42,
+        filteredAgriListings: [{}, {}, {}], // Mismatched length to prove priority
       }),
     );
-    expect(result?.where).toBe('N');
-    expect(result?.countText).toBe('Showing 4 verified agricultural parcels in N');
+    expect(result?.where).toBe('North');
+    expect(result?.countText).toBe('Showing 42 verified agricultural parcels in North');
+    expect(result?.listingCapable).toBe(true);
+  });
+
+  it('parcel-result level (agri-group-locality): uses selectedLocalityName and selectedLocalityCount when available', () => {
+    const result = deriveMapInfoDockContent(
+      buildAgriView({
+        resolvedPanelContent: 'agri-group-locality',
+        selectedRegion: 'N',
+        selectedLocality: 'loc-1',
+        selectedLocalityName: 'My Named Locality',
+        selectedLocalityCount: 8,
+        filteredAgriListings: [{}, {}, {}, {}], // Mismatched length to prove priority
+      }),
+    );
+    expect(result?.where).toBe('My Named Locality');
+    expect(result?.countText).toBe('Showing 8 verified agricultural parcels in My Named Locality');
+    expect(result?.scopeKey).toBe('agri:parcel:agri-group-locality:loc-1');
     expect(result?.listingCapable).toBe(true);
   });
 
@@ -436,7 +462,7 @@ describe('deriveMapInfoDockContent — agri-first (#2762 PR-C)', () => {
       buildAgriView({ resolvedPanelContent: 'agri-landing', selectedRegion: 'N' }),
     );
     const parcel = deriveMapInfoDockContent(
-      buildAgriView({ resolvedPanelContent: 'agri-group-selected', selectedRegion: 'N', filteredAgriListings: [] }),
+      buildAgriView({ resolvedPanelContent: 'agri-group-selected', selectedRegion: 'N', corridorTotalCount: 4 }),
     );
     expect(corridor?.scopeKey).not.toBe(parcel?.scopeKey);
   });

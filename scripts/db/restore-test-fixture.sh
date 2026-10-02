@@ -575,7 +575,9 @@ fi
 # Row-count validation
 # ---------------------------------------------------------------------------
 
-echo "==> Running row-count validation..."
+echo "==> Loading Udupi agri-destination fixture..."
+  PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" -d "${DB_NAME}" -f "${SCRIPT_DIR}/fixtures/udupi-agri-destination-seed.sql" || exit 1
+  echo "==> Running row-count validation..."
 PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" \
   -d "${DB_NAME}" <<'SQL'
 \echo '--- cities ---'

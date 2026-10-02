@@ -128,6 +128,10 @@ type MapAreasView = {
 type MapAgriView = {
   selectedRegion: 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW' | null;
   selectedMaxKm: 10 | 25 | 50 | 100 | null;
+  selectedLocality: string | null;
+  selectedLocalityName: string | null;
+  selectedLocalityCount: number | null;
+  corridorTotalCount: number | null;
   filteredAgriListings: AgriMapListingItem[] | null;
   agriDestinationMarkers: AgriMapListingItem[];
   isAgriJourney: boolean;
@@ -451,7 +455,7 @@ export type BuildMapSurfaceViewParams = MapSurfaceLeftoverParams & {
   >;
   agriController: Pick<
     ReturnType<typeof useDiscoverAgriController>,
-    'selectedRegion' | 'selectedMaxKm' | 'filteredAgriListings' | 'agriDestinationMarkers'
+    'selectedRegion' | 'selectedMaxKm' | 'filteredAgriListings' | 'agriDestinationMarkers' | 'selectedLocality' | 'selectedLocalityName' | 'selectedLocalityCount' | 'corridorTotalCount'
   >;
   schoolController: Pick<
     ReturnType<typeof useDiscoverSchoolController>,
@@ -651,7 +655,7 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
     journeyChromeController: { isLandingState, showSchoolMarkers, showSchoolBreadcrumb, schoolRadiusOverlay, isSelectedGroupState, isAreaFirstSelectedAreaState },
     markerPopoverController: { currentMapMarkerListings, markerPopoverStepper },
     navigationController: { hoveredNavigationNodeKey, focusedClusterMemberAreaKeys },
-    agriController: { selectedRegion, selectedMaxKm, filteredAgriListings, agriDestinationMarkers },
+    agriController: { selectedRegion, selectedMaxKm, filteredAgriListings, agriDestinationMarkers, selectedLocality, selectedLocalityName, selectedLocalityCount, corridorTotalCount },
     schoolController: {
       schoolZoneLabels,
       schools,
@@ -740,6 +744,10 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
     agri: {
       selectedRegion,
       selectedMaxKm,
+      selectedLocality,
+      selectedLocalityName,
+      selectedLocalityCount,
+      corridorTotalCount,
       filteredAgriListings,
       agriDestinationMarkers,
       isAgriJourney,

@@ -262,22 +262,29 @@ function deriveSchoolDock(
  * `agri.filteredAgriListings` — the SAME filtered marker/listing array this journey's map layer
  * itself renders, so the dock's count can never disagree with what's actually on the map.
  *
- * KNOWN LIMITATION (disclosed, not silently guessed): AgriGroupSelectedPanel's own "N parcels"
- * summary band is computed from `useAgriDestinations`' server-aggregated `destinations` buckets, a
- * PANEL-level hook result not present on this map-surface view — using it here would mean adding a
- * new query to a `surfaces/**` file, which this issue's own guardrails forbid. `filteredAgriListings`
- * is the closest already-available, no-new-query signal; it may not always numerically match the
- * panel's own aggregate count (e.g. while the panel's server aggregate has settled but the map's
- * client-side marker list is still catching up). Flagged for confirmation rather than asserted as
- * verified-identical.
+ * Issue #2765 — Count source uses the server-computed destinations slice via `useDiscoverAgriController`,
+ * guaranteeing perfect consistency with `AgriGroupSelectedPanel` and `AgriGroupLocalityPanel` without adding
+ * duplicate query calls to the surface layer.
  */
+const BEARING_LABELS: Record<string, string> = {
+  n: 'North', N: 'North',
+  e: 'East', E: 'East',
+  s: 'South', S: 'South',
+  w: 'West', W: 'West',
+  NE: 'North-east',
+  NW: 'North-west',
+  SE: 'South-east',
+  SW: 'South-west',
+};
+
 function deriveAgriDock(
   view: DiscoverMapSurfaceView,
   options: DeriveMapInfoDockContentOptions,
 ): MapInfoDockContent {
   const { navigation, agri } = view;
   const cityLabel = CITY_CONFIG[navigation.city]?.label ?? navigation.city;
-  const where = agri.selectedRegion ?? cityLabel;
+  const regionLabel = agri.selectedRegion ? (BEARING_LABELS[agri.selectedRegion] ?? agri.selectedRegion) : null;
+  const where = agri.selectedLocalityName ?? regionLabel ?? cityLabel;
 
   const isParcelLevel =
     navigation.resolvedPanelContent === 'agri-group-selected' ||
@@ -287,21 +294,21 @@ function deriveAgriDock(
 
   if (!isParcelLevel) {
     return {
-      scopeKey: `agri:corridor:${navigation.resolvedPanelContent}:${where}`,
+      scopeKey: `agri:corridor:${navigation.resolvedPanelContent}:${agri.selectedLocality ?? where}`,
       where,
       countText: null,
       listingCapable: false,
     };
   }
 
-  const count = agri.filteredAgriListings?.length ?? null;
+  const count = agri.selectedLocalityCount ?? agri.corridorTotalCount ?? null;
   let countText: string | null = null;
   if (!options.hideDuplicateCountBadge && count != null) {
     countText = `Showing ${count.toLocaleString()} verified agricultural ${count === 1 ? 'parcel' : 'parcels'} in ${where}`;
   }
 
   return {
-    scopeKey: `agri:parcel:${navigation.resolvedPanelContent}:${where}`,
+    scopeKey: `agri:parcel:${navigation.resolvedPanelContent}:${agri.selectedLocality ?? where}`,
     where,
     countText,
     listingCapable: true,
