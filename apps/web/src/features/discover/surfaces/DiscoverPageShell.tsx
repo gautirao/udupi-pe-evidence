@@ -2,6 +2,7 @@ import type { ReactNode, RefObject } from 'react';
 import { PublicDiscoverLayout } from '@/components/layout/PublicDiscoverLayout';
 import { DiscoverControlBar } from '@/components/discover/DiscoverControlBar';
 import type { DiscoverHeaderRegionGuide } from '@/components/discover/DiscoverHeaderJourneyTabs';
+import type { PublicNavJourney } from '@/lib/navUtils';
 
 export interface DiscoverPageShellMobileMapTrigger {
   onOpenMap: () => void;
@@ -21,6 +22,7 @@ export interface DiscoverPageShellProps {
   overlaySurface: ReactNode;
   /** Pass-through of the region-guide ring/aria-live signal to `PublicHeader`'s journey tabs; optional for callers that don't need it. */
   regionGuide?: DiscoverHeaderRegionGuide;
+  onSelectJourney?: (journey: PublicNavJourney) => void;
 }
 
 /**
@@ -46,12 +48,14 @@ export function DiscoverPageShell({
   panelSurface,
   overlaySurface,
   regionGuide,
+  onSelectJourney,
 }: DiscoverPageShellProps) {
   return (
     <PublicDiscoverLayout
       regionGuide={regionGuide}
       hostsHeaderControls={hostsHeaderControls}
       headerHostsJourneyTabs={headerHostsJourneyTabs}
+      onSelectJourney={onSelectJourney}
     >
       <div className="flex h-full flex-col">
         {isMobileShell && (

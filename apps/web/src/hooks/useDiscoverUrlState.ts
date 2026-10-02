@@ -645,6 +645,11 @@ export interface DiscoverUrlActions {
    */
   enterSchoolsJourneyAtArea: (areaKey: string) => void;
   /**
+   * ATOMIC entry into the Agri journey at a specific area: sets
+   * `journey=agri-first` AND `destKey=` while deleting `node` in ONE write.
+   */
+  enterAgriJourneyAtArea: (areaKey: string) => void;
+  /**
    * Issue #1956 PR 2 — PURE: returns the query string a middle-click / cmd-click
    * / "copy link address" on a node destination should resolve to, or null when
    * the key is not writable. Writes NOTHING. Guaranteed by a differential test to

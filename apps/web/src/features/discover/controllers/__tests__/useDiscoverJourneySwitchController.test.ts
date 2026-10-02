@@ -70,10 +70,12 @@ function makeActions() {
     setJourney: vi.fn(),
     enterAreasJourney: vi.fn(),
     enterSchoolsJourneyAtArea: vi.fn(),
+    enterAgriJourneyAtArea: vi.fn(),
   } as unknown as DiscoverUrlActions & {
     setJourney: ReturnType<typeof vi.fn>;
     enterAreasJourney: ReturnType<typeof vi.fn>;
     enterSchoolsJourneyAtArea: ReturnType<typeof vi.fn>;
+    enterAgriJourneyAtArea: ReturnType<typeof vi.fn>;
   };
 }
 
@@ -132,15 +134,14 @@ describe('useDiscoverJourneySwitchController — handleSelectJourney', () => {
     expect(actions.setJourney).not.toHaveBeenCalled();
   });
 
-  it('the AREA-leaf schools shortcut does NOT apply when legacy area context is present (that click is a conversion, not a shortcut)', () => {
+  it('the AREA-leaf schools shortcut DOES apply when legacy area context is present (context is preserved)', () => {
     const { select, actions } = setup({
       nav: { journey: 'area-first', areaKey: 'IN|KA|Bangalore|Yelahanka' },
       node: AREA_LEAF_NODE,
     });
     select('school-first');
-    expect(actions.enterSchoolsJourneyAtArea).not.toHaveBeenCalled();
-    // journey !== 'area-first' -> plain PUSH arm.
-    expect(actions.setJourney).toHaveBeenCalledWith('school-first');
+    expect(actions.enterSchoolsJourneyAtArea).toHaveBeenCalledWith('IN|KA|Bangalore|Yelahanka');
+    expect(actions.setJourney).not.toHaveBeenCalled();
   });
 
   it('legacy areaKey + switch TO area-first: resolves through the server navigation-path endpoint, then enters canonical AT THAT NODE in ONE write', () => {
@@ -261,5 +262,64 @@ describe('useDiscoverJourneySwitchController — selectGroupMemberArea (#2213)',
     selectGroupMemberArea('IN|KA|Udupi|Manipal');
     const [vars] = mockMutate.mock.calls[0];
     expect(vars.city).not.toBe('');
+  });
+});
+describe('useDiscoverJourneySwitchController — Issue #2768 canonical Area preservation', () => {
+  it('Area -> School preserves canonical Area', () => {
+    const { select, actions } = setup({
+      nav: { journey: 'area-first' },
+      node: { nodeType: 'AREA', areaKey: 'IN|KA|Udupi|Brahmavar', nodeKey: 'a:IN|KA|Udupi|Brahmavar' },
+    });
+    select('school-first');
+    expect(actions.enterSchoolsJourneyAtArea).toHaveBeenCalledWith('IN|KA|Udupi|Brahmavar');
+  });
+
+  it('Area -> Agricultural preserves canonical Area', () => {
+    const { select, actions } = setup({
+      nav: { journey: 'area-first' },
+      node: { nodeType: 'AREA', areaKey: 'IN|KA|Udupi|Brahmavar', nodeKey: 'a:IN|KA|Udupi|Brahmavar' },
+    });
+    select('agri-first');
+    expect(actions.enterAgriJourneyAtArea).toHaveBeenCalledWith('IN|KA|Udupi|Brahmavar');
+  });
+
+  it('School -> Area preserves canonical Area', () => {
+    const { select, actions } = setup({
+      nav: { journey: 'school-first', areaKey: 'IN|KA|Udupi|Brahmavar' },
+    });
+    select('area-first');
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    const [vars, options] = mockMutate.mock.calls[0];
+    expect(vars.areaKey).toBe('IN|KA|Udupi|Brahmavar');
+    options.onSuccess({ nodeKey: 'a:IN|KA|Udupi|Brahmavar' });
+    expect(actions.enterAreasJourney).toHaveBeenCalledWith('a:IN|KA|Udupi|Brahmavar');
+  });
+
+  it('School -> Agricultural preserves canonical Area', () => {
+    const { select, actions } = setup({
+      nav: { journey: 'school-first', areaKey: 'IN|KA|Udupi|Brahmavar' },
+    });
+    select('agri-first');
+    expect(actions.enterAgriJourneyAtArea).toHaveBeenCalledWith('IN|KA|Udupi|Brahmavar');
+  });
+
+  it('Agricultural -> Area preserves canonical Area', () => {
+    const { select, actions } = setup({
+      nav: { journey: 'agri-first', selectedLocality: 'IN|KA|Udupi|Brahmavar' },
+    });
+    select('area-first');
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    const [vars, options] = mockMutate.mock.calls[0];
+    expect(vars.areaKey).toBe('IN|KA|Udupi|Brahmavar');
+    options.onSuccess({ nodeKey: 'a:IN|KA|Udupi|Brahmavar' });
+    expect(actions.enterAreasJourney).toHaveBeenCalledWith('a:IN|KA|Udupi|Brahmavar');
+  });
+
+  it('Agricultural -> School preserves canonical Area', () => {
+    const { select, actions } = setup({
+      nav: { journey: 'agri-first', selectedLocality: 'IN|KA|Udupi|Brahmavar' },
+    });
+    select('school-first');
+    expect(actions.enterSchoolsJourneyAtArea).toHaveBeenCalledWith('IN|KA|Udupi|Brahmavar');
   });
 });

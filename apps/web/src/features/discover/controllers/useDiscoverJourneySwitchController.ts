@@ -96,50 +96,66 @@ export function useDiscoverJourneySwitchController({
    *     directly (no network round trip needed).
    */
   const handleSelectJourney = (journey: DiscoverJourney) => {
-    const resolvedNode = areasNavigationJourney.node;
-    if (
-      journey === 'school-first' &&
-      nav.journey === 'area-first' &&
-      !hasLegacyAreaContext(nav) &&
-      resolvedNode?.nodeType === 'AREA' &&
-      resolvedNode.areaKey
-    ) {
-      // Server-owned identity only — never parse/derive from the URL's
-      // node= encoding (#2124 ownership rule). The canonical resolved node
-      // is the sole source for an AREA leaf's areaKey.
-      actions.enterSchoolsJourneyAtArea(resolvedNode.areaKey);
+    // 1. Extract canonical area identity from the CURRENT journey state
+    let sourceAreaKey: string | null = null;
+    
+    if (nav.journey === 'area-first') {
+      if (!hasLegacyAreaContext(nav)) {
+        const resolvedNode = areasNavigationJourney.node;
+        if (resolvedNode?.nodeType === 'AREA' && resolvedNode.areaKey) {
+          sourceAreaKey = resolvedNode.areaKey;
+        }
+      } else {
+        sourceAreaKey = nav.areaKey;
+      }
+    } else if (nav.journey === 'school-first') {
+      sourceAreaKey = nav.areaKey;
+    } else if (nav.journey === 'agri-first') {
+      sourceAreaKey = nav.selectedLocality ?? null;
+    }
+
+    // 2. Perform the contextual transition if we have a concrete Area to preserve
+    if (sourceAreaKey) {
+      if (journey === 'school-first') {
+        actions.enterSchoolsJourneyAtArea(sourceAreaKey);
+        return;
+      }
+      if (journey === 'agri-first') {
+        actions.enterAgriJourneyAtArea(sourceAreaKey);
+        return;
+      }
+      if (journey === 'area-first') {
+        if (resolveAreaNavigationPath.isPending) {
+          return;
+        }
+        resolveAreaNavigationPath.mutate(
+          { city: nav.city || DEFAULT_CITY, areaKey: sourceAreaKey },
+          {
+            onSuccess: (path) => {
+              actions.enterAreasJourney(path.nodeKey);
+            },
+            onError: () => {
+              toast({
+                variant: 'destructive',
+                title: "Couldn't switch to area view",
+                description: 'This area link looks out of date. Staying on your current view.',
+              });
+            },
+          },
+        );
+        return;
+      }
+    }
+
+    // 3. Fallbacks when there is no resolved Area to preserve
+    if (journey === 'area-first' && hasLegacyAreaContext(nav) && !nav.areaKey) {
+      // groupId-only, no areaKey.
+      actions.enterAreasJourney(null);
       return;
     }
 
-    if (journey !== 'area-first' || !hasLegacyAreaContext(nav)) {
-      actions.setJourney(journey);
-      return;
-    }
-    if (nav.areaKey) {
-      if (resolveAreaNavigationPath.isPending) {
-        // A conversion is already in flight for this same click intent —
-        // never fire a second concurrent request/history write.
-        return;
-      }
-      resolveAreaNavigationPath.mutate(
-        { city: nav.city || DEFAULT_CITY, areaKey: nav.areaKey },
-        {
-          onSuccess: (path) => {
-            actions.enterAreasJourney(path.nodeKey);
-          },
-          onError: () => {
-            toast({
-              variant: 'destructive',
-              title: "Couldn't switch to area view",
-              description: 'This area link looks out of date. Staying on your current view.',
-            });
-          },
-        },
-      );
-      return;
-    }
-    // groupId-only, no areaKey.
-    actions.enterAreasJourney(null);
+    // Default city-level PUSH
+    actions.setJourney(journey);
   };
 
   /**

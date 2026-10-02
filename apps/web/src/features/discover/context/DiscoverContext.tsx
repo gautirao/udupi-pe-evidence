@@ -120,6 +120,7 @@ const ACTION_KEYS = [
   // to `never`), touched here anyway since this array is already being
   // extended for #2203's two new actions.
   'enterSchoolsJourneyAtArea',
+  'enterAgriJourneyAtArea',
   'buildNodeHref',
   'enterNodeListings',
   'clearNodeListings',

@@ -61,6 +61,7 @@ type NavigationActions = Pick<
   | 'enterAreasJourney'
   | 'enterSchoolsJourney'
   | 'enterSchoolsJourneyAtArea'
+  | 'enterAgriJourneyAtArea'
   | 'buildNodeHref'
   | 'enterNodeListings'
   | 'clearNodeListings'
@@ -507,6 +508,14 @@ export function useNavigationUrlDomain(
           next.set('journey', 'area-first');
           next.delete('groupId');
           next.delete('areaKey');
+          next.delete('schoolId');
+          next.delete('radiusKm');
+          next.delete('schoolPicking');
+          next.delete(PARAM_DEST_KEY);
+          next.delete(PARAM_LOCALITY);
+          next.delete('town');
+          next.delete('region');
+          next.delete('maxKm');
           return next;
         },
         { replace: false }, // PUSH — entering a journey is a deliberate destination
@@ -525,6 +534,11 @@ export function useNavigationUrlDomain(
           next.delete('groupId');
           next.delete('areaKey');
           next.delete('schoolId');
+          next.delete(PARAM_DEST_KEY);
+          next.delete(PARAM_LOCALITY);
+          next.delete('town');
+          next.delete('region');
+          next.delete('maxKm');
           return next;
         },
         { replace: false }, // PUSH — entering a journey is a deliberate destination
@@ -544,6 +558,35 @@ export function useNavigationUrlDomain(
           next.set('areaKey', areaKey);
           next.delete('groupId');
           next.delete('schoolId');
+          next.delete(PARAM_DEST_KEY);
+          next.delete(PARAM_LOCALITY);
+          next.delete('town');
+          next.delete('region');
+          next.delete('maxKm');
+          return next;
+        },
+        { replace: false }, // PUSH
+      );
+    },
+    [setUrlParams, timers],
+  );
+
+  const enterAgriJourneyAtArea = useCallback(
+    (areaKey: string) => {
+      cancelPendingViewportCommit(timers);
+      setUrlParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('node');
+          next.set('journey', 'agri-first');
+          next.set(PARAM_DEST_KEY, areaKey);
+          next.delete('groupId');
+          next.delete('areaKey');
+          next.delete('schoolId');
+          next.delete(PARAM_LOCALITY);
+          next.delete('town');
+          next.delete('region');
+          next.delete('maxKm');
           return next;
         },
         { replace: false }, // PUSH
@@ -595,6 +638,7 @@ export function useNavigationUrlDomain(
       enterAreasJourney,
       enterSchoolsJourney,
       enterSchoolsJourneyAtArea,
+      enterAgriJourneyAtArea,
       buildNodeHref,
       enterNodeListings,
       clearNodeListings,

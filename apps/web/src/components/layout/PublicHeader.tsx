@@ -28,9 +28,15 @@ export interface PublicHeaderProps {
    * can never transiently disagree about who owns the journey selector.
    */
   headerHostsJourneyTabs?: boolean;
+  onSelectJourney?: (journey: PublicNavJourney) => void;
 }
 
-export function PublicHeader({ regionGuide, hostsHeaderControls, headerHostsJourneyTabs }: PublicHeaderProps = {}) {
+export function PublicHeader({
+  regionGuide,
+  hostsHeaderControls,
+  headerHostsJourneyTabs,
+  onSelectJourney,
+}: PublicHeaderProps = {}) {
   const { citySlug, isUnresolvedPreview } = usePreviewCityIdentity();
   const nav = useDiscoverNav();
   const { isMobileShell } = useDiscoverShell();
@@ -53,6 +59,7 @@ export function PublicHeader({ regionGuide, hostsHeaderControls, headerHostsJour
           currentJourney={nav.journey}
           regionGuide={regionGuide}
           cityLabel={resolvedCityLabel}
+          onSelectJourney={onSelectJourney}
         />
       )}
     </>

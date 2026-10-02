@@ -76,6 +76,7 @@ export type DiscoverPageComposition =
         mapContainerRef: React.RefObject<HTMLDivElement | null>;
         /** See DiscoverHeaderJourneyTabs.tsx's doc comment. */
         regionGuide: DiscoverHeaderRegionGuide;
+        onSelectJourney: (journey: DiscoverJourney) => void;
       };
       map: { view: DiscoverMapSurfaceView; commands: DiscoverMapSurfaceCommands };
       panel: { view: DiscoverPanelSurfaceView; commands: DiscoverPanelSurfaceCommands };
@@ -790,6 +791,7 @@ export function useDiscoverPageComposition(): DiscoverPageComposition {
       mobileMapTriggerRef,
       mapContainerRef,
       regionGuide: shellRegionGuide,
+      onSelectJourney: journeySwitchController.handleSelectJourney,
     },
     map: { view: mapView, commands: mapCommands },
     panel: { view: panelView, commands: panelCommands },

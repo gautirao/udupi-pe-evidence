@@ -28,6 +28,8 @@ export interface DiscoverHeaderJourneyTabsProps {
    * renders/tests; real usage always passes the live label.
    */
   cityLabel?: string;
+  /** Optional handler to trigger the journey switch rather than relying on standard link navigation. */
+  onSelectJourney?: (journey: PublicNavJourney) => void;
 }
 
 interface HeaderJourneyTab {
@@ -50,6 +52,7 @@ export function DiscoverHeaderJourneyTabs({
   currentJourney,
   regionGuide,
   cityLabel = 'Udupi',
+  onSelectJourney,
 }: DiscoverHeaderJourneyTabsProps) {
   const ringActive = regionGuide?.ringActive ?? false;
   const ringClass = ringActive
@@ -82,6 +85,44 @@ export function DiscoverHeaderJourneyTabs({
           const isSelected = currentJourney === tab.key;
           const description = getJourneyAccessibleDescription(tab.key, cityLabel);
           const descriptionId = `discover-header-journey-tab-${tab.key}-description`;
+
+          const className = cn(
+            'flex items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] px-3 py-1.5 text-xs font-semibold transition-colors',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            isSelected
+              ? 'border-transparent bg-primary text-primary-foreground shadow-sm'
+              : 'border-border bg-card text-foreground hover:bg-muted',
+          );
+
+          const innerContent = (
+            <>
+              <tab.Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span>{tab.label}</span>
+              {/* Same helper copy JourneySwitcher's full cards show (incl. area-first's "Recommended" marker), exposed here as an accessible description rather than visible text — the row is width-critical at the sole-selector breakpoint. */}
+              <span id={descriptionId} className="sr-only">
+                {description}
+              </span>
+            </>
+          );
+
+          if (onSelectJourney) {
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => onSelectJourney(tab.key)}
+                aria-current={isSelected ? 'page' : undefined}
+                aria-label={tab.ariaLabel}
+                aria-describedby={descriptionId}
+                title={description}
+                data-testid={`discover-header-journey-tab-${tab.key}`}
+                className={className}
+              >
+                {innerContent}
+              </button>
+            );
+          }
+
           return (
             <Link
               key={tab.key}
@@ -91,20 +132,9 @@ export function DiscoverHeaderJourneyTabs({
               aria-describedby={descriptionId}
               title={description}
               data-testid={`discover-header-journey-tab-${tab.key}`}
-              className={cn(
-                'flex items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] px-3 py-1.5 text-xs font-semibold transition-colors',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                isSelected
-                  ? 'border-transparent bg-primary text-primary-foreground shadow-sm'
-                  : 'border-border bg-card text-foreground hover:bg-muted',
-              )}
+              className={className}
             >
-              <tab.Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              <span>{tab.label}</span>
-              {/* Same helper copy JourneySwitcher's full cards show (incl. area-first's "Recommended" marker), exposed here as an accessible description rather than visible text — the row is width-critical at the sole-selector breakpoint. */}
-              <span id={descriptionId} className="sr-only">
-                {description}
-              </span>
+              {innerContent}
             </Link>
           );
         })}

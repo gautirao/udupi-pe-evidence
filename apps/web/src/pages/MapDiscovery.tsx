@@ -51,6 +51,7 @@ export default function MapDiscovery() {
         headerHostsJourneyTabs={shell.headerHostsJourneyTabs}
         mobileMapOpen={shell.mobileMapOpen}
         regionGuide={shell.regionGuide}
+        onSelectJourney={shell.onSelectJourney}
         mobileMapTrigger={
           !shell.mobileMapOpen
             ? { onOpenMap: shell.onOpenMobileMap, triggerRef: shell.mobileMapTriggerRef }

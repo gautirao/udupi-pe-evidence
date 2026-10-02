@@ -1,6 +1,7 @@
 import React from 'react';
 import { PublicHeader } from './PublicHeader';
 import type { DiscoverHeaderRegionGuide } from '@/components/discover/DiscoverHeaderJourneyTabs';
+import type { PublicNavJourney } from '@/lib/navUtils';
 
 export interface PublicDiscoverLayoutProps {
   children: React.ReactNode;
@@ -10,6 +11,7 @@ export interface PublicDiscoverLayoutProps {
   hostsHeaderControls?: boolean;
   /** Forwarded to `PublicHeader`; single computed source, optional so callers with no Discover shell context still render (header falls back to its own computed value). */
   headerHostsJourneyTabs?: boolean;
+  onSelectJourney?: (journey: PublicNavJourney) => void;
 }
 
 /**
@@ -25,6 +27,7 @@ export function PublicDiscoverLayout({
   regionGuide,
   hostsHeaderControls,
   headerHostsJourneyTabs,
+  onSelectJourney,
 }: PublicDiscoverLayoutProps) {
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -32,6 +35,7 @@ export function PublicDiscoverLayout({
         regionGuide={regionGuide}
         hostsHeaderControls={hostsHeaderControls}
         headerHostsJourneyTabs={headerHostsJourneyTabs}
+        onSelectJourney={onSelectJourney}
       />
       <main className="min-h-0 flex-1">{children}</main>
     </div>
