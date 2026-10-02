@@ -16,6 +16,7 @@ vi.mock('@/components/discover/PropertyCard', () => ({
 import { ListingsBody } from '@/features/discover/area-selected/sections/ListingsBody';
 import { SchoolRadiusListings } from '@/components/discover/panels/schools/radius/SchoolRadiusListings';
 import { AgriGroupLocalityPanel } from '@/components/discover/panels/AgriGroupLocalityPanel';
+import { AreaHomesSection } from '@/components/discover/panels/schools/area/AreaHomesSection';
 
 describe('DiscoverResultsGrid shared structural contract (Issue #2769)', () => {
   const renderWithRouter = (ui: React.ReactElement) => {
@@ -193,6 +194,61 @@ describe('DiscoverResultsGrid shared structural contract (Issue #2769)', () => {
       const grid = container.querySelector('.discover-results-grid');
       expect(grid).toBeInTheDocument();
       expect(screen.getAllByTestId('agri-locality-listing-skeleton').length).toBeGreaterThan(0);
+    });
+
+    it('explicitly escapes the PanelColumn max-width restriction', () => {
+      const { container } = renderWithRouter(
+        <AgriGroupLocalityPanel
+          localityName="Test Locality"
+          listings={[]}
+          isLoading={false}
+          isError={false}
+          onRetry={() => {}}
+          onSelectListing={() => {}}
+          onClose={() => {}}
+        />
+      );
+      
+      const panelContainer = container.querySelector('.discover-panel-container');
+      const panelColumn = panelContainer?.firstElementChild;
+      expect(panelColumn).toHaveClass('w-full', 'max-w-none');
+    });
+  });
+
+  describe('School (AreaHomesSection)', () => {
+    it('applies the shared grid class and panel container to the populated listings', () => {
+      const mockCardRefs = { current: new Map() };
+      const { container } = renderWithRouter(
+        <AreaHomesSection
+          areaListings={[{ id: '1', title: 'Area Home' } as any]}
+          isLoadingAreaListings={false}
+          intent="buy"
+          cardRefs={mockCardRefs}
+        />
+      );
+      
+      const panelContainer = container.querySelector('.discover-panel-container');
+      expect(panelContainer).toBeInTheDocument();
+
+      const grid = container.querySelector('.discover-results-grid');
+      expect(grid).toBeInTheDocument();
+      expect(screen.getByText('Area Home')).toBeInTheDocument();
+    });
+
+    it('applies the shared grid class to the loading skeleton container', () => {
+      const mockCardRefs = { current: new Map() };
+      const { container } = renderWithRouter(
+        <AreaHomesSection
+          areaListings={undefined}
+          isLoadingAreaListings={true}
+          intent="buy"
+          cardRefs={mockCardRefs}
+        />
+      );
+      
+      const grid = container.querySelector('.discover-results-grid');
+      expect(grid).toBeInTheDocument();
+      expect(screen.getAllByTestId('listing-skeleton').length).toBeGreaterThan(0);
     });
   });
 });

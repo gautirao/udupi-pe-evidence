@@ -405,7 +405,7 @@ export function AgriGroupLocalityPanel({
       data-testid="agri-group-locality-panel"
       className="discover-panel-container flex flex-col h-full bg-muted/20 overflow-y-auto"
     >
-      <PanelColumn className="w-full px-4 pb-6 pt-4 space-y-4">
+      <PanelColumn className="w-full max-w-none px-4 pb-6 pt-4 space-y-4">
         {/* ── Back to towns ─────────────────────────────────────────────────── */}
         <button
           type="button"

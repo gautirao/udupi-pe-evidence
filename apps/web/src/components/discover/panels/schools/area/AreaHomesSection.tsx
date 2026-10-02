@@ -63,7 +63,7 @@ export function AreaHomesSection({
   if (areaListings === undefined && !isLoadingAreaListings) return null;
 
   return (
-    <div className="border-t border-border bg-card" data-testid="schools-in-area-properties">
+    <div className="border-t border-border bg-card discover-panel-container" data-testid="schools-in-area-properties">
       <div className="flex items-baseline justify-between gap-3 border-b border-border px-4 py-2.5">
         <h3 className="text-sm font-semibold text-foreground">
           {homesTitle} in {areaLabel}
@@ -88,7 +88,7 @@ export function AreaHomesSection({
         )}
       >
         {isLoadingAreaListings ? (
-          <div className="grid grid-cols-1 gap-3 p-3 2xl:grid-cols-2">
+          <div className="discover-results-grid grid grid-cols-1 gap-3 p-3">
             {[0, 1, 2].map((i) => (
               <div key={i} data-testid="listing-skeleton" className="rounded-lg border border-border p-3">
                 <Skeleton className="mb-3 h-32 w-full rounded-lg" />
@@ -105,7 +105,7 @@ export function AreaHomesSection({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-3 p-3 2xl:grid-cols-2">
+          <div className="discover-results-grid grid grid-cols-1 gap-3 p-3">
             {homeListings.map((listing) => (
               <div
                 key={listing.id}
