@@ -228,7 +228,7 @@ class CityAreaListingsCommercialFacts2516IT {
                 mock(NavigationGraphLoader.class), new NavigationCacheProperties());
         listingsController = new DiscoverListingsController(
                 listingsService, new ObjectMapper(), cache,
-                new PolygonGeographicSafetyPolicy(jdbcTemplate));
+                new PolygonGeographicSafetyPolicy(jdbcTemplate), new AreaSummaryService(jdbcTemplate));
     }
 
     // ── #2516: the card feed carries the facts at all ────────────────────────────────
@@ -491,7 +491,7 @@ class CityAreaListingsCommercialFacts2516IT {
         DiscoverListingsPage page = listingsController.getListings(
                 CITY_SLUG, null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null,
-                0, 50, false, null, null, null, null, null, null, null).getBody();
+                0, 50, false, null, null, null, null, null, null, null, null).getBody();
         assertThat(page).isNotNull();
         return page.content();
     }

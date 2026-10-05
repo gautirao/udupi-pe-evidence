@@ -65,9 +65,12 @@ class DiscoverListingsControllerTest {
     @MockitoBean
     private PolygonGeographicSafetyPolicy polygonGeographicSafetyPolicy;
 
+    @MockitoBean
+    private AreaSummaryService areaSummaryService;
+
     @BeforeEach
     void setUp() {
-        reset(service, userRoleService);
+        reset(service, userRoleService, areaSummaryService);
     }
 
     // ── 1. No JWT → 401/403 ──────────────────────────────────────────────────
@@ -707,6 +710,134 @@ class DiscoverListingsControllerTest {
                 .andExpect(status().isOk());
 
         verify(polygonGeographicSafetyPolicy).validate(eq("udupi"), isNull());
+    }
+
+    // ── #2767: schoolAreaKey (server-derived Area bounds) over real HTTP ──────
+    // The client never supplies coordinates for the Area constraint: the controller resolves a
+    // canonical Area key to that Area's own bounds. Real-PostGIS coherence is proven by
+    // SchoolAreaBoundsTrustBoundary2767IT; these tests pin request binding + the fail-closed reasons.
+
+    private static final String AREA_KEY_2767 = "IN|KA|Udupi|Kunjibettu";
+
+    @Test
+    void schoolAreaKey_resolvesToServerBounds_andReachesTheQueryObject() throws Exception {
+        when(areaSummaryService.findAreaBounds("udupi", AREA_KEY_2767)).thenReturn(
+                java.util.Optional.of(new AreaSummaryService.AreaBounds(13.30, 74.70, 13.40, 74.80)));
+        when(service.getListings(any())).thenReturn(new DiscoverListingsPage(List.of(), 0, 20, 0L, 0, null));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("schoolLat", "13.35")
+                        .param("schoolLon", "74.75")
+                        .param("schoolRadiusKm", "2")
+                        .param("schoolAreaKey", AREA_KEY_2767)
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getListings(argThat(q -> q.areaBbox() != null && q.areaBbox().south() == 13.30 && q.areaBbox().west() == 74.70 && q.areaBbox().north() == 13.40 && q.areaBbox().east() == 74.80));
+    }
+
+    @Test
+    void clientSuppliedAreaBbox_isIgnored_neverReachesTheQueryObject() throws Exception {
+        when(service.getListings(any())).thenReturn(new DiscoverListingsPage(List.of(), 0, 20, 0L, 0, null));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("schoolLat", "13.35")
+                        .param("schoolLon", "74.75")
+                        .param("areaBbox", "10.0,70.0,19.0,79.0")
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getListings(argThat(q -> q.areaBbox() == null));
+        verifyNoInteractions(areaSummaryService);
+    }
+
+    @Test
+    void schoolAreaKey_withoutSchool_returns400() throws Exception {
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("schoolAreaKey", AREA_KEY_2767)
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("school_area_key_requires_school")));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void schoolAreaKey_multipleValues_returns400() throws Exception {
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("schoolLat", "13.35")
+                        .param("schoolLon", "74.75")
+                        .param("schoolAreaKey", AREA_KEY_2767, "IN|KA|Udupi|Malpe")
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("school_area_key_must_be_single")));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void schoolAreaKey_blank_returns400() throws Exception {
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("schoolLat", "13.35")
+                        .param("schoolLon", "74.75")
+                        .param("schoolAreaKey", " ")
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("school_area_key_must_be_single")));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void schoolAreaKey_unknownForCity_returns400() throws Exception {
+        // Default mock: findAreaBounds(...) -> Optional.empty() (unknown / other-city / inactive-city).
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("schoolLat", "13.35")
+                        .param("schoolLon", "74.75")
+                        .param("schoolAreaKey", "IN|KA|Mangalore|Hampankatta")
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("invalid_school_area_key")));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void schoolAreaKey_areaWithNullBounds_returns400() throws Exception {
+        when(areaSummaryService.findAreaBounds("udupi", AREA_KEY_2767)).thenReturn(
+                java.util.Optional.of(new AreaSummaryService.AreaBounds(null, null, null, null)));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("schoolLat", "13.35")
+                        .param("schoolLon", "74.75")
+                        .param("schoolAreaKey", AREA_KEY_2767)
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("school_area_bounds_unavailable")));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void schoolAreaKey_withPolygon_returns400() throws Exception {
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("schoolLat", "13.35")
+                        .param("schoolLon", "74.75")
+                        .param("polygon", VALID_POLYGON)
+                        .param("schoolAreaKey", AREA_KEY_2767)
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("school_area_key_excludes_polygon")));
+
+        verifyNoInteractions(service);
     }
 
     // ── #2431: commercialSubtypes over real HTTP ─────────────────────────────

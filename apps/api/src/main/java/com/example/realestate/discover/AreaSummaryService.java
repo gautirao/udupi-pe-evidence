@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class AreaSummaryService {
@@ -122,6 +123,43 @@ public class AreaSummaryService {
 
         log.debug("getAreasByCity city={} returned {} areas", city, areas.size());
         return new AreaSummaryResponse(city, areas);
+    }
+
+    /**
+     * Server-owned bounds of one canonical Area row (#2767). {@code null} components mean the
+     * {@code areas} row exists but carries no bounds; callers must treat that as "unavailable",
+     * never as "unbounded".
+     */
+    public record AreaBounds(Double minLat, Double minLon, Double maxLat, Double maxLon) {
+        /** {@code true} when all four components are present and form a non-inverted rectangle. */
+        public boolean isUsable() {
+            return minLat != null && minLon != null && maxLat != null && maxLon != null
+                    && minLat <= maxLat && minLon <= maxLon;
+        }
+    }
+
+    /**
+     * Resolves the authoritative rectangle of ONE canonical Area for the given city slug (#2767) —
+     * the {@code areas.min_lat/min_lon/max_lat/max_lon} columns {@link #getAreasByCity} already
+     * serves to the UI as {@code DiscoverArea.minLat..maxLon}. FROM/JOIN/WHERE are the same as
+     * {@link #AREAS_BY_CITY_SQL} (city slug, active city, 4-segment area_key) plus
+     * {@code a.area_key = ?}, so an unknown key, a key of another city, a key of an inactive city
+     * and a non-locality key all yield {@link Optional#empty()}.
+     *
+     * <p>Both values are bound parameters; nothing is interpolated.
+     *
+     * @return empty when no such Area exists for that city; otherwise its bounds (possibly with
+     *         {@code null} components — see {@link AreaBounds#isUsable()})
+     */
+    public Optional<AreaBounds> findAreaBounds(String citySlug, String areaKey) {
+        List<AreaBounds> rows = jdbcOperations.query(AREA_BOUNDS_SQL,
+                (rs, rowNum) -> new AreaBounds(
+                        nullableDouble(rs.getObject("min_lat")),
+                        nullableDouble(rs.getObject("min_lon")),
+                        nullableDouble(rs.getObject("max_lat")),
+                        nullableDouble(rs.getObject("max_lon"))),
+                citySlug, areaKey);
+        return rows.stream().findFirst();
     }
 
     /**
@@ -293,6 +331,21 @@ public class AreaSummaryService {
               AND array_length(string_to_array(a.area_key, '|'), 1) = 4
             ORDER BY COALESCE(pl.listing_count, 0) DESC, a.name
             """).formatted(PropertyType.AGRICULTURAL_LAND.getValue());
+
+    /**
+     * #2767 single-Area bounds lookup. Same table, joins and WHERE predicates as
+     * {@link #AREAS_BY_CITY_SQL} (kept textually parallel on purpose), plus the exact
+     * {@code a.area_key = ?} match. Bound-arg order: [citySlug, areaKey].
+     */
+    private static final String AREA_BOUNDS_SQL = """
+            SELECT a.min_lat, a.min_lon, a.max_lat, a.max_lon
+            FROM areas a
+            JOIN cities c ON c.id = a.city_id
+            WHERE c.slug = ?
+              AND c.is_active = true
+              AND array_length(string_to_array(a.area_key, '|'), 1) = 4
+              AND a.area_key = ?
+            """;
 
     /**
      * Variant of {@link #AREAS_BY_CITY_SQL} that scopes the per-area count subquery to a single

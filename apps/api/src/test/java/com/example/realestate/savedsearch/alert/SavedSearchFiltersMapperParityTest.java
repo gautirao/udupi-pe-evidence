@@ -60,7 +60,7 @@ class SavedSearchFiltersMapperParityTest {
             // and needs its own ruling (a size range saved today would silently mean "any size"
             // if the meaning mapping later changed for a stored type). Until that ruling, a saved
             // search does not carry an area bound, which is honest rather than approximate.
-            "areaMinSqft", "areaMaxSqft");
+            "areaMinSqft", "areaMaxSqft", "areaBbox");
 
     private static final UUID USER = UUID.fromString("aaaaaaaa-0000-0000-0000-0000000000a1");
 
@@ -97,11 +97,11 @@ class SavedSearchFiltersMapperParityTest {
     }
 
     @Test
-    @DisplayName("SUPPORTED_KEYS and NON_FILTER_COMPONENTS partition Filters' 25 components exactly")
+    @DisplayName("SUPPORTED_KEYS and NON_FILTER_COMPONENTS partition Filters' 26 components exactly")
     void keySetsPartitionFiltersComponents() {
         Set<String> components = Arrays.stream(Filters.class.getRecordComponents())
                 .map(RecordComponent::getName).collect(Collectors.toSet());
-        assertThat(components).hasSize(25);
+        assertThat(components).hasSize(26);
         assertThat(SUPPORTED_KEYS).doesNotContainAnyElementsOf(NON_FILTER_COMPONENTS);
         Set<String> union = new java.util.HashSet<>(SUPPORTED_KEYS);
         union.addAll(NON_FILTER_COMPONENTS);
@@ -142,7 +142,7 @@ class SavedSearchFiltersMapperParityTest {
 
         for (Filters f : List.of(area, poly, vp)) {
             for (String c : Set.of("dateFrom", "dateTo", "schoolLat", "schoolLon", "schoolRadiusKm", "bbox", "q",
-                    "excludePropertyTypes")) {
+                    "excludePropertyTypes", "areaBbox")) {
                 assertThat(component(f, c)).as(c).isNull();
             }
             assertThat(f.city()).isEqualTo("udupi");

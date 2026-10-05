@@ -164,8 +164,8 @@ class ContextualAreaFilter2459IT {
                 new com.example.realestate.discover.navigation.NavigationCacheProperties());
         ObjectMapper objectMapper = new ObjectMapper();
         PolygonGeographicSafetyPolicy policy = new PolygonGeographicSafetyPolicy(jdbcTemplate);
-        listingsController = new DiscoverListingsController(listingsService, objectMapper, cache, policy);
-        markersController = new DiscoverMarkersController(markersService, objectMapper, cache, policy);
+        listingsController = new DiscoverListingsController(listingsService, objectMapper, cache, policy, new AreaSummaryService(jdbcTemplate));
+        markersController = new DiscoverMarkersController(markersService, objectMapper, cache, policy, new AreaSummaryService(jdbcTemplate));
     }
 
     // ── AC5: Any size shows everything ─────────────────────────────────────────────────────────
@@ -356,7 +356,7 @@ class ContextualAreaFilter2459IT {
         return listingsController.getListings(
                 CITY_SLUG, null, null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, 0, 50, includeAggregates, null, null, null,
-                null, null, min, max);
+                null, null, min, max, null);
     }
 
     private List<String> markerIds(Integer min, Integer max) {
@@ -368,7 +368,7 @@ class ContextualAreaFilter2459IT {
     private ResponseEntity<DiscoverMarkersResponse> rawMarkers(Integer min, Integer max) {
         return markersController.getMarkers(
                 CITY_SLUG, null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null, min, max);
+                null, null, null, null, null, null, null, null, null, null, null, null, min, max, null);
     }
 
     private BigDecimal storedBuiltArea(UUID listingId) {

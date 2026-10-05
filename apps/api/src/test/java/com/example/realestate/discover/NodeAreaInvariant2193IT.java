@@ -194,8 +194,8 @@ class NodeAreaInvariant2193IT {
         DiscoverMarkersService markersService = new DiscoverMarkersService(jdbcTemplate, new SimpleMeterRegistry());
         ObjectMapper objectMapper = new ObjectMapper();
         PolygonGeographicSafetyPolicy polygonGeographicSafetyPolicy = new PolygonGeographicSafetyPolicy(jdbcTemplate);
-        listingsController = new DiscoverListingsController(listingsService, objectMapper, navigationGraphCache, polygonGeographicSafetyPolicy);
-        markersController = new DiscoverMarkersController(markersService, objectMapper, navigationGraphCache, polygonGeographicSafetyPolicy);
+        listingsController = new DiscoverListingsController(listingsService, objectMapper, navigationGraphCache, polygonGeographicSafetyPolicy, new AreaSummaryService(jdbcTemplate));
+        markersController = new DiscoverMarkersController(markersService, objectMapper, navigationGraphCache, polygonGeographicSafetyPolicy, new AreaSummaryService(jdbcTemplate));
     }
 
     @Test
@@ -207,7 +207,7 @@ class NodeAreaInvariant2193IT {
         ResponseEntity<DiscoverListingsPage> listingsResponse = listingsController.getListings(
                 CITY_SLUG, null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, 0, 20, false, null, null, LEAF_NODE_KEY,
-                null, null, null, null);
+                null, null, null, null, null);
 
         assertThat(listingsResponse.getStatusCode().is2xxSuccessful()).isTrue();
         DiscoverListingsPage listingsPage = listingsResponse.getBody();
@@ -227,7 +227,7 @@ class NodeAreaInvariant2193IT {
         // (f) markers query for nodeKey=<leaf> contains a marker with the SAME listing id.
         ResponseEntity<DiscoverMarkersResponse> markersResponse = markersController.getMarkers(
                 CITY_SLUG, null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, LEAF_NODE_KEY, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, LEAF_NODE_KEY, null, null, null, null, null);
 
         assertThat(markersResponse.getStatusCode().is2xxSuccessful()).isTrue();
         DiscoverMarkersResponse markersBody = markersResponse.getBody();

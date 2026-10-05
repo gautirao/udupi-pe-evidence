@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
@@ -120,6 +120,95 @@ describe('discoverSearchParams — serializer unit tests', () => {
     expect(params.get('schoolLon')).toBe('74');
     expect(params.get('schoolRadiusKm')).toBe('3');
   });
+
+  // Issue #2767 — Area+School scoping travels as the canonical `schoolAreaKey` (server derives
+  // the bounds); never as client coordinates (`areaBbox`) or a synthetic `polygon`.
+  it('#2767 serialises schoolAreaKey as the exact literal and emits neither areaBbox nor polygon', () => {
+    const params = buildDiscoverSearchParams({
+      city: 'udupi',
+      filters: {
+        schoolAreaKey: 'IN|KA|Udupi|Kunjibettu',
+        schoolLat: 13.33,
+        schoolLon: 74.76,
+        schoolRadiusKm: 3,
+      },
+    });
+    expect(params.get('schoolAreaKey')).toBe('IN|KA|Udupi|Kunjibettu');
+    expect(params.toString()).toContain('schoolAreaKey=IN%7CKA%7CUdupi%7CKunjibettu');
+    expect(params.has('areaBbox')).toBe(false);
+    expect(params.has('polygon')).toBe(false);
+    expect(params.get('schoolRadiusKm')).toBe('3');
+  });
+
+  it('#2767 a real drawn polygon still serialises as polygon (unchanged) and emits no schoolAreaKey or areaBbox', () => {
+    const polygon: [number, number][] = [
+      [13.3, 74.7],
+      [13.4, 74.8],
+      [13.3, 74.8],
+    ];
+    const params = buildDiscoverSearchParams({ city: 'udupi', filters: { polygon } });
+    expect(params.get('polygon')).toBe(JSON.stringify(polygon));
+    expect(params.has('schoolAreaKey')).toBe(false);
+    expect(params.has('areaBbox')).toBe(false);
+  });
+
+  it('#2767 no schoolAreaKey filter -> no schoolAreaKey and no areaBbox param', () => {
+    const params = buildDiscoverSearchParams({
+      city: 'udupi',
+      filters: { schoolLat: 13, schoolLon: 74, schoolRadiusKm: 3 },
+    });
+    expect(params.has('schoolAreaKey')).toBe(false);
+    expect(params.has('areaBbox')).toBe(false);
+  });
+});
+
+describe('discoverSearchParams — #2767 schoolAreaKey reaches both discover endpoints', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockGet.mockResolvedValue({});
+  });
+  // Leave no recorded calls behind: the parity block below indexes mockGet.mock.calls[0]/[1].
+  afterEach(() => {
+    mockGet.mockReset();
+  });
+
+  const filters: PropertyFilters = {
+    schoolAreaKey: 'IN|KA|Udupi|Kunjibettu',
+    schoolLat: 13.33,
+    schoolLon: 74.76,
+    schoolRadiusKm: 3,
+  };
+
+  it('/api/discover/listings request carries schoolAreaKey and neither areaBbox nor polygon', async () => {
+    const { result } = renderHook(
+      () => useDiscoverListings({ city: 'udupi', page: 0, filters, enabled: true }),
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const [url] = mockGet.mock.calls[0] as [string];
+    expect(url.startsWith('/api/discover/listings')).toBe(true);
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.get('schoolAreaKey')).toBe('IN|KA|Udupi|Kunjibettu');
+    expect(url).toContain('schoolAreaKey=IN%7CKA%7CUdupi%7CKunjibettu');
+    expect(params.has('areaBbox')).toBe(false);
+    expect(params.has('polygon')).toBe(false);
+    expect(params.get('schoolRadiusKm')).toBe('3');
+  });
+
+  it('/api/discover/markers request carries schoolAreaKey and neither areaBbox nor polygon', async () => {
+    const { result } = renderHook(
+      () => useDiscoverFilteredMarkers('udupi', filters, true, null, '', undefined, undefined, { kind: 'city' }),
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const [url] = mockGet.mock.calls[0] as [string];
+    expect(url.startsWith('/api/discover/markers')).toBe(true);
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.get('schoolAreaKey')).toBe('IN|KA|Udupi|Kunjibettu');
+    expect(url).toContain('schoolAreaKey=IN%7CKA%7CUdupi%7CKunjibettu');
+    expect(params.has('areaBbox')).toBe(false);
+    expect(params.has('polygon')).toBe(false);
+  });
 });
 
 describe('discoverSearchParams — parity test', () => {
@@ -148,6 +237,7 @@ describe('discoverSearchParams — parity test', () => {
       'reraRegistered',
       'readyToMove',
       'polygon',
+      'schoolAreaKey',
       'schoolLat',
       'schoolLon',
       'schoolRadiusKm',
@@ -173,6 +263,7 @@ describe('discoverSearchParams — parity test', () => {
         reraRegistered: true,
         readyToMove: true,
         polygon: [[13.3, 74.7], [13.4, 74.8]] as [number, number][],
+        schoolAreaKey: 'IN|KA|Udupi|Manipal',
         schoolLat: 13.34,
         schoolLon: 74.74,
         schoolRadiusKm: 5,
@@ -232,6 +323,12 @@ describe('discoverSearchParams — parity test', () => {
       // Guard against a vacuous parity assertion: if the builder silently dropped
       // commercialSubtypes, both sides would be empty and the loop below would still pass.
       expect(listingUrlParams.getAll('commercialSubtypes')).toEqual(['SHOP', 'OFFICE']);
+      // Same guard for schoolAreaKey: an unset fixture would make its parity row pass on [] === [].
+      expect(listingUrlParams.getAll('schoolAreaKey')).toEqual(['IN|KA|Udupi|Manipal']);
+      // `areaBbox` is no longer a wire param at all (#2767 trust boundary): assert NEITHER
+      // endpoint emits it, rather than keeping a vacuous [] === [] parity row for it.
+      expect(listingUrlParams.has('areaBbox')).toBe(false);
+      expect(markerUrlParams.has('areaBbox')).toBe(false);
     });
 
     it.each(overlappingKeys)('proves serialization parity for key: %s', (key) => {

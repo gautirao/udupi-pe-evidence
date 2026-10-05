@@ -39,8 +39,52 @@ public record DiscoverListingsQuery(
         /** #2459 — inclusive lower bound on the row's PRIMARY area in sq ft; null = "Any size". */
         Integer areaMinSqft,
         /** #2459 — inclusive upper bound on the row's PRIMARY area in sq ft; null = "Any size". */
-        Integer areaMaxSqft
+        Integer areaMaxSqft,
+        /** #2767 — SERVER-DERIVED ONLY (resolved from {@code schoolAreaKey} by
+         *  {@link SchoolAreaBoundsParam}); never bound from a request parameter. */
+        DiscoverListingPredicateBuilder.Bbox areaBbox
 ) {
+
+    /**
+     * Backward-compatible constructor for callers that predate the #2767 areaBbox. Defaults to null.
+     */
+    @SuppressWarnings("java:S107")
+    public DiscoverListingsQuery(
+            String city,
+            List<String> propertyTypes,
+            List<String> commercialSubtypes,
+            Long priceMinPaise,
+            Long priceMaxPaise,
+            String dateFrom,
+            String dateTo,
+            List<Integer> bedrooms,
+            List<String> sellerTypes,
+            Boolean backOnMarket,
+            Boolean newToMarket,
+            Boolean reraRegistered,
+            Boolean readyToMove,
+            List<List<Double>> polygon,
+            Double schoolLat,
+            Double schoolLon,
+            Double schoolRadiusKm,
+            String q,
+            DiscoverListingPredicateBuilder.Bbox bbox,
+            int page,
+            int size,
+            boolean includeAggregates,
+            String listingPurpose,
+            List<String> areaKeys,
+            DiscoverListingPredicateBuilder.Bbox viewportScope,
+            String scopeFingerprint,
+            Integer areaMinSqft,
+            Integer areaMaxSqft
+    ) {
+        this(city, propertyTypes, commercialSubtypes, priceMinPaise, priceMaxPaise, dateFrom,
+                dateTo, bedrooms, sellerTypes, backOnMarket, newToMarket, reraRegistered,
+                readyToMove, polygon, schoolLat, schoolLon, schoolRadiusKm, q, bbox, page, size,
+                includeAggregates, listingPurpose, areaKeys, viewportScope, scopeFingerprint,
+                areaMinSqft, areaMaxSqft, null);
+    }
 
     /**
      * Backward-compatible constructor for callers that predate the #2459 area bounds. Defaults both
@@ -80,7 +124,7 @@ public record DiscoverListingsQuery(
                 dateTo, bedrooms, sellerTypes, backOnMarket, newToMarket, reraRegistered,
                 readyToMove, polygon, schoolLat, schoolLon, schoolRadiusKm, q, bbox, page, size,
                 includeAggregates, listingPurpose, areaKeys, viewportScope, scopeFingerprint,
-                null, null);
+                null, null, null);
     }
 
     /**

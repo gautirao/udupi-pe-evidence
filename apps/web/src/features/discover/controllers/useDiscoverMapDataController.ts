@@ -54,7 +54,7 @@ export interface UseDiscoverMapDataControllerParams {
  * PAGE FETCHES, moved verbatim off MapDiscovery.tsx.
  *
  * Owns, as one capability:
- *   - `effectiveFilters`  — the combined area+school bbox-polygon injection
+ *   - `effectiveFilters`  — the combined area+school `schoolAreaKey` injection
  *                           (AC4). Its only consumer is the query below.
  *   - `isTopGroupedLevel` — the issue #1655 grouped-overview guard that gates
  *                           BOTH `markersEnabled` and `listingsEnabled`.
@@ -92,29 +92,37 @@ export function useDiscoverMapDataController({
   startDrawSearchArea,
 }: UseDiscoverMapDataControllerParams) {
   // Area-scoping for the combined panel (AC4): when BOTH area and school are selected
-  // and no user-drawn polygon is present, derive a bounding-box polygon from the area's
-  // bbox so the listings request is spatially constrained to the intersection of area
-  // bounds AND school proximity.
+  // and no user-drawn polygon is present, send the area's
+  // canonical key as `filters.schoolAreaKey` so the listings/markers request is spatially
+  // constrained to the intersection of the Area's bounds AND school proximity.
   //
-  // Guard: !nav.schoolId restricts injection to combined state only.
-  // Without this guard, area-first journey (area selected, no school) would also have
-  // the polygon injected, routing the request through the polygon endpoint (capped at 200)
-  // and breaking authenticated-user pagination.
+  // Contract (#2767, trust boundary): the client names the Area, the SERVER owns the
+  // rectangle. `schoolAreaKey` is a single canonical Area key; the backend resolves it to
+  // that Area's bounds from the `areas` row. No coordinates travel on the wire, so this
+  // can never act as a client-controlled polygon channel. It is also NOT a polygon:
+  //   - `filters.polygon` is the user-DRAWN search area and goes through the #2420
+  //     PolygonGeographicSafetyPolicy; the server rejects polygon + schoolAreaKey, so
+  //     this injection is skipped when a polygon is present.
+  //   - `bbox` is the live camera render prefilter (see `effectiveBbox` below).
+  //   - `viewportScope` is the committed VIEWPORT result scope.
+  // Those remain independent of `schoolAreaKey`; this injection never touches them.
   //
-  // Polygon format: [[s,w],[s,e],[n,e],[n,w],[s,w]] — five [lat,lon] pairs matching
-  // the PropertyFilters.polygon convention used by useDiscoverListings/the backend.
+  // Guards: !nav.schoolId restricts injection to combined state only, so the area-first
+  // journey (area selected, no school) never gets a key. The key is sent whenever an Area
+  // is selected, REGARDLESS of whether the client-side Area object carries a bbox: the
+  // server, not the client bbox, owns whether canonical bounds exist. An Area whose
+  // bounds are NULL gets a 400 `school_area_bounds_unavailable` (fail closed) rather
+  // than silently widening to radius-only.
   const effectiveFilters = useMemo((): PropertyFilters => {
-    // Only inject area-bbox polygon in combined state (area + school both present).
+    // Only inject schoolAreaKey in combined state (area + school both present).
     // FIX CYCLE 2 (opus review, nit) — was `selectedArea?.bbox`, which never
-    // injected a polygon for a canonical AREA-leaf + school combined state
+    // injected an area constraint for a canonical AREA-leaf + school combined state
     // (the node journey never sets the legacy `selectedArea`). Uses
     // `effectiveSelectedArea` — the same area+node bridge every other
     // selectedArea-driven gate on this page already reads — so a node leaf
     // gets the same area-bbox scoping a legacy areaKey selection does.
-    if (!nav.schoolId || !effectiveSelectedArea?.bbox || filters.polygon) return filters;
-    const [[s, w], [n, e]] = effectiveSelectedArea.bbox;
-    const bboxPolygon: [number, number][] = [[s, w], [s, e], [n, e], [n, w], [s, w]];
-    return { ...filters, polygon: bboxPolygon };
+    if (!nav.schoolId || !effectiveSelectedArea || filters.polygon) return filters;
+    return { ...filters, schoolAreaKey: effectiveSelectedArea.areaKey };
   }, [filters, effectiveSelectedArea, nav.schoolId]);
 
   // Issue #1655 — top-grouped-level guard: at the grouped overview level, individual

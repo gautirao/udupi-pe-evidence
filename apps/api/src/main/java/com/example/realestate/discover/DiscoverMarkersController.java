@@ -46,13 +46,16 @@ public class DiscoverMarkersController {
     private final ObjectMapper objectMapper;
     private final NavigationGraphCache navigationGraphCache;
     private final PolygonGeographicSafetyPolicy polygonGeographicSafetyPolicy;
+    private final AreaSummaryService areaSummaryService;
 
     public DiscoverMarkersController(DiscoverMarkersPort service, ObjectMapper objectMapper,
-            NavigationGraphCache navigationGraphCache, PolygonGeographicSafetyPolicy polygonGeographicSafetyPolicy) {
+            NavigationGraphCache navigationGraphCache, PolygonGeographicSafetyPolicy polygonGeographicSafetyPolicy,
+            AreaSummaryService areaSummaryService) {
         this.service = service;
         this.objectMapper = objectMapper;
         this.navigationGraphCache = navigationGraphCache;
         this.polygonGeographicSafetyPolicy = polygonGeographicSafetyPolicy;
+        this.areaSummaryService = areaSummaryService;
     }
 
     @GetMapping
@@ -83,7 +86,8 @@ public class DiscoverMarkersController {
             @RequestParam(name = "viewportScope", required = false) String viewportScopeParam,
             @RequestParam(name = "scopeFingerprint", required = false) String scopeFingerprint,
             @RequestParam(name = "areaMinSqft", required = false) Integer areaMinSqft,
-            @RequestParam(name = "areaMaxSqft", required = false) Integer areaMaxSqft
+            @RequestParam(name = "areaMaxSqft", required = false) Integer areaMaxSqft,
+            @RequestParam(name = "schoolAreaKey", required = false) List<String> schoolAreaKeys
     ) {
         log.debug("GET /api/discover/markers city={}", city);
 
@@ -147,6 +151,13 @@ public class DiscoverMarkersController {
         // neighbourhood-level search. No-op when polygon is null.
         polygonGeographicSafetyPolicy.validate(city, polygon);
 
+        // schoolAreaKey (#2767): School+Area combined scoping. The client names a canonical Area;
+        // the SERVER resolves that Area's own bounds. No request param carries coordinates for this
+        // constraint, so it cannot be a polygon channel around the policy above. Fail-closed 400s
+        // for every unusable input; a valid key with zero matches is an empty 200.
+        DiscoverListingPredicateBuilder.Bbox areaBbox = SchoolAreaBoundsParam.resolve(
+                areaSummaryService, city, schoolAreaKeys, schoolLat, schoolLon, polygon);
+
         // Convert rupees → paise
         Long priceMinPaise = priceMin != null ? priceMin * 100L : null;
         Long priceMaxPaise = priceMax != null ? priceMax * 100L : null;
@@ -178,7 +189,8 @@ public class DiscoverMarkersController {
                 effectiveAreaKeys,
                 viewportScope,
                 areaMinSqft,
-                areaMaxSqft
+                areaMaxSqft,
+                areaBbox
         );
 
         DiscoverMarkersResponse response = service.getMarkers(filters);

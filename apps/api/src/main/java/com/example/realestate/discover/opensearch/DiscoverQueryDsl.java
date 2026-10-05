@@ -158,11 +158,15 @@ public final class DiscoverQueryDsl {
                 // #1541 must_not parity filter), so closing this is a one-line change here — it was
                 // left out of #2461 only because the flag is a literal false repo-wide. Fix this
                 // BEFORE turning that flag on.
+                // (#2767 is NOT such a divergence: areaBbox is mapped below and buildBoolQuery
+                // throws OpenSearchQueryException on it, so School+Area falls back to Postgres.)
                 null,      // excludePropertyTypes — OS responses don't carry this input param
                 q.areaKeys(),
                 q.viewportScope(),
                 q.areaMinSqft(),
-                q.areaMaxSqft()
+                q.areaMaxSqft(),
+                // #2767: carried through so buildBoolQuery can fail closed on it (see there).
+                q.areaBbox()
         );
     }
 
@@ -179,6 +183,14 @@ public final class DiscoverQueryDsl {
         if (f.polygon() != null && !f.polygon().isEmpty()) {
             throw new OpenSearchQueryException(
                     "Polygon filter not supported in OpenSearch path — use Postgres path");
+        }
+
+        // areaBbox (#2767) — the server-derived School+Area bounds are not implemented in this DSL.
+        // Silently omitting them would widen School+Area to radius-only, so fail closed exactly as
+        // for polygon: the routing service falls back to Postgres, which applies the bounds.
+        if (f.areaBbox() != null) {
+            throw new OpenSearchQueryException(
+                    "areaBbox (School+Area bounds) not supported in OpenSearch path — use Postgres path");
         }
 
         List<Object> must = new ArrayList<>();

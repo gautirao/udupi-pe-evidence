@@ -158,8 +158,8 @@ class CommercialSubtypeFilter2431IT {
                 mock(NavigationGraphLoader.class), new com.example.realestate.discover.navigation.NavigationCacheProperties());
         ObjectMapper objectMapper = new ObjectMapper();
         PolygonGeographicSafetyPolicy policy = new PolygonGeographicSafetyPolicy(jdbcTemplate);
-        listingsController = new DiscoverListingsController(listingsService, objectMapper, cache, policy);
-        markersController = new DiscoverMarkersController(markersService, objectMapper, cache, policy);
+        listingsController = new DiscoverListingsController(listingsService, objectMapper, cache, policy, new AreaSummaryService(jdbcTemplate));
+        markersController = new DiscoverMarkersController(markersService, objectMapper, cache, policy, new AreaSummaryService(jdbcTemplate));
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -951,14 +951,14 @@ class CommercialSubtypeFilter2431IT {
         return listingsController.getListings(
                 CITY_SLUG, propertyTypes, commercialSubtypes, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null,
-                0, 50, false, null, null, null, null, null, null, null);
+                0, 50, false, null, null, null, null, null, null, null, null);
     }
 
     private DiscoverMarkersResponse rawMarkers(List<String> commercialSubtypes) {
         ResponseEntity<DiscoverMarkersResponse> response = markersController.getMarkers(
                 CITY_SLUG, null, commercialSubtypes, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null);
+                null, null, null, null, null);
         DiscoverMarkersResponse body = response.getBody();
         assertThat(body).isNotNull();
         return body;

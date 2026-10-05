@@ -193,6 +193,14 @@ export interface PropertyFilters {
   readyToMove?: boolean;
   /** Draw-on-map polygon: array of [lat, lng] pairs. When set, queries the backend PostGIS endpoint. */
   polygon?: [number, number][];
+  /**
+   * Canonical Area key (e.g. `IN|KA|Udupi|Kunjibettu`), sent as the `schoolAreaKey` request
+   * param. Used exclusively for Area+School combined scoping (#2767). The SERVER resolves it to
+   * that Area's bounds; no coordinates are sent. Not a polygon: it is distinct from the
+   * user-drawn `polygon` (which goes through the #2420 PolygonGeographicSafetyPolicy; the server
+   * rejects both together), the live camera `bbox` and the committed `viewportScope`.
+   */
+  schoolAreaKey?: string;
   /** School proximity filter: center latitude of the selected school */
   schoolLat?: number;
   /** School proximity filter: center longitude of the selected school */

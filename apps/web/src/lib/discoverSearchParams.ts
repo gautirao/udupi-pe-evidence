@@ -145,6 +145,13 @@ export function buildDiscoverSearchParams({
     params.set('polygon', JSON.stringify(effectiveFilters.polygon));
   }
 
+  // #2767 — canonical Area key (Area+School combined scope). The server derives the Area's
+  // bounds from it; no coordinates are sent. Distinct from the user-drawn `polygon` above,
+  // the live camera `bbox` and the committed `viewportScope`.
+  if (effectiveFilters.schoolAreaKey) {
+    params.set('schoolAreaKey', effectiveFilters.schoolAreaKey);
+  }
+
   if (effectiveFilters.schoolLat != null) {
     params.set('schoolLat', String(effectiveFilters.schoolLat));
   }

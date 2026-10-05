@@ -1,6 +1,7 @@
 package com.example.realestate.savedsearch;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.example.realestate.ai.PropertyType;
 import com.example.realestate.discover.DiscoverFilterNormalizer;
@@ -50,7 +51,7 @@ class SavedSearchFilterAllowlistParityTest {
                     "dateFrom", "dateTo", "bedrooms", "sellerTypes", "backOnMarket", "newToMarket",
                     "reraRegistered", "readyToMove", "polygon", "schoolLat", "schoolLon",
                     "schoolRadiusKm", "bbox", "q", "listingPurpose", "excludePropertyTypes",
-                    "areaKeys", "viewportScope", "areaMinSqft", "areaMaxSqft");
+                    "areaKeys", "viewportScope", "areaMinSqft", "areaMaxSqft", "areaBbox");
 
     /**
      * Discover fields that are deliberately NOT persistable as saved-search filters: the city
@@ -60,7 +61,7 @@ class SavedSearchFilterAllowlistParityTest {
     static final Set<String> NON_ALERTABLE =
             Set.of(
                     "city", "dateFrom", "dateTo", "polygon", "schoolLat", "schoolLon",
-                    "schoolRadiusKm", "bbox", "q", "areaKeys", "viewportScope",
+                    "schoolRadiusKm", "bbox", "q", "areaKeys", "viewportScope", "areaBbox",
                     // #2019 Slice B ruling: no #2016 restore-link URL representation → not alertable
                     "excludePropertyTypes",
                     // #2459 contextual area bounds. Classified NON-ALERTABLE for now — deliberately,
@@ -70,6 +71,9 @@ class SavedSearchFilterAllowlistParityTest {
                     // needs its own ruling. Until then a saved search carries no area bound, which
                     // is honest rather than approximate.
                     "areaMinSqft", "areaMaxSqft");
+    // NOTE (#2767): "areaBbox" above is SERVER-DERIVED ONLY (resolved from the schoolAreaKey wire
+    // param by SchoolAreaBoundsParam). schoolAreaKey itself is a request param, not a Filters
+    // component, and is likewise not persistable — see schoolAreaKeyAndAreaBbox_areNeverPersistable.
 
     private static Set<String> actualFiltersComponentNames() {
         RecordComponent[] components = DiscoverListingPredicateBuilder.Filters.class.getRecordComponents();
@@ -100,6 +104,18 @@ class SavedSearchFilterAllowlistParityTest {
                 .as("every Filters component must be classified; an unclassified one means a new Discover "
                         + "field could silently become (or fail to become) alertable")
                 .isEqualTo(actualFiltersComponentNames());
+    }
+
+    @Test
+    @DisplayName("#2767: neither the server-derived areaBbox nor the schoolAreaKey wire param can be persisted in a saved search")
+    void schoolAreaKeyAndAreaBbox_areNeverPersistable() {
+        assertThat(SavedSearchFilterAllowlist.SUPPORTED_KEYS).doesNotContain("areaBbox", "schoolAreaKey");
+        assertThat(SavedSearchFilterAllowlist.unsupportedKeys(
+                Map.of("schoolAreaKey", "IN|KA|Udupi|Kunjibettu", "areaBbox", "1,2,3,4")))
+                .containsExactly("areaBbox", "schoolAreaKey");
+        assertThatThrownBy(() -> SavedSearchFilterAllowlist.validate(
+                Map.of("schoolAreaKey", "IN|KA|Udupi|Kunjibettu")))
+                .hasMessageContaining("saved_search_unsupported_filter:schoolAreaKey");
     }
 
     // ── 2. Normaliser binding ───────────────────────────────────────────────────────

@@ -72,8 +72,50 @@ public class DiscoverListingPredicateBuilder {
             /** Inclusive upper bound on the row's PRIMARY area in square feet (#2459), or
              *  {@code null}. Same per-row resolution and same UNRESOLVED handling as
              *  {@link #areaMinSqft()}. */
-            Integer areaMaxSqft
+            Integer areaMaxSqft,
+            /** #2767 — SERVER-DERIVED ONLY: the canonical Area's own bounds, resolved from the
+             *  {@code schoolAreaKey} request param by {@link SchoolAreaBoundsParam}. Never bind this
+             *  from a request: arbitrary client coordinates here would be an unvalidated polygon
+             *  channel around {@link PolygonGeographicSafetyPolicy}. */
+            Bbox areaBbox
     ) {
+
+        /**
+         * Backward-compatible constructor for the pre-#2767 25-component shape (no areaBbox).
+         */
+        @SuppressWarnings("java:S107")
+        public Filters(
+                String city,
+                List<String> propertyTypes,
+                List<String> commercialSubtypes,
+                Long priceMinPaise,
+                Long priceMaxPaise,
+                String dateFrom,
+                String dateTo,
+                List<Integer> bedrooms,
+                List<String> sellerTypes,
+                Boolean backOnMarket,
+                Boolean newToMarket,
+                Boolean reraRegistered,
+                Boolean readyToMove,
+                List<List<Double>> polygon,
+                Double schoolLat,
+                Double schoolLon,
+                Double schoolRadiusKm,
+                Bbox bbox,
+                String q,
+                String listingPurpose,
+                List<String> excludePropertyTypes,
+                List<String> areaKeys,
+                Bbox viewportScope,
+                Integer areaMinSqft,
+                Integer areaMaxSqft
+        ) {
+            this(city, propertyTypes, commercialSubtypes, priceMinPaise, priceMaxPaise, dateFrom,
+                    dateTo, bedrooms, sellerTypes, backOnMarket, newToMarket, reraRegistered,
+                    readyToMove, polygon, schoolLat, schoolLon, schoolRadiusKm, bbox, q,
+                    listingPurpose, excludePropertyTypes, areaKeys, viewportScope, areaMinSqft, areaMaxSqft, null);
+        }
 
         /**
          * Backward-compatible constructor for the pre-#2459 23-component shape (no area bounds).
@@ -109,7 +151,7 @@ public class DiscoverListingPredicateBuilder {
             this(city, propertyTypes, commercialSubtypes, priceMinPaise, priceMaxPaise, dateFrom,
                     dateTo, bedrooms, sellerTypes, backOnMarket, newToMarket, reraRegistered,
                     readyToMove, polygon, schoolLat, schoolLon, schoolRadiusKm, bbox, q,
-                    listingPurpose, excludePropertyTypes, areaKeys, viewportScope, null, null);
+                    listingPurpose, excludePropertyTypes, areaKeys, viewportScope, null, null, null);
         }
 
         /**
@@ -493,6 +535,22 @@ public class DiscoverListingPredicateBuilder {
             params.add(vs.south());
             params.add(vs.east());
             params.add(vs.north());
+        }
+
+        // areaBbox (#2767) — SERVER-DERIVED Area bounds (from schoolAreaKey) used exclusively for
+        // Area+School combined scoping; never a client-supplied rectangle. Like viewportScope
+        // above, it is structurally identical to the bbox predicate (using the same
+        // idx_property_listings_geog && ST_MakeEnvelope operator).
+        // It is distinct from polygon (which is a user-drawn result scope subject to geographic
+        // safety checks) and distinct from viewportScope (which is mutually exclusive with areaKeys).
+        // It only fires when an explicit Area+School combined intersection is requested.
+        if (f.areaBbox() != null) {
+            Bbox ab = f.areaBbox();
+            sb.append(" AND pl.geog && ST_MakeEnvelope(?, ?, ?, ?, 4326)::geography");
+            params.add(ab.west());
+            params.add(ab.south());
+            params.add(ab.east());
+            params.add(ab.north());
         }
 
         // keyword search — FTS via the search_vector generated column added by V18.

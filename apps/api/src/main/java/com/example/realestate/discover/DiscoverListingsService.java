@@ -508,7 +508,8 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                 q.areaKeys(),
                 q.viewportScope(),
                 q.areaMinSqft(),
-                q.areaMaxSqft()
+                q.areaMaxSqft(),
+                q.areaBbox()
         );
     }
 }

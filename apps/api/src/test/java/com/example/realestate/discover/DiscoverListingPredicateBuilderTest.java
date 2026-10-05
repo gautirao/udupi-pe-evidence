@@ -442,6 +442,49 @@ class DiscoverListingPredicateBuilderTest {
                 "No envelope clause should be added when both bbox and viewportScope are null");
     }
 
+
+    // ── 10d. areaBbox (#2767 "School radius bounded to parent area") ─────────
+
+    @Test
+    void build_areaBbox_generatesEnvelopeClause_boundaryInclusive() {
+        DiscoverListingPredicateBuilder.Bbox areaBbox =
+                new DiscoverListingPredicateBuilder.Bbox(13.3, 74.7, 13.4, 74.8);
+        DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null,
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, areaBbox);
+
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
+
+        assertTrue(sql.whereFragment().contains("pl.geog && ST_MakeEnvelope(?, ?, ?, ?, 4326)::geography"),
+                "Expected GIST-compatible boundary-inclusive envelope overlap predicate for areaBbox");
+        int wi = sql.params().indexOf(74.7);
+        int si = sql.params().indexOf(13.3);
+        int ei = sql.params().indexOf(74.8);
+        int ni = sql.params().indexOf(13.4);
+        assertTrue(wi >= 0 && si >= 0 && ei >= 0 && ni >= 0,
+                "All four areaBbox values must appear in params");
+        assertTrue(wi < si && si < ei && ei < ni,
+                "Param order must be west, south, east, north per ST_MakeEnvelope signature");
+    }
+
+    @Test
+    void build_areaBbox_doesNotSetBboxApplied() {
+        DiscoverListingPredicateBuilder.Bbox areaBbox =
+                new DiscoverListingPredicateBuilder.Bbox(13.3, 74.7, 13.4, 74.8);
+        DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null,
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, areaBbox);
+
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
+
+        assertTrue(sql.whereFragment().contains("ST_MakeEnvelope"),
+                "areaBbox must still contribute the envelope clause to whereFragment");
+        assertFalse(sql.bboxApplied(),
+                "bboxApplied must stay false when only areaBbox (not bbox) is set");
+    }
+
     // ── 11. reraRegistered=true → PG regex on rera_number ─────────────────
 
     @Test

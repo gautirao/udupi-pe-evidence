@@ -628,6 +628,44 @@ class DiscoverQueryDslTest {
     }
 
     // -----------------------------------------------------------------------
+    // #2767: areaBbox (server-derived School+Area bounds) fails closed, like polygon
+    // -----------------------------------------------------------------------
+
+    @Test
+    void areaBbox_listingsQuery_throwsOpenSearchQueryException_andIsNotSilentlyDropped() {
+        DiscoverListingPredicateBuilder.Bbox areaBbox =
+                new DiscoverListingPredicateBuilder.Bbox(12.998, 73.998, 13.004, 74.004);
+        DiscoverListingsQuery withBounds = new DiscoverListingsQuery(
+                "udupi", null, null, null, null, null, null, null, null, null, null, null, null,
+                null, 13.0, 74.0, 1.5, null, null, 0, 20, false, null, null, null, null, null, null,
+                areaBbox);
+        DiscoverListingsQuery withoutBounds = new DiscoverListingsQuery(
+                "udupi", null, null, null, null, null, null, null, null, null, null, null, null,
+                null, 13.0, 74.0, 1.5, null, null, 0, 20, false, null, null, null, null, null, null,
+                null);
+
+        // Control: the identical School radius query WITHOUT bounds builds fine.
+        assertThat(DiscoverQueryDsl.buildListingsQuery(withoutBounds, ANY_ACTIVE_AREA_KEYS)).isNotNull();
+
+        assertThatThrownBy(() -> DiscoverQueryDsl.buildListingsQuery(withBounds, ANY_ACTIVE_AREA_KEYS))
+                .isInstanceOf(OpenSearchQueryException.class)
+                .hasMessageContaining("areaBbox (School+Area bounds) not supported in OpenSearch path");
+    }
+
+    @Test
+    void areaBbox_markersQuery_throwsOpenSearchQueryException() {
+        DiscoverListingPredicateBuilder.Bbox areaBbox =
+                new DiscoverListingPredicateBuilder.Bbox(12.998, 73.998, 13.004, 74.004);
+        DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null, null, null, null, null, null, null, null,
+                null, 13.0, 74.0, 1.5, null, null, null, null, null, null, null, null, areaBbox);
+
+        assertThatThrownBy(() -> DiscoverQueryDsl.buildMarkersQuery(filters, ANY_ACTIVE_AREA_KEYS))
+                .isInstanceOf(OpenSearchQueryException.class)
+                .hasMessageContaining("areaBbox (School+Area bounds) not supported in OpenSearch path");
+    }
+
+    // -----------------------------------------------------------------------
     // listingPurpose filter tests (#1497 — OpenSearch Buy/Rent intent parity)
     // -----------------------------------------------------------------------
 

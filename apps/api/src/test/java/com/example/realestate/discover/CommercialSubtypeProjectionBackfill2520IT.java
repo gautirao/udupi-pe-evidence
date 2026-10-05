@@ -166,8 +166,8 @@ class CommercialSubtypeProjectionBackfill2520IT {
                 mock(NavigationGraphLoader.class), new NavigationCacheProperties());
         ObjectMapper objectMapper = new ObjectMapper();
         PolygonGeographicSafetyPolicy policy = new PolygonGeographicSafetyPolicy(jdbcTemplate);
-        listingsController = new DiscoverListingsController(listingsService, objectMapper, cache, policy);
-        markersController = new DiscoverMarkersController(markersService, objectMapper, cache, policy);
+        listingsController = new DiscoverListingsController(listingsService, objectMapper, cache, policy, new AreaSummaryService(jdbcTemplate));
+        markersController = new DiscoverMarkersController(markersService, objectMapper, cache, policy, new AreaSummaryService(jdbcTemplate));
 
         // NOTE: the drifted rows are seeded INSIDE the tests that need them, never here. The guard
         // tests call SET CONSTRAINTS ALL IMMEDIATE, which fires every deferred check queued so far
@@ -557,14 +557,14 @@ class CommercialSubtypeProjectionBackfill2520IT {
         DiscoverListingsPage page = listingsController
                 .getListings(CITY_SLUG, null, List.of(subtype), null, null, null, null, null, null,
                         null, null, null, null, null, null, null, null, null, null,
-                        0, 50, false, null, null, null, null, null, null, null)
+                        0, 50, false, null, null, null, null, null, null, null, null)
                 .getBody();
         assertThat(page).as("the listings endpoint must return a body").isNotNull();
 
         DiscoverMarkersResponse markers = markersController
                 .getMarkers(CITY_SLUG, null, List.of(subtype), null, null, null, null, null, null,
                         null, null, null, null, null, null, null, null, null, null, null, null,
-                        null, null, null, null, null, null)
+                        null, null, null, null, null, null, null)
                 .getBody();
         assertThat(markers).as("the markers endpoint must return a body").isNotNull();
 
@@ -578,7 +578,7 @@ class CommercialSubtypeProjectionBackfill2520IT {
         DiscoverListingsPage page = listingsController
                 .getListings(CITY_SLUG, propertyTypes, subtypes, null, null, null, null, null, null,
                         null, null, null, null, null, null, null, null, null, null,
-                        0, 50, false, null, null, null, null, null, null, null)
+                        0, 50, false, null, null, null, null, null, null, null, null)
                 .getBody();
         assertThat(page).isNotNull();
         return page.content().stream().map(DiscoverListingResponse::id).toList();
