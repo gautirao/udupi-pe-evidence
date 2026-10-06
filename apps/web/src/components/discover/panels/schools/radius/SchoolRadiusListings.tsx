@@ -59,6 +59,14 @@ export interface SchoolRadiusListingsProps {
   cardRefs: React.MutableRefObject<Map<string, HTMLDivElement | null>>;
   /** SchoolSelectedPanel-only bounded-search CTA/count — absent for 'combined'. */
   boundedSearchSlot?: ReactNode;
+  /**
+   * Issue #2770 — how the radius chips are laid out for the selected-school state:
+   *   'default' — the original stacked "Search radius" block (any caller that passes nothing);
+   *   'compact' — bounded compaction below the desktop reskin (caption sr-only, >=44px chips);
+   *   'desktop' — chips are NOT rendered here: SchoolContextHeader (rendered by the panel) owns
+   *               them in the single compact context block.
+   */
+  density?: 'default' | 'compact' | 'desktop';
 }
 
 export function SchoolRadiusListings({
@@ -82,6 +90,7 @@ export function SchoolRadiusListings({
   onHoverListing,
   cardRefs,
   boundedSearchSlot,
+  density = 'default',
 }: SchoolRadiusListingsProps) {
   const navigate = useNavigate();
 
@@ -92,13 +101,16 @@ export function SchoolRadiusListings({
   return (
     <>
       {/* Radius chips */}
-      <RadiusChips
-        effectiveRadius={effectiveRadius}
-        listingCount={listings.length}
-        intent={intent}
-        onRadiusChange={onRadiusChange}
-        testIdPrefix={radiusTestIdPrefix}
-      />
+      {density !== 'desktop' && (
+        <RadiusChips
+          effectiveRadius={effectiveRadius}
+          listingCount={listings.length}
+          intent={intent}
+          onRadiusChange={onRadiusChange}
+          testIdPrefix={radiusTestIdPrefix}
+          compact={density === 'compact'}
+        />
+      )}
 
       {boundedSearchSlot}
 

@@ -34,6 +34,7 @@ import { hasActiveSchoolPropertyFilters, clearSchoolPropertyFilters } from '../r
 import { sortListingsBySchoolDistance } from '../radius/sortListingsBySchoolDistance';
 import { SchoolSummaryBand } from '../radius/SchoolSummaryBand';
 import { SchoolRadiusListings } from '../radius/SchoolRadiusListings';
+import { SchoolContextHeader } from '../radius/SchoolContextHeader';
 import { SchoolFiltersSheet } from '../shared/SchoolFiltersSheet';
 import { useSelectedCardScroll } from '../shared/useSelectedCardScroll';
 import type {
@@ -100,9 +101,22 @@ export interface AreaSchoolCombinedPanelProps {
    * `false` preserves every existing caller/test's behaviour unchanged.
    */
   isDesktop?: boolean;
+  /**
+   * Issue #2770 — selects the single compact desktop context block (SchoolContextHeader) instead
+   * of the stacked, bounded-compaction band + radius row. Defaults to `isDesktop`, so the legacy
+   * bridge (which passes isDesktop) needs no change. The canonical area-first surface passes ONLY
+   * this prop: it has no filtersContent, and `isDesktop` would also mount CompactFilterBar there.
+   */
+  compactContext?: boolean;
 }
 
-export function AreaSchoolCombinedPanel({ view, commands, isDesktop = false }: AreaSchoolCombinedPanelProps) {
+export function AreaSchoolCombinedPanel({
+  view,
+  commands,
+  isDesktop = false,
+  compactContext,
+}: AreaSchoolCombinedPanelProps) {
+  const useCompactContext = compactContext ?? isDesktop;
   const {
     chrome: { journey, activeContextChips, filtersContent },
     viewer: { intent = 'buy', isAuthenticated = false },
@@ -226,18 +240,34 @@ export function AreaSchoolCombinedPanel({ view, commands, isDesktop = false }: A
           school-first URL (areaKey + schoolId both set) actually renders. */}
       <div className="flex-1 overflow-y-auto" data-testid="combined-selected-scroll">
       {/* Ink-navy school summary band */}
-      <SchoolSummaryBand
-        school={selectedSchool}
-        listings={listings}
-        intent={intent}
-        groupId={groupId}
-        areaLabel={areaLabel}
-        onChangeSchool={onClearSchool}
-      />
+      {useCompactContext ? (
+        // Issue #2770 — desktop reskin: ONE compact block (name, board, Change school, radius
+        // chips, count), <=107px, so the first card surfaces ~220px sooner.
+        <SchoolContextHeader
+          school={selectedSchool}
+          listingCount={listings.length}
+          intent={intent}
+          effectiveRadius={effectiveRadius}
+          onRadiusChange={onRadiusChange}
+          onChangeSchool={onClearSchool}
+          radiusTestIdPrefix="combined-radius-btn"
+        />
+      ) : (
+        <SchoolSummaryBand
+          compact
+          school={selectedSchool}
+          listings={listings}
+          intent={intent}
+          groupId={groupId}
+          areaLabel={areaLabel}
+          onChangeSchool={onClearSchool}
+        />
+      )}
 
       {/* Issue #1261 — anonymous school-radius listing set is from the PUBLIC endpoint. */}
 
       <SchoolRadiusListings
+        density={useCompactContext ? 'desktop' : 'compact'}
         variant="combined"
         school={selectedSchool}
         areaLabel={areaLabel}

@@ -143,11 +143,14 @@ describe('Testid inventory — SchoolsInAreaPanel wrapper (school-first, area li
 
 // ── SchoolSelectedPanel ────────────────────────────────────────────────────────
 
-function renderSelected(props: { school?: SchoolResult | null; listings?: DiscoverCityListingItem[]; isLoadingListings?: boolean } = {}) {
-  const { school = mockSchool, listings = [makeListing('l-1')], isLoadingListings = false } = props;
+function renderSelected(
+  props: { school?: SchoolResult | null; listings?: DiscoverCityListingItem[]; isLoadingListings?: boolean; desktop?: boolean } = {},
+) {
+  const { school = mockSchool, listings = [makeListing('l-1')], isLoadingListings = false, desktop = false } = props;
   return renderWithProviders(
     <DiscoverProvider>
       <SchoolSelectedPanel
+        isDesktop={desktop}
         view={{
           chrome: {},
           viewer: { isAuthenticated: false },
@@ -181,6 +184,38 @@ describe('Testid inventory — SchoolSelectedPanel', () => {
       'radius-btn-3',
       'radius-btn-5',
       'radius-btn-10',
+      'radius-result-heading',
+      'radius-result-count',
+      'school-listings-body',
+      'listing-card',
+      'listing-save-button',
+      'distance-badge',
+      'listing-view-details',
+    ]);
+  });
+
+  // Issue #2770 — DELIBERATE addition. Desktop reskin (isDesktop): same testids, but the radius
+  // chips move INSIDE the single compact context block (before school-summary-count), so the list
+  // order differs from the stacked layout above:
+  //   stacked : band, name, change-school-btn, count, radius-btn-3/5/10, heading, count, body ...
+  //   desktop : band, name, change-school-btn, radius-btn-3/5/10, count, heading, count, body ...
+  it('loaded, with results — desktop compact context block (#2770)', () => {
+    const { container } = renderSelected({ listings: [makeListing('l-1')], desktop: true });
+    expect(testIdsOf(container)).toEqual([
+      // isDesktop also mounts the legacy CompactFilterBar (unchanged by #2770).
+      'school-filter-pill-type',
+      'school-filter-pill-bhk',
+      'school-filter-pill-budget',
+      'school-filter-pill-area',
+      'school-filter-toolbar-more-filters-trigger',
+      'school-selected-scroll',
+      'school-summary-band',
+      'school-summary-name',
+      'change-school-btn',
+      'radius-btn-3',
+      'radius-btn-5',
+      'radius-btn-10',
+      'school-summary-count',
       'radius-result-heading',
       'radius-result-count',
       'school-listings-body',
@@ -246,17 +281,26 @@ describe('Testid inventory — SchoolSelectedPanel', () => {
 // ── AreaSchoolCombinedPanel ────────────────────────────────────────────────────
 
 function renderCombined(
-  props: { selectedArea?: AreaPoint | null; selectedSchool?: SchoolResult | null; listings?: DiscoverCityListingItem[]; isLoadingListings?: boolean } = {},
+  props: {
+    selectedArea?: AreaPoint | null;
+    selectedSchool?: SchoolResult | null;
+    listings?: DiscoverCityListingItem[];
+    isLoadingListings?: boolean;
+    /** Issue #2770 — canonical area-first path: compact context block, NO isDesktop (no filter bar). */
+    compactContext?: boolean;
+  } = {},
 ) {
   const {
     selectedArea = mockArea,
     selectedSchool = mockSchool,
     listings = [makeListing('l-1')],
     isLoadingListings = false,
+    compactContext,
   } = props;
   return renderWithProviders(
     <DiscoverProvider>
       <AreaSchoolCombinedPanel
+        compactContext={compactContext}
         view={{
           chrome: {},
           viewer: { isAuthenticated: false },
@@ -291,6 +335,29 @@ describe('Testid inventory — AreaSchoolCombinedPanel', () => {
       'combined-radius-btn-3',
       'combined-radius-btn-5',
       'combined-radius-btn-10',
+      'radius-result-heading',
+      'radius-result-count',
+      'combined-listings-body',
+      'listing-card',
+      'listing-save-button',
+      'distance-badge',
+      'listing-view-details',
+    ]);
+  });
+
+  // Issue #2770 — DELIBERATE addition (canonical area-first path, desktop reskin, no filtersContent):
+  // chips move inside the compact context block, ahead of school-summary-count; no filter bar.
+  it('loaded, with results — desktop compact context block, canonical path (#2770)', () => {
+    const { container } = renderCombined({ listings: [makeListing('l-1')], compactContext: true });
+    expect(testIdsOf(container)).toEqual([
+      'combined-selected-scroll',
+      'school-summary-band',
+      'school-summary-name',
+      'change-school-btn',
+      'combined-radius-btn-3',
+      'combined-radius-btn-5',
+      'combined-radius-btn-10',
+      'school-summary-count',
       'radius-result-heading',
       'radius-result-count',
       'combined-listings-body',

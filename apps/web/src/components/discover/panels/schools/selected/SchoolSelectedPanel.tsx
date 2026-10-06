@@ -28,6 +28,7 @@ import { hasActiveSchoolPropertyFilters, clearSchoolPropertyFilters } from '../r
 import { sortListingsBySchoolDistance } from '../radius/sortListingsBySchoolDistance';
 import { SchoolSummaryBand } from '../radius/SchoolSummaryBand';
 import { SchoolRadiusListings } from '../radius/SchoolRadiusListings';
+import { SchoolContextHeader } from '../radius/SchoolContextHeader';
 import { SchoolFiltersSheet } from '../shared/SchoolFiltersSheet';
 import { useSelectedCardScroll } from '../shared/useSelectedCardScroll';
 import type {
@@ -275,8 +276,20 @@ export function SchoolSelectedPanel({ view, commands, isDesktop = false }: Schoo
           <Skeleton className="h-3 w-1/2 mb-3 bg-slate-700" />
           <Skeleton className="h-8 w-1/3 bg-slate-700" />
         </div>
+      ) : isDesktop ? (
+        // Issue #2770 — parity with AreaSchoolCombinedPanel: one compact desktop context block.
+        <SchoolContextHeader
+          school={school}
+          listingCount={listings.length}
+          intent={intent}
+          effectiveRadius={effectiveRadius}
+          onRadiusChange={onRadiusChange}
+          onChangeSchool={handleChangeSchool}
+          radiusTestIdPrefix="radius-btn"
+        />
       ) : (
         <SchoolSummaryBand
+          compact
           school={school}
           listings={listings}
           intent={intent}
@@ -293,6 +306,7 @@ export function SchoolSelectedPanel({ view, commands, isDesktop = false }: Schoo
           "Showing homes in this area only" limitation note has been removed. */}
 
       <SchoolRadiusListings
+        density={school != null && isDesktop ? 'desktop' : school != null ? 'compact' : 'default'}
         variant="selected"
         school={school}
         areaLabel={areaLabelForBreadcrumb}

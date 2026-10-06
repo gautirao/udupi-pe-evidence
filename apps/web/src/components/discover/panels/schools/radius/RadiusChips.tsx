@@ -13,6 +13,12 @@ export interface RadiusChipsProps {
   onRadiusChange: (km: number) => void;
   /** testid prefix — "radius-btn" for SchoolSelectedPanel, "combined-radius-btn" for AreaSchoolCombinedPanel */
   testIdPrefix?: string;
+  /**
+   * Issue #2770 — bounded compaction below the desktop reskin: the visible "Search radius" caption
+   * becomes screen-reader-only (the group keeps its aria-label) and the row sheds its top padding
+   * (the band above supplies the 24px gap). Chips keep >=44px touch targets.
+   */
+  compact?: boolean;
 }
 
 export function RadiusChips({
@@ -21,11 +27,12 @@ export function RadiusChips({
   intent,
   onRadiusChange,
   testIdPrefix = 'radius-btn',
+  compact = false,
 }: RadiusChipsProps) {
   const noun = intent === 'rent' ? 'rental' : 'home';
   return (
-    <div className="px-4 py-3 border-b border-border">
-      <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2">
+    <div className={cn('px-4 border-b border-border', compact ? 'pb-3' : 'py-3')}>
+      <p className={cn('text-xs font-bold uppercase tracking-wide text-muted-foreground', compact ? 'sr-only' : 'mb-2')}>
         Search radius
       </p>
       {/* Three equal-width buttons (mock parity, cycle 2) — active chip = strong plum
@@ -44,6 +51,7 @@ export function RadiusChips({
               onClick={() => onRadiusChange(km)}
               className={cn(
                 'flex flex-1 flex-col items-center gap-0.5 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition-all',
+                compact && 'min-h-11 justify-center',
                 isActive
                   ? 'border-[hsl(var(--plum))] bg-[hsl(var(--plum-tint))] text-[hsl(var(--plum))] shadow-sm'
                   : 'border-border bg-card text-muted-foreground hover:border-[hsl(var(--plum))]/50 hover:text-foreground',

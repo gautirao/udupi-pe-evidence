@@ -33,6 +33,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useDiscoverActions, useDiscoverNav, useDiscoverShell } from '@/features/discover/context/useDiscoverContext';
 import { AreaSetDraftPanel } from '@/features/discover/components/AreaSetDraftPanel';
 import { useDiscoverSearchState } from '@/features/discover/state/useDiscoverSearchState';
+import { useDiscoverHeaderHostsControls } from '@/features/discover/state/useDiscoverHeaderHostsControls';
 import { ROOT_NODE_KEY } from '@/features/discover/navigation/types';
 import { toSelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
@@ -85,7 +86,11 @@ export function AreaLeafListingsSurface({ view, commands }: AreaLeafListingsSurf
   // production render site for the canonical AREA leaf (AreaSelectedPanel
   // below). On desktop, an open AREA_SET draft renders IN-PANEL
   // (AreaSetDraftPanel) here too — see DiscoverShellContextValue.isAreaSetDraftOpen's doc.
-  const { isAreaSetDraftOpen } = useDiscoverShell();
+  const { isAreaSetDraftOpen, isMobileShell } = useDiscoverShell();
+  // Issue #2770 — the same desktop-reskin signal AreaSelectedPanel gates on (>=1366px). Drives
+  // ONLY the compact selected-school context block; it is deliberately NOT passed as `isDesktop`
+  // (that would also mount the CompactFilterBar, which this canonical path never had).
+  const isDesktopReskin = useDiscoverHeaderHostsControls(isMobileShell);
   const intentListingPurpose = nav.intent === 'rent' ? 'rent' : 'sale';
   const { searchQuery, debouncedSearch, handleSearchChange } = useDiscoverSearchState({
     urlQ: nav.q,
@@ -243,6 +248,7 @@ export function AreaLeafListingsSurface({ view, commands }: AreaLeafListingsSurf
     return (
       <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden" data-testid="areas-journey-panel-school-combined">
         <AreaSchoolCombinedPanel
+          compactContext={isDesktopReskin}
           view={{
             chrome: { journey: 'area-first' },
             viewer: { intent: nav.intent, isAuthenticated },
