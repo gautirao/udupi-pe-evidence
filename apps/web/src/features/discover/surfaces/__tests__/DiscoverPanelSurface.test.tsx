@@ -471,6 +471,9 @@ function baseProps(overrides: Partial<PanelFlatFixture> = {}): PanelFlatFixture 
     anonViewportListingsLoading: false,
     isErrorAnonViewport: false,
     refetchAnonViewport: vi.fn(),
+    // #1793 SR-024 — school-radius request-failure signal (MapDataSlice).
+    isErrorSchoolRadiusListings: false,
+    refetchSchoolRadiusListings: vi.fn(),
     setPage: vi.fn(),
     areasNavigationJourney: inertAreasNavigationJourney(),
     // Issue #2142 (correction pass) — the deleted flat interface declared these
@@ -593,6 +596,8 @@ function toModelParams(g: PanelFlatFixture): BuildPanelSurfaceModelParams {
       anonViewportListingsLoading: g.anonViewportListingsLoading,
       isErrorAnonViewport: g.isErrorAnonViewport,
       refetchAnonViewport: g.refetchAnonViewport,
+      isErrorSchoolRadiusListings: g.isErrorSchoolRadiusListings,
+      refetchSchoolRadiusListings: g.refetchSchoolRadiusListings,
     },
     agri: {
       corridorGroups: g.corridorGroups,

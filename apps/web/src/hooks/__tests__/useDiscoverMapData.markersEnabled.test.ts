@@ -385,7 +385,15 @@ describe('useDiscoverMapData — anon viewport cards/markers identity reconcilia
     expect(result.current.isErrorAnonViewport).toBe(true);
     expect(result.current.anonViewportListings.map((l) => l.id)).toEqual(['retained-1']);
     expect(result.current.anonViewportMarkerListings.map((l) => l.id)).toEqual(['retained-1']);
-    expect(result.current.refetchAnonViewport).toBe(mockRefetch);
+    // Issue #1793 — refetchAnonViewport is a useCallback wrapper (so a click MouseEvent is never
+    // forwarded as refetch options); assert the call REACHES the real refetch, with no arguments.
+    result.current.refetchAnonViewport();
+    expect(mockRefetch).toHaveBeenCalledTimes(1);
+    expect(mockRefetch).toHaveBeenLastCalledWith();
+    // A click handler passes its MouseEvent as the first argument; it must be dropped.
+    (result.current.refetchAnonViewport as (event: unknown) => void)({ type: 'click' });
+    expect(mockRefetch).toHaveBeenCalledTimes(2);
+    expect(mockRefetch).toHaveBeenLastCalledWith();
 
     // Phase 3: retry succeeds — fresh listings replace the retained set, error clears.
     const freshData = {

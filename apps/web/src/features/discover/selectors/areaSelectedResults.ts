@@ -29,9 +29,16 @@ export interface AreaSelectedResultsInput<TAreaListing, TAnonListing, TRetry> {
   isListingsError: boolean;
   isErrorAuthViewport: boolean | undefined;
   isErrorPolygonListings: boolean | undefined;
+  /**
+   * Issue #1793 SR-024 — the anon "Search this area" viewport query's OWN error. Optional so
+   * callers that predate it read as "no viewport error" (the former hard-coded `false`).
+   */
+  isErrorAnonViewport?: boolean | undefined;
   onRetryListings: TRetry;
   onRetryAuthViewport: TRetry;
   onRetryPolygonListings: TRetry;
+  /** Issue #1793 SR-024 — refetches the anon viewport query `isErrorAnonViewport` mirrors. */
+  onRetryAnonViewport?: TRetry | undefined;
 }
 
 export interface AreaSelectedResultsView<TAreaListing, TAnonListing, TRetry> {
@@ -61,8 +68,11 @@ export function resolveAreaSelectedResults<TAreaListing, TAnonListing, TRetry>(
     listings: isScopeSubstituted ? substitutedListings : input.areaListings,
     summaryText: isScopeSubstituted ? undefined : input.areaResultSummaryText,
     isLoading: isScopeSubstituted ? substitutedListingsLoading : input.isLoadingListings,
+    // Issue #1793 SR-024 — the anon viewport used to be hard-coded `false` here (and `retry`
+    // undefined below), which rendered a failed "Search this area" request as a zero-result state.
+    // It now reports its OWN query's error/retry; an absent signal still reads as "no error".
     isError: input.isAnonViewport
-      ? false
+      ? (input.isErrorAnonViewport ?? false)
       : input.isAuthViewport
         ? input.isErrorAuthViewport
         : input.isPolygonScope
@@ -70,7 +80,7 @@ export function resolveAreaSelectedResults<TAreaListing, TAnonListing, TRetry>(
           : input.isListingsError,
     isViewportScope,
     retry: input.isAnonViewport
-      ? undefined
+      ? input.onRetryAnonViewport
       : input.isAuthViewport
         ? input.onRetryAuthViewport
         : input.isPolygonScope

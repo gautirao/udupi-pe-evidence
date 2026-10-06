@@ -44,6 +44,11 @@ export interface SchoolSummaryBandProps {
    * keeps the SchoolJourneyHero layout byte-identical for any other caller.
    */
   compact?: boolean;
+  /**
+   * Issue #1793 SR-024 (R1) — the school-radius result is loading or failed, so `listings.length`
+   * is not a real count: omit the homes stat instead of rendering "0".
+   */
+  countPending?: boolean;
 }
 
 export function SchoolSummaryBand({
@@ -54,6 +59,7 @@ export function SchoolSummaryBand({
   areaLabel,
   onChangeSchool,
   compact = false,
+  countPending = false,
 }: SchoolSummaryBandProps) {
   const boardDisplay = school.board ?? school.boardType ?? null;
   const count = listings.length;
@@ -131,12 +137,14 @@ export function SchoolSummaryBand({
           >
             Change school
           </Button>
-          <div className="mt-2 flex items-center border-t border-slate-700 pt-2">
-            <div className="flex items-baseline gap-1.5" data-testid="school-summary-count">
-              <span className="font-mono text-lg font-bold leading-none tabular-nums text-white">{count}</span>
-              <span className="text-xs text-slate-400">{homesNoun(intent, count)}</span>
+          {!countPending && (
+            <div className="mt-2 flex items-center border-t border-slate-700 pt-2">
+              <div className="flex items-baseline gap-1.5" data-testid="school-summary-count">
+                <span className="font-mono text-lg font-bold leading-none tabular-nums text-white">{count}</span>
+                <span className="text-xs text-slate-400">{homesNoun(intent, count)}</span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     );
@@ -160,14 +168,18 @@ export function SchoolSummaryBand({
             </span>
           ) : undefined
         }
-        stats={[
-          {
-            key: 'homes',
-            value: count,
-            label: homesNoun(intent, count),
-            testId: 'school-summary-count',
-          },
-        ]}
+        stats={
+          countPending
+            ? []
+            : [
+                {
+                  key: 'homes',
+                  value: count,
+                  label: homesNoun(intent, count),
+                  testId: 'school-summary-count',
+                },
+              ]
+        }
         onChangeAction={onChangeSchool}
         changeActionLabel="Change school"
         changeActionTestId="change-school-btn"

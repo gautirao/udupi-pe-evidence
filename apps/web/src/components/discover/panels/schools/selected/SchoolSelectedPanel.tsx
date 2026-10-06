@@ -27,6 +27,7 @@ import { snapRadiusKm } from '../radius/radiusOptions';
 import { hasActiveSchoolPropertyFilters, clearSchoolPropertyFilters } from '../radius/schoolPropertyFilters';
 import { sortListingsBySchoolDistance } from '../radius/sortListingsBySchoolDistance';
 import { SchoolSummaryBand } from '../radius/SchoolSummaryBand';
+import { isSchoolRadiusCountPending } from '../radius/isSchoolRadiusCountPending';
 import { SchoolRadiusListings } from '../radius/SchoolRadiusListings';
 import { SchoolContextHeader } from '../radius/SchoolContextHeader';
 import { SchoolFiltersSheet } from '../shared/SchoolFiltersSheet';
@@ -34,7 +35,7 @@ import { useSelectedCardScroll } from '../shared/useSelectedCardScroll';
 import type {
   SchoolChromeCommands,
   SchoolChromeViewWithFilters,
-  SchoolListingsCommands,
+  SchoolRadiusListingsCommands,
   SchoolPropertyFiltersCommands,
   SchoolPropertyFiltersView,
   SchoolViewerView,
@@ -53,6 +54,12 @@ export interface SchoolSelectedPanelView {
     /** Proximity-filtered listings from MapDiscovery (already server-filtered). */
     data: DiscoverCityListingItem[];
     loading: boolean;
+    /**
+     * Issue #1793 SR-024 — true when the school-radius request failed. With no listings to
+     * show, the panel renders a request-failure block + Retry instead of the "no homes within
+     * N km" empty state (a backend failure is not an empty market).
+     */
+    error?: boolean;
     /**
      * Issue #1170 — true while a school-radius/filter refetch is in flight (distinct
      * from the initial skeleton load). Drives the AreaSelectedPanel-style opacity dim.
@@ -82,7 +89,7 @@ export interface SchoolSelectedPanelCommands {
     /** Called when the user picks a new radius button. Parent writes URL + filter. */
     change: (radiusKm: number) => void;
   };
-  listings: SchoolListingsCommands;
+  listings: SchoolRadiusListingsCommands;
   propertyFilters: SchoolPropertyFiltersCommands;
   /**
    * Issue #1115 — when the whole group is present, renders a CTA the user must
@@ -116,14 +123,20 @@ export function SchoolSelectedPanel({ view, commands, isDesktop = false }: Schoo
     viewer: { intent = 'buy', isAuthenticated = false },
     school,
     radius: { km: radiusKm },
-    listings: { data: listings, loading: isLoadingListings, fetching: isFetching = false, selectedId: selectedListingId = null },
+    listings: {
+      data: listings,
+      loading: isLoadingListings,
+      error: isListingsError = false,
+      fetching: isFetching = false,
+      selectedId: selectedListingId = null,
+    },
     propertyFilters: { value: filters = {} },
     boundedSearch: { triggered: boundedSearchTriggered = false },
   } = view;
   const {
     chrome: { startOver: onStartOver, back: onBack },
     radius: { change: onRadiusChange },
-    listings: { select: onSelectListing, hover: onHoverListing },
+    listings: { select: onSelectListing, hover: onHoverListing, retry: onRetryListings },
     propertyFilters: { replace: onFiltersChange },
     boundedSearch,
   } = commands;
@@ -286,6 +299,12 @@ export function SchoolSelectedPanel({ view, commands, isDesktop = false }: Schoo
           onRadiusChange={onRadiusChange}
           onChangeSchool={handleChangeSchool}
           radiusTestIdPrefix="radius-btn"
+          countPending={isSchoolRadiusCountPending({
+            isAuthenticated,
+            isLoading: isLoadingListings,
+            isError: isListingsError,
+            listingCount: listings.length,
+          })}
         />
       ) : (
         <SchoolSummaryBand
@@ -296,6 +315,12 @@ export function SchoolSelectedPanel({ view, commands, isDesktop = false }: Schoo
           groupId={groupId}
           areaLabel={areaLabelForBreadcrumb}
           onChangeSchool={handleChangeSchool}
+          countPending={isSchoolRadiusCountPending({
+            isAuthenticated,
+            isLoading: isLoadingListings,
+            isError: isListingsError,
+            listingCount: listings.length,
+          })}
         />
       )}
 
@@ -313,6 +338,8 @@ export function SchoolSelectedPanel({ view, commands, isDesktop = false }: Schoo
         listings={listings}
         sortedListingsWithDistance={sortedListingsWithDistance}
         isLoadingListings={isLoadingListings}
+        isError={isListingsError}
+        onRetry={onRetryListings}
         isFetching={isFetching}
         hasMissingCoords={hasMissingCoords}
         hasPropertyFilters={hasPropertyFilters}

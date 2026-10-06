@@ -94,6 +94,13 @@ export interface AreasJourneyResultsCommands {
   reportSelectedListingPreview?: (preview: SelectedListingPreview | null) => void;
   /** POLYGON zero-result "Adjust boundary" (#2018 slice 3) — commits nothing itself. */
   redrawPolygon?: () => void;
+  /**
+   * Issue #1793 SR-024 — refetches the school-radius listings query that
+   * `view.schools.selectedListings.error` mirrors (Retry of the combined school+area view's
+   * request-failure block). Lives here, not in `AreasJourneySchoolCommands`, which is already at
+   * the per-group ceiling (areasJourneyContractBudget.guard.test.ts).
+   */
+  retrySchoolListings?: () => void;
 }
 
 // ── Schools within the Area journey (#2124) ──────────────────────────────────
@@ -104,7 +111,7 @@ export interface AreasJourneySchoolView {
   /** The school picked for the combined area+school view (`schoolId=`). */
   selected?: SchoolResult | null;
   /** Listings around the selected school (MapDiscovery-owned query). */
-  selectedListings: Pick<SchoolQueryState<DiscoverCityListingItem[] | undefined>, 'data' | 'loading'>;
+  selectedListings: Pick<SchoolQueryState<DiscoverCityListingItem[] | undefined>, 'data' | 'loading' | 'error'>;
   radiusKm?: number | null;
 }
 

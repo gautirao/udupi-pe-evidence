@@ -296,6 +296,7 @@ describe('deriveMapInfoDockContent — school-first (#2762 PR-C)', () => {
     schoolFirstZoneSchoolCount?: number | null;
     schoolFirstAreaSchoolCount?: number | null;
     schoolFirstLandingSchoolCount?: number | null;
+    isSchoolRadiusCountPending?: boolean;
   }): DiscoverMapSurfaceView {
     return {
       navigation: {
@@ -311,9 +312,35 @@ describe('deriveMapInfoDockContent — school-first (#2762 PR-C)', () => {
         schoolFirstAreaSchoolCount: overrides.schoolFirstAreaSchoolCount ?? null,
         schoolFirstLandingSchoolCount: overrides.schoolFirstLandingSchoolCount ?? null,
       },
-      status: {},
+      status: { isSchoolRadiusCountPending: overrides.isSchoolRadiusCountPending ?? false },
     } as unknown as DiscoverMapSurfaceView;
   }
+
+  // Issue #1793 SR-024 (PR-A R1) — the dock must not claim "0 verified properties" while the
+  // anonymous school-radius result is loading or failed-with-nothing (zero only for lack of data).
+  it('#1793 R1: selected school + school-radius count pending: countText is null (no premature "0")', () => {
+    const result = deriveMapInfoDockContent(
+      buildSchoolView({
+        selectedSchool: { id: 'sch-1', name: 'Delhi Public School' },
+        schoolListings: [],
+        isSchoolRadiusCountPending: true,
+      }),
+    );
+    expect(result?.countText).toBeNull();
+    expect(result?.where).toBe('Delhi Public School');
+    expect(result?.listingCapable).toBe(true);
+  });
+
+  it('#1793 R1 control: a settled genuine zero still reads "Showing 0 verified properties near …"', () => {
+    const result = deriveMapInfoDockContent(
+      buildSchoolView({
+        selectedSchool: { id: 'sch-1', name: 'Delhi Public School' },
+        schoolListings: [],
+        isSchoolRadiusCountPending: false,
+      }),
+    );
+    expect(result?.countText).toBe('Showing 0 verified properties near Delhi Public School');
+  });
 
   it('browsing state (no school selected): count from schoolFirst*Count, where from the deepest breadcrumb segment, not listingCapable', () => {
     const result = deriveMapInfoDockContent(

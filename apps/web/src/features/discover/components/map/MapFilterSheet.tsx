@@ -59,6 +59,12 @@ export interface MapFilterSheetProps {
   /** Result count for the CURRENTLY APPLIED filters — drives the "still shows M ⟨units⟩" status line. */
   appliedResultCount: number;
   /**
+   * Issue #1793 PR-A F1 — true while the caller cannot vouch for `appliedResultCount` (anonymous
+   * school-radius results loading or failed-with-nothing: the markers count reads 0 as "unknown").
+   * The status line then omits the number rather than claim "0". Defaults to false (unchanged).
+   */
+  appliedCountPending?: boolean;
+  /**
    * Live result count for the DRAFT filters, recomputed by the caller as the draft changes. Map's
    * query layer is outside this component's ownership, so this is `null` when the caller has not
    * wired a live recount — the footer then shows a qualitative status only, never a fabricated
@@ -85,6 +91,7 @@ export function MapFilterSheet({
   isCommercialSubtypeSupported = true,
   isReadyToMoveSupported = true,
   appliedResultCount,
+  appliedCountPending = false,
   draftResultCount = null,
   resultUnitNoun = 'homes',
   scopeNote,
@@ -360,7 +367,9 @@ export function MapFilterSheet({
           >
             {!hasChanges
               ? 'These filters are on the map now.'
-              : `Not applied yet — the map still shows ${appliedResultCount} ${resultUnitNoun}`}
+              : appliedCountPending
+                ? 'Not applied yet'
+                : `Not applied yet — the map still shows ${appliedResultCount} ${resultUnitNoun}`}
           </p>
           <div className="flex gap-2">
             <Button

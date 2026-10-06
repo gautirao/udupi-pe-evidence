@@ -69,6 +69,10 @@ export interface AreaFirstJourneyPanelView {
     | 'isAnonViewport'
     | 'anonViewportListings'
     | 'anonViewportListingsLoading'
+    // Issue #1793 SR-024 — the anon viewport query's own error (its refetch is in
+    // `commands.geography`), so a failed "Search this area" request surfaces as
+    // error + Retry instead of a zero-result state.
+    | 'isErrorAnonViewport'
     | 'isAuthViewport'
     | 'authViewportListings'
     | 'authViewportListingsLoading'
@@ -106,6 +110,11 @@ export interface AreaFirstJourneyPanelCommands {
     // Issue #2353 (code-review fix) — the SAME query `mapAreaListings` came
     // from, so a Retry click on the prop path is a real refetch, not a no-op.
     'handleAreaFirstBack' | 'refetchAreaListings' | 'handleRedrawPolygon'
+    // Issue #1793 SR-024 — the anon viewport query's real refetch (Retry target for the
+    // viewport scope's error), and the school-radius query's (Retry target for the combined
+    // school+area view's request-failure block).
+    | 'refetchAnonViewport'
+    | 'refetchSchoolRadiusListings'
   >;
 }
 
@@ -143,7 +152,8 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
   const { areaListings, isLoadingAreaListings, isErrorAreaListings, selectedArea, isFetchingAreaListings } =
     view.geography;
   const { filters } = view.filters;
-  const { selectedSchool, schools, schoolsQuery, schoolListings } = view.schools;
+  const { selectedSchool, schools, schoolsQuery, schoolListings, isErrorSchoolRadiusListings, schoolRadiusPanelLoading } =
+    view.schools;
   const { listingDataLoading } = view.results;
   const { prefersReducedMotion } = view.interaction;
   const {
@@ -154,7 +164,8 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
     selectJourney,
   } = commands.navigation;
   const { handleFiltersChange } = commands.filters;
-  const { handleAreaFirstBack, refetchAreaListings, handleRedrawPolygon } = commands.geography;
+  const { handleAreaFirstBack, refetchAreaListings, handleRedrawPolygon, refetchAnonViewport, refetchSchoolRadiusListings } =
+    commands.geography;
   // Issue #2142 SOLID follow-up (commit 2, PLAN REVIEW correction 3) — these
   // two were `useDiscoverNav()`/`useDiscoverActions()` calls (the #1953
   // ambient-facade deviation) until this commit. Same objects, same values,
@@ -240,7 +251,9 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
               // Issue #2015 / #2461 — the committed VIEWPORT ("Search this
               // area") / POLYGON scope, converged into one discriminated scope
               // by the typed adapter (anon > auth > polygon, T10).
-              scope: toAreaLeafScopeSource(view.geography),
+              // Issue #1793 SR-024 — `refetchAnonViewport` is a COMMAND (commands.geography), the
+              // rest of the signals (incl. `isErrorAnonViewport`) are view.geography verbatim.
+              scope: toAreaLeafScopeSource({ ...view.geography, refetchAnonViewport }),
             },
           },
           // Issue #2124 (fix-cycle) — the SAME schools/selectedSchool/
@@ -254,7 +267,16 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
               error: schoolsQuery.isError,
             },
             selected: selectedSchool,
-            selectedListings: { data: schoolListings, loading: listingDataLoading },
+            // Issue #1793 SR-024 — `error` is the school-radius query's failure, so the combined
+            // school+area view renders a request-failure block instead of "No homes within N km".
+            // Issue #1793 SR-024 (PR-A review A1) — `listingDataLoading` is auth-only (false for anon);
+            // `schoolRadiusPanelLoading` is the anon school-radius query's own in-flight signal
+            // (first load / automatic retries / data-less Retry), so the zero state never shows then.
+            selectedListings: {
+              data: schoolListings,
+              loading: listingDataLoading || (schoolRadiusPanelLoading ?? false),
+              error: isErrorSchoolRadiusListings,
+            },
             radiusKm: urlState.radiusKm,
           },
           city: { label: areaFirstCityLabel },
@@ -272,6 +294,9 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
             // Issue #2018 slice 3 — 'Adjust boundary' seam for the POLYGON
             // zero-result row; commits nothing itself.
             redrawPolygon: handleRedrawPolygon,
+            // Issue #1793 SR-024 — the REAL school-radius query refetch (Retry of the combined
+            // school+area view's request-failure block).
+            retrySchoolListings: refetchSchoolRadiusListings,
           },
           schools: {
             // Issue #1956 PR-4 FINAL FIX PASS — the SAME

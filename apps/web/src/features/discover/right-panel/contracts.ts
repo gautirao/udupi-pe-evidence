@@ -337,6 +337,11 @@ export interface SchoolSelectedView {
   radiusKm: NavView['radiusKm'];
   listings: SurfaceView['schools']['schoolListings'];
   listingsLoading: SurfaceView['results']['listingDataLoading'];
+  /**
+   * Issue #1793 SR-024 — the school-radius query's failure. Optional (additive): absent reads as
+   * "no error". Set by buildRightPanelView from `view.schools.isErrorSchoolRadiusListings`.
+   */
+  listingsError?: SurfaceView['schools']['isErrorSchoolRadiusListings'];
   boundedSearchTriggered: SurfaceView['navigation']['journeyView']['boundedSearchTriggered'];
 }
 
@@ -375,6 +380,11 @@ export interface SchoolsInAreaCommands {
 export interface SchoolSelectedCommands {
   changeRadius: SurfaceCommands['navigation']['journeyCommands']['changeRadius'];
   clearSchool: SurfaceCommands['navigation']['journeyCommands']['clearSchool'];
+  /**
+   * Issue #1793 SR-024 — Retry for the school-radius failure block: the real query refetch.
+   * Optional (additive); set by buildRightPanelCommands.
+   */
+  retryListings?: SurfaceCommands['geography']['refetchSchoolRadiusListings'];
   /** Only wired when authenticated (bridge:404); see G11. */
   boundedSearch?: SurfaceCommands['results']['handleBoundedSearch'];
 }

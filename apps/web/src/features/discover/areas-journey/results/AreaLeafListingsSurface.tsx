@@ -68,6 +68,7 @@ export function AreaLeafListingsSurface({ view, commands }: AreaLeafListingsSurf
     changeFilters: onCommittedFiltersChange,
     reportSelectedListingPreview: onSelectedListingPreviewChange,
     redrawPolygon: onRedrawPolygon,
+    retrySchoolListings: onSchoolListingsRetry,
   } = commands.results;
   const {
     enterPicking: onAddSchool,
@@ -258,6 +259,8 @@ export function AreaLeafListingsSurface({ view, commands }: AreaLeafListingsSurf
             listings: {
               data: schoolListings.data ?? [],
               loading: schoolListings.loading ?? false,
+              // Issue #1793 SR-024 — the school-radius query's failure (request-failure block).
+              error: schoolListings.error ?? false,
               // T6 — pinned: the AREA-leaf listings' fetching signal, not a
               // school-listings one.
               fetching: isFetchingAreaListingsResolved,
@@ -268,7 +271,7 @@ export function AreaLeafListingsSurface({ view, commands }: AreaLeafListingsSurf
           commands={{
             chrome: { startOver: onStartOver, back: onBackFromSchoolFlow },
             radius: { change: onRadiusChange ?? (() => undefined) },
-            listings: { select: (id) => actions.setSelectedListing(id) },
+            listings: { select: (id) => actions.setSelectedListing(id), retry: onSchoolListingsRetry },
             propertyFilters: {
               replace: (next) => {
                 // Issue #2553 — forward what the panel emitted instead of rebuilding

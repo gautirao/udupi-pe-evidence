@@ -107,6 +107,9 @@ function makeParams(overrides: DeepPartial<BuildPanelSurfaceModelParams> = {}): 
       anonViewportListingsLoading: false,
       isErrorAnonViewport: false,
       refetchAnonViewport: vi.fn(),
+      // #1793 SR-024 — school-radius request-failure signal (MapDataSlice).
+      isErrorSchoolRadiusListings: false,
+      refetchSchoolRadiusListings: vi.fn(),
     },
     agri: {
       corridorGroups: [],
@@ -187,7 +190,19 @@ describe('buildPanelSurfaceModel', () => {
       schools: [],
       schoolsQuery: {},
       schoolListings: [],
+      // #1793 SR-024 (approved AC A1) — the schools group now also carries the school-radius
+      // request-failure signal (from the controller's `isErrorSchoolRadiusListings`).
+      isErrorSchoolRadiusListings: false,
     });
+  });
+
+  it('#1793 A1: schools.isErrorSchoolRadiusListings mirrors the controller signal and the real refetch reaches commands.geography', () => {
+    const refetchSchoolRadiusListings = vi.fn();
+    const params = makeParams({
+      mapData: { isErrorSchoolRadiusListings: true, refetchSchoolRadiusListings },
+    });
+    expect(buildPanelSurfaceModel(params).schools.isErrorSchoolRadiusListings).toBe(true);
+    expect(buildPanelSurfaceCommands(params).geography.refetchSchoolRadiusListings).toBe(refetchSchoolRadiusListings);
   });
 
   it('preserves object identity for reference-typed fields (no deep-copy)', () => {

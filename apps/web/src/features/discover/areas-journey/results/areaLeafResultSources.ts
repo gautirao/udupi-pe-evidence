@@ -14,9 +14,10 @@
  *     which case the leaf falls back to its own query.
  *   - `scope`: the committed result scope, a discriminated union mirroring
  *     `useDiscoverMapData`'s own `resultScope.kind`. Each non-area kind
- *     carries exactly the data that scope really has — VIEWPORT has no
- *     error/retry of its own (none exists upstream), POLYGON does. The shapes
- *     are kept honest rather than padded into a common type.
+ *     carries exactly the data that scope really has — the AUTH viewport has no
+ *     error/retry of its own (none exists upstream); the ANON viewport (#1793)
+ *     and POLYGON do. The shapes are kept honest rather than padded into a
+ *     common type.
  */
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 
@@ -34,6 +35,12 @@ export type AreaLeafScopeSource =
       audience: 'anon' | 'auth';
       listings: DiscoverCityListingItem[] | undefined;
       loading: boolean | undefined;
+      /**
+       * Issue #1793 SR-024 — ANON viewport only: the viewport query's own error/retry. The auth
+       * viewport has none of its own and keeps the pinned T1 behaviour (AREA base error/retry).
+       */
+      error?: boolean | undefined;
+      retry?: (() => void) | undefined;
     }
   | {
       kind: 'polygon';
@@ -84,6 +91,14 @@ export interface AreaLeafScopeSignals {
   polygonListingsLoading: boolean | undefined;
   isErrorPolygonListings: boolean | undefined;
   refetchPolygonListings: (() => void) | undefined;
+  /**
+   * Issue #1793 SR-024 — the anon viewport query's own error + refetch. OPTIONAL (unlike the
+   * rest) so every existing caller keeps compiling; production (`AreaFirstJourneyPanel`) always
+   * supplies both, from `view.geography.isErrorAnonViewport` /
+   * `commands.geography.refetchAnonViewport`.
+   */
+  isErrorAnonViewport?: boolean | undefined;
+  refetchAnonViewport?: (() => void) | undefined;
 }
 
 export interface ResolvedAreaLeafResultSource {
@@ -139,6 +154,8 @@ export function toAreaLeafScopeSource(signals: AreaLeafScopeSignals): AreaLeafSc
             audience: 'anon',
             listings: signals.anonViewportListings,
             loading: signals.anonViewportListingsLoading,
+            error: signals.isErrorAnonViewport,
+            retry: signals.refetchAnonViewport,
           }
         : {
             kind: 'viewport',
@@ -191,7 +208,7 @@ export interface AreaLeafResultSourceInputs {
   substituted: {
     listings: DiscoverCityListingItem[] | undefined;
     loading: boolean | undefined;
-    /** POLYGON only — VIEWPORT has no error/retry of its own. */
+    /** POLYGON and ANON viewport (#1793) — the AUTH viewport has no error/retry of its own. */
     error: boolean | undefined;
     retry: (() => void) | undefined;
   };
@@ -218,9 +235,24 @@ export function resolveAreaLeafResultSource(
     : sources.ownQuery.isFetching;
 
   if (scope.kind === 'viewport') {
-    // T1 (commit 0, pinned quirk) — cards/loading come from the viewport
-    // scope, but error/retry come from the AREA base (the matched map base,
-    // else the fallback query) — a viewport scope carries no error/retry.
+    // Issue #1793 SR-024 (approved AC A2) — AMENDS the T1 quirk below for the ANON viewport only:
+    // its error/retry are the viewport query's OWN. Under T1 they came from the AREA base, but that
+    // query is disabled during a viewport scope and can never error, so a failed "Search this
+    // area" request was invisible and rendered as a zero-result state.
+    if (scope.audience === 'anon') {
+      return {
+        origin: 'viewport',
+        isViewportScope: true,
+        listings: sources.substituted.listings ?? [],
+        loading: sources.substituted.loading ?? false,
+        fetching,
+        error: sources.substituted.error ?? false,
+        retry: sources.substituted.retry ?? (() => undefined),
+      };
+    }
+    // T1 (commit 0, pinned quirk) — still true for the AUTH viewport: cards/loading come from the
+    // viewport scope, but error/retry come from the AREA base (the matched map base, else the
+    // fallback query) — the auth viewport carries no error/retry of its own.
     return {
       origin: 'viewport',
       isViewportScope: true,

@@ -339,6 +339,9 @@ function buildParams(overrides: BuildOverrides = {}): BuildPanelSurfaceModelPara
       anonViewportListingsLoading: false,
       isErrorAnonViewport: false,
       refetchAnonViewport: vi.fn(),
+      // #1793 SR-024 — school-radius request-failure signal (MapDataSlice).
+      isErrorSchoolRadiusListings: false,
+      refetchSchoolRadiusListings: vi.fn(),
       isAuthViewport: false,
       authViewportListings: [],
       authViewportListingsLoading: false,

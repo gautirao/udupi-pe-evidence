@@ -57,6 +57,8 @@ export function buildRightPanelView(view: DiscoverPanelSurfaceView, extras: Righ
     isListingsError: view.geography.isErrorAreaListings,
     isErrorAuthViewport: view.geography.isErrorAuthViewport,
     isErrorPolygonListings: view.geography.isErrorPolygonListings,
+    // Issue #1793 SR-024 — the anon viewport's OWN error (previously hard-coded false).
+    isErrorAnonViewport: view.geography.isErrorAnonViewport,
     // `retry` is a COMMANDS-side field (RightPanelAreaCommands.results.retry,
     // built separately in buildRightPanelCommands below) — this view builder
     // only reads the view-side outputs (listings/summaryText/isLoading/
@@ -64,6 +66,7 @@ export function buildRightPanelView(view: DiscoverPanelSurfaceView, extras: Righ
     onRetryListings: undefined,
     onRetryAuthViewport: undefined,
     onRetryPolygonListings: undefined,
+    onRetryAnonViewport: undefined,
   });
 
   return {
@@ -143,7 +146,12 @@ export function buildRightPanelView(view: DiscoverPanelSurfaceView, extras: Righ
         school: view.schools.selectedSchool,
         radiusKm: urlState.radiusKm,
         listings: view.schools.schoolListings,
-        listingsLoading: view.results.listingDataLoading,
+        // Issue #1793 SR-024 (PR-A review A1) — `listingDataLoading` is auth-only (false for anon);
+        // the anon school-radius query's own in-flight signal covers its first load, automatic
+        // retries and a data-less Retry, so the panel shows the skeleton instead of "No homes".
+        listingsLoading: view.results.listingDataLoading || (view.schools.schoolRadiusPanelLoading ?? false),
+        // Issue #1793 SR-024 — the school-radius query's failure (request-failure block).
+        listingsError: view.schools.isErrorSchoolRadiusListings,
         boundedSearchTriggered: view.navigation.journeyView.boundedSearchTriggered,
       },
       propertyFilters: { value: view.filters.filters },
@@ -231,6 +239,10 @@ export function buildRightPanelCommands(
     // identical to pre-C8 behaviour.
     onRetryAuthViewport: undefined,
     onRetryPolygonListings: view.geography.refetchPolygonListings,
+    // Issue #1793 SR-024 — the anon viewport's own error/retry (previously hard-coded
+    // false/undefined): Retry is the REAL anon-viewport query refetch.
+    isErrorAnonViewport: view.geography.isErrorAnonViewport,
+    onRetryAnonViewport: commands.geography.refetchAnonViewport,
   });
 
   // Issue #2216 — journey-preserving canonical write (moved verbatim from
@@ -313,6 +325,8 @@ export function buildRightPanelCommands(
       selected: {
         changeRadius: commands.navigation.journeyCommands.changeRadius,
         clearSchool: commands.navigation.journeyCommands.clearSchool,
+        // Issue #1793 SR-024 — the REAL school-radius query refetch (Retry of the failure block).
+        retryListings: commands.geography.refetchSchoolRadiusListings,
         // Issue #1115/G11 — only wired when authenticated.
         boundedSearch: view.interaction.isAuthenticated ? commands.results.handleBoundedSearch : undefined,
       },

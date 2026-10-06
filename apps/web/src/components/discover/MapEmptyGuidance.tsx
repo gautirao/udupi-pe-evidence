@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { PropertyFilters } from '@/hooks/usePropertyListings';
 import { CITY_CONFIG } from '@/lib/localityUtils';
+import { Button } from '@/components/ui/button';
 
 interface MapEmptyGuidanceProps {
   cityTotal: number;
@@ -48,6 +49,16 @@ interface MapEmptyGuidanceProps {
    * false so every other journey (and any legacy caller) is unaffected.
    */
   suppressAnonZoomPrompt?: boolean;
+  /**
+   * Issue #1793 SR-024 — the /api/discover/areas request FAILED. `cityTotal` is derived from that
+   * response and reads 0 on failure, so without this the "No properties listed in {city} yet" copy
+   * would present a failed request as an empty city. When true (and cityTotal is 0) the error +
+   * Retry below REPLACES both `cityTotal === 0` messages; a genuine zero (false/omitted) still
+   * shows them. Optional so legacy callers leave it dormant.
+   */
+  isAreasError?: boolean;
+  /** Issue #1793 — Retry target for the error state (the real areas-query refetch). */
+  onRetryAreas?: () => void;
 }
 
 /**
@@ -67,6 +78,8 @@ export function MapEmptyGuidance({
   isAgriJourney,
   isMobileMapOverlay = false,
   suppressAnonZoomPrompt = false,
+  isAreasError = false,
+  onRetryAreas,
 }: MapEmptyGuidanceProps) {
   if (isLoading) return null;
 
@@ -81,6 +94,37 @@ export function MapEmptyGuidance({
 
   const cityLabel = CITY_CONFIG[city]?.label ?? city;
   const hasLocalities = (filters.localities?.length ?? 0) > 0;
+
+  // Issue #1793 SR-024 — a failed /api/discover/areas request (cityTotal reads 0) must not be
+  // reported as an empty city. Same Agri guard as the messages below (the right panel owns the
+  // Agri state). Same placement/classes as the empty-city card, plus `pointer-events-auto` on the
+  // card because it hosts a Retry button.
+  if (!isAgriJourney && isAreasError && cityTotal === 0) {
+    return (
+      <div
+        className={
+          isMobileMapOverlay
+            ? 'absolute bottom-[192px] left-1/2 -translate-x-1/2 z-[1000] max-w-sm'
+            : 'absolute bottom-36 left-1/2 -translate-x-1/2 z-[1000] max-w-sm'
+        }
+      >
+        <div
+          role="alert"
+          className="pointer-events-auto flex flex-col items-center gap-2 rounded-lg border border-destructive/30 bg-card/95 px-4 py-3 text-center shadow-lg backdrop-blur"
+          data-testid="map-areas-error"
+        >
+          <p className="text-sm text-muted-foreground">
+            We could not load properties for {cityLabel}. This is a request failure, not an empty market.
+          </p>
+          {onRetryAreas && (
+            <Button variant="outline" size="sm" onClick={onRetryAreas} data-testid="map-areas-error-retry">
+              Retry
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   let message: string | null = null;
 

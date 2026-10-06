@@ -197,7 +197,9 @@ function deriveSchoolDock(
     const where = schools.selectedSchool.name;
     const count = schools.schoolListings.length;
     let countText: string | null = null;
-    if (!options.hideDuplicateCountBadge) {
+    // Issue #1793 SR-024 (PR-A R1) — while the anon school-radius result is loading or failed with
+    // nothing retained, `count` is 0 only for lack of data: omit the count rather than claim "0".
+    if (!options.hideDuplicateCountBadge && !view.status.isSchoolRadiusCountPending) {
       countText = `Showing ${count.toLocaleString()} verified ${count === 1 ? 'property' : 'properties'} near ${where}`;
     }
     return {

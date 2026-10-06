@@ -212,7 +212,16 @@ type MapDataSlice = Pick<
   | 'polygonListingsLoading'
   | 'isErrorPolygonListings'
   | 'refetchPolygonListings'
->;
+  // Issue #1793 SR-024 — the school-radius listings query's error + refetch, so the school
+  // result panels can render a request-failure block (with a REAL Retry) instead of "No homes
+  // found within N km" when the request failed.
+  | 'isErrorSchoolRadiusListings'
+  | 'refetchSchoolRadiusListings'
+> &
+  // Issue #1793 SR-024 (PR-A review A1) — the SAME query's anon in-flight signal (first load,
+  // automatic retries, data-less Retry). OPTIONAL on this shared slice so existing fixtures stay
+  // valid; the real controller always supplies it, and an absent value reads as "not loading".
+  Partial<Pick<ReturnType<typeof useDiscoverMapDataController>, 'schoolRadiusPanelLoading'>>;
 type AgriSlice = Pick<
   ReturnType<typeof useDiscoverAgriController>,
   | 'corridorGroups'
@@ -464,6 +473,9 @@ type PanelGeographyCommands = Pick<
   | 'refetchAreaListings'
   // Issue #2015 (caller-wiring follow-up) — see MapDataSlice's own doc comment.
   | 'refetchAnonViewport'
+  // Issue #1793 SR-024 — see MapDataSlice's own doc comment (Retry target of the school-radius
+  // request-failure block, grouped here beside the other query refetches).
+  | 'refetchSchoolRadiusListings'
   // Issue #2018 slice 3 — "Adjust boundary" on the POLYGON zero-result state.
   // Grouped with geography because it changes the searched GEOMETRY, not a
   // filter; it starts a new drawing and commits nothing on its own.
@@ -535,7 +547,14 @@ type PanelAgriCommands = Pick<
 
 type PanelSchoolsView = Pick<
   PanelFields,
-  'selectedSchool' | 'schools' | 'schoolsQuery' | 'schoolListings'
+  | 'selectedSchool'
+  | 'schools'
+  | 'schoolsQuery'
+  | 'schoolListings'
+  // Issue #1793 SR-024 — see MapDataSlice's own doc comment.
+  | 'isErrorSchoolRadiusListings'
+  // Issue #1793 SR-024 (PR-A review A1) — see MapDataSlice's own doc comment (optional).
+  | 'schoolRadiusPanelLoading'
 >;
 
 type PanelFiltersView = Pick<PanelFields, 'filters' | 'filtersContent' | 'searchQuery'>;
@@ -655,6 +674,8 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       polygonListingsLoading,
       isErrorPolygonListings,
       refetchPolygonListings,
+      isErrorSchoolRadiusListings,
+      schoolRadiusPanelLoading,
     },
     agri: {
       corridorGroups,
@@ -761,7 +782,14 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       selectedRegion,
       selectedMaxKm,
     },
-    schools: { selectedSchool, schools, schoolsQuery, schoolListings },
+    schools: {
+      selectedSchool,
+      schools,
+      schoolsQuery,
+      schoolListings,
+      isErrorSchoolRadiusListings,
+      schoolRadiusPanelLoading,
+    },
     filters: { filters, filtersContent, searchQuery },
     navigation: {
       areasNavigationJourney,
@@ -786,7 +814,7 @@ export function buildPanelSurfaceCommands(
     navigation: { setHoveredNavigationNodeKey, setFocusedClusterMemberAreaKeys },
     journeySwitch: { handleSelectJourney, selectGroupMemberArea },
     geography: { refetchRegionScopedGroups },
-    mapData: { refetchAreaListings, refetchAnonViewport },
+    mapData: { refetchAreaListings, refetchAnonViewport, refetchSchoolRadiusListings },
     agri: { refetchRegionalAreaGroups, refetchAgriGroupListings },
     results: { refetchGroupResults },
     school: { handleAreaFirstBack, journeyCommands },
@@ -818,6 +846,7 @@ export function buildPanelSurfaceCommands(
       selectGroupMemberArea,
       refetchAreaListings,
       refetchAnonViewport,
+      refetchSchoolRadiusListings,
       handleRedrawPolygon,
     },
     results: { refetchGroupResults, setPage, handleBoundedSearch },

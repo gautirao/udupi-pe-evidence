@@ -595,6 +595,9 @@ export function flatPropsToRightPanel(flat: FlatRightPanelTestFixture): {
     isListingsError: flat.isListingsError ?? false,
     isErrorAuthViewport: flat.isErrorAuthViewport,
     isErrorPolygonListings: flat.isErrorPolygonListings,
+    // Issue #1793 SR-024 — the anon viewport's OWN error/retry (mirrors rightPanelContract.ts).
+    isErrorAnonViewport: flat.isErrorAnonViewport,
+    onRetryAnonViewport: flat.onRetryAnonViewport,
     onRetryListings: flat.onRetryListings,
     onRetryAuthViewport: flat.onRetryAuthViewport,
     // Issue #2657 C8 M8 — deliberately `onRetryPolygonListings`, not

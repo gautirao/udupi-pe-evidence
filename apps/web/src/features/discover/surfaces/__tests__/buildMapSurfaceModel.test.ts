@@ -5,6 +5,8 @@ import {
   type BuildMapSurfaceViewParams,
   type BuildMapSurfaceCommandsParams,
 } from '../buildMapSurfaceModel';
+import { deriveMapInfoDockContent } from '../mapInfoDockContent';
+import { isDrillDownCountBadgeVisible } from '@/components/discover/discoverMapCountBadgeVisibility';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 
@@ -56,6 +58,12 @@ function toMapParams<T extends Record<string, unknown>>(f: T) {
       markersReturnedElements: g.markersReturnedElements,
       markersTotalFilteredElements: g.markersTotalFilteredElements,
       isLoading: g.isLoading,
+      // #1793 A3 — the /api/discover/areas error signal + its refetch.
+      isErrorDiscoverAreas: g.isErrorDiscoverAreas,
+      refetchDiscoverAreas: g.refetchDiscoverAreas,
+      // #1793 R1 — the anon school-radius request-state signals the count badge must honour.
+      isErrorSchoolRadiusListings: g.isErrorSchoolRadiusListings,
+      schoolRadiusPanelLoading: g.schoolRadiusPanelLoading,
       publishCameraIntent: g.publishCameraIntent,
       publishClusterCameraIntent: g.publishClusterCameraIntent,
       publishMarkerClusterCameraIntent: g.publishMarkerClusterCameraIntent,
@@ -303,6 +311,99 @@ describe('buildMapSurfaceModel', () => {
     expect(view.status.cityTotal).toBe(42);
   });
 
+  it('#1793 A3: view.areas.isErrorDiscoverAreas mirrors the controller\'s /api/discover/areas error signal', () => {
+    expect(buildMapSurfaceModel(makeViewParams({ isErrorDiscoverAreas: true })).areas.isErrorDiscoverAreas).toBe(true);
+    expect(buildMapSurfaceModel(makeViewParams({ isErrorDiscoverAreas: false })).areas.isErrorDiscoverAreas).toBe(false);
+  });
+
+  describe('#1793 R1 — the map count pill never shows a zero count while the school-radius result is failed or loading', () => {
+    // The controller's own settled-zero result: this is what the pill would render as "Showing 0 homes".
+    const ZERO_BADGE = {
+      visible: true,
+      count: 0,
+      loading: false,
+      n: 0,
+      m: 0,
+      hasActiveFilters: false,
+      hasPropertyFilters: false,
+      state: 'zero-empty',
+    };
+    const pillVisible = (view: ReturnType<typeof buildMapSurfaceModel>) =>
+      isDrillDownCountBadgeVisible({
+        discoverBadge: view.status.discoverBadge,
+        resolvedPanelContent: 'school-selected',
+        isAreaFirstCityLanding: false,
+        journey: 'school-first',
+      });
+    const base = {
+      schoolRadiusActive: true,
+      isAuthenticated: false,
+      discoverBadge: ZERO_BADGE,
+      announcedBadgeText: '0 properties within 3 km',
+      schoolController: { ...makeSchoolController(), schoolListings: [] },
+    };
+
+    it('anon + request error with no listings: the pill is hidden and the a11y mirror is silent', () => {
+      const view = buildMapSurfaceModel(makeViewParams({ ...base, isErrorSchoolRadiusListings: true }));
+      expect(pillVisible(view)).toBe(false);
+      expect(view.status.discoverBadge.count).toBeNull();
+      expect(view.status.announcedBadgeText).toBe('');
+    });
+
+    it('anon + loading (pending or retrying): the pill is hidden', () => {
+      const view = buildMapSurfaceModel(makeViewParams({ ...base, schoolRadiusPanelLoading: true }));
+      expect(pillVisible(view)).toBe(false);
+      expect(view.status.announcedBadgeText).toBe('');
+    });
+
+    it('control: a genuine zero (neither failed nor loading) keeps the zero count pill', () => {
+      const view = buildMapSurfaceModel(makeViewParams({ ...base, isErrorSchoolRadiusListings: false, schoolRadiusPanelLoading: false }));
+      expect(pillVisible(view)).toBe(true);
+      expect(view.status.discoverBadge.count).toBe(0);
+    });
+
+    it('signed-in control (unchanged): the same signals leave the badge untouched', () => {
+      const view = buildMapSurfaceModel(makeViewParams({ ...base, isAuthenticated: true, isErrorSchoolRadiusListings: true, schoolRadiusPanelLoading: true }));
+      expect(view.status.discoverBadge).toBe(ZERO_BADGE);
+      expect(view.status.announcedBadgeText).toBe('0 properties within 3 km');
+    });
+  });
+
+  describe('#1793 R1 — the school-first map info dock honours the same pending state (through the real builder)', () => {
+    const selectedSchool = { id: 'sch-1', name: 'Delhi Public School' };
+    const dockBase = {
+      navJourney: 'school-first',
+      schoolRadiusActive: true,
+      isAuthenticated: false,
+      selectedSchool,
+      schoolController: { ...makeSchoolController(), schoolListings: [] },
+    };
+    const dockCount = (overrides: Record<string, unknown>) =>
+      deriveMapInfoDockContent(buildMapSurfaceModel(makeViewParams({ ...dockBase, ...overrides })))?.countText;
+
+    it('anon + request error with no listings: status flag set and the dock count is omitted', () => {
+      const view = buildMapSurfaceModel(makeViewParams({ ...dockBase, isErrorSchoolRadiusListings: true }));
+      expect(view.status.isSchoolRadiusCountPending).toBe(true);
+      expect(deriveMapInfoDockContent(view)?.countText).toBeNull();
+    });
+
+    it('anon + loading: the dock count is omitted', () => {
+      expect(dockCount({ schoolRadiusPanelLoading: true })).toBeNull();
+    });
+
+    it('control: a settled genuine zero keeps "Showing 0 verified properties near …"', () => {
+      expect(dockCount({ isErrorSchoolRadiusListings: false, schoolRadiusPanelLoading: false })).toBe(
+        'Showing 0 verified properties near Delhi Public School',
+      );
+    });
+
+    it('signed-in control (unchanged): the same signals do not hide the dock count', () => {
+      expect(dockCount({ isAuthenticated: true, isErrorSchoolRadiusListings: true, schoolRadiusPanelLoading: true })).toBe(
+        'Showing 0 verified properties near Delhi Public School',
+      );
+    });
+  });
+
   it('mobileCluster.visible mirrors mobileMapOpen and derives eligibilityJourney from navJourney', () => {
     const view = buildMapSurfaceModel(
       makeViewParams({ mobileMapOpen: true, navJourney: 'school-first' }),
@@ -527,6 +628,16 @@ describe('buildMapSurfaceCommands', () => {
       ...overrides,
     });
   }
+
+  // #1793 SR-024 (AC A3) — the production seam: the useDiscoverAreas error signal and its REAL
+  // refetch must reach DiscoverMapCanvas through the view/commands contract (by reference, so Retry
+  // is the actual query refetch, never a wrapper or a no-op).
+  it('#1793 A3: commands.areas.refetchDiscoverAreas is the controller\'s own refetch (same reference)', () => {
+    const refetchDiscoverAreas = vi.fn();
+    const params = makeCommandsParams({ refetchDiscoverAreas }) as never as Record<string, unknown>;
+    const commands = buildMapSurfaceCommands(params as never as Parameters<typeof buildMapSurfaceCommands>[0]);
+    expect(commands.areas?.refetchDiscoverAreas).toBe(refetchDiscoverAreas);
+  });
 
   it('groups commands into their sections verbatim (same function references)', () => {
     const params = makeCommandsParams() as never as Record<string, Record<string, unknown>>;

@@ -56,6 +56,16 @@ export interface SchoolListingsCommands {
   hover?: PropertyCardProps['onHover'];
 }
 
+/**
+ * Listing commands for the two school-RADIUS result panels (SchoolSelectedPanel /
+ * AreaSchoolCombinedPanel): card selection/hover plus Retry for the radius request-failure block
+ * (Issue #1793 SR-024). Kept off `SchoolListingsCommands` because the other panels sharing that
+ * type have no radius-listings query to retry.
+ */
+export interface SchoolRadiusListingsCommands extends SchoolListingsCommands {
+  retry?: () => void;
+}
+
 /** Current committed property-filters value, read by the "clear filters" empty-state action. */
 export interface SchoolPropertyFiltersView {
   value?: PropertyFilters;

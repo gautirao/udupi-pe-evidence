@@ -65,6 +65,22 @@ describe('toAreaLeafScopeSource — flat committed-scope signals -> one discrimi
     });
   });
 
+  it('anon viewport also carries its OWN error/retry (#1793 SR-024 (approved AC A2)); the auth viewport never does', () => {
+    const refetchAnon = vi.fn();
+    const withAnonError = { ...ALL, isErrorAnonViewport: true, refetchAnonViewport: refetchAnon };
+    expect(toAreaLeafScopeSource({ ...withAnonError, isAnonViewport: true })).toEqual({
+      kind: 'viewport',
+      audience: 'anon',
+      listings: anon,
+      loading: true,
+      error: true,
+      retry: refetchAnon,
+    });
+    const authScope = toAreaLeafScopeSource({ ...withAnonError, isAuthViewport: true });
+    expect(authScope).toMatchObject({ kind: 'viewport', audience: 'auth' });
+    expect(authScope).not.toHaveProperty('error', true);
+  });
+
   it('auth viewport carries ONLY the auth listings/loading', () => {
     expect(toAreaLeafScopeSource({ ...ALL, isAuthViewport: true })).toEqual({
       kind: 'viewport',
@@ -139,13 +155,44 @@ describe('resolveAreaLeafResultSource — pinned quirks', () => {
     expect(r.isViewportScope).toBe(true);
   });
 
-  it('T1 — viewport with NO matched base: error/retry from the own fallback query', () => {
+  it('T1 — auth viewport with NO matched base: error/retry from the own fallback query (unchanged, signed-in behaviour)', () => {
     const r = resolveAreaLeafResultSource(
-      { kind: 'viewport', audience: 'anon' },
+      { kind: 'viewport', audience: 'auth' },
       inputs({ hasMapAreaListings: false, ownQuery: { ...inputs().ownQuery, isError: true } }),
     );
     expect(r.error).toBe(true);
     expect(r.retry).toBe(ownRefetch);
+  });
+
+  // #1793 SR-024 (approved AC A2) — the T1 quirk "viewport error/retry come from the AREA base /
+  // own fallback query" was pinned for BOTH audiences. For the ANON viewport it meant a failed
+  // "Search this area" request was invisible (the AREA query is disabled and cannot error), so the
+  // failure rendered as a zero-result state. The anon viewport now reports ITS OWN query's
+  // error/retry; the auth audience keeps the original T1 behaviour (see the test above).
+  it('T1 amended — anon viewport: error/retry come from the VIEWPORT query itself, not the AREA base (#1793 SR-024 (approved AC A2))', () => {
+    const viewportRetry = vi.fn();
+    const r = resolveAreaLeafResultSource(
+      { kind: 'viewport', audience: 'anon' },
+      inputs({
+        areaBase: { listings: [], loading: false, fetching: false, error: false, retry: mapRetry },
+        substituted: { listings: [], loading: false, error: true, retry: viewportRetry },
+      }),
+    );
+    expect(r.error).toBe(true);
+    expect(r.retry).toBe(viewportRetry);
+    expect(r.retry).not.toBe(mapRetry);
+    expect(r.origin).toBe('viewport');
+  });
+
+  it('T1 amended — anon viewport: an AREA-base error never masquerades as a viewport error (#1793 SR-024 (approved AC A2))', () => {
+    const r = resolveAreaLeafResultSource(
+      { kind: 'viewport', audience: 'anon' },
+      inputs({
+        areaBase: { listings: [], loading: false, fetching: false, error: true, retry: mapRetry },
+        substituted: { listings: [], loading: false, error: false, retry: vi.fn() },
+      }),
+    );
+    expect(r.error).toBe(false);
   });
 
   it('T5 — fetching never branches on scope: the matched base\'s fetching applies under viewport AND polygon', () => {

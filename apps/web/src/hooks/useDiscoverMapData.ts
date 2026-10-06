@@ -387,6 +387,35 @@ export interface UseDiscoverMapDataResult {
   schoolRadiusListingsLoading: boolean;
   /** True when the school-radius endpoint reports more listings beyond this page. */
   schoolRadiusHasMore: boolean;
+  /**
+   * Issue #1793 SR-024 — true when the school-radius request FAILED (5xx / network), so a
+   * consumer can render a request-failure state instead of "No homes found within N km". Gated
+   * on the query being enabled AND on it being the panel's card source (anonymous callers):
+   * for an authenticated caller the panel's cards come from the auth listings and this query is
+   * only the marker fallback, so its failure is not a panel-level error.
+   */
+  isErrorSchoolRadiusListings: boolean;
+  /** Issue #1793 — refetches the SAME school-radius query `isErrorSchoolRadiusListings` mirrors. */
+  refetchSchoolRadiusListings: () => void;
+  /**
+   * Issue #1793 SR-024 (PR-A review A1) — true while the school-radius request that is the PANEL's
+   * card source (anonymous callers) has no data yet: the first load, every automatic retry of a
+   * failing request, and a user Retry of a data-less failure (a data-less query returns to pending).
+   * `listingDataLoading` is `isAuthenticated && …` (always false for anon) and feeds the global
+   * spinner, so it cannot express this; without this signal the school panels render "No homes
+   * within N km" for that whole window. Gated exactly like `isErrorSchoolRadiusListings`
+   * (enabled && anonymous); `schoolRadiusListingsLoading` keeps its older, un-gated meaning.
+   */
+  schoolRadiusPanelLoading: boolean;
+  /**
+   * Issue #1793 SR-024 — true when the blended /api/discover/areas request FAILED and there is no
+   * data to fall back on (a failed background refresh over data already on screen is NOT an error
+   * here). `cityTotal` is derived from this query and reads 0 on failure, so without this signal
+   * a failed request is indistinguishable from a genuinely empty city ("No properties listed").
+   */
+  isErrorDiscoverAreas: boolean;
+  /** Issue #1793 — refetches the SAME /api/discover/areas query `isErrorDiscoverAreas` mirrors. */
+  refetchDiscoverAreas: () => void;
   areaMarkerListings: (PropertyListing & { images?: PropertyImage[] })[];
   /**
    * Issue #2015 — true only for an anonymous caller with a COMMITTED VIEWPORT
@@ -681,11 +710,22 @@ export function useDiscoverMapData({
   // MapDiscovery.tsx) becomes intent-aware against the backend's new
   // AreaSummaryService purpose filter, instead of always reporting the
   // blended (Buy+Rent) total regardless of the active Buy/Rent toggle.
-  const { data: discoverAreasData, isLoading: areasLoading } = useDiscoverAreas(
+  const {
+    data: discoverAreasData,
+    isLoading: areasLoading,
+    isError: discoverAreasQueryError,
+    refetch: refetchDiscoverAreasQuery,
+  } = useDiscoverAreas(
     isCityValid ? city : '',
     undefined,
     listingPurpose,
   );
+  // Issue #1793 SR-024 — see `isErrorDiscoverAreas` on the result interface. Only an error with no
+  // data to show counts: a failed background refresh keeps the last-good areas (and cityTotal).
+  const isErrorDiscoverAreas = discoverAreasQueryError && discoverAreasData == null;
+  const refetchDiscoverAreas = useCallback(() => {
+    void refetchDiscoverAreasQuery();
+  }, [refetchDiscoverAreasQuery]);
 
   // Issue #1371 — agri-scoped area summary. Only enabled in agri-first journey.
   // Uses a SEPARATE cache key (['discover-areas', city, 'agricultural_land']) so React Query
@@ -786,7 +826,7 @@ export function useDiscoverMapData({
     // primary data source (AreaLeafListingsSurface, via the panel-surface
     // pipeline) can offer a working Retry on `isErrorAreaListings` instead of
     // a dead button — this IS the query that produced the error.
-    refetch: refetchAreaListings,
+    refetch: refetchAreaListingsQuery,
     // Issue #2353 (code-review fix) — this query uses
     // `placeholderData: keepPreviousData` (see useDiscoverCityListings.ts), so
     // on a query-key change (filter/search rekey) it deliberately keeps
@@ -818,6 +858,13 @@ export function useDiscoverMapData({
     isAuthenticated,
   });
 
+  // Issue #1793 (PR-A review) — wrapped like the sibling refetches: a click handler hands its
+  // MouseEvent to whatever it is bound to, and the raw react-query `refetch` would take that event
+  // as its options argument.
+  const refetchAreaListings = useCallback(() => {
+    void refetchAreaListingsQuery();
+  }, [refetchAreaListingsQuery]);
+
   // Issue #1261 — cross-area school-radius listings (PUBLIC endpoint).
   // Enabled for anon users always (their only listing source in radius mode), and for
   // authenticated users when markersEnabled is false (CTA not yet triggered) so the
@@ -832,6 +879,8 @@ export function useDiscoverMapData({
   const {
     data: schoolRadiusData,
     isLoading: schoolRadiusQueryLoading,
+    isError: schoolRadiusQueryError,
+    refetch: refetchSchoolRadiusQuery,
   } = useSchoolRadiusListings({
     city,
     schoolLat: filters.schoolLat,
@@ -944,6 +993,15 @@ export function useDiscoverMapData({
   );
   const schoolRadiusListingsLoading = schoolRadiusEnabled && schoolRadiusQueryLoading;
   const schoolRadiusHasMore = schoolRadiusData?.hasMore ?? false;
+  // Issue #1793 SR-024 — gated on the query being enabled (a disabled query must never leak a
+  // stale error) and on it being the panel's card source (anon; see the interface doc).
+  const isErrorSchoolRadiusListings =
+    schoolRadiusEnabled && !isAuthenticated && schoolRadiusQueryError === true;
+  // Issue #1793 SR-024 (PR-A review A1) — see `schoolRadiusPanelLoading` on the result interface.
+  const schoolRadiusPanelLoading = schoolRadiusListingsLoading && !isAuthenticated;
+  const refetchSchoolRadiusListings = useCallback(() => {
+    void refetchSchoolRadiusQuery();
+  }, [refetchSchoolRadiusQuery]);
 
   const markerListings = useMemo((): (PropertyListing & { images?: PropertyImage[] })[] => {
     if (!filteredMarkersData?.markers) return [];
@@ -984,8 +1042,9 @@ export function useDiscoverMapData({
   const {
     data: anonViewportRawData,
     isLoading: anonViewportQueryLoading,
-    isError: isErrorAnonViewport,
-    refetch: refetchAnonViewport,
+    isError: anonViewportQueryError,
+    isPlaceholderData: anonViewportIsPlaceholder,
+    refetch: refetchAnonViewportQuery,
   } = useDiscoverCityListings({
     city,
     // areaKeys deliberately empty — this is the bbox-only mode (#2015); the backend
@@ -1028,19 +1087,36 @@ export function useDiscoverMapData({
   // render — not inside the memo callback — mirroring the existing during-render ref-write
   // convention already used in this codebase (see useZoomBand.ts's bandRef and
   // useDiscoverUrlState.ts's liveUrlParamsRef).
-  const anonViewportLastGoodRef = useRef<AnonViewportListingItem[]>([]);
+  // Issue #1793 SR-024 — gated on isAnonViewport: the query is disabled outside an anon VIEWPORT
+  // scope, and a disabled query must never leak a stale error into the panel.
+  const isErrorAnonViewport = isAnonViewport && anonViewportQueryError;
+  // Issue #1793 SR-024 (PR-A review A2) — the retained cards are keyed by the COMMITTED bbox and
+  // dropped on leaving the anon viewport, so a failure on viewport B can never surface viewport A's
+  // cards under B's retry banner. Only a failure on the SAME viewport still retains its own cards.
+  const anonViewportKey = anonViewportBbox != null ? anonViewportBbox.join(',') : null;
+  const anonViewportLastGoodRef = useRef<{ key: string; items: AnonViewportListingItem[] } | null>(null);
   const anonViewportListings = useMemo((): AnonViewportListingItem[] => {
     if (!isAnonViewport) return [];
     if (!anonViewportRawData) {
-      return isErrorAnonViewport ? anonViewportLastGoodRef.current : [];
+      const lastGood = anonViewportLastGoodRef.current;
+      return isErrorAnonViewport && lastGood != null && lastGood.key === anonViewportKey
+        ? lastGood.items
+        : [];
     }
     return anonViewportRawData.areas.flatMap((a) =>
       a.listings.map((l) => mapAnonViewportCard(l, a.areaKey)),
     );
-  }, [isAnonViewport, anonViewportRawData, isErrorAnonViewport]);
-  if (isAnonViewport && anonViewportRawData) {
-    anonViewportLastGoodRef.current = anonViewportListings;
+  }, [isAnonViewport, anonViewportRawData, isErrorAnonViewport, anonViewportKey]);
+  if (!isAnonViewport) {
+    anonViewportLastGoodRef.current = null;
+  } else if (anonViewportRawData && !anonViewportIsPlaceholder && anonViewportKey != null) {
+    // `placeholderData: keepPreviousData` serves the PREVIOUS viewport's response while this one is
+    // in flight; that is not this viewport's own result, so it must never be recorded as its last good.
+    anonViewportLastGoodRef.current = { key: anonViewportKey, items: anonViewportListings };
   }
+  const refetchAnonViewport = useCallback(() => {
+    void refetchAnonViewportQuery();
+  }, [refetchAnonViewportQuery]);
   const anonViewportListingsLoading = isAnonViewport && anonViewportQueryLoading;
 
   const anonViewportMarkerListings = useMemo((): (PropertyListing & { images?: PropertyImage[] })[] => {
@@ -1286,6 +1362,11 @@ export function useDiscoverMapData({
     schoolRadiusListings,
     schoolRadiusListingsLoading,
     schoolRadiusHasMore,
+    isErrorSchoolRadiusListings,
+    refetchSchoolRadiusListings,
+    schoolRadiusPanelLoading,
+    isErrorDiscoverAreas,
+    refetchDiscoverAreas,
     areaMarkerListings,
     isAnonViewport,
     anonViewportListings,

@@ -16,14 +16,17 @@
  * renders between the radius chips and the result heading.
  */
 import { useNavigate } from 'react-router-dom';
+import { AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
 import { PropertyCard } from '../../../PropertyCard';
 import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { ListingWithDistance } from './sortListingsBySchoolDistance';
 import { RadiusChips } from './RadiusChips';
+import { isSchoolRadiusCountPending } from './isSchoolRadiusCountPending';
 import { RadiusResultHeading } from './RadiusResultHeading';
 import { SchoolRadiusEmptyState } from './SchoolRadiusEmptyState';
 import { MissingCoordsEmptyState } from './MissingCoordsEmptyState';
@@ -44,6 +47,14 @@ export interface SchoolRadiusListingsProps {
   listings: DiscoverCityListingItem[];
   sortedListingsWithDistance: ListingWithDistance[];
   isLoadingListings: boolean;
+  /**
+   * Issue #1793 SR-024 — the school-radius request failed. With no listings to fall back on this
+   * renders the request-failure block + Retry INSTEAD of SchoolRadiusEmptyState; results retained
+   * alongside an error keep rendering their cards.
+   */
+  isError?: boolean;
+  /** Issue #1793 — Retry target for the request-failure block (the real query refetch). */
+  onRetry?: () => void;
   isFetching: boolean;
   hasMissingCoords: boolean;
   hasPropertyFilters: boolean;
@@ -76,6 +87,8 @@ export function SchoolRadiusListings({
   listings,
   sortedListingsWithDistance,
   isLoadingListings,
+  isError = false,
+  onRetry,
   isFetching,
   hasMissingCoords,
   hasPropertyFilters,
@@ -109,6 +122,12 @@ export function SchoolRadiusListings({
           onRadiusChange={onRadiusChange}
           testIdPrefix={radiusTestIdPrefix}
           compact={density === 'compact'}
+          countPending={isSchoolRadiusCountPending({
+            isAuthenticated,
+            isLoading: isLoadingListings,
+            isError,
+            listingCount: listings.length,
+          })}
         />
       )}
 
@@ -153,6 +172,26 @@ export function SchoolRadiusListings({
             areaLabel={areaLabel}
             onClearSchool={onClearSchool}
           />
+        ) : isError && listings.length === 0 ? (
+          // Issue #1793 SR-024 — "error is not empty". A settled request failure with nothing to
+          // fall back on gets the explicit request-failure state, NEVER the "no homes within N km"
+          // empty state below. Markup/copy mirrors ListingsBody's area-listings-error block
+          // (features/discover/area-selected/sections/ListingsBody.tsx), with school-radius testids.
+          <div
+            className="m-4 flex flex-col items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-12 text-center"
+            data-testid="school-radius-listings-error"
+          >
+            <AlertCircle className="h-8 w-8 text-destructive" aria-hidden="true" />
+            <h2 className="text-base font-semibold text-foreground">We could not load these results</h2>
+            <p className="max-w-sm text-sm text-muted-foreground">
+              This is a request failure, not an empty market. Your scope and filters are unchanged.
+            </p>
+            {onRetry && (
+              <Button variant="outline" size="sm" onClick={onRetry} data-testid="school-radius-listings-error-retry">
+                Retry
+              </Button>
+            )}
+          </div>
         ) : listings.length === 0 ? (
           <SchoolRadiusEmptyState
             school={school!}

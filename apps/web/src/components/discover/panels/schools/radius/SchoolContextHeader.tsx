@@ -27,6 +27,11 @@ export interface SchoolContextHeaderProps {
   onChangeSchool: () => void;
   /** "radius-btn" for SchoolSelectedPanel, "combined-radius-btn" for AreaSchoolCombinedPanel. */
   radiusTestIdPrefix: string;
+  /**
+   * Issue #1793 SR-024 (R1) — the school-radius result is loading or failed, so `listingCount` is
+   * not a real count: omit the "N homes within X km" stat instead of rendering "0".
+   */
+  countPending?: boolean;
 }
 
 export function SchoolContextHeader({
@@ -37,6 +42,7 @@ export function SchoolContextHeader({
   onRadiusChange,
   onChangeSchool,
   radiusTestIdPrefix,
+  countPending = false,
 }: SchoolContextHeaderProps) {
   const boardDisplay = school.board ?? school.boardType ?? null;
   const noun = intent === 'rent' ? 'rental' : 'home';
@@ -100,12 +106,14 @@ export function SchoolContextHeader({
               );
             })}
           </div>
-          <p
-            className="min-w-0 truncate text-right font-mono text-sm font-semibold tabular-nums text-slate-200"
-            data-testid="school-summary-count"
-          >
-            {listingCount} {listingCount === 1 ? noun : `${noun}s`} within {effectiveRadius} km
-          </p>
+          {!countPending && (
+            <p
+              className="min-w-0 truncate text-right font-mono text-sm font-semibold tabular-nums text-slate-200"
+              data-testid="school-summary-count"
+            >
+              {listingCount} {listingCount === 1 ? noun : `${noun}s`} within {effectiveRadius} km
+            </p>
+          )}
         </div>
       </div>
     </div>

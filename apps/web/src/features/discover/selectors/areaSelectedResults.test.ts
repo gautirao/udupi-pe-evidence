@@ -22,6 +22,8 @@ function baseInput(
     isListingsError: false,
     isErrorAuthViewport: false,
     isErrorPolygonListings: false,
+    isErrorAnonViewport: undefined,
+    onRetryAnonViewport: undefined,
     onRetryListings: 'retry-area',
     onRetryAuthViewport: 'retry-auth',
     onRetryPolygonListings: 'retry-polygon',
@@ -79,13 +81,39 @@ describe('resolveAreaSelectedResults (#2657 C1)', () => {
     });
   });
 
-  it('anon viewport scope: substitutes listings, suppresses summary text, isError always false, retry undefined', () => {
+  // #1793 SR-024 (approved AC A2) — this T1 characterization previously pinned "isError always
+  // false, retry undefined" for the anon viewport. That hard-coding is exactly the SR-024 defect
+  // (a viewport request failure rendered as a zero-result state), so it is replaced deliberately:
+  // the anon viewport now reports ITS OWN query's error/retry. An absent signal still reads as
+  // "no error / no retry", and no OTHER scope's error (auth viewport / area) can leak in.
+  it('anon viewport scope: substitutes listings, suppresses summary text; with no anon error signal isError stays false and retry undefined (#1793 SR-024 (approved AC A2))', () => {
     const view = resolveAreaSelectedResults(baseInput({ isAnonViewport: true, isErrorAuthViewport: true }));
     expect(view.listings).toEqual([{ id: 'anon' }]);
     expect(view.summaryText).toBeUndefined();
     expect(view.isError).toBe(false);
     expect(view.retry).toBeUndefined();
     expect(view.isViewportScope).toBe(true);
+  });
+
+  it('anon viewport scope: its OWN error and retry are surfaced, never the area/auth ones (#1793 SR-024 (approved AC A2))', () => {
+    const view = resolveAreaSelectedResults(
+      baseInput({
+        isAnonViewport: true,
+        isListingsError: false,
+        isErrorAnonViewport: true,
+        onRetryAnonViewport: 'retry-anon',
+      }),
+    );
+    expect(view.isError).toBe(true);
+    expect(view.retry).toBe('retry-anon');
+    expect(view.listings).toEqual([{ id: 'anon' }]);
+  });
+
+  it('anon viewport scope: an AREA error does not masquerade as the viewport error (#1793 SR-024 (approved AC A2))', () => {
+    const view = resolveAreaSelectedResults(
+      baseInput({ isAnonViewport: true, isListingsError: true, isErrorAnonViewport: false }),
+    );
+    expect(view.isError).toBe(false);
   });
 
   it('auth viewport scope: substitutes listings, uses isErrorAuthViewport and its retry', () => {

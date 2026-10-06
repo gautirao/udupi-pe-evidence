@@ -1,5 +1,6 @@
 import type { ReactNode, RefObject, MutableRefObject, Dispatch, SetStateAction } from 'react';
 import { AREA_LAYER_MAX_ZOOM } from '@/lib/map/zoomPolicy';
+import { isSchoolRadiusCountPending } from '@/components/discover/panels/schools/radius/isSchoolRadiusCountPending';
 import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
 import type { RegionOverviewMarkerKind } from '@/components/map/RegionGuidanceCard';
 import type { PropertyFilters, PropertyListing, PropertyImage } from '@/hooks/usePropertyListings';
@@ -122,6 +123,17 @@ type MapAreasView = {
   isRegionOverview: boolean;
   regionOverviewShortLabel: string | null;
   areaRestoreArea: DiscoverArea | null;
+  /**
+   * Issue #1793 SR-024 — the blended /api/discover/areas request FAILED (no data to fall back
+   * on). Lets MapEmptyGuidance tell a failed request from a genuinely empty city instead of
+   * reading `cityTotal === 0` as "No properties listed". Optional (additive); the builder always
+   * sets it from `useDiscoverMapData`.
+   */
+  isErrorDiscoverAreas?: boolean;
+};
+/** Issue #1793 SR-024 — Retry for the areas-request-failure state (the real query refetch). */
+type MapAreasCommands = {
+  refetchDiscoverAreas: () => void;
 };
 
 /** D2 — split out of the old (21-field) `layers` group. */
@@ -297,6 +309,8 @@ type MapStatusView = {
   isAuthenticated: boolean;
   hasActiveAnonFilter: boolean;
   announcedBadgeText: string;
+  /** Issue #1793 SR-024 (PR-A R1) — anon school-radius result is loading / failed-with-nothing: counts are unknown, not zero. */
+  isSchoolRadiusCountPending: boolean;
   /** Issue #2628 — the applied Buy/Rent intent (Map results heading/summary + MapFilterSheet). */
   intent?: DiscoverIntent;
 };
@@ -376,6 +390,8 @@ export interface DiscoverMapSurfaceCommands {
   overlays: DiscoverMapOverlaysCommands;
   /** Issue #2628 — the mobile Map "Filters" staged sheet's one canonical write command. */
   filters: MapFiltersCommands;
+  /** Issue #1793 SR-024 — optional (additive); the builder always sets it. */
+  areas?: MapAreasCommands;
 }
 
 /**
@@ -515,7 +531,16 @@ export type BuildMapSurfaceViewParams = MapSurfaceLeftoverParams & {
     | 'markersReturnedElements'
     | 'markersTotalFilteredElements'
     | 'isLoading'
-  >;
+    // Issue #1793 SR-024 — /api/discover/areas request failure (see MapAreasView).
+    | 'isErrorDiscoverAreas'
+  > &
+    // Issue #1793 SR-024 (PR-A R1) — the anon school-radius request-state signals, read ONLY to
+    // keep the count pill from claiming "0 homes" while that request is failed or loading. Optional
+    // so existing fixtures stay valid; the production setter is `useDiscoverMapDataController`
+    // itself (the composition root passes the whole controller object).
+    Partial<
+      Pick<ReturnType<typeof useDiscoverMapDataController>, 'isErrorSchoolRadiusListings' | 'schoolRadiusPanelLoading'>
+    >;
   areaGroupsController: Pick<
     ReturnType<typeof useDiscoverAreaGroupsController>,
     | 'focusedGroupAreas'
@@ -649,7 +674,7 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
       cancelDrawNonce,
       undoVertexNonce,
     },
-    mapDataController: { error, activeFocusBounds, cityCenter, cityZoom, cameraIntent, pendingRemountCameraIntentSeqRef, areaMarkerListings, schoolRadiusHasMore, markersTruncated, markersReturnedElements, markersTotalFilteredElements, isLoading },
+    mapDataController: { error, activeFocusBounds, cityCenter, cityZoom, cameraIntent, pendingRemountCameraIntentSeqRef, areaMarkerListings, schoolRadiusHasMore, markersTruncated, markersReturnedElements, markersTotalFilteredElements, isLoading, isErrorDiscoverAreas, isErrorSchoolRadiusListings, schoolRadiusPanelLoading },
     areaGroupsController: { focusedGroupAreas, focusedGroup },
     badgeController: { announcedBadgeText, discoverBadge, areaResultSummaryText, groupSelectedBadgeCopy, fallbackBadgeCopy, schoolRadiusActive, schoolRadiusPillNoun, cityTotal, hasActiveAnonFilter },
     journeyChromeController: { isLandingState, showSchoolMarkers, showSchoolBreadcrumb, schoolRadiusOverlay, isSelectedGroupState, isAreaFirstSelectedAreaState },
@@ -714,6 +739,24 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
     activeAreasNavigationJourney.node.nodeType !== 'ROOT'
   );
 
+  // Issue #1793 SR-024 (PR-A R1) — "error is not empty" for the map count pill. While the anon
+  // school-radius request is loading (pending or retrying) or has failed with nothing retained,
+  // `schoolListings.length` is 0 only for lack of data, so the controller's badge would read
+  // "Showing 0 homes". Hand the pill the controller's own no-count loading shape instead: the
+  // drill-down predicate (`isDrillDownCountBadgeVisible`) hides it and the a11y mirror goes silent.
+  // A settled 200 with no listings is a genuine zero and signed-in viewers are untouched.
+  const schoolRadiusCountPending =
+    schoolRadiusActive &&
+    isSchoolRadiusCountPending({
+      isAuthenticated,
+      isLoading: !!schoolRadiusPanelLoading,
+      isError: !!isErrorSchoolRadiusListings,
+      listingCount: schoolListings.length,
+    });
+  const statusDiscoverBadge: typeof discoverBadge = schoolRadiusCountPending
+    ? { ...discoverBadge, visible: false, count: null, n: null, m: null, loading: true, state: 'loading' }
+    : discoverBadge;
+
   return {
     camera: {
       agriGroupFocusBounds,
@@ -740,6 +783,7 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
       isRegionOverview,
       regionOverviewShortLabel,
       areaRestoreArea,
+      isErrorDiscoverAreas,
     },
     agri: {
       selectedRegion,
@@ -809,7 +853,7 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
       showLoader,
       error,
       isLoading,
-      discoverBadge,
+      discoverBadge: statusDiscoverBadge,
       areaResultSummaryText,
       groupSelectedBadgeCopy,
       fallbackBadgeCopy,
@@ -817,7 +861,8 @@ export function buildMapSurfaceModel(params: BuildMapSurfaceViewParams): Discove
       isAreaRecenterButtonVisible,
       isAuthenticated,
       hasActiveAnonFilter,
-      announcedBadgeText,
+      announcedBadgeText: schoolRadiusCountPending ? '' : announcedBadgeText,
+      isSchoolRadiusCountPending: schoolRadiusCountPending,
       /** Issue #2628 — the applied Buy/Rent intent (Map results heading/summary + MapFilterSheet). */
       intent,
     },
@@ -913,6 +958,8 @@ export type BuildMapSurfaceCommandsParams = {
     | 'publishCameraIntent'
     | 'publishClusterCameraIntent'
     | 'publishMarkerClusterCameraIntent'
+    // Issue #1793 SR-024 — Retry target for the areas-request-failure state.
+    | 'refetchDiscoverAreas'
   >;
   geographyController: Pick<
     ReturnType<typeof useDiscoverGeographyController>,
@@ -1006,7 +1053,7 @@ export function buildMapSurfaceCommands(
       setMapReady,
       handleCityChange,
     },
-    mapDataController: { publishCameraIntent, publishClusterCameraIntent, publishMarkerClusterCameraIntent },
+    mapDataController: { publishCameraIntent, publishClusterCameraIntent, publishMarkerClusterCameraIntent, refetchDiscoverAreas },
     geographyController: { handleAreaMarkersComputed },
     markerPopoverController: { handleStepMarkerListing },
     onAreaVisualClusterCameraIntent,
@@ -1043,6 +1090,8 @@ export function buildMapSurfaceCommands(
     // Issue #2628 — the mobile Map "Filters" sheet's one canonical write command.
     // Issue #2711 — plus `onIntentChange`, its matching canonical intent command.
     filters: { onFiltersChange: handleFiltersChange, onIntentChange: handleIntentChange },
+    // Issue #1793 SR-024 — the REAL /api/discover/areas refetch (by reference), never a wrapper.
+    areas: { refetchDiscoverAreas },
     drawing: {
       handlePolygonDrawn,
       handlePolygonCleared,

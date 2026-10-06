@@ -125,6 +125,7 @@ export function DiscoverMapCanvas({ mapContainerRef, view, commands }: DiscoverM
     markers: __commands_markers,
     regionGuide: __commands_regionGuide,
     filters: __commands_filters,
+    areas: __commands_areas,
   } = commands;
 
   const {
@@ -154,7 +155,10 @@ export function DiscoverMapCanvas({ mapContainerRef, view, commands }: DiscoverM
     isRegionOverview,
     regionOverviewShortLabel,
     areaRestoreArea,
+    isErrorDiscoverAreas = false,
   } = __view_areas;
+  // Issue #1793 SR-024 — Retry target for MapEmptyGuidance's areas-request-failure state.
+  const refetchDiscoverAreas = __commands_areas?.refetchDiscoverAreas;
 
   const { selectedRegion, selectedMaxKm, filteredAgriListings, agriDestinationMarkers, isAgriJourney } = __view_agri;
 
@@ -272,6 +276,7 @@ export function DiscoverMapCanvas({ mapContainerRef, view, commands }: DiscoverM
     isAuthenticated,
     hasActiveAnonFilter,
     announcedBadgeText,
+    isSchoolRadiusCountPending,
     intent = 'buy',
   } = __view_status;
 
@@ -429,6 +434,7 @@ export function DiscoverMapCanvas({ mapContainerRef, view, commands }: DiscoverM
     mapResultsCount === 0 &&
     mapFiltersRefinementCount > 0 &&
     !isAgriJourney &&
+    !isSchoolRadiusCountPending &&
     !showLoader &&
     !isLoading;
 
@@ -1069,6 +1075,8 @@ export function DiscoverMapCanvas({ mapContainerRef, view, commands }: DiscoverM
           onIntentChange={onIntentChange}
           isCommercialSubtypeSupported
           appliedResultCount={mapResultsCount}
+          // Issue #1793 PR-A F1 — same pending/error signal as the heading + zero-results block.
+          appliedCountPending={isSchoolRadiusCountPending}
           // mf-09 — "Show 2 commercial properties"; the sheet's own generic 'homes' default
           // (step 2-3/8) did not yet distinguish family. `isAgriJourney` still wins (agri is
           // never in-scope for this sheet per the design doc's Handoff section, but the prop
@@ -1111,7 +1119,12 @@ export function DiscoverMapCanvas({ mapContainerRef, view, commands }: DiscoverM
               already hide that badge (see `hideDuplicateCountBadge`'s own doc above) because
               THIS heading is the sole place showing the count — suppressing it too there would
               leave no count visible anywhere, not just remove a duplicate. */}
-          {isAgriZeroResultsSuppressed ? null : isMapZeroResults ? (
+          {/* Issue #1793 SR-024 (PR-A M1) — `mapResultsCount` is the MARKERS count, which reads 0
+              for an anonymous school-radius viewer whose cards come from the school-radius request.
+              While that request is loading or failed-with-nothing the count is unknown, not zero, so
+              neither the heading count nor the "0 matching" block may render (same pending signal
+              the dock and badge already use). A settled genuine zero still shows 0. */}
+          {isAgriZeroResultsSuppressed || isSchoolRadiusCountPending ? null : isMapZeroResults ? (
             <div
               role="status"
               aria-live="polite"
@@ -1391,6 +1404,8 @@ export function DiscoverMapCanvas({ mapContainerRef, view, commands }: DiscoverM
         isAgriJourney={isAgriJourney}
         isMobileMapOverlay={isMobileMapOverlay}
         suppressAnonZoomPrompt={nav.journey === 'area-first'}
+        isAreasError={isErrorDiscoverAreas}
+        onRetryAreas={refetchDiscoverAreas}
       />
 
       {/* a3 — Marker popover mini card. Gated to listing-marker clicks via

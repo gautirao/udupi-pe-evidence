@@ -378,6 +378,9 @@ export interface DiscoverMapCanvasFlatProps {
   pendingRemountCameraIntentSeqRef: MutableRefObject<number | null>;
   focusedGroupAreas: string[] | undefined;
   areaLayerMaxZoom: number;
+  /** #1793 A3 — /api/discover/areas error signal + its real refetch (optional, like production). */
+  isErrorDiscoverAreas?: boolean;
+  refetchDiscoverAreas?: () => void;
   selectedArea: AreaPoint | null;
   areaSearchMatchKeys: string[] | undefined;
   hoveredAreaKeyForMap: string | null;
@@ -444,6 +447,8 @@ export interface DiscoverMapCanvasFlatProps {
   regionOverviewShortLabel: string | null;
   areaMarkerListings: (PropertyListing & { images?: PropertyImage[] })[];
   announcedBadgeText: string;
+  /** Issue #1793 PR-A M1 — optional; defaults to false (the builder's settled-result value). */
+  isSchoolRadiusCountPending?: boolean;
   discoverBadge: DiscoverBadgeResult;
   areaResultSummaryText: string | null;
   groupSelectedBadgeCopy: string;
@@ -506,6 +511,7 @@ function toCanvasProps(
         isRegionOverview: flat.isRegionOverview,
         regionOverviewShortLabel: flat.regionOverviewShortLabel,
         areaRestoreArea: flat.areaRestoreArea,
+        isErrorDiscoverAreas: flat.isErrorDiscoverAreas,
       },
       agri: {
         selectedRegion: flat.selectedRegion,
@@ -580,6 +586,7 @@ function toCanvasProps(
         isAuthenticated: flat.isAuthenticated,
         hasActiveAnonFilter: flat.hasActiveAnonFilter,
         announcedBadgeText: flat.announcedBadgeText,
+        isSchoolRadiusCountPending: flat.isSchoolRadiusCountPending ?? false,
         intent: flat.intent,
       },
       mobile: { mobileListButton: flat.mobileListButton },
@@ -659,6 +666,7 @@ function toCanvasProps(
         onFiltersChange: flat.onFiltersChange,
         onIntentChange: flat.onIntentChange,
       },
+      areas: flat.refetchDiscoverAreas ? { refetchDiscoverAreas: flat.refetchDiscoverAreas } : undefined,
     },
   };
 }
@@ -1047,6 +1055,36 @@ describe('DiscoverMapCanvas', () => {
     );
     expect(screen.queryByText(/Select an area to see properties/)).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /sign in/i })).not.toBeInTheDocument();
+  });
+
+  // Issue #1793 SR-024 (AC A3) — the REAL canvas must not turn a failed /api/discover/areas
+  // request (cityTotal 0) into "No properties listed in {city} yet". The signal and its refetch
+  // arrive through the same view/commands contract buildMapSurfaceModel/buildMapSurfaceCommands
+  // produce (see buildMapSurfaceModel.test.ts for that seam).
+  it('#1793 A3: areas request failure shows the error + Retry (the real refetch), never "No properties listed"', async () => {
+    const user = (await import('@testing-library/user-event')).default.setup();
+    const refetchDiscoverAreas = vi.fn();
+    renderCanvas(
+      <MemoryRouter>
+        <DiscoverMapCanvas
+          {...baseProps({ cityTotal: 0, isErrorDiscoverAreas: true, refetchDiscoverAreas })}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByText(/No properties listed in/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId('map-areas-error')).toBeInTheDocument();
+    await user.click(screen.getByTestId('map-areas-error-retry'));
+    expect(refetchDiscoverAreas).toHaveBeenCalledTimes(1);
+  });
+
+  it('#1793 A3 control: a genuinely empty city (no areas error) still shows "No properties listed"', () => {
+    renderCanvas(
+      <MemoryRouter>
+        <DiscoverMapCanvas {...baseProps({ cityTotal: 0, isErrorDiscoverAreas: false })} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(/No properties listed in/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('map-areas-error')).not.toBeInTheDocument();
   });
 
   it('never renders the marker popover when isMarkerPopoverEligible is false, even with a pixel position', () => {
@@ -2005,5 +2043,134 @@ describe('Issue #2724 — Map zero-results panel requires a genuinely active fil
     );
 
     expect(screen.getByTestId('map-zero-results')).toBeInTheDocument();
+  });
+});
+
+// Issue #1793 SR-024 (PR-A M1) — the mobile Map results heading ("N homes for sale · Residential")
+// counts the markers query, which is empty for an anonymous school-radius viewer. While the anon
+// school-radius request is loading or failed-with-nothing, that 0 is "unknown", not a result.
+describe('Issue #1793 PR-A M1 — mobile Map heading never claims 0 while school-radius results are pending', () => {
+  const MOBILE_SCHOOL_RADIUS: Partial<DiscoverMapCanvasFlatProps> = {
+    mobileListButton: <button type="button">List</button>,
+    onFiltersChange: vi.fn(),
+    isLandingState: false,
+    resolvedPanelContent: 'school-selected',
+    schoolRadiusActive: true,
+    isAuthenticated: false,
+  };
+
+  it('A1 error, no listings: no count heading and no "0 matching" block', () => {
+    renderCanvas(
+      <DiscoverMapCanvas
+        {...baseProps({ ...MOBILE_SCHOOL_RADIUS, isSchoolRadiusCountPending: true, markersReturnedElements: undefined })}
+      />,
+    );
+
+    expect(screen.queryByTestId('map-results-heading-text')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('map-zero-results')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^0 (homes|commercial)/)).not.toBeInTheDocument();
+  });
+
+  it('A1 loading with an active filter: still no zero count (heading and zero-results block both absent)', () => {
+    renderCanvas(
+      <DiscoverMapCanvas
+        {...baseProps({
+          ...MOBILE_SCHOOL_RADIUS,
+          isSchoolRadiusCountPending: true,
+          markersReturnedElements: 0,
+          filters: { bedrooms: [2] },
+        })}
+      />,
+    );
+
+    expect(screen.queryByTestId('map-results-heading-text')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('map-zero-results')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^0 (homes|commercial)/)).not.toBeInTheDocument();
+  });
+
+  it('genuine zero (settled, nothing pending): the heading still states 0', () => {
+    renderCanvas(
+      <DiscoverMapCanvas
+        {...baseProps({ ...MOBILE_SCHOOL_RADIUS, isSchoolRadiusCountPending: false, markersReturnedElements: 0 })}
+      />,
+    );
+
+    expect(screen.getByTestId('map-results-heading-text')).toHaveTextContent(/^0 homes for sale · Residential/);
+  });
+
+  it('genuine zero with an active filter (settled): the "0 matching" block still renders', () => {
+    renderCanvas(
+      <DiscoverMapCanvas
+        {...baseProps({
+          ...MOBILE_SCHOOL_RADIUS,
+          isSchoolRadiusCountPending: false,
+          markersReturnedElements: 0,
+          filters: { bedrooms: [2] },
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId('map-zero-results')).toBeInTheDocument();
+  });
+
+  it('signed-in control: the heading states the map count unchanged', () => {
+    renderCanvas(
+      <DiscoverMapCanvas
+        {...baseProps({
+          ...MOBILE_SCHOOL_RADIUS,
+          isAuthenticated: true,
+          isSchoolRadiusCountPending: false,
+          markersReturnedElements: 4,
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId('map-results-heading-text')).toHaveTextContent(/^4 homes for sale · Residential/);
+  });
+
+  describe('F1 — Filters sheet status line', () => {
+    if (!Element.prototype.setPointerCapture) Element.prototype.setPointerCapture = () => {};
+    if (!Element.prototype.releasePointerCapture) Element.prototype.releasePointerCapture = () => {};
+    if (!Element.prototype.hasPointerCapture) Element.prototype.hasPointerCapture = () => false;
+
+    function openAndEditSheet() {
+      fireEvent.click(screen.getByTestId('map-filters-pill'));
+      fireEvent.click(screen.getByTestId('quick-chip-2-bhk'));
+      return screen.getByTestId('map-filter-sheet-status');
+    }
+
+    it('A1 pending, sheet open and edited: no zero / no digit in the status line', () => {
+      renderCanvas(
+        <DiscoverMapCanvas
+          {...baseProps({ ...MOBILE_SCHOOL_RADIUS, isSchoolRadiusCountPending: true, markersReturnedElements: 0 })}
+        />,
+      );
+      const status = openAndEditSheet();
+      expect(status.textContent).toMatch(/Not applied yet/);
+      expect(status.textContent).not.toMatch(/\d/);
+    });
+
+    it('settled genuine zero: the status line still says 0 homes', () => {
+      renderCanvas(
+        <DiscoverMapCanvas
+          {...baseProps({ ...MOBILE_SCHOOL_RADIUS, isSchoolRadiusCountPending: false, markersReturnedElements: 0 })}
+        />,
+      );
+      expect(openAndEditSheet()).toHaveTextContent('the map still shows 0 homes');
+    });
+
+    it('signed-in control: the status line states the map count unchanged', () => {
+      renderCanvas(
+        <DiscoverMapCanvas
+          {...baseProps({
+            ...MOBILE_SCHOOL_RADIUS,
+            isAuthenticated: true,
+            isSchoolRadiusCountPending: false,
+            markersReturnedElements: 4,
+          })}
+        />,
+      );
+      expect(openAndEditSheet()).toHaveTextContent('the map still shows 4 homes');
+    });
   });
 });

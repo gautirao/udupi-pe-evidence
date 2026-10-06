@@ -19,6 +19,8 @@ export interface RadiusChipsProps {
    * (the band above supplies the 24px gap). Chips keep >=44px touch targets.
    */
   compact?: boolean;
+  /** Issue #1793 SR-024 (R1) — result loading/failed: omit the active chip's count rather than show "0". */
+  countPending?: boolean;
 }
 
 export function RadiusChips({
@@ -28,6 +30,7 @@ export function RadiusChips({
   onRadiusChange,
   testIdPrefix = 'radius-btn',
   compact = false,
+  countPending = false,
 }: RadiusChipsProps) {
   const noun = intent === 'rent' ? 'rental' : 'home';
   return (
@@ -58,7 +61,7 @@ export function RadiusChips({
               )}
             >
               <span>{km} km</span>
-              {isActive && (
+              {isActive && !countPending && (
                 <span className="text-xs font-medium tabular-nums opacity-80">
                   {listingCount} {listingCount === 1 ? noun : `${noun}s`}
                 </span>

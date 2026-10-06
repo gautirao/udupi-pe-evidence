@@ -227,6 +227,8 @@ export function SchoolJourneyPanel({
             listings: {
               data: view.selected.listings ?? [],
               loading: view.selected.listingsLoading ?? false,
+              // Issue #1793 SR-024 — school-radius request failure (error block instead of empty state).
+              error: view.selected.listingsError ?? false,
               fetching: refresh.isFetching,
               selectedId: cards.selectedListingId,
             },
@@ -236,7 +238,11 @@ export function SchoolJourneyPanel({
           commands={{
             chrome: { startOver: onStartOver, back: onBack },
             radius: { change: commands.selected.changeRadius ?? (() => undefined) },
-            listings: { select: onSelectResultListing, hover: onHoverResultListing },
+            listings: {
+              select: onSelectResultListing,
+              hover: onHoverResultListing,
+              retry: commands.selected.retryListings,
+            },
             propertyFilters: { replace: commands.propertyFilters.replace },
             // G11 — stays undefined (never `{trigger: undefined}`) when absent.
             boundedSearch: commands.selected.boundedSearch
@@ -263,6 +269,8 @@ export function SchoolJourneyPanel({
             listings: {
               data: view.selected.listings ?? [],
               loading: view.selected.listingsLoading ?? false,
+              // Issue #1793 SR-024 — school-radius request failure (error block instead of empty state).
+              error: view.selected.listingsError ?? false,
               fetching: refresh.isFetching,
               selectedId: cards.selectedListingId,
             },
@@ -271,7 +279,11 @@ export function SchoolJourneyPanel({
           commands={{
             chrome: { startOver: onStartOver, back: onBack },
             radius: { change: commands.selected.changeRadius ?? (() => undefined) },
-            listings: { select: onSelectResultListing, hover: onHoverResultListing },
+            listings: {
+              select: onSelectResultListing,
+              hover: onHoverResultListing,
+              retry: commands.selected.retryListings,
+            },
             propertyFilters: { replace: commands.propertyFilters.replace },
             school: { clear: commands.selected.clearSchool ?? (() => undefined) },
           }}

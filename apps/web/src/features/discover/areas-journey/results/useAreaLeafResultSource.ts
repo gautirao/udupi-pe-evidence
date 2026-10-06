@@ -64,8 +64,10 @@ export function useAreaLeafResultSource(
   const viewportAudience = scopeSource.kind === 'viewport' ? scopeSource.audience : null;
   const substitutedListings = scopeSource.kind === 'area' ? undefined : scopeSource.listings;
   const substitutedLoading = scopeSource.kind === 'area' ? undefined : scopeSource.loading;
-  const substitutedError = scopeSource.kind === 'polygon' ? scopeSource.error : undefined;
-  const substitutedRetry = scopeSource.kind === 'polygon' ? scopeSource.retry : undefined;
+  // Issue #1793 SR-024 — POLYGON and the ANON viewport carry their own error/retry (the auth
+  // viewport never sets them, so it reads undefined and the resolver keeps its T1 behaviour).
+  const substitutedError = scopeSource.kind === 'area' ? undefined : scopeSource.error;
+  const substitutedRetry = scopeSource.kind === 'area' ? undefined : scopeSource.retry;
 
   // Memoized on the primitive discriminant values, not on the caller's
   // freshly-constructed scope object (the H1 fix).

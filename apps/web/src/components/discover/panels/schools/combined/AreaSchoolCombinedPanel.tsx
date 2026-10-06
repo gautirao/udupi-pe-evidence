@@ -33,6 +33,7 @@ import { snapRadiusKm } from '../radius/radiusOptions';
 import { hasActiveSchoolPropertyFilters, clearSchoolPropertyFilters } from '../radius/schoolPropertyFilters';
 import { sortListingsBySchoolDistance } from '../radius/sortListingsBySchoolDistance';
 import { SchoolSummaryBand } from '../radius/SchoolSummaryBand';
+import { isSchoolRadiusCountPending } from '../radius/isSchoolRadiusCountPending';
 import { SchoolRadiusListings } from '../radius/SchoolRadiusListings';
 import { SchoolContextHeader } from '../radius/SchoolContextHeader';
 import { SchoolFiltersSheet } from '../shared/SchoolFiltersSheet';
@@ -40,7 +41,7 @@ import { useSelectedCardScroll } from '../shared/useSelectedCardScroll';
 import type {
   SchoolChromeCommands,
   SchoolChromeViewWithFilters,
-  SchoolListingsCommands,
+  SchoolRadiusListingsCommands,
   SchoolPropertyFiltersCommands,
   SchoolPropertyFiltersView,
   SchoolViewerView,
@@ -62,6 +63,12 @@ export interface AreaSchoolCombinedPanelView {
     data: DiscoverCityListingItem[];
     loading: boolean;
     /**
+     * Issue #1793 SR-024 — true when the school-radius request failed. With no listings to
+     * show, the panel renders a request-failure block + Retry instead of the "no homes within
+     * N km" empty state.
+     */
+    error?: boolean;
+    /**
      * Issue #1170 — true while a school-radius/filter refetch is in flight
      * (distinct from the initial skeleton load).
      */
@@ -81,7 +88,7 @@ export interface AreaSchoolCombinedPanelCommands {
     /** Called when the user picks a new radius. */
     change: (radiusKm: number) => void;
   };
-  listings: SchoolListingsCommands;
+  listings: SchoolRadiusListingsCommands;
   propertyFilters: SchoolPropertyFiltersCommands;
   school: {
     /** Called when the user dismisses the school chip — removes schoolId/radiusKm, preserves areaKey + board/category. */
@@ -123,13 +130,19 @@ export function AreaSchoolCombinedPanel({
     area: selectedArea,
     school: selectedSchool,
     radius: { km: radiusKm },
-    listings: { data: listings, loading: isLoadingListings, fetching: isFetching = false, selectedId: selectedListingId = null },
+    listings: {
+      data: listings,
+      loading: isLoadingListings,
+      error: isListingsError = false,
+      fetching: isFetching = false,
+      selectedId: selectedListingId = null,
+    },
     propertyFilters: { value: filters = {} },
   } = view;
   const {
     chrome: { startOver: onStartOver, back: onBack },
     radius: { change: onRadiusChange },
-    listings: { select: onSelectListing, hover: onHoverListing },
+    listings: { select: onSelectListing, hover: onHoverListing, retry: onRetryListings },
     propertyFilters: { replace: onFiltersChange },
     school: { clear: onClearSchool },
   } = commands;
@@ -183,6 +196,14 @@ export function AreaSchoolCombinedPanel({
     () => sortListingsBySchoolDistance(listings, selectedSchool),
     [listings, selectedSchool],
   );
+
+  // Issue #1793 SR-024 (R1) — loading/failed result: suppress the zero count on the band/header.
+  const countPending = isSchoolRadiusCountPending({
+    isAuthenticated,
+    isLoading: isLoadingListings,
+    isError: isListingsError,
+    listingCount: listings.length,
+  });
 
   // Loading skeleton — shown when either dimension is still resolving on cold load.
   if (!selectedArea || !selectedSchool) {
@@ -251,6 +272,7 @@ export function AreaSchoolCombinedPanel({
           onRadiusChange={onRadiusChange}
           onChangeSchool={onClearSchool}
           radiusTestIdPrefix="combined-radius-btn"
+          countPending={countPending}
         />
       ) : (
         <SchoolSummaryBand
@@ -261,6 +283,7 @@ export function AreaSchoolCombinedPanel({
           groupId={groupId}
           areaLabel={areaLabel}
           onChangeSchool={onClearSchool}
+          countPending={countPending}
         />
       )}
 
@@ -274,6 +297,8 @@ export function AreaSchoolCombinedPanel({
         listings={listings}
         sortedListingsWithDistance={sortedListingsWithDistance}
         isLoadingListings={isLoadingListings}
+        isError={isListingsError}
+        onRetry={onRetryListings}
         isFetching={isFetching}
         hasMissingCoords={hasMissingCoords}
         hasPropertyFilters={hasPropertyFilters}

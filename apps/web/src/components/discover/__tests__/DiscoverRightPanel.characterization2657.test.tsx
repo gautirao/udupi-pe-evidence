@@ -834,8 +834,16 @@ describe('G8 — area-selected (:1758-1901)', () => {
     expect(onNavigateAreaLanding).toHaveBeenCalledTimes(1);
   });
 
-  it('under the anon-viewport substitution, isError is hard-coded false and retry is undefined regardless of the underlying anon error flag', () => {
+  // #1793 SR-024 (approved AC A2) — this T1 characterization previously pinned "isError is
+  // hard-coded false and retry undefined regardless of the underlying anon error flag" for the
+  // anon-viewport substitution (:1823-1830). That hard-coding was the SR-024 defect: a failed
+  // "Search this area" request rendered AreaZeroResultRecovery's "no results" state. It is
+  // replaced deliberately, NOT deleted: the anon viewport now reports its OWN query's error and
+  // retry, while the AREA-keyed error still cannot leak into the viewport substitution.
+  it('under the anon-viewport substitution, the anon viewport\'s OWN error renders the request-failure state and Retry targets the viewport refetch (#1793 SR-024 (approved AC A2))', async () => {
     const onRetryAnonViewport = vi.fn();
+    const onRetryListings = vi.fn();
+    const user = userEvent.setup();
     renderPanel(
       <DiscoverRightPanel
         {...baseProps}
@@ -849,17 +857,37 @@ describe('G8 — area-selected (:1758-1901)', () => {
         anonViewportListingsLoading={false}
         isErrorAnonViewport
         onRetryAnonViewport={onRetryAnonViewport}
+        onRetryListings={onRetryListings}
+        areaResultSummaryText="42 of 100 match in Manipal"
+      />,
+    );
+    // The area-specific summary text stays suppressed while substituted (:1804).
+    expect(screen.queryByText('42 of 100 match in Manipal')).not.toBeInTheDocument();
+    // The anon viewport's failed request is a request failure, never a zero-result state.
+    expect(screen.getByTestId('area-listings-error')).toBeInTheDocument();
+    expect(screen.queryByTestId('area-zero-result-recovery')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('area-listings-error-retry'));
+    expect(onRetryAnonViewport).toHaveBeenCalledTimes(1);
+    expect(onRetryListings).not.toHaveBeenCalled();
+  });
+
+  it('under the anon-viewport substitution, an AREA-keyed error (isListingsError) is still NOT claimed as the viewport\'s request failure (T1 retained half)', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="area-selected"
+        selectedArea={area}
+        areaListings={[]}
+        isLoadingListings={false}
+        journey="area-first"
+        isAnonViewport
+        anonViewportListings={[]}
+        anonViewportListingsLoading={false}
         isListingsError
         onRetryListings={vi.fn()}
         areaResultSummaryText="42 of 100 match in Manipal"
       />,
     );
-    // The AREA-SELECTED zero/error UI must not claim a request failure here —
-    // isError is forced false for the anon-viewport branch (:1823-1830), so
-    // ListingsBody's request-failure state (area-listings-error) must NOT render
-    // even though isErrorAnonViewport is true and the substituted (viewport)
-    // listings array is empty — and the area-specific summary text is
-    // suppressed while substituted (:1804).
     expect(screen.queryByText('42 of 100 match in Manipal')).not.toBeInTheDocument();
     expect(screen.queryByTestId('area-listings-error')).not.toBeInTheDocument();
   });

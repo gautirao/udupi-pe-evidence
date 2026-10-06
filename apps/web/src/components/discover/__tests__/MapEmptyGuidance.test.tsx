@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
 import { MapEmptyGuidance } from '../MapEmptyGuidance';
@@ -417,5 +418,73 @@ describe('MapEmptyGuidance', () => {
 
     const signIn = screen.getByRole('link', { name: /sign in/i });
     expect(signIn).toHaveClass('pointer-events-auto');
+  });
+});
+
+// Issue #1793 SR-024 (AC A3) — a failed /api/discover/areas request leaves cityTotal at 0, which
+// would otherwise render "No properties listed in {city} yet" for a city whose request merely
+// failed. The error state must replace that claim; a genuine zero must still show it.
+describe('MapEmptyGuidance — #1793 A3 areas request failure', () => {
+  it('areas error + cityTotal 0: does NOT claim the city is empty, shows an error with Retry', async () => {
+    const user = userEvent.setup();
+    const onRetryAreas = vi.fn();
+    render(
+      <MapEmptyGuidance
+        cityTotal={0}
+        filters={emptyFilters}
+        city="udupi"
+        isLoading={false}
+        isAreasError
+        onRetryAreas={onRetryAreas}
+      />,
+    );
+    expect(screen.queryByText(/No properties listed in/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId('map-areas-error')).toBeInTheDocument();
+    await user.click(screen.getByTestId('map-areas-error-retry'));
+    expect(onRetryAreas).toHaveBeenCalledTimes(1);
+  });
+
+  it('areas error + cityTotal 0 + locality filter: the "selected areas" empty claim is replaced too', () => {
+    render(
+      <MapEmptyGuidance
+        cityTotal={0}
+        filters={filtersWithLocality}
+        city="udupi"
+        isLoading={false}
+        isAreasError
+        onRetryAreas={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/No properties found in the selected areas/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId('map-areas-error')).toBeInTheDocument();
+  });
+
+  it('control: a genuine zero (no areas error) still shows the "No properties listed" copy and no error', () => {
+    render(
+      <MapEmptyGuidance cityTotal={0} filters={emptyFilters} city="udupi" isLoading={false} isAreasError={false} />,
+    );
+    expect(screen.getByText(/No properties listed in/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('map-areas-error')).not.toBeInTheDocument();
+  });
+
+  it('loading never renders the error (or any zero) state', () => {
+    const { container } = render(
+      <MapEmptyGuidance cityTotal={0} filters={emptyFilters} city="udupi" isLoading isAreasError />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('areas error with a school radius active: the school panel owns the state, so the map stays silent', () => {
+    const { container } = render(
+      <MapEmptyGuidance
+        cityTotal={0}
+        filters={{ schoolRadiusKm: 2, schoolLat: 13.34, schoolLon: 74.74 }}
+        city="udupi"
+        isLoading={false}
+        isAreasError
+        onRetryAreas={vi.fn()}
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
   });
 });
