@@ -1,5 +1,6 @@
 package com.example.realestate.security;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -9,12 +10,16 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenAuthenticationFilter;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
+import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
 public class JwtConfig {
+
+    private static final String PROPERTY_REQUEST_PUBLIC_PATH = "/api/public/property-requests";
 
     private final IngestionApiKeyFilter ingestionApiKeyFilter;
     private final PrometheusApiKeyFilter prometheusApiKeyFilter;
@@ -144,6 +149,10 @@ public class JwtConfig {
                         // Anonymous discover_event telemetry ingest — no auth required (#1531)
                         // PII-free; session_id is client-generated, never linked to auth.users.
                         .requestMatchers(HttpMethod.POST, "/api/discover/events").permitAll()
+                        // Anonymous "request this property" submission — no auth required (#1793).
+                        // Rate-limited in the service; the bearer-token resolver below also ignores
+                        // the Authorization header on this one path (B8).
+                        .requestMatchers(HttpMethod.POST, PROPERTY_REQUEST_PUBLIC_PATH).permitAll()
                         // Public Trends endpoints — no auth required (#771)
                         .requestMatchers(HttpMethod.GET, "/api/trends/**").permitAll()
                         // Public discover summary endpoint — no auth required (#1745 P5)
@@ -153,9 +162,27 @@ public class JwtConfig {
                 // Wire DbRoleJwtAuthenticationConverter to perform the user_roles DB lookup per
                 // request and populate ROLE_* GrantedAuthorities on the JwtAuthenticationToken.
                 // CallerInfoResolver reads from those authorities — zero additional DB lookups.
-                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt ->
-                        jwt.jwtAuthenticationConverter(dbRoleJwtAuthenticationConverter)));
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .bearerTokenResolver(publicPropertyRequestAwareBearerTokenResolver())
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(dbRoleJwtAuthenticationConverter)));
 
         return http.build();
+    }
+
+    /**
+     * permitAll() does not stop BearerTokenAuthenticationFilter from rejecting a request that
+     * CARRIES an invalid/expired token with 401. A browser holding a stale Supabase JWT must still
+     * be able to submit the anonymous property-request form, so the Authorization header is
+     * ignored (treated as no token) for exactly POST /api/public/property-requests and resolved
+     * normally everywhere else — the admin endpoint still 401s anonymous/expired callers.
+     */
+    private static BearerTokenResolver publicPropertyRequestAwareBearerTokenResolver() {
+        DefaultBearerTokenResolver delegate = new DefaultBearerTokenResolver();
+        return request -> isPublicPropertyRequestPost(request) ? null : delegate.resolve(request);
+    }
+
+    private static boolean isPublicPropertyRequestPost(HttpServletRequest request) {
+        return HttpMethod.POST.matches(request.getMethod())
+                && PROPERTY_REQUEST_PUBLIC_PATH.equals(request.getRequestURI());
     }
 }

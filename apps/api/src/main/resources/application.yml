@@ -110,6 +110,33 @@ app:
       # this is reached, in addition to the unconditional hourly eviction.
       max-entries: ${RATE_LIMIT_TRENDS_MAX_ENTRIES:100000}
 
+    # Public property-request POST anti-abuse limits (#1793; see PropertyRequestRateLimiter).
+    # Two in-memory Bucket4j buckets: per client key and per keyed phone hash, each refilling over
+    # one hour. Single-instance only (multi-instance = limit x instances; restart resets).
+    property-request:
+      client-per-hour: ${RATE_LIMIT_PROPERTY_REQUEST_CLIENT_PER_HOUR:10}
+      phone-per-hour: ${RATE_LIMIT_PROPERTY_REQUEST_PHONE_PER_HOUR:3}
+      # false (default): key on getRemoteAddr() only; X-Forwarded-For is ignored entirely.
+      # true: ONLY the rightmost X-Forwarded-For entry is trusted (an IP literal, else the remote
+      # address is used); entries to its left are never consulted. Correct only if the single proxy
+      # directly in front of the app appends the true client address. Per-client limiting behind
+      # Render is UNRESOLVED (the rightmost entry there may be a Cloudflare/Render hop); tracked in
+      # follow-up issue #2793, which must be resolved (staging probe, then a client-IP source)
+      # BEFORE enabling the public endpoint.
+      trust-forwarded-header: ${RATE_LIMIT_PROPERTY_REQUEST_TRUST_FORWARDED_HEADER:false}
+      max-entries: ${RATE_LIMIT_PROPERTY_REQUEST_MAX_ENTRIES:100000}
+
+  # Public anonymous property-request POST (#1793) — DARK BY DEFAULT. When false the route does not
+  # exist (404) and the public controller is not wired (404). Enabling requires ALL of:
+  #   1. PHONE_ENCRYPTION_KEY set to a real Base64 32-byte key in production (startup fails closed
+  #      otherwise: absent or the dev fallback; see PropertyRequestEncryptionKeyGuard);
+  #   2. #2793 resolved (per-client rate limiting behind Render/Cloudflare) OR the limits above
+  #      deliberately raised;
+  #   3. the V146 migration version re-checked against main.
+  # The admin list (GET /api/admin/property-requests) is admin-only and is NOT behind this flag.
+  property-requests:
+    enabled: ${PROPERTY_REQUESTS_ENABLED:false}
+
 management:
   endpoints:
     web:
