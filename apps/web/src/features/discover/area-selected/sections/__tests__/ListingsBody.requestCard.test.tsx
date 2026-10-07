@@ -10,7 +10,10 @@ import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import { ListingsBody } from '../ListingsBody';
-import { RequestCardSettledContext } from '@/features/discover/areas-journey/results/requestCardSettledContext';
+import {
+  RequestCardSettledContext,
+  RequestCardNodeScopeContext,
+} from '@/features/discover/areas-journey/results/requestCardSettledContext';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 
 // Bare render: NO RequestCardSettledContext provider (a surface that does not supply the signal).
@@ -80,7 +83,8 @@ describe('ListingsBody — request card render matrix (#1793 PR-C C1)', () => {
 
   it.each([
     ['loading', { isLoadingListings: true }],
-    ['initial loading', { isInitialLoading: true, isFetching: true }],
+    // Initial load: the own query is not settled yet (the page-level flag alone no longer gates the card).
+    ['initial loading (own query unsettled)', { isInitialLoading: true, isFetching: true, settled: false }],
     // A first/keyed refetch: the own query is NOT settled while it is in flight (the surface's signal).
     ['refetching (fetching, not initial; own query unsettled)', { isFetching: true, settled: false }],
     ['error with nothing to fall back on', { isListingsError: true }],
@@ -89,6 +93,20 @@ describe('ListingsBody — request card render matrix (#1793 PR-C C1)', () => {
     render(<ListingsBody {...baseProps} {...patch} />, settled ?? true);
     expect(screen.queryByRole('button', { name: CARD })).not.toBeInTheDocument();
     expect(screen.queryByText("Can't find what you need?")).not.toBeInTheDocument();
+  });
+
+  // PR #2803 mobile defect: `isInitialLoading` is the PAGE-level loader (auth / map-ready / areas / markers),
+  // which stays true on the mobile list view where the map never becomes ready. It says nothing about THIS
+  // scope's query, so a settled genuine zero must still show the card.
+  it('shown on a settled zero even while the page-level initial loader is true (mobile: map never ready)', () => {
+    render(<ListingsBody {...baseProps} isInitialLoading isFetching />, true);
+    expect(screen.getByTestId('area-zero-result-recovery')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: CARD })).toBeInTheDocument();
+  });
+
+  it('still hidden on that same page-level loader when the own query is NOT settled', () => {
+    render(<ListingsBody {...baseProps} isInitialLoading isFetching />, false);
+    expect(screen.queryByRole('button', { name: CARD })).not.toBeInTheDocument();
   });
 
   it('hidden when there are results (populated grid, including stale results with a refresh error)', () => {
@@ -210,9 +228,11 @@ describe('ListingsBody — own-query settled gate (#1793 PR-C fix cycle, CR F1)'
     expect(screen.getByText('Request received')).toBeInTheDocument();
   });
 
-  it('no provider (a surface that does not supply the signal): FAILS CLOSED, even on a settled-looking zero (isFetching false)', () => {
-    // The legacy `?areaKey=` AreaJourneyPanel route: shared isFetching is false, data is a settled-
-    // looking [], but nothing vouches that THIS scope's query settled, so no card (CR review 2, F1).
+  it('absent provider: FAILS CLOSED, even on a settled-looking zero (isFetching false)', () => {
+    // A bare render with no RequestCardSettledContext provider (a hypothetical host that does not supply
+    // the signal): shared isFetching is false and data is a settled-looking [], but nothing vouches that
+    // THIS scope's query settled, so no card (CR review 2, F1). The real hosts all provide it: the legacy
+    // `?areaKey=` route and Browse-all (#2795) have their own specs.
     renderBare(<ListingsBody {...baseProps} isFetching={false} />);
     expect(screen.getByTestId('area-zero-result-recovery')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: CARD })).not.toBeInTheDocument();
@@ -297,8 +317,8 @@ describe('ListingsBody — a same-key refetch never dims or remounts the open ca
 describe('ListingsBody — error branch never hosts the request card (#1793 PR-C r2, surviving E2E mutation)', () => {
   // Reachability: the area-first leaf (AreaLeafListingsSurface) returns its OWN error+Retry before it
   // renders AreaSelectedPanel/ListingsBody, so E2E cannot reach this branch with the provider present.
-  // The legacy ?areaKey= AreaJourneyPanel and NodeListingsSurface DO reach it but supply no
-  // RequestCardSettledContext, so the card fails closed there anyway. This pins the branch directly,
+  // The legacy ?areaKey= AreaJourneyPanel and NodeListingsSurface can reach it (their settled signal is
+  // false on error, #2795, but this branch must not depend on that). This pins the branch directly,
   // with the provider reporting settled=true (the value that would let a misplaced card show).
   it('settled=true + error + nothing to fall back on: error and Retry render, and NO request card', async () => {
     const onRetryListings = vi.fn();
@@ -351,5 +371,33 @@ describe('ListingsBody — multi-area AREA_SET request label (#1793 PR-C fix cyc
     const body = await submit({ multiAreaKeys: ['IN|KA|Udupi|kalsanka'] });
     expect(body.areaKey).toBe('IN|KA|Udupi|kalsanka');
     expect(body.areaLabel).toBe('Kalsanka');
+  });
+});
+
+describe('ListingsBody — navigation-node scope never submits a node key as an area key (#2795)', () => {
+  it('node scope (Browse all): areaKey null, journey AREA, label names the node', async () => {
+    const fetchMock = vi.fn(async (...args: [unknown, RequestInit?]) =>
+      String(args[0]).includes('/api/public/property-requests')
+        ? new Response(JSON.stringify({ id: 'r', status: 'NEW', createdAt: 'x' }), { status: 201 })
+        : new Response('{}', { status: 404 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+    render(
+      <RequestCardNodeScopeContext.Provider value>
+        <ListingsBody {...baseProps} areaLabel="North Udupi" fallbackAreaKey="d:north" />
+      </RequestCardNodeScopeContext.Provider>,
+    );
+    await user.click(screen.getByRole('button', { name: CARD }));
+    await user.type(screen.getByLabelText(/phone number/i), '9876543210');
+    await user.click(screen.getByRole('checkbox', { name: /i agree to share this information/i }));
+    await user.click(screen.getByRole('button', { name: 'Send request' }));
+    const posts = () => fetchMock.mock.calls.filter(([u]) => String(u).includes('/api/public/property-requests'));
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    const body = JSON.parse((posts()[0][1] as RequestInit).body as string);
+    expect(body.journey).toBe('AREA');
+    expect(body.areaKey ?? null).toBeNull();
+    expect(body.areaLabel).toBe('North Udupi');
+    expect(JSON.stringify(body)).not.toContain('d:north');
   });
 });

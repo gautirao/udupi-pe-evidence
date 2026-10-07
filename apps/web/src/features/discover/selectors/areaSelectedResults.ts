@@ -34,6 +34,13 @@ export interface AreaSelectedResultsInput<TAreaListing, TAnonListing, TRetry> {
    * callers that predate it read as "no viewport error" (the former hard-coded `false`).
    */
   isErrorAnonViewport?: boolean | undefined;
+  /**
+   * Issue #2795 — the AREA query is serving the PREVIOUS key's response (`keepPreviousData`).
+   * Optional: absent reads as "not a placeholder".
+   */
+  isPlaceholderAreaListings?: boolean | undefined;
+  /** Issue #2795 — the anon viewport query is serving the previous viewport's response. Optional. */
+  isPlaceholderAnonViewport?: boolean | undefined;
   onRetryListings: TRetry;
   onRetryAuthViewport: TRetry;
   onRetryPolygonListings: TRetry;
@@ -47,6 +54,12 @@ export interface AreaSelectedResultsView<TAreaListing, TAnonListing, TRetry> {
   isLoading: boolean | undefined;
   isError: boolean | undefined;
   isViewportScope: boolean;
+  /**
+   * Issue #2795 — the ACTIVE scope's own query has settled to a real result: loaded, not failed, and
+   * not a keepPreviousData placeholder. Gates the "Request a property" card; deliberately not
+   * `isFetching` (a same-key background refetch is still settled and must not unmount a draft).
+   */
+  settled: boolean;
   retry: TRetry | undefined;
 }
 
@@ -64,7 +77,23 @@ export function resolveAreaSelectedResults<TAreaListing, TAnonListing, TRetry>(
     ? viewportListingsLoading
     : input.polygonListingsLoading;
 
+  const isLoading = isScopeSubstituted ? substitutedListingsLoading : input.isLoadingListings;
+  const isError = input.isAnonViewport
+    ? (input.isErrorAnonViewport ?? false)
+    : input.isAuthViewport
+      ? input.isErrorAuthViewport
+      : input.isPolygonScope
+        ? input.isErrorPolygonListings
+        : input.isListingsError;
+  // Only the anon viewport and the AREA query keep previous data; auth viewport and polygon do not.
+  const isPlaceholder = input.isAnonViewport
+    ? (input.isPlaceholderAnonViewport ?? false)
+    : isScopeSubstituted
+      ? false
+      : (input.isPlaceholderAreaListings ?? false);
+
   return {
+    settled: !isLoading && !isError && !isPlaceholder,
     listings: isScopeSubstituted ? substitutedListings : input.areaListings,
     summaryText: isScopeSubstituted ? undefined : input.areaResultSummaryText,
     isLoading: isScopeSubstituted ? substitutedListingsLoading : input.isLoadingListings,

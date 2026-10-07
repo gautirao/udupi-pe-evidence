@@ -6,7 +6,7 @@ import { PropertyCard } from '@/components/discover/PropertyCard';
 import { AreaZeroResultRecovery } from '@/components/discover/panels/AreaZeroResultRecovery';
 import { deriveDiscoverEmptyStateCopy } from '@/components/discover/emptyStateCopy';
 import { RequestPropertyCard } from '@/components/discover/RequestPropertyCard';
-import { useRequestCardSettled } from '@/features/discover/areas-journey/results/requestCardSettledContext';
+import { useRequestCardSettled, useRequestCardNodeScope } from '@/features/discover/areas-journey/results/requestCardSettledContext';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
@@ -114,12 +114,15 @@ export function ListingsBody({
 
   // Issue #1793 PR-C — "this scope's own query settled" (loaded, not failed, not a keepPreviousData
   // placeholder), supplied by the surface that resolves the result source. `undefined` = the caller
-  // does not provide it, so the card FAILS CLOSED (never shown). The legacy `?areaKey=` AreaJourneyPanel
-  // 'area-selected' route provides no signal, so it shows no card in PR-C; threading the signal there
-  // is a follow-up. (The shared `isFetching` flag is not a safe substitute: it misses keepPreviousData
-  // placeholders and flickers on same-key refetches, which would unmount a typed draft.)
+  // does not provide it (e.g. any host rendered without a provider), so the card FAILS CLOSED (never
+  // shown). Every current production host provides it: AreaLeafListingsSurface, the legacy `?areaKey=`
+  // AreaJourneyPanel route and NodeListingsSurface "Browse all" (#2795). (The shared
+  // `isFetching` flag is not a safe substitute: it misses keepPreviousData placeholders and flickers
+  // on same-key refetches, which would unmount a typed draft.)
   const ownQuerySettled = useRequestCardSettled();
   const isQuerySettled = ownQuerySettled ?? false;
+  // #2795 — a navigation-node scope has no real area key: never submit the node key as one.
+  const isNodeScope = useRequestCardNodeScope();
 
   // Refetch dim (in-flight refetch, not the initial skeleton load). Applied to the surrounding results,
   // NEVER to an open request card: opacity cannot be undone by a child, and a dimmed, click-blocked card
@@ -199,7 +202,9 @@ export function ListingsBody({
               areaListings !== undefined &&
               areaListings.length === 0 &&
               !isLoadingListings &&
-              !isInitialLoading &&
+              // NOT `!isInitialLoading` (PR #2803): that is the PAGE-level loader (auth / map-ready /
+              // areas / markers) and stays true on the mobile list view, where the map never becomes
+              // ready. It says nothing about this scope's data; `isQuerySettled` is that proof.
               isQuerySettled &&
               !isListingsError;
             const isMapScope = resultScopeKind !== 'AREA';
@@ -238,7 +243,7 @@ export function ListingsBody({
                     context={{
                       city: resolvedAreasCity,
                       // MAP scopes (drawn polygon / viewport) never invent an area.
-                      areaKey: isMapScope || !isSingleArea ? null : (multiAreaKeys?.[0] ?? fallbackAreaKey),
+                      areaKey: isMapScope || isNodeScope || !isSingleArea ? null : (multiAreaKeys?.[0] ?? fallbackAreaKey),
                       areaLabel: isMapScope ? null : setLabel.slice(0, 200),
                       journey: isMapScope ? 'MAP' : 'AREA',
                       intent: intentNoun === 'rent' ? 'RENT' : 'BUY',

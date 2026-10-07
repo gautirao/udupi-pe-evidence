@@ -59,6 +59,9 @@ export function buildRightPanelView(view: DiscoverPanelSurfaceView, extras: Righ
     isErrorPolygonListings: view.geography.isErrorPolygonListings,
     // Issue #1793 SR-024 — the anon viewport's OWN error (previously hard-coded false).
     isErrorAnonViewport: view.geography.isErrorAnonViewport,
+    // Issue #2795 — keepPreviousData placeholder flags, so `settled` never counts stale data.
+    isPlaceholderAreaListings: view.geography.isPlaceholderAreaListings,
+    isPlaceholderAnonViewport: view.geography.isPlaceholderAnonViewport,
     // `retry` is a COMMANDS-side field (RightPanelAreaCommands.results.retry,
     // built separately in buildRightPanelCommands below) — this view builder
     // only reads the view-side outputs (listings/summaryText/isLoading/
@@ -130,6 +133,7 @@ export function buildRightPanelView(view: DiscoverPanelSurfaceView, extras: Righ
         isLoading: areaSelectedResults.isLoading,
         isError: areaSelectedResults.isError,
         isViewportScope: areaSelectedResults.isViewportScope,
+        settled: areaSelectedResults.settled,
       },
       filters: { filters: view.filters.filters, searchQuery: view.filters.searchQuery, trendsHref: view.routing.trendsHref },
     },

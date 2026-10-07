@@ -274,6 +274,12 @@ export interface AreaResultsView {
   isError: AreaSelectedResults['isError'];
   /** True when the committed result source is an anon/auth VIEWPORT or a POLYGON scope, not the AREA_SET default. */
   isViewportScope: AreaSelectedResults['isViewportScope'];
+  /**
+   * Issue #2795 — the active scope's own query settled (loaded, not failed, not a keepPreviousData
+   * placeholder). Optional (additive): absent reads as "not settled", so the legacy `?areaKey=` route
+   * fails closed (no "Request a property" card) for any producer that does not supply it.
+   */
+  settled?: AreaSelectedResults['settled'];
 }
 
 export interface AreaFiltersView {

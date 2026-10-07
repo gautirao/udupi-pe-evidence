@@ -2,6 +2,7 @@ import React from 'react';
 import { AreaSelectionPanel } from '@/components/discover/panels/AreaSelectionPanel';
 import { AreaSelectedPanel } from '@/components/discover/panels/AreaSelectedPanel';
 import { AreaSetDraftPanel } from '@/features/discover/components/AreaSetDraftPanel';
+import { RequestCardSettledContext } from '@/features/discover/areas-journey/results/requestCardSettledContext';
 // Issue #2657 R2 — this file only needs the panelContent union; indexed off
 // the authoritative type, never off DiscoverRightPanel's own props.
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
@@ -115,6 +116,10 @@ export function AreaJourneyPanel({
       }
       const regionName = view.selection.regionName;
       return (
+        // Issue #2795 — hands ListingsBody THIS route's own "settled" signal (the active scope's query
+        // loaded, not failed, not a keepPreviousData placeholder). Absent => fails closed. See
+        // requestCardSettledContext.ts.
+        <RequestCardSettledContext.Provider value={view.results.settled ?? false}>
         <AreaSelectedPanel
           // Issue #2658 (C5) — the binding prop-modelling contract: view/commands,
           // not 40 flat props. Every value/expression below is carried over
@@ -191,6 +196,7 @@ export function AreaJourneyPanel({
             scope: {},
           }}
         />
+        </RequestCardSettledContext.Provider>
       );
     }
 

@@ -14,6 +14,10 @@ import { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/
 import { type SelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 import { toSelectedListingPreview } from '@/features/discover/navigation/selectedListingPreview';
 import { AreaSelectedPanel } from '@/components/discover/panels/AreaSelectedPanel';
+import {
+  RequestCardSettledContext,
+  RequestCardNodeScopeContext,
+} from '@/features/discover/areas-journey/results/requestCardSettledContext';
 import { CITY_CONFIG } from '@/lib/localityUtils';
 import { discoverListingToCityListing } from '@/lib/discoverMappers';
 import { toCommittedUrlFilters } from '@/features/discover/selectors/effectiveDiscoverContext';
@@ -171,6 +175,9 @@ export function NodeListingsSurface({
     isLoading: isLoadingNodeListingsAnon,
     isError: isErrorNodeListingsAnon,
     refetch: refetchNodeListingsAnon,
+    // Issue #2795 — this query uses keepPreviousData: a placeholder is the PREVIOUS key's response.
+    isPlaceholderData: isPlaceholderNodeListingsAnon,
+    isSuccess: isSuccessNodeListingsAnon,
   } = useDiscoverCityListings({
     city: nav.city,
     areaKeys: !isAuthenticated ? nodeAreaKeys : [],
@@ -281,6 +288,15 @@ export function NodeListingsSurface({
   const isErrorNodeListings = isAuthenticated ? areaListingsQuery.isError : isErrorNodeListingsAnon;
   const refetchNodeListings = isAuthenticated ? areaListingsQuery.refetch : refetchNodeListingsAnon;
 
+  // Issue #1793 PR-C / #2795 — "the ACTIVE source's own query settled": a real successful result that
+  // is not a keepPreviousData placeholder. Taken from whichever query serves the current auth state
+  // (never both/either), and `isSuccess` also excludes a disabled / never-run query. Deliberately not
+  // `isFetching`: a same-key background refetch is still a settled result and must not unmount a form
+  // the buyer is filling in. (Error never reaches the panel here: it returns the error state above.)
+  const isNodeListingsSettled = isAuthenticated
+    ? areaListingsQuery.isSuccess === true && !areaListingsQuery.isPlaceholderData
+    : isSuccessNodeListingsAnon === true && !isPlaceholderNodeListingsAnon;
+
   const areaListingsForPanel = useMemo(() => {
     const listings = isAuthenticated
       ? (areaListingsQuery.data?.content ?? [])
@@ -372,6 +388,10 @@ export function NodeListingsSurface({
         <AreaSetDraftPanel />
       ) : (
       <>
+      {/* Issue #2795 — hands ListingsBody this surface's own settled signal, and marks the scope as a
+          navigation node so the request card never submits a node key as an area key. */}
+      <RequestCardSettledContext.Provider value={isNodeListingsSettled}>
+      <RequestCardNodeScopeContext.Provider value>
       <AreaSelectedPanel
         // Issue #2658 (C5) — {view, commands} contract flip. Every value/expression
         // below is carried over verbatim from the flat call this replaces; only the
@@ -462,6 +482,8 @@ export function NodeListingsSurface({
           scope: {},
         }}
       />
+      </RequestCardNodeScopeContext.Provider>
+      </RequestCardSettledContext.Provider>
       {totalPages > 1 ? (
         <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border bg-card shrink-0">
           <Button

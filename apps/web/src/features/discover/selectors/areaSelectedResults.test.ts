@@ -77,6 +77,7 @@ describe('resolveAreaSelectedResults (#2657 C1)', () => {
       isLoading: false,
       isError: false,
       isViewportScope: false,
+      settled: true,
       retry: 'retry-area',
     });
   });
@@ -143,7 +144,55 @@ describe('resolveAreaSelectedResults (#2657 C1)', () => {
     ];
     for (const overrides of table) {
       const input = baseInput(overrides);
-      expect(resolveAreaSelectedResults(input)).toEqual(originalInline(input));
+      // `settled` is the additive #2795 output; the pre-existing fields must be unchanged.
+      expect(resolveAreaSelectedResults(input)).toEqual({
+        ...originalInline(input),
+        settled: expect.any(Boolean),
+      });
     }
+  });
+});
+
+describe('resolveAreaSelectedResults — settled (#2795)', () => {
+  it('area scope: settled only when loaded, not failed and not a keepPreviousData placeholder', () => {
+    expect(resolveAreaSelectedResults(baseInput()).settled).toBe(true);
+    expect(resolveAreaSelectedResults(baseInput({ isLoadingListings: true })).settled).toBe(false);
+    expect(resolveAreaSelectedResults(baseInput({ isListingsError: true })).settled).toBe(false);
+    expect(resolveAreaSelectedResults(baseInput({ isPlaceholderAreaListings: true })).settled).toBe(false);
+  });
+
+  it('area scope: a refetch is not in the inputs, so a same-key background refetch stays settled', () => {
+    // The selector never sees isFetching; a settled result with a refetch in flight is still settled.
+    expect(resolveAreaSelectedResults(baseInput({ isPlaceholderAreaListings: false })).settled).toBe(true);
+  });
+
+  it('area scope: an absent placeholder flag reads as "not a placeholder"', () => {
+    expect(resolveAreaSelectedResults(baseInput({ isPlaceholderAreaListings: undefined })).settled).toBe(true);
+  });
+
+  it('anon viewport: uses ITS OWN loading/error/placeholder, never the area ones', () => {
+    const anon = { isAnonViewport: true };
+    expect(resolveAreaSelectedResults(baseInput(anon)).settled).toBe(true);
+    expect(resolveAreaSelectedResults(baseInput({ ...anon, anonViewportListingsLoading: true })).settled).toBe(false);
+    expect(resolveAreaSelectedResults(baseInput({ ...anon, isErrorAnonViewport: true })).settled).toBe(false);
+    expect(resolveAreaSelectedResults(baseInput({ ...anon, isPlaceholderAnonViewport: true })).settled).toBe(false);
+    // The AREA query's states do not leak into the viewport scope.
+    expect(
+      resolveAreaSelectedResults(
+        baseInput({ ...anon, isLoadingListings: true, isListingsError: true, isPlaceholderAreaListings: true }),
+      ).settled,
+    ).toBe(true);
+  });
+
+  it('auth viewport and polygon: loading/error unsettle; no placeholder concept', () => {
+    expect(resolveAreaSelectedResults(baseInput({ isAuthViewport: true })).settled).toBe(true);
+    expect(resolveAreaSelectedResults(baseInput({ isAuthViewport: true, authViewportListingsLoading: true })).settled).toBe(false);
+    expect(resolveAreaSelectedResults(baseInput({ isAuthViewport: true, isErrorAuthViewport: true })).settled).toBe(false);
+    expect(resolveAreaSelectedResults(baseInput({ isPolygonScope: true })).settled).toBe(true);
+    expect(resolveAreaSelectedResults(baseInput({ isPolygonScope: true, polygonListingsLoading: true })).settled).toBe(false);
+    expect(resolveAreaSelectedResults(baseInput({ isPolygonScope: true, isErrorPolygonListings: true })).settled).toBe(false);
+    expect(
+      resolveAreaSelectedResults(baseInput({ isPolygonScope: true, isPlaceholderAreaListings: true })).settled,
+    ).toBe(true);
   });
 });

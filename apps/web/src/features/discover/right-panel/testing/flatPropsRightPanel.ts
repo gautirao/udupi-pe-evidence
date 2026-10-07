@@ -665,6 +665,7 @@ export function flatPropsToRightPanel(flat: FlatRightPanelTestFixture): {
         isLoading: areaSelectedResults.isLoading,
         isError: areaSelectedResults.isError,
         isViewportScope: areaSelectedResults.isViewportScope,
+        settled: areaSelectedResults.settled,
       },
       filters: { filters: flat.filters ?? {}, searchQuery: flat.searchQuery ?? '', trendsHref: flat.trendsHref },
     },
