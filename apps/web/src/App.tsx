@@ -13,6 +13,7 @@ import { DISTRICT_TO_CITY_SLUG } from "@/lib/localityUtils";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { DiscoverProvider } from "@/features/discover/context/DiscoverContext";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
+import { isPropertyRequestsEnabled } from "@/hooks/useCreatePropertyRequest";
 
 // Eagerly loaded — these are on the critical path for first paint
 import MapDiscovery from "./pages/MapDiscovery";
@@ -85,6 +86,10 @@ const Intelligence = lazy(() => import("./pages/admin/Intelligence"));
 const CityLaunch = lazy(() => import("./pages/admin/CityLaunch"));
 // Issue #1911 PR3 — admin city-launch revision preview (Complete Discover preview)
 const CityLaunchPreview = lazy(() => import("./pages/admin/CityLaunchPreview"));
+
+// Issue #1793 PR-C — admin property-requests list. Lazy; the route itself is registered only
+// when VITE_PROPERTY_REQUESTS_ENABLED === 'true' (see the flag docblock in useCreatePropertyRequest).
+const PropertyRequests = lazy(() => import("./pages/admin/PropertyRequests"));
 
 const queryClient = new QueryClient();
 
@@ -394,6 +399,17 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
+              {/* Issue #1793 PR-C — flag-gated (dark by default): absent from the route table unless enabled. */}
+              {isPropertyRequestsEnabled() && (
+                <Route
+                  path="/admin/property-requests"
+                  element={
+                    <ProtectedRoute requireAdmin>
+                      <PropertyRequests />
+                    </ProtectedRoute>
+                  }
+                />
+              )}
               </Route>
               <Route element={<RouteErrorBoundary group="public"><Outlet /></RouteErrorBoundary>}>
                 <Route path="*" element={<NotFound />} />

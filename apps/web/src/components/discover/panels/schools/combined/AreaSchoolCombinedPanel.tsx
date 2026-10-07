@@ -74,6 +74,14 @@ export interface AreaSchoolCombinedPanelView {
      */
     fetching?: boolean;
     /**
+     * Issue #1793 PR-C — the school-radius card source's OWN "settled" (loaded, not failed, not a
+     * keepPreviousData placeholder), distinct from `fetching`. Gates the "Request a property" card;
+     * absent reads as "not settled" (no card).
+     */
+    settled?: boolean;
+    /** Issue #1793 PR-C — the anonymous school-radius page was capped; a filtered-empty page is then not a real zero. */
+    hasMore?: boolean;
+    /**
      * ReTrends redesign — id of the currently selected listing (from `listing`
      * URL param). Drives the copper selected card frame + scroll-into-view.
      */
@@ -135,6 +143,8 @@ export function AreaSchoolCombinedPanel({
       loading: isLoadingListings,
       error: isListingsError = false,
       fetching: isFetching = false,
+      settled: isSettled,
+      hasMore,
       selectedId: selectedListingId = null,
     },
     propertyFilters: { value: filters = {} },
@@ -312,6 +322,10 @@ export function AreaSchoolCombinedPanel({
         onSelectListing={onSelectListing}
         onHoverListing={onHoverListing}
         cardRefs={cardRefs}
+        city={urlState.city}
+        requestAreaKey={selectedArea.areaKey}
+        settled={isSettled}
+        hasMore={hasMore}
       />
       </div>
     </>

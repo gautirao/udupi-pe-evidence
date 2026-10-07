@@ -41,6 +41,11 @@ export type AreaLeafScopeSource =
        */
       error?: boolean | undefined;
       retry?: (() => void) | undefined;
+      /**
+       * Issue #1793 PR-C — ANON viewport only: the viewport query is serving the PREVIOUS viewport's
+       * response (keepPreviousData). Feeds `settled`; the auth viewport keeps no previous data.
+       */
+      placeholder?: boolean | undefined;
     }
   | {
       kind: 'polygon';
@@ -64,6 +69,12 @@ export interface AreaLeafAreaBase {
   fetching: boolean | undefined;
   error: boolean | undefined;
   retry: (() => void) | undefined;
+  /**
+   * Issue #1793 PR-C — the base query is serving the PREVIOUS key's response (keepPreviousData), as
+   * opposed to a same-key background refetch (which `fetching` also reports). Optional (additive):
+   * absent reads as "not a placeholder".
+   */
+  placeholder?: boolean | undefined;
 }
 
 export interface AreaLeafResultSourceView {
@@ -99,6 +110,8 @@ export interface AreaLeafScopeSignals {
    */
   isErrorAnonViewport?: boolean | undefined;
   refetchAnonViewport?: (() => void) | undefined;
+  /** Issue #1793 PR-C — the anon viewport query is serving the previous viewport's response. */
+  isPlaceholderAnonViewport?: boolean | undefined;
 }
 
 export interface ResolvedAreaLeafResultSource {
@@ -110,6 +123,13 @@ export interface ResolvedAreaLeafResultSource {
   retry: () => void;
   /** Mirrors the original `isViewportScope` prop threaded to `AreaSelectedPanel`. */
   isViewportScope: boolean;
+  /**
+   * Issue #1793 PR-C — "THIS scope's own query has settled": loaded, not failed, and not a
+   * keepPreviousData placeholder. Deliberately NOT `!fetching`: `fetching` is the T5-pinned shared
+   * refresh signal (it is also true for a same-key background refetch of a result that IS settled,
+   * and it never branches on scope). Gates the "Request a property" card only.
+   */
+  settled: boolean;
 }
 
 /**
@@ -156,6 +176,7 @@ export function toAreaLeafScopeSource(signals: AreaLeafScopeSignals): AreaLeafSc
             loading: signals.anonViewportListingsLoading,
             error: signals.isErrorAnonViewport,
             retry: signals.refetchAnonViewport,
+            placeholder: signals.isPlaceholderAnonViewport,
           }
         : {
             kind: 'viewport',
@@ -203,6 +224,7 @@ export interface AreaLeafResultSourceInputs {
     fetching: boolean | undefined;
     error: boolean | undefined;
     retry: (() => void) | undefined;
+    placeholder?: boolean | undefined;
   };
   /** Data of the committed NON-area scope (unused for kind 'area'). */
   substituted: {
@@ -211,6 +233,8 @@ export interface AreaLeafResultSourceInputs {
     /** POLYGON and ANON viewport (#1793) — the AUTH viewport has no error/retry of its own. */
     error: boolean | undefined;
     retry: (() => void) | undefined;
+    /** ANON viewport only (#1793 PR-C). */
+    placeholder?: boolean | undefined;
   };
   /** The ONE remaining fallback query's already-resolved snapshot (see `useAreaLeafResultSource.ts`). */
   ownQuery: {
@@ -219,6 +243,8 @@ export interface AreaLeafResultSourceInputs {
     isFetching: boolean;
     isError: boolean;
     refetch: () => void;
+    /** #1793 PR-C — optional (additive): absent reads as "not a placeholder". */
+    isPlaceholderData?: boolean;
   };
 }
 
@@ -248,19 +274,28 @@ export function resolveAreaLeafResultSource(
         fetching,
         error: sources.substituted.error ?? false,
         retry: sources.substituted.retry ?? (() => undefined),
+        settled:
+          !(sources.substituted.loading ?? false) &&
+          !(sources.substituted.error ?? false) &&
+          !(sources.substituted.placeholder ?? false),
       };
     }
     // T1 (commit 0, pinned quirk) — still true for the AUTH viewport: cards/loading come from the
     // viewport scope, but error/retry come from the AREA base (the matched map base, else the
     // fallback query) — the auth viewport carries no error/retry of its own.
+    const authViewportError = sources.hasMapAreaListings
+      ? (sources.areaBase.error ?? false)
+      : sources.ownQuery.isError;
     return {
       origin: 'viewport',
       isViewportScope: true,
       listings: sources.substituted.listings ?? [],
       loading: sources.substituted.loading ?? false,
       fetching,
-      error: sources.hasMapAreaListings ? (sources.areaBase.error ?? false) : sources.ownQuery.isError,
+      error: authViewportError,
       retry: sources.hasMapAreaListings ? (sources.areaBase.retry ?? (() => undefined)) : sources.ownQuery.refetch,
+      // The auth viewport page keeps no previous data (useDiscoverListings has no keepPreviousData).
+      settled: !(sources.substituted.loading ?? false) && !authViewportError,
     };
   }
 
@@ -276,6 +311,7 @@ export function resolveAreaLeafResultSource(
       fetching,
       error: sources.substituted.error ?? false,
       retry: sources.substituted.retry ?? (() => undefined),
+      settled: !(sources.substituted.loading ?? false) && !(sources.substituted.error ?? false),
     };
   }
 
@@ -289,6 +325,10 @@ export function resolveAreaLeafResultSource(
       fetching,
       error: sources.areaBase.error ?? false,
       retry: sources.areaBase.retry ?? (() => undefined),
+      settled:
+        !(sources.areaBase.loading ?? false) &&
+        !(sources.areaBase.error ?? false) &&
+        !(sources.areaBase.placeholder ?? false),
     };
   }
   return {
@@ -299,5 +339,7 @@ export function resolveAreaLeafResultSource(
     fetching,
     error: sources.ownQuery.isError,
     retry: sources.ownQuery.refetch,
+    settled:
+      !sources.ownQuery.isLoading && !sources.ownQuery.isError && !(sources.ownQuery.isPlaceholderData ?? false),
   };
 }

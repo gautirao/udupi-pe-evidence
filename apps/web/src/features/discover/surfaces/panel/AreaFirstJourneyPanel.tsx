@@ -82,6 +82,10 @@ export interface AreaFirstJourneyPanelView {
     | 'polygonListingsLoading'
     | 'isErrorPolygonListings'
     | 'refetchPolygonListings'
+    // Issue #1793 PR-C — the keepPreviousData-placeholder signals of the two queries the
+    // "Request a property" card's settled gate reads (distinct from `isFetchingAreaListings`).
+    | 'isPlaceholderAreaListings'
+    | 'isPlaceholderAnonViewport'
   >;
   filters: Pick<DiscoverPanelSurfaceView['filters'], 'filters'>;
   schools: DiscoverPanelSurfaceView['schools'];
@@ -149,11 +153,25 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
   const { city } = view.routing;
   const { areasNavigationJourney, hoveredNavigationNodeKey, focusedClusterMemberAreaKeys } =
     view.navigation;
-  const { areaListings, isLoadingAreaListings, isErrorAreaListings, selectedArea, isFetchingAreaListings } =
-    view.geography;
+  const {
+    areaListings,
+    isLoadingAreaListings,
+    isErrorAreaListings,
+    selectedArea,
+    isFetchingAreaListings,
+    isPlaceholderAreaListings,
+  } = view.geography;
   const { filters } = view.filters;
-  const { selectedSchool, schools, schoolsQuery, schoolListings, isErrorSchoolRadiusListings, schoolRadiusPanelLoading } =
-    view.schools;
+  const {
+    selectedSchool,
+    schools,
+    schoolsQuery,
+    schoolListings,
+    isErrorSchoolRadiusListings,
+    schoolRadiusPanelLoading,
+    schoolRadiusPanelSettled,
+    schoolRadiusHasMore,
+  } = view.schools;
   const { listingDataLoading } = view.results;
   const { prefersReducedMotion } = view.interaction;
   const {
@@ -245,6 +263,8 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
                 areaKey: selectedArea?.areaKey ?? null,
                 loading: isLoadingAreaListings,
                 fetching: isFetchingAreaListings,
+                // Issue #1793 PR-C — placeholder (previous key) vs same-key refetch; see resolver `settled`.
+                placeholder: isPlaceholderAreaListings,
                 error: isErrorAreaListings,
                 retry: refetchAreaListings,
               },
@@ -276,6 +296,9 @@ export function AreaFirstJourneyPanel({ view, commands }: AreaFirstJourneyPanelP
               data: schoolListings,
               loading: listingDataLoading || (schoolRadiusPanelLoading ?? false),
               error: isErrorSchoolRadiusListings,
+              // Issue #1793 PR-C — the card source's own settled signal + the anon page-cap flag.
+              settled: schoolRadiusPanelSettled,
+              hasMore: schoolRadiusHasMore,
             },
             radiusKm: urlState.radiusKm,
           },

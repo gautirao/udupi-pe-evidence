@@ -330,6 +330,59 @@ class PropertyRequestControllerTest {
         assertValidationFailure(b, "city");
     }
 
+    // ── #1793 PR-C r2: phone-like content in free-text fields is rejected server-side ──
+
+    private static final String FREE_TEXT_DIGITS = "9123456780";
+    private static final String PHONE_IN_TEXT_MESSAGE =
+            "Please enter contact numbers only in the Phone / WhatsApp field.";
+
+    @ParameterizedTest
+    @ValueSource(strings = {"requirement", "areaLabel", "city"})
+    @DisplayName("PR-C r2: phone-like text in requirement/areaLabel/city -> 400 on that field, exact message, no echo, no log, service not called")
+    void phoneLikeFreeText_returns400_withExactMessage_noEchoNoLog(String field) throws Exception {
+        Map<String, Object> b = validBody();
+        b.put(field, "Call me on " + FREE_TEXT_DIGITS);
+
+        MvcResult result = mockMvc.perform(postJson(b))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.fields.length()").value(1))
+                .andExpect(jsonPath("$.fields[0].field").value(field))
+                .andExpect(jsonPath("$.fields[0].message").value(PHONE_IN_TEXT_MESSAGE))
+                .andReturn();
+
+        assertThat(stringOf(result)).doesNotContain(FREE_TEXT_DIGITS).doesNotContain("98765");
+        org.mockito.Mockito.verifyNoInteractions(repository);
+        for (ILoggingEvent e : logAppender.list) {
+            String text = e.getFormattedMessage()
+                    + (e.getThrowableProxy() == null ? "" : ThrowableProxyUtil.asString(e.getThrowableProxy()));
+            assertThat(text).as("log event from %s", e.getLoggerName()).doesNotContain(FREE_TEXT_DIGITS);
+        }
+
+        // A rejected body must not consume rate-limit budget (validation runs before the service):
+        // 5 rejections from one client (limit is 3/hour) still leave room for a valid request.
+        for (int i = 0; i < 5; i++) {
+            mockMvc.perform(postJson(b).header("X-Forwarded-For", "10.9.9.9")).andExpect(status().isBadRequest());
+        }
+        mockMvc.perform(postJson(validBody()).header("X-Forwarded-For", "10.9.9.9")).andExpect(status().isCreated());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"3 BHK", "1200 sqft", "50 lakh", "2020-2024", "6000000 - 9000000", "₹50,00,000",
+            "budget 45-60 lakh", "2 BHK near 5th cross, 560078", "Built 1998", "plot 30x40"})
+    @DisplayName("PR-C r2: numeric-but-not-a-phone requirements are accepted -> 201")
+    void numericRequirement_returns201(String requirement) throws Exception {
+        Map<String, Object> b = validBody();
+        b.put("requirement", requirement);
+        mockMvc.perform(postJson(b)).andExpect(status().isCreated());
+    }
+
+    @Test
+    @DisplayName("PR-C r2: the dedicated phone field still accepts a phone (rule applies to free text only)")
+    void dedicatedPhoneFieldStillAccepted() throws Exception {
+        mockMvc.perform(postJson(validBody())).andExpect(status().isCreated());
+    }
+
     @Test
     @DisplayName("B3/B7: malformed JSON containing a phone -> 400, body never echoes it, nothing logs it")
     void malformedJson_returns400_withoutEcho_andWithoutLogging() throws Exception {

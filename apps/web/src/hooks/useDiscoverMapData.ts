@@ -408,6 +408,23 @@ export interface UseDiscoverMapDataResult {
    */
   schoolRadiusPanelLoading: boolean;
   /**
+   * Issue #1793 PR-C — true only when the school-result panel's OWN card source has settled to a
+   * real result: loaded, not failed, and NOT a `keepPreviousData` placeholder (the previous radius'
+   * response served while the new one is in flight). Anonymous: the school-radius query. Signed-in:
+   * the discover-listings query (which keeps no previous data, so a key change reads as loading).
+   * Deliberately NOT `isFetching`: a same-key background refetch (window focus, stale refetch) is
+   * still a settled result and must not unmount a "Request a property" form the buyer is filling in.
+   */
+  schoolRadiusPanelSettled: boolean;
+  /**
+   * Issue #1793 PR-C — the area-listings query is currently serving the PREVIOUS key's response
+   * (`placeholderData: keepPreviousData`). Distinct from `isFetchingAreaListings`, which is also true
+   * for a same-key background refetch of data that IS this key's own result.
+   */
+  isPlaceholderAreaListings: boolean;
+  /** Issue #1793 PR-C — the anon viewport query is serving the previous viewport's response. Gated on `isAnonViewport`. */
+  isPlaceholderAnonViewport: boolean;
+  /**
    * Issue #1793 SR-024 — true when the blended /api/discover/areas request FAILED and there is no
    * data to fall back on (a failed background refresh over data already on screen is NOT an error
    * here). `cityTotal` is derived from this query and reads 0 on failure, so without this signal
@@ -836,6 +853,9 @@ export function useDiscoverMapData({
     // surface that "showing stale data, refresh in flight" signal instead of
     // presenting the previous page's cards as fully settled/current.
     isFetching: isFetchingAreaListings,
+    // Issue #1793 PR-C — true while `data` is the PREVIOUS key's response (keepPreviousData), as
+    // opposed to a same-key background refetch (which keeps this false). See the result interface.
+    isPlaceholderData: isPlaceholderAreaListings,
   } = useDiscoverCityListings({
     city,
     areaKeys: activeAreaListingKeys,
@@ -880,6 +900,7 @@ export function useDiscoverMapData({
     data: schoolRadiusData,
     isLoading: schoolRadiusQueryLoading,
     isError: schoolRadiusQueryError,
+    isPlaceholderData: schoolRadiusIsPlaceholder,
     refetch: refetchSchoolRadiusQuery,
   } = useSchoolRadiusListings({
     city,
@@ -999,6 +1020,14 @@ export function useDiscoverMapData({
     schoolRadiusEnabled && !isAuthenticated && schoolRadiusQueryError === true;
   // Issue #1793 SR-024 (PR-A review A1) — see `schoolRadiusPanelLoading` on the result interface.
   const schoolRadiusPanelLoading = schoolRadiusListingsLoading && !isAuthenticated;
+  // Issue #1793 PR-C — see `schoolRadiusPanelSettled` on the result interface.
+  const schoolRadiusPanelSettled = isAuthenticated
+    ? discoverListingsPage !== undefined && !discoverListingsLoading && discoverListingsError == null
+    : schoolRadiusEnabled &&
+      schoolRadiusData !== undefined &&
+      !schoolRadiusQueryLoading &&
+      !schoolRadiusQueryError &&
+      !schoolRadiusIsPlaceholder;
   const refetchSchoolRadiusListings = useCallback(() => {
     void refetchSchoolRadiusQuery();
   }, [refetchSchoolRadiusQuery]);
@@ -1044,6 +1073,7 @@ export function useDiscoverMapData({
     isLoading: anonViewportQueryLoading,
     isError: anonViewportQueryError,
     isPlaceholderData: anonViewportIsPlaceholder,
+    // (re-exposed below, gated on isAnonViewport, as `isPlaceholderAnonViewport`)
     refetch: refetchAnonViewportQuery,
   } = useDiscoverCityListings({
     city,
@@ -1118,6 +1148,8 @@ export function useDiscoverMapData({
     void refetchAnonViewportQuery();
   }, [refetchAnonViewportQuery]);
   const anonViewportListingsLoading = isAnonViewport && anonViewportQueryLoading;
+  // Issue #1793 PR-C — gated like the error/loading signals: a disabled query must never leak.
+  const isPlaceholderAnonViewport = isAnonViewport && anonViewportIsPlaceholder;
 
   const anonViewportMarkerListings = useMemo((): (PropertyListing & { images?: PropertyImage[] })[] => {
     if (anonViewportListings.length === 0) return [];
@@ -1365,6 +1397,9 @@ export function useDiscoverMapData({
     isErrorSchoolRadiusListings,
     refetchSchoolRadiusListings,
     schoolRadiusPanelLoading,
+    schoolRadiusPanelSettled,
+    isPlaceholderAreaListings,
+    isPlaceholderAnonViewport,
     isErrorDiscoverAreas,
     refetchDiscoverAreas,
     areaMarkerListings,

@@ -60,6 +60,7 @@ export function useAreaLeafResultSource(
   const baseFetching = areaBase?.fetching;
   const baseError = areaBase?.error;
   const baseRetry = areaBase?.retry;
+  const basePlaceholder = areaBase?.placeholder;
   const scopeKind = scopeSource.kind;
   const viewportAudience = scopeSource.kind === 'viewport' ? scopeSource.audience : null;
   const substitutedListings = scopeSource.kind === 'area' ? undefined : scopeSource.listings;
@@ -68,6 +69,9 @@ export function useAreaLeafResultSource(
   // viewport never sets them, so it reads undefined and the resolver keeps its T1 behaviour).
   const substitutedError = scopeSource.kind === 'area' ? undefined : scopeSource.error;
   const substitutedRetry = scopeSource.kind === 'area' ? undefined : scopeSource.retry;
+  // Issue #1793 PR-C — only the ANON viewport carries a keepPreviousData placeholder signal.
+  const substitutedPlaceholder =
+    scopeSource.kind === 'viewport' ? scopeSource.placeholder : undefined;
 
   // Memoized on the primitive discriminant values, not on the caller's
   // freshly-constructed scope object (the H1 fix).
@@ -148,18 +152,21 @@ export function useAreaLeafResultSource(
           fetching: baseFetching,
           error: baseError,
           retry: baseRetry,
+          placeholder: basePlaceholder,
         },
         substituted: {
           listings: substitutedListings,
           loading: substitutedLoading,
           error: substitutedError,
           retry: substitutedRetry,
+          placeholder: substitutedPlaceholder,
         },
         ownQuery: {
           listings: ownQueryListings,
           isLoading: areaListingsQuery.isLoading,
           isFetching: areaListingsQuery.isFetching,
           isError: areaListingsQuery.isError,
+          isPlaceholderData: areaListingsQuery.isPlaceholderData,
           refetch: () => areaListingsQuery.refetch(),
         },
       }),
@@ -171,14 +178,17 @@ export function useAreaLeafResultSource(
       baseFetching,
       baseError,
       baseRetry,
+      basePlaceholder,
       substitutedListings,
       substitutedLoading,
       substitutedError,
       substitutedRetry,
+      substitutedPlaceholder,
       ownQueryListings,
       areaListingsQuery.isLoading,
       areaListingsQuery.isFetching,
       areaListingsQuery.isError,
+      areaListingsQuery.isPlaceholderData,
       areaListingsQuery.refetch,
     ],
   );

@@ -221,7 +221,19 @@ type MapDataSlice = Pick<
   // Issue #1793 SR-024 (PR-A review A1) — the SAME query's anon in-flight signal (first load,
   // automatic retries, data-less Retry). OPTIONAL on this shared slice so existing fixtures stay
   // valid; the real controller always supplies it, and an absent value reads as "not loading".
-  Partial<Pick<ReturnType<typeof useDiscoverMapDataController>, 'schoolRadiusPanelLoading'>>;
+  Partial<Pick<ReturnType<typeof useDiscoverMapDataController>, 'schoolRadiusPanelLoading'>> &
+  // Issue #1793 PR-C — the own-query "settled" inputs for the "Request a property" card (placeholder-
+  // vs-refetch aware; see useDiscoverMapData's result interface). OPTIONAL for the same reason: an
+  // absent value reads as "not settled", so a fixture that predates them simply never shows the card.
+  Partial<
+    Pick<
+      ReturnType<typeof useDiscoverMapDataController>,
+      | 'schoolRadiusPanelSettled'
+      | 'schoolRadiusHasMore'
+      | 'isPlaceholderAreaListings'
+      | 'isPlaceholderAnonViewport'
+    >
+  >;
 type AgriSlice = Pick<
   ReturnType<typeof useDiscoverAgriController>,
   | 'corridorGroups'
@@ -460,6 +472,9 @@ type PanelGeographyView = Pick<
   | 'polygonListingsLoading'
   | 'isErrorPolygonListings'
   | 'refetchPolygonListings'
+  // Issue #1793 PR-C — see MapDataSlice's own doc comment (optional).
+  | 'isPlaceholderAreaListings'
+  | 'isPlaceholderAnonViewport'
 >;
 type PanelGeographyCommands = Pick<
   PanelFields,
@@ -555,6 +570,9 @@ type PanelSchoolsView = Pick<
   | 'isErrorSchoolRadiusListings'
   // Issue #1793 SR-024 (PR-A review A1) — see MapDataSlice's own doc comment (optional).
   | 'schoolRadiusPanelLoading'
+  // Issue #1793 PR-C — see MapDataSlice's own doc comment (optional).
+  | 'schoolRadiusPanelSettled'
+  | 'schoolRadiusHasMore'
 >;
 
 type PanelFiltersView = Pick<PanelFields, 'filters' | 'filtersContent' | 'searchQuery'>;
@@ -676,6 +694,10 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       refetchPolygonListings,
       isErrorSchoolRadiusListings,
       schoolRadiusPanelLoading,
+      schoolRadiusPanelSettled,
+      schoolRadiusHasMore,
+      isPlaceholderAreaListings,
+      isPlaceholderAnonViewport,
     },
     agri: {
       corridorGroups,
@@ -752,6 +774,8 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       polygonListingsLoading,
       isErrorPolygonListings,
       refetchPolygonListings,
+      isPlaceholderAreaListings,
+      isPlaceholderAnonViewport,
     },
     regionGuide: { regionGuideRingActive, regionOverviewMarkerKind, regionSelectNonce },
     results: {
@@ -789,6 +813,8 @@ export function buildPanelSurfaceModel(params: BuildPanelSurfaceModelParams): Di
       schoolListings,
       isErrorSchoolRadiusListings,
       schoolRadiusPanelLoading,
+      schoolRadiusPanelSettled,
+      schoolRadiusHasMore,
     },
     filters: { filters, filtersContent, searchQuery },
     navigation: {

@@ -7,7 +7,7 @@
  * `SchoolSummaryBand` + `SchoolRadiusListings` -> `RadiusChips`.
  * A genuine zero (200, no listings) and signed-in viewers keep their counts.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import type { UseInfiniteQueryResult, InfiniteData } from '@tanstack/react-query';
 import { renderWithProviders } from '@/test/renderWithProviders';
@@ -216,7 +216,16 @@ type PanelContent = 'school-selected' | 'area-school-combined';
  */
 function buildParams(
   panelContent: PanelContent,
-  schoolRadius: { isError: boolean; refetch: () => void; loading?: boolean; listingDataLoading?: boolean; isAuthenticated?: boolean },
+  schoolRadius: {
+    isError: boolean;
+    refetch: () => void;
+    loading?: boolean;
+    listingDataLoading?: boolean;
+    isAuthenticated?: boolean;
+    /** #1793 PR-C — the card source's own settled signal + the anon page-cap flag. */
+    settled?: boolean;
+    hasMore?: boolean;
+  },
 ): BuildPanelSurfaceModelParams {
   const nav: DiscoverUrlState = { ...URL_STATE };
   return {
@@ -290,6 +299,8 @@ function buildParams(
       // `schoolRadiusPanelLoading` is the anon school-radius query's own in-flight signal.
       listingDataLoading: schoolRadius.listingDataLoading ?? false,
       schoolRadiusPanelLoading: schoolRadius.loading ?? false,
+      schoolRadiusPanelSettled: schoolRadius.settled,
+      schoolRadiusHasMore: schoolRadius.hasMore,
       totalPages: 1,
       totalElements: 0,
       isAnonViewport: false,
@@ -410,6 +421,55 @@ describe.each<PanelContent>(['school-selected', 'area-school-combined'])(
       );
       expect(await screen.findByTestId('school-summary-count')).toHaveTextContent('0');
       expect(screen.getByTestId(`${CHIP_PREFIX[panelContent]}-3`)).toHaveTextContent('0 homes');
+    });
+  },
+);
+
+// Issue #1793 PR-C (fix cycle 1, CR F1/F2) — the legacy bridge threads the school-radius card source's
+// OWN settled signal and page-cap flag (surface view -> buildRightPanelView -> shared.refresh ->
+// SchoolJourneyPanel -> the panels -> SchoolRadiusListings) and gates the request card on them.
+describe.each<PanelContent>(['school-selected', 'area-school-combined'])(
+  'LegacyRightPanelBridge (%s) — #1793 PR-C request card follows the school-radius query\'s own settled signal',
+  (panelContent) => {
+    beforeEach(() => {
+      vi.stubEnv('VITE_PROPERTY_REQUESTS_ENABLED', 'true');
+      // The school panels read the city from the real URL (DiscoverProvider); the card needs one.
+      window.history.pushState({}, '', '/discover?city=udupi');
+    });
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+    const CARD = { name: 'Request a property' };
+    const base = { isError: false, refetch: vi.fn() };
+
+    it('settled, uncapped zero: the card renders in the empty state', async () => {
+      renderBridge(buildParams(panelContent, { ...base, settled: true }));
+      expect(await screen.findByTestId('school-radius-empty-state')).toBeVisible();
+      expect(screen.getByRole('button', CARD)).toBeInTheDocument();
+    });
+
+    it('F1a: a keepPreviousData placeholder (settled false, panel loading false) shows the empty state but NO card', async () => {
+      renderBridge(buildParams(panelContent, { ...base, settled: false }));
+      expect(await screen.findByTestId('school-radius-empty-state')).toBeVisible();
+      expect(screen.queryByRole('button', CARD)).not.toBeInTheDocument();
+    });
+
+    it('F2: an anonymous capped page (hasMore) filtered to empty: NO card', async () => {
+      renderBridge(buildParams(panelContent, { ...base, settled: true, hasMore: true }));
+      expect(await screen.findByTestId('school-radius-empty-state')).toBeVisible();
+      expect(screen.queryByRole('button', CARD)).not.toBeInTheDocument();
+    });
+
+    it('F2 control: signed-in is not affected by hasMore', async () => {
+      renderBridge(buildParams(panelContent, { ...base, settled: true, hasMore: true, isAuthenticated: true }));
+      expect(await screen.findByTestId('school-radius-empty-state')).toBeVisible();
+      expect(screen.getByRole('button', CARD)).toBeInTheDocument();
+    });
+
+    it('no settled signal from the surface at all: no card (never shown without proof)', async () => {
+      renderBridge(buildParams(panelContent, { ...base }));
+      expect(await screen.findByTestId('school-radius-empty-state')).toBeVisible();
+      expect(screen.queryByRole('button', CARD)).not.toBeInTheDocument();
     });
   },
 );

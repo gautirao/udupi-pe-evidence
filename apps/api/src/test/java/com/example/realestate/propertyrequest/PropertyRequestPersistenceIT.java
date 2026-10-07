@@ -158,6 +158,69 @@ class PropertyRequestPersistenceIT {
         assertThat(two.get(1).phoneMasked()).endsWith("0002");
     }
 
+    /**
+     * AES-256-GCM in the converter's documented storage format ({@code ENC:Base64(IV||ct||tag)}) under
+     * a key that is NOT the one the running converter uses: simulates a row written before a key
+     * rotation. Test-local so PhoneEncryptionConverter itself is not touched.
+     */
+    private static String encryptUnderForeignKey(String plaintext) throws Exception {
+        byte[] foreignKey = new byte[32];
+        new java.security.SecureRandom().nextBytes(foreignKey);
+        byte[] iv = new byte[12];
+        new java.security.SecureRandom().nextBytes(iv);
+        javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, new javax.crypto.spec.SecretKeySpec(foreignKey, "AES"),
+                new javax.crypto.spec.GCMParameterSpec(128, iv));
+        byte[] ct = cipher.doFinal(plaintext.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        byte[] all = new byte[iv.length + ct.length];
+        System.arraycopy(iv, 0, all, 0, iv.length);
+        System.arraycopy(ct, 0, all, iv.length, ct.length);
+        return "ENC:" + java.util.Base64.getEncoder().encodeToString(all);
+    }
+
+    @Test
+    @DisplayName("PR-C r2 key rotation: a row encrypted under another key must not break the admin list; it shows a non-plaintext fallback mask")
+    void undecryptableRowDoesNotBreakAdminList() throws Exception {
+        service.create(dto(PHONE), "it-client");
+        Thread.sleep(5);
+        jdbc.update("INSERT INTO public.property_requests (city, journey, intent, phone_enc, phone_hash, "
+                        + "contact_via, consent_version, consented_at) VALUES (?,?,?,?,?,?,?,now())",
+                "Udupi", "AREA", "BUY", encryptUnderForeignKey("+919123456780"), "h-rotated", "PHONE", "v1");
+
+        List<AdminPropertyRequestView> view = service.listRecent(10);
+
+        assertThat(view).hasSize(2);
+        // newest first: the foreign-key row was inserted last
+        assertThat(view.get(0).phoneMasked()).isEqualTo("unavailable");
+        assertThat(view.get(1).phoneMasked()).isEqualTo("+91******1234");
+        assertThat(view.toString()).doesNotContain("ENC:").doesNotContain("9123456780");
+    }
+
+    @Test
+    @DisplayName("PR-C r2: a phone-like requirement/areaLabel/city is rejected by bean validation, so no row is written")
+    void phoneLikeFreeTextWritesNoRow() {
+        jakarta.validation.Validator validator =
+                jakarta.validation.Validation.buildDefaultValidatorFactory().getValidator();
+        CreatePropertyRequestDto bad = new CreatePropertyRequestDto("Udupi", "karnataka/udupi/manipal",
+                "Manipal", "AREA", "BUY", "Call me on 9876543210", 2000000L, 5000000L, PHONE, "WHATSAPP",
+                true, "v1");
+        var violations = validator.validate(bad);
+        assertThat(violations).hasSize(1);
+        assertThat(violations.iterator().next().getMessage())
+                .isEqualTo("Please enter contact numbers only in the Phone / WhatsApp field.");
+        // The controller only calls the service when validation passes; so the table stays empty.
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM public.property_requests", Long.class)).isZero();
+
+        // ...while the dedicated phone field is still stored encrypted and shown masked.
+        CreatePropertyRequestDto good = new CreatePropertyRequestDto("Udupi", "karnataka/udupi/manipal",
+                "Manipal", "AREA", "BUY", "3 BHK, 50 lakh", 2000000L, 5000000L, PHONE, "WHATSAPP", true, "v1");
+        assertThat(validator.validate(good)).isEmpty();
+        service.create(good, "it-client");
+        assertThat(jdbc.queryForObject("SELECT phone_enc FROM public.property_requests", String.class))
+                .startsWith("ENC:");
+        assertThat(service.listRecent(5).get(0).phoneMasked()).isEqualTo("+91******1234");
+    }
+
     @Test
     @DisplayName("V146 CHECK constraints reject a lowercase journey and budget_max < budget_min at the DB level")
     void checkConstraintsHold() {

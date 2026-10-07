@@ -20,6 +20,8 @@ public class PropertyRequestService {
     private static final Logger log = LoggerFactory.getLogger(PropertyRequestService.class);
 
     private static final String MASK_FALLBACK = "****";
+    /** Shown when a row's phone cannot be decrypted (e.g. written under a rotated key). */
+    static final String MASK_UNAVAILABLE = "unavailable";
     private static final int MIN_MASKABLE_DIGITS = 8;
 
     private final PropertyRequestRepository repository;
@@ -56,6 +58,11 @@ public class PropertyRequestService {
     public List<AdminPropertyRequestView> listRecent(int limit) {
         List<PropertyRequest> rows = repository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, limit));
         log.info("Property requests listed count={} limit={}", rows.size(), limit);
+        long unreadable = rows.stream().filter(r -> TolerantPhoneConverter.UNDECRYPTABLE.equals(r.getPhone())).count();
+        if (unreadable > 0) {
+            // Count only: never the ids' ciphertext. Usually means a PHONE_ENCRYPTION_KEY change.
+            log.warn("Property requests with undecryptable phone count={} of {}", unreadable, rows.size());
+        }
         return rows.stream().map(PropertyRequestService::toView).toList();
     }
 
@@ -74,6 +81,9 @@ public class PropertyRequestService {
     static String mask(String phone) {
         if (phone == null) {
             return MASK_FALLBACK;
+        }
+        if (TolerantPhoneConverter.UNDECRYPTABLE.equals(phone)) {
+            return MASK_UNAVAILABLE;
         }
         String digits = phone.replaceAll("[^0-9]", "");
         if (digits.length() < MIN_MASKABLE_DIGITS) {

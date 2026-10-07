@@ -51,7 +51,7 @@ public class PropertyRequest {
     @Column(name = "budget_max")
     private Long budgetMax;
 
-    @Convert(converter = PhoneEncryptionConverter.class)
+    @Convert(converter = TolerantPhoneConverter.class)
     @Column(name = "phone_enc", nullable = false)
     private String phone;
 

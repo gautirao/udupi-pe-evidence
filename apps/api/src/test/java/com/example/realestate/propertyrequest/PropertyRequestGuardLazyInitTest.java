@@ -29,6 +29,8 @@ class PropertyRequestGuardLazyInitTest {
                 .withBean(PhoneKeyResolver.class,
                         () -> PropertyRequestEncryptionKeyGuardTest.resolver(spring, env, Map.of()))
                 .withBean(PropertyRequestEncryptionKeyGuard.class)
+                .withBean(jakarta.validation.Validator.class,
+                        () -> jakarta.validation.Validation.buildDefaultValidatorFactory().getValidator())
                 .withBean(PropertyRequestService.class, () -> Mockito.mock(PropertyRequestService.class))
                 .withBean(PropertyRequestRateLimiter.class, () -> Mockito.mock(PropertyRequestRateLimiter.class))
                 .withBean(PublicPropertyRequestController.class);

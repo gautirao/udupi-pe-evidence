@@ -111,7 +111,12 @@ export interface AreasJourneySchoolView {
   /** The school picked for the combined area+school view (`schoolId=`). */
   selected?: SchoolResult | null;
   /** Listings around the selected school (MapDiscovery-owned query). */
-  selectedListings: Pick<SchoolQueryState<DiscoverCityListingItem[] | undefined>, 'data' | 'loading' | 'error'>;
+  selectedListings: Pick<SchoolQueryState<DiscoverCityListingItem[] | undefined>, 'data' | 'loading' | 'error'> & {
+    /** Issue #1793 PR-C — the school-radius card source's own "settled" (see `schoolRadiusPanelSettled`). Optional (additive). */
+    settled?: boolean;
+    /** Issue #1793 PR-C — the anonymous school-radius page was capped (`hasMore`). Optional (additive). */
+    hasMore?: boolean;
+  };
   radiusKm?: number | null;
 }
 

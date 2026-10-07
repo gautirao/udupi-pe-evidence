@@ -29,6 +29,7 @@ import { Button } from '@/components/ui/button';
 import { HierarchyBackButton } from '@/components/discover/navigation/HierarchyBackButton';
 import { AreaSelectedPanel } from '@/components/discover/panels/AreaSelectedPanel';
 import { SchoolsInAreaPanel, AreaSchoolCombinedPanel } from '@/components/discover/panels/SchoolJourneyPanels';
+import { RequestCardSettledContext } from './requestCardSettledContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDiscoverActions, useDiscoverNav, useDiscoverShell } from '@/features/discover/context/useDiscoverContext';
 import { AreaSetDraftPanel } from '@/features/discover/components/AreaSetDraftPanel';
@@ -261,6 +262,10 @@ export function AreaLeafListingsSurface({ view, commands }: AreaLeafListingsSurf
               loading: schoolListings.loading ?? false,
               // Issue #1793 SR-024 — the school-radius query's failure (request-failure block).
               error: schoolListings.error ?? false,
+              // Issue #1793 PR-C — the school-radius card source's own settled signal + the anon
+              // page-cap flag (a capped page filtered to empty is not a real zero).
+              settled: schoolListings.settled,
+              hasMore: schoolListings.hasMore,
               // T6 — pinned: the AREA-leaf listings' fetching signal, not a
               // school-listings one.
               fetching: isFetchingAreaListingsResolved,
@@ -373,6 +378,9 @@ export function AreaLeafListingsSurface({ view, commands }: AreaLeafListingsSurf
       {isAreaSetDraftOpen ? (
         <AreaSetDraftPanel />
       ) : (
+      // Issue #1793 PR-C — hands ListingsBody THIS scope's own "settled" signal (AreaSelectedPanel
+      // between them forwards only a fixed prop set). See requestCardSettledContext.ts.
+      <RequestCardSettledContext.Provider value={resolvedResultSource.settled}>
       <AreaSelectedPanel
         // Issue #2658 (C5) — {view, commands} contract. Every value/expression
         // below is carried over verbatim from the flat call it replaced.
@@ -466,6 +474,7 @@ export function AreaLeafListingsSurface({ view, commands }: AreaLeafListingsSurf
           scope: { redrawPolygon: onRedrawPolygon },
         }}
       />
+      </RequestCardSettledContext.Provider>
       )}
     </div>
   );

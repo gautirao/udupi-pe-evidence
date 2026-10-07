@@ -58,6 +58,10 @@ export interface FlatAreasJourneyPanelProps {
   mapAreaListingsRefetch?: () => void;
   onRedrawPolygon?: () => void;
   mapAreaListingsFetching?: boolean;
+  /** Issue #1793 PR-C — the map's area query is serving the PREVIOUS key's response (keepPreviousData). */
+  mapAreaListingsPlaceholder?: boolean;
+  /** Issue #1793 PR-C — the anon viewport query is serving the previous viewport's response. */
+  isPlaceholderAnonViewport?: boolean;
   isAnonViewport?: boolean;
   anonViewportListings?: DiscoverCityListingItem[];
   anonViewportListingsLoading?: boolean;
@@ -83,6 +87,9 @@ export interface FlatAreasJourneyPanelProps {
   selectedSchool?: SchoolResult | null;
   schoolListings?: DiscoverCityListingItem[];
   schoolListingsLoading?: boolean;
+  /** Issue #1793 PR-C — the school-radius card source's own settled signal + the anon page-cap flag. */
+  schoolListingsSettled?: boolean;
+  schoolListingsHasMore?: boolean;
   radiusKm?: number | null;
   onRadiusChange?: (radiusKm: number) => void;
   onClearSchool?: () => void;
@@ -113,6 +120,7 @@ export function toAreasJourneyPanelProps(p: FlatAreasJourneyPanelProps): Grouped
             areaKey: p.mapAreaListingsAreaKey ?? null,
             loading: p.mapAreaListingsLoading,
             fetching: p.mapAreaListingsFetching,
+            placeholder: p.mapAreaListingsPlaceholder,
             error: p.mapAreaListingsError,
             retry: p.mapAreaListingsRefetch,
           },
@@ -128,13 +136,19 @@ export function toAreasJourneyPanelProps(p: FlatAreasJourneyPanelProps): Grouped
             polygonListingsLoading: p.polygonListingsLoading,
             isErrorPolygonListings: p.isErrorPolygonListings,
             refetchPolygonListings: p.refetchPolygonListings,
+            isPlaceholderAnonViewport: p.isPlaceholderAnonViewport,
           }),
         },
       },
       schools: {
         inArea: { data: p.schools, loading: p.schoolsLoading, fetching: p.schoolsFetching, error: p.schoolsError },
         selected: p.selectedSchool,
-        selectedListings: { data: p.schoolListings, loading: p.schoolListingsLoading },
+        selectedListings: {
+          data: p.schoolListings,
+          loading: p.schoolListingsLoading,
+          settled: p.schoolListingsSettled,
+          hasMore: p.schoolListingsHasMore,
+        },
         radiusKm: p.radiusKm,
       },
       city: { label: p.cityLabel },

@@ -105,7 +105,13 @@ export function buildRightPanelView(view: DiscoverPanelSurfaceView, extras: Righ
       chrome: { activeContextChips: view.interaction.activeContextChips, filtersContent: view.filters.filtersContent },
       area: { point: view.geography.selectedArea, urlAreaKey: urlState.areaKey, isLoading: view.geography.areasLoading },
       cards: { selectedListingId: urlState.selectedListing, hoveredListingId: null },
-      refresh: { isFetching: view.results.isFetching, isInitialLoading: view.results.isLoading },
+      refresh: {
+        isFetching: view.results.isFetching,
+        isInitialLoading: view.results.isLoading,
+        // Issue #1793 PR-C — the school-radius card source's own settled signal + the anon page-cap flag.
+        schoolRadiusSettled: view.schools.schoolRadiusPanelSettled,
+        schoolRadiusHasMore: view.schools.schoolRadiusHasMore,
+      },
     },
     entry: {
       landing: { isCityEmpty: view.routing.cityHasNoListings },

@@ -5,6 +5,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { PropertyCard } from '@/components/discover/PropertyCard';
 import { AreaZeroResultRecovery } from '@/components/discover/panels/AreaZeroResultRecovery';
 import { deriveDiscoverEmptyStateCopy } from '@/components/discover/emptyStateCopy';
+import { RequestPropertyCard } from '@/components/discover/RequestPropertyCard';
+import { useRequestCardSettled } from '@/features/discover/areas-journey/results/requestCardSettledContext';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
@@ -110,13 +112,30 @@ export function ListingsBody({
   // call sites below still read it independently, matching that shape.
   const zeroResultNoun = commercialFromFilters ? 'properties' : intentNoun === 'rent' ? 'rentals' : 'homes';
 
+  // Issue #1793 PR-C — "this scope's own query settled" (loaded, not failed, not a keepPreviousData
+  // placeholder), supplied by the surface that resolves the result source. `undefined` = the caller
+  // does not provide it, so the card FAILS CLOSED (never shown). The legacy `?areaKey=` AreaJourneyPanel
+  // 'area-selected' route provides no signal, so it shows no card in PR-C; threading the signal there
+  // is a follow-up. (The shared `isFetching` flag is not a safe substitute: it misses keepPreviousData
+  // placeholders and flickers on same-key refetches, which would unmount a typed draft.)
+  const ownQuerySettled = useRequestCardSettled();
+  const isQuerySettled = ownQuerySettled ?? false;
+
+  // Refetch dim (in-flight refetch, not the initial skeleton load). Applied to the surrounding results,
+  // NEVER to an open request card: opacity cannot be undone by a child, and a dimmed, click-blocked card
+  // would trap a buyer mid-typing on a same-key background refetch (#1793 PR-C r4). So the zero-result
+  // branch dims only its own recovery block and renders the card OUTSIDE the dimmed element.
+  const dimClass = cn(
+    'transition-opacity duration-150',
+    isFetching && !isInitialLoading ? 'pointer-events-none opacity-50' : 'opacity-100',
+  );
+  const isZeroResultBranch =
+    !isLoadingListings &&
+    !(isListingsError && (!areaListings || areaListings.length === 0)) &&
+    (!areaListings || areaListings.length === 0);
+
   return (
-      <div
-        className={cn(
-          'transition-opacity duration-150',
-          isFetching && !isInitialLoading ? 'pointer-events-none opacity-50' : 'opacity-100',
-        )}
-      >
+      <div className={isZeroResultBranch ? undefined : dimClass}>
         {isLoadingListings ? (
           <div className="discover-results-grid grid grid-cols-1 gap-3 p-4">
             {/* a4 — rounded-xl skeleton cards for consistency with PropertyCard corners. */}
@@ -169,23 +188,71 @@ export function ListingsBody({
             // Issue #2018 (slice 1/3) — every scope kind reaches the mock's
             // `EPZero` recovery stack, which says only what is true of the
             // ACTIVE scope (see AreaZeroResultRecovery's `scopeKind` doc).
+            // Issue #1793 PR-C (C1) — the "Request a property" card needs a SETTLED successful empty
+            // result. This branch also fires for `areaListings === undefined` (a disabled / never-run
+            // query) and while a refetch is in flight, neither of which is a settled success, so
+            // the gate is explicit rather than inferred from "no listings". `isQuerySettled` is THIS
+            // scope's own query (see above) — never the shared `isFetching`, which is also true for a
+            // same-key background refetch (that would unmount a half-filled form) and false for an
+            // anonymous keepPreviousData placeholder (that would show the card over stale data).
+            const isSettledEmptySuccess =
+              areaListings !== undefined &&
+              areaListings.length === 0 &&
+              !isLoadingListings &&
+              !isInitialLoading &&
+              isQuerySettled &&
+              !isListingsError;
+            const isMapScope = resultScopeKind !== 'AREA';
+            const isSingleArea = !multiAreaKeys || multiAreaKeys.length === 1;
+            // A multi-area AREA_SET request must name the whole set, not only the primary area. The
+            // labels are not available here (AreaSelectedPanel owns them), so use each committed key's
+            // last segment (its slug) rather than inventing a prettified name.
+            const setLabel =
+              !isSingleArea && multiAreaKeys
+                ? multiAreaKeys.map((k) => k.split('|').pop() || k).join(', ')
+                : areaLabel;
+
             return (
-              <AreaZeroResultRecovery
-                scopeAreaKeys={multiAreaKeys ?? [fallbackAreaKey]}
-                fallbackScopeName={areaLabel}
-                city={resolvedAreasCity}
-                filters={filters}
-                intent={intent}
-                searchQuery={searchQuery}
-                noun={zeroResultNoun}
-                cause={copy.cause}
-                scopeKind={resultScopeKind}
-                resultScope={activeScope}
-                onAdjustBoundary={onRedrawPolygon}
-                onApplyFilters={onApplyFilters}
-                onClearFilters={onClearFilters}
-                onClearSearch={onClearSearch}
-              />
+              <>
+                <div className={dimClass}>
+                  <AreaZeroResultRecovery
+                    scopeAreaKeys={multiAreaKeys ?? [fallbackAreaKey]}
+                    fallbackScopeName={areaLabel}
+                    city={resolvedAreasCity}
+                    filters={filters}
+                    intent={intent}
+                    searchQuery={searchQuery}
+                    noun={zeroResultNoun}
+                    cause={copy.cause}
+                    scopeKind={resultScopeKind}
+                    resultScope={activeScope}
+                    onAdjustBoundary={onRedrawPolygon}
+                    onApplyFilters={onApplyFilters}
+                    onClearFilters={onClearFilters}
+                    onClearSearch={onClearSearch}
+                  />
+                </div>
+                {isSettledEmptySuccess && resolvedAreasCity && (
+                  <RequestPropertyCard
+                    className="mx-4 mb-4"
+                    context={{
+                      city: resolvedAreasCity,
+                      // MAP scopes (drawn polygon / viewport) never invent an area.
+                      areaKey: isMapScope || !isSingleArea ? null : (multiAreaKeys?.[0] ?? fallbackAreaKey),
+                      areaLabel: isMapScope ? null : setLabel.slice(0, 200),
+                      journey: isMapScope ? 'MAP' : 'AREA',
+                      intent: intentNoun === 'rent' ? 'RENT' : 'BUY',
+                      contextLabel: `${
+                        resultScopeKind === 'POLYGON'
+                          ? 'Drawn area'
+                          : resultScopeKind === 'VIEWPORT'
+                            ? 'Visible map area'
+                            : setLabel
+                      }, ${resolvedCityLabel || resolvedAreasCity}`,
+                    }}
+                  />
+                )}
+              </>
             );
           })()
         ) : (

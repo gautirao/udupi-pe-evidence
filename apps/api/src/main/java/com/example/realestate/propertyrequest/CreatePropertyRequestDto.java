@@ -19,17 +19,22 @@ import java.io.IOException;
  *
  * <p>All validation messages are static strings: field errors must never carry the rejected value,
  * because {@code phone} is PII and the 400 body is returned to an anonymous caller.
+ * The free-text fields {@code city}, {@code areaLabel} and {@code requirement} reject phone-like
+ * content ({@link ContactNumberRule}; the dedicated {@code phone} field below is the only place a
+ * number is accepted, so keep the two in step).
  * {@code toString()} is overridden so an accidental log of this object cannot leak the phone.
  */
 public record CreatePropertyRequestDto(
         @NotBlank(message = "city is required")
         @Size(max = 100, message = "city must be at most 100 characters")
+        @NoContactNumber
         String city,
 
         @Size(max = 200, message = "areaKey must be at most 200 characters")
         String areaKey,
 
         @Size(max = 200, message = "areaLabel must be at most 200 characters")
+        @NoContactNumber
         String areaLabel,
 
         @NotNull(message = "journey is required")
@@ -41,6 +46,7 @@ public record CreatePropertyRequestDto(
         String intent,
 
         @Size(max = 500, message = "requirement must be at most 500 characters")
+        @NoContactNumber
         String requirement,
 
         @PositiveOrZero(message = "budgetMin must be zero or positive")

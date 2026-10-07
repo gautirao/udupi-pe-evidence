@@ -185,6 +185,15 @@ export interface SharedCardsView {
 
 export interface SharedRefreshView {
   isFetching: SurfaceView['results']['isFetching'];
+  /**
+   * Issue #1793 PR-C — the school-radius card source's own "settled" signal (loaded, not failed, not a
+   * keepPreviousData placeholder; NOT `isFetching`, which is also true for a same-key background
+   * refetch) and the anonymous page-cap flag. They live here rather than on `SchoolSelectedView`,
+   * which is already at the per-group ceiling (rightPanelContractBudget.guard.test.ts). Optional
+   * (additive): absent reads as "not settled", so the "Request a property" card never shows without them.
+   */
+  schoolRadiusSettled?: SurfaceView['schools']['schoolRadiusPanelSettled'];
+  schoolRadiusHasMore?: SurfaceView['schools']['schoolRadiusHasMore'];
   isInitialLoading: SurfaceView['results']['isLoading'];
 }
 

@@ -43,7 +43,8 @@ export interface SchoolJourneyPanelProps {
   area: Pick<SharedAreaView, 'point'>;
   chrome: Pick<SharedChromeView, 'activeContextChips' | 'filtersContent'>;
   cards: Pick<SharedCardsView, 'selectedListingId' | 'hoveredListingId'>;
-  refresh: Pick<SharedRefreshView, 'isFetching'>;
+  // Issue #1793 PR-C — the optional settled/hasMore pair feeds the "Request a property" card gate.
+  refresh: Pick<SharedRefreshView, 'isFetching' | 'schoolRadiusSettled' | 'schoolRadiusHasMore'>;
   onStartOver: SharedChromeCommands['startOver'];
   onBack: SharedChromeCommands['back'];
   onSelectJourney: SharedChromeCommands['selectJourney'];
@@ -230,6 +231,9 @@ export function SchoolJourneyPanel({
               // Issue #1793 SR-024 — school-radius request failure (error block instead of empty state).
               error: view.selected.listingsError ?? false,
               fetching: refresh.isFetching,
+              // Issue #1793 PR-C — the card source's OWN settled signal (not `fetching`) + page-cap flag.
+              settled: refresh.schoolRadiusSettled,
+              hasMore: refresh.schoolRadiusHasMore,
               selectedId: cards.selectedListingId,
             },
             propertyFilters: { value: view.propertyFilters.value },
@@ -272,6 +276,9 @@ export function SchoolJourneyPanel({
               // Issue #1793 SR-024 — school-radius request failure (error block instead of empty state).
               error: view.selected.listingsError ?? false,
               fetching: refresh.isFetching,
+              // Issue #1793 PR-C — the card source's OWN settled signal (not `fetching`) + page-cap flag.
+              settled: refresh.schoolRadiusSettled,
+              hasMore: refresh.schoolRadiusHasMore,
               selectedId: cards.selectedListingId,
             },
             propertyFilters: { value: view.propertyFilters.value },

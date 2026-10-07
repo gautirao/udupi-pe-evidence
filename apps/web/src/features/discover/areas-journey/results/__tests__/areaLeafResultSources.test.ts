@@ -215,3 +215,97 @@ describe('resolveAreaLeafResultSource — pinned quirks', () => {
     expect(own.retry).toBe(ownRefetch);
   });
 });
+
+// Issue #1793 PR-C (CR F1) — `settled` = THIS scope's own query is loaded, not failed and not a
+// keepPreviousData placeholder. It is NOT `!fetching` (the T5-pinned shared refresh signal).
+describe('resolveAreaLeafResultSource — settled (the request card gate)', () => {
+  const noop = vi.fn();
+  const settledInputs = (over: Partial<AreaLeafResultSourceInputs> = {}): AreaLeafResultSourceInputs => ({
+    hasMapAreaListings: true,
+    areaBase: { listings: [], loading: false, fetching: false, error: false, retry: noop, placeholder: false },
+    substituted: { listings: [], loading: false, error: false, retry: noop, placeholder: false },
+    ownQuery: { listings: [], isLoading: false, isFetching: false, isError: false, refetch: noop, isPlaceholderData: false },
+    ...over,
+  });
+
+  it('AREA / matched base: a placeholder is NOT settled even when fetching reads false', () => {
+    const r = resolveAreaLeafResultSource(
+      { kind: 'area' },
+      settledInputs({ areaBase: { listings: [], loading: false, fetching: false, error: false, retry: noop, placeholder: true } }),
+    );
+    expect(r.fetching).toBe(false);
+    expect(r.settled).toBe(false);
+  });
+
+  it('AREA / matched base: a same-key background refetch (fetching, no placeholder) IS settled', () => {
+    const r = resolveAreaLeafResultSource(
+      { kind: 'area' },
+      settledInputs({ areaBase: { listings: [], loading: false, fetching: true, error: false, retry: noop, placeholder: false } }),
+    );
+    expect(r.fetching).toBe(true);
+    expect(r.settled).toBe(true);
+  });
+
+  it.each([
+    ['loading', { loading: true, fetching: true, error: false, retry: noop, listings: [] }],
+    ['error', { loading: false, fetching: false, error: true, retry: noop, listings: [] }],
+  ])('AREA / matched base: %s is not settled', (_n, base) => {
+    expect(resolveAreaLeafResultSource({ kind: 'area' }, settledInputs({ areaBase: base })).settled).toBe(false);
+  });
+
+  it('AREA / own fallback query: placeholder, loading and error are not settled; a refetch is', () => {
+    const own = (over: Partial<AreaLeafResultSourceInputs['ownQuery']>) =>
+      resolveAreaLeafResultSource(
+        { kind: 'area' },
+        settledInputs({ hasMapAreaListings: false, ownQuery: { ...settledInputs().ownQuery, ...over } }),
+      );
+    expect(own({}).settled).toBe(true);
+    expect(own({ isFetching: true }).settled).toBe(true);
+    expect(own({ isPlaceholderData: true }).settled).toBe(false);
+    expect(own({ isLoading: true }).settled).toBe(false);
+    expect(own({ isError: true }).settled).toBe(false);
+  });
+
+  it('ANON viewport: a placeholder (previous viewport) is not settled; its own loading/error are not settled; a refetch is', () => {
+    const anon = (over: Partial<AreaLeafResultSourceInputs['substituted']>) =>
+      resolveAreaLeafResultSource(
+        { kind: 'viewport', audience: 'anon' },
+        settledInputs({ substituted: { ...settledInputs().substituted, ...over } }),
+      );
+    expect(anon({}).settled).toBe(true);
+    expect(anon({ placeholder: true }).settled).toBe(false);
+    expect(anon({ loading: true }).settled).toBe(false);
+    expect(anon({ error: true }).settled).toBe(false);
+    // The AREA base's fetching never leaks into the anon viewport's settled (T5 is about `fetching` only).
+    expect(
+      resolveAreaLeafResultSource(
+        { kind: 'viewport', audience: 'anon' },
+        settledInputs({ areaBase: { listings: [], loading: false, fetching: true, error: false, retry: noop, placeholder: true } }),
+      ).settled,
+    ).toBe(true);
+  });
+
+  it('AUTH viewport and POLYGON: settled = not loading and not errored (no keepPreviousData)', () => {
+    const run = (scope: Parameters<typeof resolveAreaLeafResultSource>[0], over: Partial<AreaLeafResultSourceInputs['substituted']>, baseErr = false) =>
+      resolveAreaLeafResultSource(
+        scope,
+        settledInputs({
+          areaBase: { listings: [], loading: false, fetching: true, error: baseErr, retry: noop, placeholder: false },
+          substituted: { ...settledInputs().substituted, ...over },
+        }),
+      ).settled;
+    expect(run({ kind: 'viewport', audience: 'auth' }, {})).toBe(true);
+    expect(run({ kind: 'viewport', audience: 'auth' }, { loading: true })).toBe(false);
+    expect(run({ kind: 'viewport', audience: 'auth' }, {}, true)).toBe(false); // T1: error from the AREA base
+    expect(run({ kind: 'polygon' }, {})).toBe(true);
+    expect(run({ kind: 'polygon' }, { loading: true })).toBe(false);
+    expect(run({ kind: 'polygon' }, { error: true })).toBe(false);
+  });
+
+  it('toAreaLeafScopeSource carries isPlaceholderAnonViewport onto the anon viewport only', () => {
+    const anon = toAreaLeafScopeSource({ ...NO_SIGNALS, isAnonViewport: true, isPlaceholderAnonViewport: true });
+    expect(anon).toMatchObject({ kind: 'viewport', audience: 'anon', placeholder: true });
+    const auth = toAreaLeafScopeSource({ ...NO_SIGNALS, isAuthViewport: true, isPlaceholderAnonViewport: true });
+    expect(auth).not.toHaveProperty('placeholder');
+  });
+});

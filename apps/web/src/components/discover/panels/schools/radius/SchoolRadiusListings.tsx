@@ -78,6 +78,26 @@ export interface SchoolRadiusListingsProps {
    *               them in the single compact context block.
    */
   density?: 'default' | 'compact' | 'desktop';
+  /**
+   * Issue #1793 PR-C — context for the "Request a property" card shown in the settled zero state.
+   * ADDITIVE and optional: without `city` the card never renders.
+   */
+  city?: string | null;
+  /** Issue #1793 PR-C — real area key for the request context, or null. */
+  requestAreaKey?: string | null;
+  /**
+   * Issue #1793 PR-C — the school-radius card source's OWN "settled" signal (loaded, not failed, not
+   * a keepPreviousData placeholder). NOT `isFetching`: that is also true for a same-key background
+   * refetch (which would unmount a half-filled form) and is false for an anonymous placeholder (which
+   * would show the card over the previous radius' stale zero). Absent reads as "not settled".
+   */
+  settled?: boolean;
+  /**
+   * Issue #1793 PR-C — the anonymous school-radius page was capped (`hasMore`). The anonymous list is
+   * filtered client-side, so a capped page filtered to empty is NOT a real zero (C1 "not truncated").
+   * Ignored for signed-in callers, whose list is filtered server-side.
+   */
+  hasMore?: boolean;
 }
 
 export function SchoolRadiusListings({
@@ -104,12 +124,24 @@ export function SchoolRadiusListings({
   cardRefs,
   boundedSearchSlot,
   density = 'default',
+  city,
+  requestAreaKey,
+  settled = false,
+  hasMore = false,
 }: SchoolRadiusListingsProps) {
   const navigate = useNavigate();
 
   const radiusTestIdPrefix = variant === 'selected' ? 'radius-btn' : 'combined-radius-btn';
   const listingsBodyTestId = variant === 'selected' ? 'school-listings-body' : 'combined-listings-body';
   const listingSkeletonTestId = variant === 'selected' ? 'listing-skeleton' : 'combined-listing-skeleton';
+
+  // Refetch dim: applied to the surrounding results, NEVER to an open request card (opacity cannot be undone
+  // by a child; a dimmed, click-blocked card would trap a buyer mid-typing on a same-key background refetch,
+  // #1793 PR-C r4). The settled-empty branch hands the dim to SchoolRadiusEmptyState, which applies it to
+  // everything except the card.
+  const isRefetchDimmed = isFetching && !isLoadingListings;
+  const isEmptyBranch =
+    !isLoadingListings && !hasMissingCoords && !(isError && listings.length === 0) && listings.length === 0;
 
   return (
     <>
@@ -152,7 +184,7 @@ export function SchoolRadiusListings({
         data-testid={listingsBodyTestId}
         className={cn(
           'discover-panel-container transition-opacity duration-150',
-          isFetching && !isLoadingListings ? 'opacity-50 pointer-events-none' : 'opacity-100',
+          isRefetchDimmed && !isEmptyBranch ? 'opacity-50 pointer-events-none' : 'opacity-100',
         )}
       >
         {isLoadingListings ? (
@@ -202,6 +234,14 @@ export function SchoolRadiusListings({
             onRadiusChange={onRadiusChange}
             onClearSchool={onClearSchool}
             onClearPropertyFilters={onClearPropertyFilters}
+            city={city}
+            areaKey={requestAreaKey}
+            dimmed={isRefetchDimmed}
+            // Settled SUCCESSFUL, NON-TRUNCATED empty only. This branch is already past loading/
+            // missing-coords/error, but it is also reached while an anonymous keepPreviousData
+            // placeholder (the previous radius' []) is on screen, so the query's OWN settled signal is
+            // required — never `isFetching`, which is also true for a same-key background refetch.
+            requestSettled={settled && !isLoadingListings && !isError && (isAuthenticated || !hasMore)}
           />
         ) : (
           <div className="discover-results-grid grid grid-cols-1 gap-3 p-3">

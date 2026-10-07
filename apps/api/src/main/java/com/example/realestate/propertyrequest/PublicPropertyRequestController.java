@@ -1,21 +1,20 @@
 package com.example.realestate.propertyrequest;
 
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.Valid;
+import jakarta.validation.Validator;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Public anonymous write endpoint for property requests (#1793).
@@ -41,6 +40,7 @@ public class PublicPropertyRequestController {
 
     private final PropertyRequestService service;
     private final PropertyRequestRateLimiter rateLimiter;
+    private final Validator validator;
 
     /**
      * The guard parameter is intentionally unused: depending on it forces the fail-closed key check
@@ -48,24 +48,48 @@ public class PublicPropertyRequestController {
      */
     public PublicPropertyRequestController(PropertyRequestService service,
                                            PropertyRequestRateLimiter rateLimiter,
-                                           PropertyRequestEncryptionKeyGuard keyGuard) {
+                                           PropertyRequestEncryptionKeyGuard keyGuard,
+                                           Validator validator) {
         this.service = service;
         this.rateLimiter = rateLimiter;
+        this.validator = validator;
     }
 
+    /**
+     * Validation is invoked here, not via {@code @Valid} on the parameter: Spring's
+     * {@code MethodArgumentNotValidException} message embeds each field's rejected value and is
+     * logged at DEBUG by the exception resolver, which would write a submitted phone number (in
+     * the phone field or in free text) to the log. {@link ValidationRejected} carries static
+     * messages only.
+     */
     @PostMapping
     public ResponseEntity<PropertyRequestCreatedResponse> create(
-            @Valid @RequestBody CreatePropertyRequestDto body, HttpServletRequest request) {
+            @RequestBody CreatePropertyRequestDto body, HttpServletRequest request) {
+        List<Map<String, String>> fields = validator.validate(body).stream()
+                .map(v -> Map.of("field", v.getPropertyPath().toString(), "message", v.getMessage()))
+                .sorted(Comparator.comparing((Map<String, String> m) -> m.get("field"))
+                        .thenComparing(m -> m.get("message")))
+                .toList();
+        if (!fields.isEmpty()) {
+            throw new ValidationRejected(fields);
+        }
         PropertyRequestCreatedResponse created = service.create(body, rateLimiter.resolveClientKey(request));
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
-        List<Map<String, String>> fields = ex.getBindingResult().getFieldErrors().stream()
-                .map(fe -> Map.of("field", fe.getField(), "message", Objects.toString(fe.getDefaultMessage(), "")))
-                .toList();
-        return ResponseEntity.badRequest().body(Map.of("error", "VALIDATION_FAILED", "fields", fields));
+    @ExceptionHandler(ValidationRejected.class)
+    public ResponseEntity<Map<String, Object>> handleValidation(ValidationRejected ex) {
+        return ResponseEntity.badRequest().body(Map.of("error", "VALIDATION_FAILED", "fields", ex.fields));
+    }
+
+    /** Field errors with static messages; its own message is constant so logging it leaks nothing. */
+    static final class ValidationRejected extends RuntimeException {
+        private final transient List<Map<String, String>> fields;
+
+        ValidationRejected(List<Map<String, String>> fields) {
+            super("Property request validation failed", null, false, false);
+            this.fields = fields;
+        }
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
