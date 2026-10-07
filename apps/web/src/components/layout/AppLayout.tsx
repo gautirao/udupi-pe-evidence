@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAuthModal } from '@/contexts/AuthModalContext';
 import { useToast } from '@/hooks/use-toast';
+import { isPropertyRequestsEnabled } from '@/hooks/useCreatePropertyRequest';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
@@ -43,6 +44,7 @@ import {
   GraduationCap,
   Sprout,
   Heart,
+  MessageSquarePlus,
 } from 'lucide-react';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { cn } from '@/lib/utils';
@@ -71,6 +73,17 @@ const adminNavigation = [
   { name: 'Trust Review', href: '/admin/trust-review', icon: ShieldCheck },
   { name: 'Intelligence', href: '/admin/intelligence', icon: BarChart3 },
 ];
+
+/**
+ * Issue #2796 — admin nav, with the flag-gated "Property requests" entry.
+ * Read at render time (not module scope) so it matches the `/admin/property-requests`
+ * route registration in App.tsx and honours `vi.stubEnv` in tests; a link to an
+ * unregistered route would 404.
+ */
+function getAdminNavigation(): NavRoleItem[] {
+  if (!isPropertyRequestsEnabled()) return adminNavigation;
+  return [...adminNavigation, { name: 'Property requests', href: '/admin/property-requests', icon: MessageSquarePlus }];
+}
 
 const brokerRoleNavigation = [
   { name: 'Broker dashboard', href: '/broker/dashboard', icon: Home },
@@ -322,7 +335,7 @@ export function RoleAwareHeader({
       ) : navVisibility.showAdminConsole ? (
         <>
           <div className="px-3 py-1 text-xs font-medium text-primary">Admin Console</div>
-          {adminNavigation.map((item) => (
+          {getAdminNavigation().map((item) => (
             <NavItem key={item.name} item={item} mobile onClick={() => setMobileOpen(false)} />
           ))}
         </>
@@ -475,7 +488,7 @@ export function RoleAwareHeader({
                 <RoleActionsOverflowMenu
                   label="Admin"
                   isActive={location.pathname.startsWith('/admin')}
-                  items={withTrends(adminNavigation, discoverTrendsHref)}
+                  items={withTrends(getAdminNavigation(), discoverTrendsHref)}
                   currentPathname={location.pathname}
                 />
               ) : (
@@ -495,7 +508,7 @@ export function RoleAwareHeader({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-52">
-                    {adminNavigation.map((item) => {
+                    {getAdminNavigation().map((item) => {
                       const active = location.pathname.startsWith(item.href);
                       return (
                         <DropdownMenuItem key={item.name} asChild>
