@@ -20,8 +20,8 @@ Notes:
 
 ## 2. Prerequisites before enabling (all required)
 
-1. **#2792 retention purge.** Rows carry `retain_until` (12 months); the purge job that deletes expired
-   rows must be live. Also have the deletion-email process ready for
+1. **#2792 retention purge.** Rows carry `retain_until` (12 months); the purge job
+   (`PropertyRequestRetentionJob`, section 8) deletes expired rows and ships with the backend. Also have the deletion-email process ready for
    `remove-my-search@propertysignal.in` (a person asking to remove their search must be actioned).
 2. **#2793 per-client rate limit / client-IP hardening.** Per-client limiting behind Render/Cloudflare
    is unresolved (the rightmost `X-Forwarded-For` entry may be a proxy hop). Limits are in-memory,
@@ -129,3 +129,26 @@ never run against a shared or hosted database:
 Then run the spec with the project's local E2E runner from inside the worktree you are testing,
 selecting the `full` project (the default `smoke` project does not include this spec) and one worker.
 Discard the containers and key afterwards.
+
+## 8. Retention purge (#2792)
+
+`PropertyRequestRetentionJob` hard-deletes expired `property_requests` rows (encrypted buyer phone is PII).
+
+- **Schedule:** daily at 03:00 UTC.
+- **Predicate:** `retain_until < now()` (exclusive; a row exactly at the cutoff is kept). The period is the
+  V146 `retain_until` column default (`now() + 12 months`); there is no second period in Java.
+- **Batching:** 500 rows per statement, each batch its own transaction, looped until a short batch.
+- **Metric:** counter `property_requests.retention.rows_purged` (no tags), emitted on every run including zero-row runs.
+- **Logs:** counts and cutoff only (`... starting cutoff=...`, `... completed totalDeleted=N cutoff=...`); never row content.
+- **Flag independence:** runs regardless of `PROPERTY_REQUESTS_ENABLED`, so rows from an enabled period still expire after rollback.
+- **Manual read-only check** (should be 0 after the day's 03:00 UTC run; rows expiring later in the day
+  are not yet purged, so do not compare against `now()`):
+
+  ```sql
+  SELECT count(*) FROM property_requests WHERE retain_until < date_trunc('day', now()) + interval '3 hours';
+  ```
+- **No failure signal (follow-up, not implemented):** the job raises no alert on exceptions. Suggested
+  alert: no `property_requests_retention_rows_purged` datapoint, or no "retention purge completed" log
+  line, for more than 25h.
+- **Backups:** backups, PITR and dev copies keep expired rows until their own rotation. The 12-month
+  guarantee covers the live table only.
