@@ -59,9 +59,9 @@ Derive the change tier from the triage fields. This is mechanical — do not ove
 | Tier | qa-fast | Engineer | Code-reviewer | Security-reviewer | E2E authoring | QA E2E gate | Pre-push hook |
 |------|---------|----------|---------------|-------------------|---------------|-------------|---------------|
 | Doc-only | skip | skip | skip | skip | skip | skip | skips (doc pattern) |
-| Trivial | skip | see Trivial engineer-test rule below | skip | skip | skip | skip | best-effort local backstop |
-| Normal | **conditional** (Standard: required; Lean: skip-eligible — see § Step 1C) | required | required (sonnet) | only if Gate F | **conditional** (qa-fast signal) | **required** | best-effort local backstop |
-| High-risk | required | required | required (**opus**) | **required** | **conditional** (qa-fast signal) | **required** | best-effort local backstop |
+| Trivial | skip | see Trivial engineer-test rule below | skip | skip | skip | skip | static guards only (not the E2E gate) |
+| Normal | **conditional** (Standard: required; Lean: skip-eligible — see § Step 1C) | required | required (sonnet) | only if Gate F | **conditional** (qa-fast signal) | **required** | static guards only (not the E2E gate) |
+| High-risk | required | required | required (**opus**) | **required** | **conditional** (qa-fast signal) | **required** | static guards only (not the E2E gate) |
 
 ### Trivial classification evidence (required)
 
@@ -73,7 +73,7 @@ If the orchestrator cannot confidently declare `Behavior impact: NONE`, classify
 
 **Trivial engineer-test rule:** Trivial changes may skip engineer tests ONLY when `Behavior impact: NONE` is declared AND the changed file is purely non-executable (e.g., a display string, placeholder text, comment, or static label). If the changed file is executable code (`.java`, `.ts`, `.tsx`, `.kt`, `.sql`, etc.), engineer tests are still required even for Trivial classification.
 
-The pre-push hook runs as a best-effort local backstop for Trivial changes — it is not a guarantee and must not be relied upon as the quality gate.
+The pre-push hook runs E2E static guards only — it does not execute the canonical suite, so it is not the E2E gate and must not be relied upon as the quality gate. The E2E gate is `npm run test:e2e:gate`.
 
 ### Evidence verbosity by tier
 
@@ -492,7 +492,7 @@ Rationale: Once planning is complete and approved, re-pasting the full plan and 
     - Standard and Full Guardrail modes treat all ADVISORY-FIX as QUALITY — no sub-classification needed.
 - `qa` in **E2E authoring mode** runs AFTER code-reviewer (and security-reviewer if applicable) APPROVE, BEFORE `qa` verification mode, for Normal and High-risk changes only. Conditional — triggered only when qa-fast recommended `E2E authoring recommended: YES`.
   When invoking E2E authoring mode, use this exact Task prompt:
-  > "Mode: e2e-authoring. Write E2E tests for the new/modified user flow introduced by this change. Follow TOOLING.md E2E test placement rules. qa-fast context: [paste qa-fast E2E justification]. Changed files: [list files]. Implementation summary: [1-2 line summary of what the engineer built]. Run the new/updated spec file(s) using a targeted Playwright command to confirm the authored tests pass. Only run the full suite (`npm run test:e2e:local`) if targeted validation is not feasible. Do NOT modify implementation code."
+  > "Mode: e2e-authoring. Write E2E tests for the new/modified user flow introduced by this change. Follow TOOLING.md E2E test placement rules. qa-fast context: [paste qa-fast E2E justification]. Changed files: [list files]. Implementation summary: [1-2 line summary of what the engineer built]. Run the new/updated spec file(s) using a targeted Playwright command to confirm the authored tests pass. A targeted run is dev iteration only and is never gate evidence; the E2E gate is `npm run test:e2e:gate` (canonical suite `e2e/canonical/**`, no targeted mode). Do NOT modify implementation code."
 
   **Skip conditions** (orchestrator skips E2E authoring even when qa-fast says YES):
   - Triage Type is `refactor` AND ALL of: no new UI route, no new API endpoint, no changed user-visible workflow step, AND qa-fast did not signal missing E2E coverage for this path
@@ -503,10 +503,10 @@ Rationale: Once planning is complete and approved, re-pasting the full plan and 
   When invoking verification mode, construct the Task prompt based on context:
 
   **Default (standalone or no targeted-files override):**
-  > "Mode: verification. Run the full E2E suite (`npm run test:e2e:local`) and report results. Do NOT write or modify any code. Do NOT fix failing tests. Report pass/fail with exact failure output for any failures. Changed files in this PR: [list files]. Classification: [normal|high-risk]."
+  > "Mode: verification. Run the E2E gate (`npm run test:e2e:gate`, canonical suite `e2e/canonical/**` on the local auth stack, clean working tree) and report results; exit 5 (open gaps) and exit 6 (hosted auth, ENVIRONMENT_GATED) are NOT a PASS. Do NOT write or modify any code. Do NOT fix failing tests. Report pass/fail with exact failure output for any failures. Changed files in this PR: [list files]. Classification: [normal|high-risk]."
 
   **Targeted-first (when sprint context provides `targeted_files` and no full-suite trigger):**
-  > "Mode: verification. Run targeted E2E first: `npx playwright test [targeted_files] --project=chromium`. If all targeted tests pass, report PASS (targeted-only). Do NOT run the full suite unless a targeted test fails. Do NOT write or modify any code. Report pass/fail with exact failure output for any failures. Changed files in this PR: [list files]. Classification: [normal|high-risk]."
+  > "Mode: verification. Run targeted E2E first (legacy dev iteration only — NOT the E2E gate, never evidence): `npx playwright test [targeted_files] --project=chromium`. A targeted-only result is reported as `TARGETED (not gate evidence)`, never as PASS of the gate; the gate itself (`npm run test:e2e:gate`) has no targeted mode. Do NOT write or modify any code. Report pass/fail with exact failure output for any failures. Changed files in this PR: [list files]. Classification: [normal|high-risk]."
 
   **Full-suite triggers (override targeted-first back to full suite):** every 3rd PR in a sprint, last PR in the sprint, PR modified any shared fixture file (`e2e/fixtures/`, `e2e/pages/`, `global-setup.ts`, `playwright.config.ts`), or PR modified auth/session setup.
 
@@ -517,9 +517,9 @@ Rationale: Once planning is complete and approved, re-pasting the full plan and 
 **Activation condition:** `.claude/state/current-pr-fixlog.md` exists AND `qa-verify-cycles` ≥ 1. When this condition is met, this protocol replaces the default full-suite re-run. When the condition is NOT met (cycle 1, or no fixlog), use the standard verification mode prompts above.
 
 **Rerun scope priority (orchestrator must attempt in this order):**
-1. **Test-level rerun** — if the Playwright runner supports `--grep "<test name>"`, rerun the exact failing tests: `npx playwright test --grep "<pattern>" --project=chromium`
-2. **Spec-level rerun** — if test-level is not feasible, rerun only the failing spec files: `npx playwright test [spec-file-paths] --project=chromium`
-3. **Full suite** — only if neither narrower scope is technically possible; must be stated explicitly with a one-line reason
+1. **Test-level rerun** (legacy dev iteration — not gate evidence) — if the Playwright runner supports `--grep "<test name>"`, rerun the exact failing tests: `npx playwright test --grep "<pattern>" --project=chromium`
+2. **Spec-level rerun** (legacy dev iteration — not gate evidence) — if test-level is not feasible, rerun only the failing spec files: `npx playwright test [spec-file-paths] --project=chromium`
+3. **Gate rerun** — `npm run test:e2e:gate`; always required before a cycle can be reported PASS (the gate has no targeted mode; narrower reruns above only localise a failure)
 
 **QA Task prompt — prepend verbatim before the standard verification prompt:**
 > "This is a targeted rerun (cycle 2+). Do the following in order:
@@ -675,9 +675,9 @@ After code-reviewer signals APPROVE and before proceeding to QA E2E gate, settle
 | Tier | QA E2E gate | Pre-push hook |
 |------|-------------|---------------|
 | Doc-only | skip | skips (doc pattern match) |
-| Trivial | skip | skips (marker or runs if no marker) |
-| Normal | **must be evaluated** — recorded as PASS or explicit documented SKIP under applicability rules (see below) | skips if marker exists |
-| High-risk | **must be evaluated** — recorded as PASS or explicit documented SKIP under applicability rules (see below) | skips if marker exists |
+| Trivial | skip | static guards only (not the E2E gate) |
+| Normal | **must be evaluated** — recorded as PASS or explicit documented SKIP under applicability rules (see below) | static guards only (not the E2E gate) |
+| High-risk | **must be evaluated** — recorded as PASS or explicit documented SKIP under applicability rules (see below) | static guards only (not the E2E gate) |
 
 ### E2E applicability rules (Normal and High-risk)
 
@@ -795,19 +795,17 @@ Heuristics (inform, not override, the rules above):
 - API response errors, 4xx/5xx status codes in test output → likely backend-engineer
 - Database constraint violations, migration errors → likely backend-engineer
 
-### Pre-push hook: smart backstop with marker deduplication
+### Pre-push hook: static guards only; `.e2e-passed` is written by the gate alone
 
-The `.githooks/pre-push` hook uses a marker-based approach:
+The E2E gate is `npm run test:e2e:gate` (`scripts/run-e2e-gate.sh`, canonical suite `e2e/canonical/**` on the local auth stack; CI job `e2e-canonical`). The `.githooks/pre-push` hook is NOT the gate:
 
-1. **Doc-only changes** → skips E2E (same as before)
-2. **`.e2e-passed` marker exists and SHA matches HEAD** → skips E2E (already verified by QA gate or prior run)
-3. **No marker or stale marker** → runs full E2E suite (catches manual pushes outside the workflow)
+1. **Hook** → runs the E2E static guards only (it neither reads nor writes `.e2e-passed`). `PREPUSH_E2E=gate` is an opt-in that additionally runs `npm run test:e2e:gate`.
+2. **`.e2e-passed`** → written ONLY by `scripts/run-e2e-gate.sh`, as the bare HEAD sha, and only on a full PASS with local auth, no open gaps (`E2E_GATE_ALLOW_OPEN_GAPS=1` → exit 5, not a pass) and a clean working tree. A dirty tree prints PASS with `.e2e-passed NOT written` (exit 0); a hosted-auth run exits 6 (ENVIRONMENT_GATED, not a pass). `scripts/run-e2e-local.sh` (legacy) never writes it.
+3. **Consumers** → prose checks only: `cat .e2e-passed` MUST equal `git rev-parse HEAD`; missing or mismatched = the gate is not proven for this HEAD (a stale sentinel is invalid; existence alone is not a pass signal).
 
-The hook also writes the marker on success, so retries and subsequent pushes of the same commit skip.
+See `.claude/E2E_GATE.md` for the full design.
 
-This eliminates redundant E2E runs for workflow-driven pushes while preserving safety for manual pushes. See `.claude/E2E_GATE.md` for the full design.
-
-If the pre-push hook fails (no marker, stale marker, E2E actually fails): play `afplay /System/Library/Sounds/Basso.aiff`, surface the failure to the user and stop. Do NOT auto-fix.
+If the pre-push hook fails (a static guard fails): play `afplay /System/Library/Sounds/Basso.aiff`, surface the failure to the user and stop. Do NOT auto-fix.
 
 ---
 
@@ -828,11 +826,11 @@ If the pre-push hook fails (no marker, stale marker, E2E actually fails): play `
 ### MUST NOT
 
 1. **Write or edit code** — not source, not tests, not config, not SQL. Not even "trivial one-line fixes."
-2. **Run tests** — not `mvn test`, not `npm test`, not `npm run test:e2e:local`. Delegate to engineer (unit/integration) or QA (E2E verification).
+2. **Run tests** — not `mvn test`, not `npm test`, not `npm run test:e2e:gate`. Delegate to engineer (unit/integration) or QA (E2E verification).
 3. **Run build commands** — not `npm run build`, not `mvn compile`.
 4. **Interpret test failures as acceptable** — if a test fails, route to agent. Never skip.
 5. **Apply reviewer findings directly** — always re-invoke the responsible engineer.
-6. **Override the E2E gate** — if classification is Normal or High-risk, QA E2E must run (or be explicitly satisfied by a valid skip reason per the E2E applicability rules). No exceptions. Run `npm run test:e2e:local` unconditionally; do not pre-check server availability. "Backend not running" is not a valid skip reason — if a server fails to start, surface as BLOCKED. `SKIPPED(no E2E infra)` and `SKIPPED(server not running)` are never valid — see the "Invalid skip reasons" section in Step 3.
+6. **Override the E2E gate** — if classification is Normal or High-risk, QA E2E must run (or be explicitly satisfied by a valid skip reason per the E2E applicability rules). No exceptions. Run `npm run test:e2e:gate` unconditionally; do not pre-check server availability. "Backend not running" is not a valid skip reason — if a server fails to start, surface as BLOCKED. `SKIPPED(no E2E infra)` and `SKIPPED(server not running)` are never valid — see the "Invalid skip reasons" section in Step 3.
 7. **Reclassify to dodge gates** — if triage says risk=med or the change has logic, it cannot be Trivial.
 8. **Resolve implementation decisions before engineer pre-flight.** This includes:
    - choosing implementation approach or design pattern

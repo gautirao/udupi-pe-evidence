@@ -172,7 +172,7 @@ manual_verification = true | false
 manual_verification_notes = "user verified at URL X"
 server_preflight_check = "PASS" | "FAIL" | "NOT_RUN"
 env_file = ".env.e2e"           # REQUIRED: exact env file loaded (e.g. .env.e2e); must be repo-grounded
-command_executed = "bash scripts/run-e2e-local.sh e2e/spec.ts"  # REQUIRED: exact shell command; must exist in repo
+command_executed = "npm run test:e2e:gate"  # REQUIRED: exact shell command; must exist in repo. The E2E gate (canonical suite e2e/canonical/**); a targeted/legacy run (e.g. scripts/run-e2e-local.sh <spec>, LEGACY) is dev iteration only, never gate evidence
 artefact_path = "playwright-report/index.html | screenshots/step1.png | N/A — BLOCKED"
                                 # REQUIRED: path to screenshot, trace, video, or HTML report;
                                 #           "N/A" only if verdict is BLOCKED, with reason
@@ -210,7 +210,7 @@ Never invent file paths, env var names, commands, URLs, test accounts, or creden
 | Resource | Correct value |
 |---|---|
 | E2E credentials file | `.env.e2e` (NOT `.env.local`) |
-| E2E runner | `bash scripts/run-e2e-local.sh <spec>` |
+| E2E runner | `npm run test:e2e:gate` (the gate). Targeted canonical dev run: `npx playwright test --config=playwright.canonical.config.ts <spec>` — not gate evidence. `bash scripts/run-e2e-local.sh <spec>` is LEGACY, not the gate |
 | Frontend dev server | `npm run dev` → `http://localhost:5174` |
 | Playwright config | `playwright.config.ts` (loads `.env.e2e` at line ~10) |
 | Backend health | `http://localhost:8085/health` (HTTP 401 when live) |

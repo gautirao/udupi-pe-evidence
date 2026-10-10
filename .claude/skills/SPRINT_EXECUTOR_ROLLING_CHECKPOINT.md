@@ -429,7 +429,7 @@ SPRINT_EXECUTOR's only obligation before every cycle-2+ reviewer runs: capture a
    **E2E Integrity Check (HARD GATE):**
    - `cat .e2e-passed` MUST match `git rev-parse HEAD` — a stale sentinel is invalid; existence alone is not a pass signal
    - Tests must NOT contain: `test.skip(true)` called unconditionally, or conditional-pass patterns (branches where the test passes regardless of whether the feature works)
-   - If sentinel is stale: run `bash scripts/run-e2e-local.sh` and refresh `.e2e-passed` only after a verified green run against current HEAD
+   - If sentinel is missing or stale: run `npm run test:e2e:gate` on a clean working tree (canonical suite, local auth stack). `.e2e-passed` is written only by that gate, as the bare HEAD sha, and only on a full PASS (exit 5 open gaps / exit 6 hosted auth are not a pass; a dirty tree prints PASS but writes nothing). `scripts/run-e2e-local.sh` is legacy and never refreshes it
    - If the route is public: at least one test must cover the anonymous journey (no `storageState`)
    - Tests must assert correct navigation outcomes (URL after navigation), not only the absence of error messages
    - Permissive assertions that pass on regression are equivalent to no coverage — treat as a gap requiring new tests
@@ -444,7 +444,7 @@ SPRINT_EXECUTOR's only obligation before every cycle-2+ reviewer runs: capture a
    - `git push -u origin <branch>`
    - `gh pr create --title "..." --body "..." --base main`
    - **Workflow invariant:** Every PR body must include `Closes #<issue-number>` for the issue being executed. The issue number comes from the sprint checkpoint's `Sprint issues:` map. Missing closing keyword is a workflow error — this step is not complete until the correct closing keyword is present in the PR body.
-   - **Local E2E is the primary merge gate.** If the pre-push hook ran E2E and it passed (all tests pass / 0 failures, marker written), proceed to merge immediately — do NOT wait for CI.
+   - **Local E2E is the primary merge gate.** The pre-push hook runs static guards only and is not the gate. If `npm run test:e2e:gate` printed `CANONICAL E2E GATE: PASS @ <sha>` for the PR head sha (clean tree, `.e2e-passed` == HEAD), proceed to merge immediately — do NOT wait for CI.
    - CI green is a bonus signal, not a merge blocker. Only block on CI if the failure is clearly a **code failure** (test failures, compile errors, linting errors, type errors, missing dependencies): play `afplay /System/Library/Sounds/Basso.aiff`, stop, surface failure log to user, emit BLOCKED checkpoint. Infrastructure failures do NOT block merge when local E2E passed. Infrastructure failures are exclusively: runner timeout, billing/quota error, network error, Docker pull failure, runner unavailability. Everything else is a code failure and blocks merge.
    - Merge PR via `gh pr merge <number> --squash --delete-branch` — **only with explicit user merge approval in the current session (CLAUDE.md §10; gate/E2E pass is eligibility, not approval). Never `--admin`, never bypass branch protection, never force merge.** A standing user instruction covering the sprint (e.g. "merge each PR as it goes green in this sprint") counts as explicit approval for the PRs it covers; absent that, stop and ask per PR.
    - `git checkout main && git pull origin main`
@@ -563,7 +563,7 @@ SPRINT_EXECUTOR's only obligation before every cycle-2+ reviewer runs: capture a
 
 When all issues in the execution order have been merged and closed:
 
-1. **Integration validation** — run the full E2E suite (`npm run test:e2e:local`) against the accumulated state of main after the final PR merge. This catches regressions caused by the combined effect of multiple sprint PRs that passed individually but interact badly together.
+1. **Integration validation** — run the E2E gate (`npm run test:e2e:gate`) against the accumulated state of main after the final PR merge. This catches regressions caused by the combined effect of multiple sprint PRs that passed individually but interact badly together.
    - **PASS** → record `Integration validation: PASS` in the final checkpoint. Proceed to step 2.
    - **FAIL** → do NOT mark sprint as complete. Update checkpoint with `Status: NEEDS FOLLOW-UP` and `Integration validation: FAIL — [failure summary]`. Play `afplay /System/Library/Sounds/Basso.aiff`. Surface the failure to the user with options: (a) investigate and fix as a follow-up PR (create issue), (b) revert the suspected PR (see Revert Protocol below), (c) accept the failure and close the sprint with a known risk. Do not proceed to archiving until the user decides.
    - **Skip condition:** if the sprint contained only doc-only or trivial PRs with no code changes, skip integration validation and record `Integration validation: SKIPPED(no code PRs)`.
@@ -611,7 +611,7 @@ git revert <merge-commit-sha> --no-edit
 - Commit the revert with message: `revert: undo #<PR-number> — <reason>`
 
 **Step 3 — Verify the revert:**
-- Run full E2E suite (`npm run test:e2e:local`) to confirm the regression is resolved and no new issues were introduced by the revert.
+- Run the E2E gate (`npm run test:e2e:gate`) to confirm the regression is resolved and no new issues were introduced by the revert.
 - If PASS: push the revert commit and proceed to step 4.
 - If FAIL: surface to user — the revert itself introduced a new failure or the original regression was not fully contained. Do NOT proceed without user decision.
 

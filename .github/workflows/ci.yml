@@ -143,50 +143,6 @@ jobs:
           SUPABASE_PROJECT_REF: ci-placeholder
           AI_API_KEY: ci-placeholder
 
-  # ── E2E (legacy, deployed-site smoke) ────────────────────────────────────────
-  # Runs auth-free smoke tests against the deployed Cloudflare Pages site.
-  # Tests run against the previously-deployed version (before PR merges) —
-  # this validates the gate infrastructure and catches regressions in auth-free flows.
-  #
-  # NOTE (#2187): this job is NOT the authoritative cross-stack merge gate.
-  # It proves the deployed frontend renders and admits auth-free navigation
-  # against WHATEVER build is currently live — it never exercises the PR's
-  # own backend code, and a CORS/env misconfiguration on the deployed site can
-  # make this pass or fail independent of the PR's changes. `e2e-canonical`
-  # below is the real backend-honest gate. Left running as a secondary,
-  # low-cost check on deployed-site reachability; see e2e/README.md.
-  playwright-pr:
-    name: E2E smoke (Playwright, deployed site — secondary)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright browsers
-        run: npx playwright install chromium --with-deps
-
-      - name: Run auth-free smoke tests
-        run: npx playwright test --project=smoke
-        env:
-          PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL || 'https://udupi-property-explorer.pages.dev' }}
-
-      - name: Upload Playwright report on failure
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: playwright-pr-report-${{ github.run_id }}-${{ github.run_attempt }}
-          path: playwright-report/
-          retention-days: 14
-
   # ── E2E (canonical, real backend) ────────────────────────────────────────────
   # #2187: this is the AUTHORITATIVE cross-stack merge gate. It builds the PR's
   # own frontend + backend, stands up a real local Postgres/PostGIS fixture, and

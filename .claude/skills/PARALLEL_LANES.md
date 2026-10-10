@@ -146,7 +146,7 @@ Before `gh pr create`:
 - [ ] If this is a **switch PR**, queue token is held (per tracking issue pinned comment).
 - [ ] If this is a **migration PR**, Flyway slot claim PR has merged.
 - [ ] If this is a **frontend switch PR**, backend endpoint deployed + `curl` verified.
-- [ ] Local E2E gate green: `bash scripts/run-e2e-local.sh e2e/quick-smoke.spec.ts`.
+- [ ] Local E2E gate green: `npm run test:e2e:gate` (canonical suite on the local auth stack; clean tree so `.e2e-passed` is written).
 
 ### H. Merge sequencing
 Introduce PRs: merge first-come-first-green.

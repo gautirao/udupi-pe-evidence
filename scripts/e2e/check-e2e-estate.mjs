@@ -57,6 +57,7 @@ export const EXPECTED_CONFIGS = [
   'e2e-parity/mock-capture/playwright.mock-capture.config.ts',
   'playwright.canonical.config.ts',
   'playwright.config.ts',
+  'playwright.deployed.config.ts',
   'playwright.parity.config.ts',
 ];
 export const NEW_SPEC_RULE =

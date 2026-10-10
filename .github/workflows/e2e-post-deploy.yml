@@ -1,20 +1,49 @@
-name: Post-Deploy Smoke
+name: Post-Deploy Reachability (secondary — not the E2E gate)
 
-# Runs after every merge to main.
-# Cloudflare Pages deploys in ~3 min; Render backend is polled until healthy.
-# This tests the LIVE production deployment, not the CI build.
+# SECONDARY — not the E2E gate. The authoritative gate is `npm run test:e2e:gate` (the canonical suite, run locally and
+# by the e2e-canonical job in ci.yml). This workflow only asks whether the deployed site is reachable and fails closed
+# for an anonymous visitor: the frontend renders, protected routes redirect to /auth, the backend health reports UP, one
+# public endpoint answers and one authenticated endpoint refuses an anonymous GET.
+#
+# It is AUTH-FREE and WRITE-FREE: no secrets, no credentials, no sign-in, and the browser aborts every non-read request
+# (see e2e/deployed/post-deploy.reachability.ts). It replaces the former production smoke run, which signed in with
+# stored credentials and created listings on production. The permissions block below is read-only on purpose.
+#
+# What a green run does NOT mean:
+#  - Render autoDeploy is OFF, so the backend answering says nothing about the backend that was just merged.
+#  - Cloudflare Pages deploys a minute or two after the merge; a push-triggered run can therefore probe the PREVIOUS
+#    frontend build. The polls below prove the sites answer, not that they serve this commit.
+#
+# The two URLs are explicit, reviewable inputs of this workflow and the ONLY place a default lives:
+# playwright.deployed.config.ts has no default for them (a local run can never silently hit production). The production
+# frontend is https://propertysignal.in, overridable through the repo variable DEPLOYED_BASE_URL (backend:
+# DEPLOYED_BACKEND_URL). They are repo VARIABLES (vars.), never secrets. Whether the Render backend's CORS allow-list
+# admits the https://propertysignal.in origin is an owner-confirm item: a CORS failure in this run is a finding, not a flake.
 on:
   push:
     branches: [main]
   workflow_dispatch:  # allow manual trigger
 
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-post-deploy
+  cancel-in-progress: true
+
 jobs:
-  smoke:
-    name: Production smoke (Playwright)
+  reachability:
+    name: Deployed-site reachability (secondary — not the E2E gate)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PLAYWRIGHT_BASE_URL: ${{ vars.DEPLOYED_BASE_URL || 'https://propertysignal.in' }}
+      BACKEND_BASE_URL: ${{ vars.DEPLOYED_BACKEND_URL || 'https://udupi-property-explorer.onrender.com' }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -27,45 +56,41 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps
 
-      - name: Wait for Cloudflare Pages deployment
+      - name: Wait for the frontend to answer
         run: |
-          echo "Waiting 3 minutes for Cloudflare Pages to finish deploying..."
-          sleep 180
-          echo "Cloudflare wait complete."
-
-      - name: Wait for Render backend
-        run: |
-          echo "Polling Render backend at $BACKEND_BASE_URL ..."
+          echo "Polling the frontend at $PLAYWRIGHT_BASE_URL ..."
           for i in $(seq 1 10); do
-            if curl -sf "$BACKEND_BASE_URL/actuator/health" --max-time 30 -o /dev/null; then
-              echo "Backend ready."
+            if curl -sf "$PLAYWRIGHT_BASE_URL/" --max-time 30 -o /dev/null; then
+              echo "Frontend answered."
               exit 0
             fi
             echo "Attempt $i/10: not ready, retrying in 30s..."
             sleep 30
           done
-          echo "Backend did not respond after 5 minutes — proceeding anyway."
-        env:
-          BACKEND_BASE_URL: ${{ secrets.BACKEND_BASE_URL || 'https://udupi-property-explorer.onrender.com' }}
+          echo "Frontend did not answer after 10 attempts."
+          exit 1
 
-      - name: Run production smoke tests
-        run: npm run test:e2e:full
-        env:
-          PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL || 'https://udupi-property-explorer.pages.dev' }}
-          BACKEND_BASE_URL: ${{ secrets.BACKEND_BASE_URL || 'https://udupi-property-explorer.onrender.com' }}
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          SMOKE_USER_EMAIL: ${{ secrets.SMOKE_USER_EMAIL }}
-          SMOKE_USER_PASSWORD: ${{ secrets.SMOKE_USER_PASSWORD }}
-          DEALER_EMAIL: ${{ secrets.DEALER_EMAIL }}
-          DEALER_PASSWORD: ${{ secrets.DEALER_PASSWORD }}
-          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
-          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+      - name: Wait for the backend health endpoint
+        run: |
+          echo "Polling the backend at $BACKEND_BASE_URL ..."
+          for i in $(seq 1 10); do
+            if curl -sf "$BACKEND_BASE_URL/actuator/health" --max-time 30 -o /dev/null; then
+              echo "Backend answered."
+              exit 0
+            fi
+            echo "Attempt $i/10: not ready, retrying in 30s..."
+            sleep 30
+          done
+          echo "Backend did not answer after 10 attempts."
+          exit 1
 
-      - name: Upload Playwright report on failure
+      - name: Run reachability check (secondary — not the E2E gate)
+        run: npx playwright test --config=playwright.deployed.config.ts
+
+      - name: Upload reachability report on failure
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: post-deploy-playwright-report-${{ github.run_id }}
-          path: playwright-report/
+          name: post-deploy-reachability-report-${{ github.run_id }}
+          path: playwright-report-deployed/
           retention-days: 14

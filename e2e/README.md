@@ -28,30 +28,39 @@ unexecuted journey, and on any role credential value found in the run artefacts.
 - New permanent Playwright coverage must extend the canonical suite for a documented journey gap, or
   carry an explicit specialist reason as a `RETAIN_SPECIALIST` manifest row; the estate guard fails on
   any unlisted spec.
-- Everything else below (`test:e2e:local`, `e2e-watch.sh`, the `smoke`/`journey`/`full` projects) is the
-  LEGACY estate: NOT the gate, scheduled for retirement per the manifest.
+- `.e2e-passed` (bare HEAD sha) is written ONLY by this gate, and only on a full PASS with local auth,
+  no open gaps and a clean working tree. A dirty tree prints PASS with `.e2e-passed NOT written` (exit 0);
+  open gaps exit 5 and a hosted-auth run exits 6 (ENVIRONMENT_GATED) - neither is a PASS. The pre-push
+  hook runs static guards only and neither reads nor writes the sentinel.
+- Everything else below (`test:e2e:local`, `e2e-watch.sh`, the `journey`/`full`/`integration-ui` projects)
+  is the LEGACY estate: NOT the gate, scheduled for retirement per the manifest. The legacy `smoke`
+  project, the `playwright-pr` CI job and the `udupi-canonical` fixture profile are retired.
+- Post-deploy: `.github/workflows/e2e-post-deploy.yml` runs `playwright.deployed.config.ts`
+  (`e2e/deployed/`), a write-free, credential-free reachability check of the deployed site. It is
+  **secondary - not the E2E gate**.
 
 ## Three suites, one authoritative gate (#2187)
 
 This repo has three layers of Playwright coverage. Only one of them is the
-**authoritative CI merge gate**:
+**authoritative CI merge gate** (`npm run test:e2e:gate` locally):
 
 | Suite | Config | Runs against | CI job | Authoritative gate? |
 |---|---|---|---|---|
 | **Canonical** (`e2e/canonical/`) | `playwright.canonical.config.ts` | A real, locally-built frontend + real locally-run backend + real local Postgres/PostGIS fixture, started IN the CI job itself | `e2e-canonical` in `.github/workflows/ci.yml` | **YES — this is the merge gate.** |
-| **Legacy smoke** (7 files, see below) | `playwright.config.ts`, `smoke` project | The already-deployed Cloudflare Pages site (whatever build is currently live) | `playwright-pr` in `.github/workflows/ci.yml` | No — secondary/auth-free reachability check only, kept for continuity. Does not exercise the PR's own backend. |
+| **Deployed reachability** (secondary — not the E2E gate) | `playwright.deployed.config.ts` (`e2e/deployed/`) | The already-deployed production site (https://propertysignal.in, overridable via repo variable `DEPLOYED_BASE_URL`) + Render backend (repo variable `DEPLOYED_BACKEND_URL`), whatever build is currently live. The defaults live only in the workflow; the config requires explicit URLs. No auth, no writes | `.github/workflows/e2e-post-deploy.yml` (post-merge, not a PR check) | No — secondary reachability check only. Does not exercise the PR's own backend. |
 | **Historical/specialist** (~150 remaining `*.spec.ts` files under `e2e/`, including `journey/` and `integration-ui/`) | `playwright.config.ts`, `journey`/`integration-ui`/`full` projects | A locally-started dev backend+frontend (via `scripts/e2e-watch.sh` or `scripts/run-e2e-local.sh`) | Not run in CI at all | No — developer-invoked only (`npm run test:e2e:watch`, `bash scripts/e2e-watch.sh --project=journey`, etc.) |
 
 **Why canonical is authoritative:** it is the only suite that builds and
 exercises the PR's own frontend AND backend code together against a real
 database, with `canonical-global-setup.ts`'s build-sha provenance check
-proving the served build actually matches the commit under test. The legacy
-`playwright-pr` smoke job tests the deployed site's CORS/render behaviour but
+proving the served build actually matches the commit under test. The
+deployed reachability check tests the live site's render/CORS/health but
 never touches the PR's backend — see `e2e/canonical/README.md`'s module
 docstring in `playwright.canonical.config.ts` for the full "why" of the
-canonical harness's guards. `playwright-pr` is left running as a secondary,
-low-cost check; it is **not** where a real regression should be caught, and a
-green `playwright-pr` run proves nothing about the PR's own backend changes.
+canonical harness's guards. The reachability check is a secondary, low-cost
+post-deploy signal (secondary — not the E2E gate); it is **not** where a real
+regression should be caught, and a green run proves nothing about the merged
+backend (Render autoDeploy is off).
 
 **Role coverage — local vs. CI:** the canonical config's `canonical-<role>`
 projects (`user`/`broker`/`admin`) are included ADDITIVELY only when that
@@ -61,18 +70,13 @@ selection, never `test.skip`). For a local/direct developer run this is
 permissive: with no role credentials exported, only `canonical-anon` is
 selected, and that is a normal, anon-capable result, not an error.
 
-CI's `e2e-canonical` job is stricter, by design (#2334 review): before the
-canonical run, a preflight step asserts `ADMIN_EMAIL`/`ADMIN_PASSWORD`,
-`DEALER_EMAIL`/`DEALER_PASSWORD` (legacy alias consumed as
-`BROKER_EMAIL`/`BROKER_PASSWORD`), and `SMOKE_USER_EMAIL`/`SMOKE_USER_PASSWORD`
-are all non-empty, and fails the whole job closed — before any tests run — if
-any are missing. A second preflight step then verifies via `--list` that all
-four expected projects (`canonical-anon`, `canonical-user`,
-`canonical-broker`, `canonical-admin`) were actually selected, so a future
-env-var rename or `roleCredentialsPresent()` alias drift can't silently drop
-a role's coverage without the CI job noticing. In other words: in CI, a
-missing/empty role secret is a hard gate failure, never a silent reduction to
-anon-only.
+The gate (`npm run test:e2e:gate`, and CI's `e2e-canonical` job, which runs the
+same `scripts/run-e2e-gate.sh`) is stricter, by design: in its default LOCAL
+auth mode it generates the three role users per run in the local GoTrue (no
+repository secret and no env file is read), and its list and results phases
+fail closed if any of the four expected projects (`canonical-anon`,
+`canonical-user`, `canonical-broker`, `canonical-admin`) or any matrix journey
+is missing, so a role's coverage can never silently shrink to anon-only.
 
 **File/test counts:** generated, not hand-typed. See
 [`docs/testing/e2e-inventory.md`](../docs/testing/e2e-inventory.md) (BEFORE = the base the retirement
@@ -92,7 +96,7 @@ once per role project, so static call sites and executed tests differ by design.
 | `npm run test:e2e:watch:slow` | Headed browser, 1 worker, 800ms between actions |
 | `bash scripts/e2e-watch.sh --slow --project=journey` | Watch all journeys slowly |
 | `bash scripts/e2e-watch.sh --debug` | Open Playwright Inspector on failure |
-| `npm run test:e2e:local` | LEGACY runner (smoke project) - NOT the authoritative gate; prints a banner saying so. Use `npm run test:e2e:gate`. |
+| `npm run test:e2e:local` | LEGACY runner (requires an explicit `--project`) - NOT the authoritative gate; prints a banner saying so. Use `npm run test:e2e:gate`. |
 
 ---
 
@@ -113,7 +117,6 @@ bash scripts/e2e-watch.sh -g "DL1"
 
 # One project
 bash scripts/e2e-watch.sh --project=journey
-bash scripts/e2e-watch.sh --project=smoke
 bash scripts/e2e-watch.sh --project=integration-ui
 ```
 
@@ -184,7 +187,7 @@ PWDEBUG=1 bash scripts/e2e-watch.sh e2e/journey/anon-teaser.spec.ts
 
 ## 4. Journey structure
 
-Tests are organised into three Playwright projects:
+The legacy (non-gate, dev-only) specs are organised into Playwright projects; the `smoke` project is retired:
 
 ### `journey` — end-to-end user flows (`e2e/journey/`)
 
@@ -206,27 +209,15 @@ grouped here because the tests share fixtures and are most coherent when
 watched and run together. The grouping is for execution/watchability, not a
 claim that every individual `test()` is a multi-step user journey.
 
-### `smoke` — lightweight access and render checks (`e2e/`)
+### `smoke` — RETIRED (#2750 PR-2)
 
-Fast, stateless page-load and auth-redirect checks. This is exactly the 7
-files `playwright.config.ts`'s `smoke` project's `testMatch` lists — run in
-CI by the secondary `playwright-pr` job (see the suite table at the top of
-this file for why it is not the authoritative gate).
+The `smoke` and `udupi-canonical-smoke` projects, their 8 spec files and the CI `playwright-pr` job
+were removed. The auth-free reachability shape now lives in `e2e/deployed/post-deploy.reachability.ts`
+(secondary — not the E2E gate; run by `.github/workflows/e2e-post-deploy.yml`).
 
-| File | Tests |
-|---|---|
-| `quick-smoke.spec.ts` | Q1-Q7 — App load, auth redirect, login, CORS, API guard, nav, booking duplicate |
-| `broker-smoke.spec.ts` | D1-D4 — Broker page access checks |
-| `broker-listing-quality.spec.ts` | Broker listing quality checks |
-| `broker-dashboard-v2.spec.ts` | Broker dashboard v2 checks |
-| `admin-smoke.spec.ts` | A1-A4 — Admin page access checks |
-| `discover-real-data-smoke.spec.ts` | Discover real-data smoke checks |
-| `discover-schools-canonical-2124.spec.ts` | Discover schools canonical checks (#2124) |
-
-`nav-roles.spec.ts` and `user-journeys.spec.ts` still exist under `e2e/` but
-are **not** matched by `smoke`'s `testMatch` — they're part of the
+`nav-roles.spec.ts` and `user-journeys.spec.ts` still exist under `e2e/`; they're part of the
 historical/specialist set (developer-invoked only, e.g. via
-`bash scripts/e2e-watch.sh e2e/nav-roles.spec.ts`), not the CI smoke gate.
+`bash scripts/e2e-watch.sh e2e/nav-roles.spec.ts`), not a gate.
 
 ### `integration-ui` — browser tests with controlled setup (`e2e/`)
 
@@ -243,7 +234,6 @@ isolation. Useful for verifying widget behaviour without live data dependency.
 
 ```bash
 bash scripts/e2e-watch.sh --project=journey         # all journeys
-bash scripts/e2e-watch.sh --project=smoke            # all smoke
 bash scripts/e2e-watch.sh --project=integration-ui   # all integration-ui
 bash scripts/e2e-watch.sh --project=full             # everything
 ```
@@ -255,7 +245,7 @@ bash scripts/e2e-watch.sh --project=full             # everything
 | Concern | Status |
 |---|---|
 | **CI merge gate** (`.github/workflows/ci.yml`, `e2e-canonical` job) | **#2187: this is now the authoritative gate.** Builds frontend+backend from the PR's own commit, stands up a real local Postgres/PostGIS fixture + Spring Boot backend inside the job, runs `npm run test:e2e:canonical`. See the suite table at the top of this file. |
-| CI legacy job (`.github/workflows/ci.yml`, `playwright-pr` job) | Still runs `--project=smoke` headless against the deployed Cloudflare Pages site. Kept as a secondary, low-cost auth-free reachability check — not where a real regression should be caught (see suite table above). |
+| Post-deploy (`.github/workflows/e2e-post-deploy.yml`) | Secondary — not the E2E gate. Runs `playwright.deployed.config.ts` (write-free, credential-free reachability of the deployed site) after merges to `main`; the former `playwright-pr` CI job is retired. |
 | Local pre-push hook (`.githooks/pre-push`) | #2750: runs the two static guards (estate guard + journey static check) and BLOCKS the push on failure. It prints `E2E static guards PASSED - this is NOT the E2E gate` and never claims E2E passed. `PREPUSH_E2E=gate` opts in to the real gate. |
 | `playwright.config.ts` defaults | `headless: true`, no `slowMo`, `workers: 2`. |
 | `playwright.canonical.config.ts` defaults | `headless: true`, no `slowMo`, `workers: 1` (single shared local fixture DB — see `e2e/canonical/README.md`). |

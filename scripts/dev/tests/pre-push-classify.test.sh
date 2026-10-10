@@ -4,9 +4,8 @@
 # Minimal, dependency-free bash assertion harness (same style as
 # scripts/dev/tests/remote-db-safety.test.sh) covering:
 #   - scripts/dev/lib/pre-push-classify.sh (filter_code_changes /
-#     classify_e2e_coverage as pure functions)
-#   - T-SYNC: SMOKE_SPEC_BASENAMES never silently drifts from
-#     playwright.config.ts's live `smoke` project testMatch array
+#     filter_guard_triggers / classify_e2e_changes as pure functions)
+#   - T-NOSMOKE: playwright.config.ts declares no `smoke` project (retired, #2750 PR-2)
 #   - T-INTEG: .githooks/pre-push itself (#2750 contract: static guards only,
 #     never claims e2e passed, PREPUSH_E2E=gate opt-in), run end-to-end against
 #     a synthetic local git repo with stubbed `node` and `npm` on PATH (never a
@@ -41,7 +40,7 @@ cleanup_all() {
 trap cleanup_all EXIT
 
 # ===========================================================================
-# T-LIB — filter_code_changes() / classify_e2e_coverage() as pure functions,
+# T-LIB — filter_code_changes() / classify_e2e_changes() as pure functions,
 # sourced directly (no subprocess, no git repo needed).
 # ===========================================================================
 
@@ -56,8 +55,8 @@ assert_eq "T1: a pure doc-only changeset filters to empty" "$OUT1" ""
 # T2 (#2592 fix (a), regression for the original defect): an e2e-only spec
 # change is CODE, not doc — this is the exact input that used to trigger the
 # old "Doc-only changes — skipping e2e" vacuous skip.
-OUT2="$(printf '%s\n' "e2e/broker-smoke.spec.ts" | filter_code_changes)"
-assert_eq "T2: an e2e/ spec file is classified as a code change, not doc" "$OUT2" "e2e/broker-smoke.spec.ts"
+OUT2="$(printf '%s\n' "e2e/example-feature.spec.ts" | filter_code_changes)"
+assert_eq "T2: an e2e/ spec file is classified as a code change, not doc" "$OUT2" "e2e/example-feature.spec.ts"
 
 # T3: a mixed doc + e2e changeset keeps only the e2e file.
 MIXED=$'README.md\ne2e/discover-1738-regression.spec.ts\ndocs/notes.md'
@@ -71,37 +70,8 @@ assert_eq "T3: mixed doc + e2e changeset keeps only the e2e file" "$OUT3" "e2e/d
 OUT4="$(printf '%s\n' "e2e/README.md" | filter_code_changes)"
 assert_eq "T4: an e2e/README.md edit is still doc-only" "$OUT4" ""
 
-# T5: e2e/broker-smoke.spec.ts (in SMOKE_SPEC_BASENAMES) is covered by the
-# smoke run — classify_e2e_coverage reports nothing for it.
-OUT5="$(printf '%s\n' "e2e/broker-smoke.spec.ts" | classify_e2e_coverage)"
-assert_eq "T5: a smoke-allowlisted spec is reported as covered (no output)" "$OUT5" ""
-
-# T6 (#2592 fix (b)): a spec NOT in the smoke allowlist is reported uncovered.
-OUT6="$(printf '%s\n' "e2e/discover-1738-regression.spec.ts" | classify_e2e_coverage)"
-assert_eq "T6: a non-smoke spec is reported as uncovered" "$OUT6" "e2e/discover-1738-regression.spec.ts"
-
-# T7: a canonical-harness file is always reported uncovered — it is a
-# separate build/config/DB-fixture harness the default smoke run can never
-# collect, regardless of any future change to SMOKE_SPEC_BASENAMES.
-OUT7="$(printf '%s\n' "e2e/canonical/booking-request.canonical.ts" | classify_e2e_coverage)"
-assert_eq "T7: a canonical-harness file is reported as uncovered" "$OUT7" "e2e/canonical/booking-request.canonical.ts"
-
-# T8: a journey-only spec (not in the smoke allowlist) is reported uncovered.
-OUT8="$(printf '%s\n' "e2e/journey/booking-journey.spec.ts" | classify_e2e_coverage)"
-assert_eq "T8: a journey-project-only spec is reported as uncovered" "$OUT8" "e2e/journey/booking-journey.spec.ts"
-
-# T9: a supporting (non-spec, non-canonical) e2e file is NOT flagged — the
-# smoke run exercises it transitively via whichever spec imports it, so
-# flagging every helper edit would be a false positive.
-OUT9="$(printf '%s\n' "e2e/helpers.ts" | classify_e2e_coverage)"
-assert_eq "T9: a supporting e2e helper file is not flagged as uncovered" "$OUT9" ""
-
-# T10: a mixed batch reports exactly the uncovered subset, one per line, in
-# input order.
-BATCH=$'e2e/broker-smoke.spec.ts\ne2e/discover-1738-regression.spec.ts\ne2e/canonical/booking-request.canonical.ts\ne2e/helpers.ts'
-OUT10="$(printf '%s\n' "$BATCH" | classify_e2e_coverage)"
-EXPECTED10=$'e2e/discover-1738-regression.spec.ts\ne2e/canonical/booking-request.canonical.ts'
-assert_eq "T10: a mixed batch reports exactly the uncovered subset" "$OUT10" "$EXPECTED10"
+# T5-T10 (smoke-allowlist coverage classifier) were removed with the retired `smoke` project (#2750 PR-2);
+# T-NOSMOKE below asserts the project and its library mirror stay gone.
 
 # T10b (#2750): classify_e2e_changes lists every changed e2e/ and e2e-parity/ path, in order, and nothing else.
 BATCH2=$'e2e/canonical/x.canonical.ts\nscripts/run-e2e-gate.sh\ne2e-parity/p.spec.ts\ne2e/helpers.ts\napps/web/src/a.ts'
@@ -133,21 +103,15 @@ assert_eq "T10f: mixed batch keeps exactly the trigger paths" \
   $'scripts/e2e/x.mjs\npackage.json'
 
 # ===========================================================================
-# T-SYNC - SMOKE_SPEC_BASENAMES must never silently drift from
-# playwright.config.ts's live `smoke` project testMatch array. Extracts the
-# real array from the config file and compares it, sorted, against the
-# library's static copy. (The hook no longer runs smoke, but the project and
-# the library list exist until the retirement series removes them.)
+# T-NOSMOKE (#2750 PR-2) - the `smoke` Playwright project is retired. The legacy config must declare
+# no smoke project, and the library must no longer carry the allowlist mirror or its classifier.
 # ===========================================================================
 
-LIVE_SMOKE_BASENAMES="$(
-  awk "/name: .smoke.,/{flag=1} flag{print} flag && /\],/{exit}" "$REPO_ROOT/playwright.config.ts" \
-    | grep -oE "[a-zA-Z0-9._-]+\.spec\.ts" \
-    | sort
-)"
-LIB_SMOKE_BASENAMES="$(printf '%s\n' "${SMOKE_SPEC_BASENAMES[@]}" | sort)"
-assert_eq "T-SYNC: SMOKE_SPEC_BASENAMES matches playwright.config.ts's live smoke testMatch array" \
-  "$LIB_SMOKE_BASENAMES" "$LIVE_SMOKE_BASENAMES"
+NOSMOKE_CFG="$(grep -E "name: *'(smoke|udupi-canonical-smoke)'" "$REPO_ROOT/playwright.config.ts" || true)"
+assert_eq "T-NOSMOKE: playwright.config.ts declares no smoke / udupi-canonical-smoke project" "$NOSMOKE_CFG" ""
+assert_eq "T-NOSMOKE: SMOKE_SPEC_BASENAMES is no longer defined by the library" "${SMOKE_SPEC_BASENAMES+set}" ""
+declare -F classify_e2e_coverage >/dev/null 2>&1
+assert_false "T-NOSMOKE: classify_e2e_coverage is no longer defined by the library" "$?"
 
 # ===========================================================================
 # T-INTEG - .githooks/pre-push run end-to-end against a synthetic local git
@@ -234,7 +198,7 @@ fresh_logs() { NPM_LOG="$(mktemp)"; NODE_LOG="$(mktemp)"; : > "$NPM_LOG"; : > "$
 # T11: an e2e-only diff is CODE. Both static guards run, the output says PASSED + NOT the E2E gate,
 # never "e2e passed", and no E2E suite (npm) is run by default.
 SB11="$(new_hook_sandbox)"; BASE11="$(cd "$SB11" && git rev-parse HEAD)"
-commit_file "$SB11" e2e/broker-smoke.spec.ts
+commit_file "$SB11" e2e/example-feature.spec.ts
 HEAD11="$(cd "$SB11" && git rev-parse HEAD)"
 fresh_logs
 LOG11="$(mktemp)"
@@ -246,7 +210,7 @@ assert_not_contains "T11: output does NOT claim a doc-only skip for an e2e-only 
 assert_contains "T11: output states the static guards PASSED and that this is NOT the E2E gate" \
   "$OUT11" "[pre-push] E2E static guards PASSED — this is NOT the E2E gate. Run: npm run test:e2e:gate"
 assert_not_contains "T11: output never says 'e2e passed'" "$(printf '%s' "$OUT11" | tr 'A-Z' 'a-z')" "e2e passed"
-assert_contains "T11: the changed e2e file is named as NOT executed by the hook" "$OUT11" "e2e/broker-smoke.spec.ts"
+assert_contains "T11: the changed e2e file is named as NOT executed by the hook" "$OUT11" "e2e/example-feature.spec.ts"
 assert_contains "T11: the estate guard was invoked" "$(cat "$NODE_LOG")" "check-e2e-estate.mjs"
 assert_contains "T11: the journey static phase was invoked" "$(cat "$NODE_LOG")" "check-canonical-journeys.mjs --phase=static"
 assert_eq "T11: no npm command (no smoke suite, no gate) is run by default" "$(cat "$NPM_LOG")" ""

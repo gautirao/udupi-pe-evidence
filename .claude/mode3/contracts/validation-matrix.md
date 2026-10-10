@@ -262,7 +262,7 @@ A row that omits any of these is NOT acceptable evidence.
 
 | Field | Required values / format |
 |---|---|
-| `command_executed` | Exact shell command verbatim (e.g. `mvn test -pl backend`, `npx playwright test e2e/foo.spec.ts --project=full`) |
+| `command_executed` | Exact shell command verbatim (e.g. `mvn test -pl backend`, `npm run test:e2e:gate`) |
 | `runner_or_phase` | Maven phase (`surefire` / `failsafe`), test runner (`vitest` / `playwright` / `tsc`), etc. |
 | `scope_pattern` | What classes/files ran: e.g. `*Test.java` (surefire), `*IT.java` (failsafe), `src/pages/broker`, `e2e/*.spec.ts` |
 | `branch` | Branch the command was run on |
@@ -285,7 +285,7 @@ A row that omits any of these is NOT acceptable evidence.
 |---|---|---|---|---|---|---|
 | `mvn test -pl backend` | surefire | `*Test.java` | feat/my-branch | CURRENT_SESSION | 0 | DIRECT_RUN |
 | `mvn verify -pl backend` | failsafe + surefire | `*IT.java` + `*Test.java` | feat/my-branch | NOT_RUN | NOT_RUN | — |
-| `npx playwright test e2e/foo.spec.ts --project=full` | playwright/chromium | `e2e/foo.spec.ts` | feat/my-branch | CURRENT_SESSION | 0 | DIRECT_RUN |
+| `npm run test:e2e:gate` | playwright/chromium (canonical config) | `e2e/canonical/**` | feat/my-branch | CURRENT_SESSION | 0 | DIRECT_RUN |
 | `npx tsc --noEmit` | tsc | all `*.ts` / `*.tsx` | feat/my-branch | CURRENT_SESSION | 0 | DIRECT_RUN |
 
 **NOT acceptable:**

@@ -29,8 +29,9 @@ Sequence, all in `scripts/run-e2e-gate.sh`:
 7. Only then: `CANONICAL E2E GATE: PASS @ <sha>` plus counts, and `.e2e-passed` is written (only for a
    clean tracked tree).
 
-Credentials come from the process env, else are read (never written) from `E2E_ENV_FILE` (default: the
-worktree's `.env.e2e.local` / `.env.e2e`, else the main checkout's). Ports: `E2E_GATE_FRONTEND_PORT` /
+In the default local mode the gate generates role users per run and reads no env file. `E2E_ENV_FILE` /
+`.env.e2e*` are read only by `E2E_AUTH_MODE=hosted`, which is ENVIRONMENT_GATED (exit 6) and never a pass.
+Ports: `E2E_GATE_FRONTEND_PORT` /
 `E2E_GATE_BACKEND_PORT` (defaults 5375 / 8375).
 
 Evidence rule (CLAUDE.md section 11): report command, exit code and counts. A gate that could not run
@@ -56,9 +57,13 @@ and is unit-tested by `scripts/dev/tests/pre-push-classify.test.sh`.
 
 ## Legacy runners (NOT the gate)
 
-`scripts/run-e2e-local.sh` (`npm run test:e2e:local`), `scripts/e2e-watch.sh`, and the `smoke` / `journey` /
-`full` / `integration-ui` projects of `playwright.config.ts` are the legacy estate. They print a banner
-saying so and are being retired per the manifest (series PR-2 .. PR-7). Do not cite them as E2E evidence.
+`scripts/run-e2e-local.sh` (`npm run test:e2e:local`), `scripts/e2e-watch.sh`, and the `journey` /
+`full` / `integration-ui` projects of `playwright.config.ts` are the legacy estate (the `smoke` project is
+retired). They print a banner saying so and are being retired per the manifest (series PR-3 .. PR-7).
+Do not cite them as E2E evidence.
+
+Post-deploy (`.github/workflows/e2e-post-deploy.yml`, `playwright.deployed.config.ts`) is a secondary,
+write-free, credential-free reachability check of the deployed site — not the E2E gate.
 
 ## E2E applicability rules
 

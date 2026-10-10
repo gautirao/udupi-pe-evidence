@@ -246,17 +246,21 @@ terminal.
 ## 9. Phase 7A / Playwright browser workflow
 
 The `e2e/` directory holds the project's Playwright suite (see
-`e2e/admin-approval.spec.ts`, `e2e/admin-smoke.spec.ts`,
-`e2e/admin-intelligence-smoke.spec.ts`, etc.). Relevant `package.json`
-scripts:
+`e2e/admin-approval.spec.ts`, `e2e/admin-intelligence-smoke.spec.ts`,
+etc.).
+
+**The E2E gate is `npm run test:e2e:gate`** (`scripts/run-e2e-gate.sh`, canonical suite
+`e2e/canonical/**` on the local auth stack). It is the only command that writes `.e2e-passed`
+(bare HEAD sha, full PASS on a clean tree). Everything below is LEGACY / dev-only and is not the
+gate; do not cite it as E2E evidence (retired per `docs/testing/e2e-retirement-manifest.csv`):
 
 ```bash
-npm run test:e2e          # playwright test
-npm run test:e2e:smoke    # --project=smoke
-npm run test:e2e:journey  # --project=journey
-npm run test:e2e:full     # --project=full
-npm run test:e2e:local    # scripts/run-e2e-local.sh
-npm run test:e2e:headed   # scripts/run-e2e-local.sh --headed --workers=1
+npm run test:e2e:gate     # THE E2E gate (canonical suite)
+npm run test:e2e          # LEGACY: playwright test
+npm run test:e2e:journey  # LEGACY: --project=journey
+npm run test:e2e:full     # LEGACY: --project=full
+npm run test:e2e:local    # LEGACY (not the gate): scripts/run-e2e-local.sh, requires an explicit --project
+npm run test:e2e:headed   # LEGACY: scripts/run-e2e-local.sh --headed --workers=1
 ```
 
 Admin-scoped specs require `ADMIN_EMAIL`/`ADMIN_PASSWORD` in the

@@ -28,8 +28,9 @@ not what is *ingested*.
   `mvn test -Dtest=<TestClass> > /tmp/qa-be.log 2>&1`, then
   `grep -aE "Tests run:|BUILD|ERROR" /tmp/qa-be.log`. Do not add `-q` - it suppresses the Surefire
   summary, so that grep returns zero lines even on a passing run.
-- **E2E** - `npm run test:e2e:local > /tmp/qa-e2e.log 2>&1`, then
-  `grep -aE "passed|failed|flaky|Error:" /tmp/qa-e2e.log`.
+- **E2E** - `npm run test:e2e:gate > /tmp/qa-e2e.log 2>&1` (from INSIDE the worktree), then
+  `grep -aE "CANONICAL E2E GATE|NOT A GATE RUN|ENVIRONMENT_GATED|listed|executed|unexpected|skipped|flaky" /tmp/qa-e2e.log`.
+  Exit 3 (NOT A GATE RUN), 5 (open gaps) or 6 (ENVIRONMENT_GATED) is NOT_RUN, never PASS.
 
 **An empty grep result is INCONCLUSIVE, never a pass.** Targeting means selecting the right tests and
 reading the result efficiently - never running fewer of them. Never skip a required test because its
@@ -40,11 +41,12 @@ output is large or the suite is slow.
 ## Worktree prerequisite — env files must be symlinked before any stack bring-up or push
 
 `.env.e2e` and `apps/api/.env` are **untracked** (`git ls-files` returns nothing for either), so a
-new worktree never carries them. The pre-push E2E gate resolves them at the *worktree* root
-(`.githooks/pre-push` uses `git rev-parse --show-toplevel`), finds nothing, prints a one-line
-warning and **proceeds anyway** into `npm run test:e2e:local` — which then fails for a reason
-that looks nothing like its cause. The usual next move is `--no-verify`, at which point the E2E
-gate silently stops running — a gate lost to environment rather than to policy.
+new worktree never carries them. The pre-push hook does not run E2E: it runs the two static guards
+(estate guard + journey static check) and prints that it is NOT the E2E gate. The one authoritative
+E2E gate is `npm run test:e2e:gate` (`.claude/E2E_GATE.md`). In the default local mode the gate
+generates role users per run and reads no env file. E2E_ENV_FILE / .env.e2e* are read only by
+E2E_AUTH_MODE=hosted, which is ENVIRONMENT_GATED (exit 6) and never a pass. A gate that cannot run is `NOT_RUN`, never PASS. `--no-verify` skips the static
+guards and must be reported as a bypass, not a pass.
 
 This is endemic, not hypothetical: measured 2026-09-10, **16 of the 41 worktrees other than the
 main clone were missing at least one of these two files** — roughly two in five. (`git worktree
@@ -77,7 +79,7 @@ reason in your report.
 
 ## Verification Mode (prompt starts 'Mode: verification')
 
-Final quality gate before PR. Run `npm run test:e2e:local` — nothing else. Redirect it (`> /tmp/qa-e2e.log 2>&1`) and read the log, so a large run cannot flood your
+Final quality gate before PR. Run `npm run test:e2e:gate` from INSIDE the worktree — nothing else. Redirect it (`> /tmp/qa-e2e.log 2>&1`) and read the log, so a large run cannot flood your
 context and cost you the report.
 
 **Rules:** Don't write/edit any file. Don't diagnose or suggest fixes. Don't dismiss failures as "minor" or "known". Don't re-run for a pass. Stack startup failure = FAIL.
@@ -87,7 +89,7 @@ context and cost you the report.
 ```
 ## E2E Verification Report
 Mode: verification | Classification: [normal|high-risk]
-Changed files: [list] | Command: npm run test:e2e:local
+Changed files: [list] | Command: npm run test:e2e:gate | Exit: [code] | HEAD: [sha]
 Result: PASS|FAIL | Pass: X | Fail: Y | Skip: Z
 Failures: - [test]: [exact error]
 Triage: - [test]: area=[area] | character=[type] | repro=[command]

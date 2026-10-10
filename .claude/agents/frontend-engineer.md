@@ -431,11 +431,12 @@ No suppressed warnings. No skipped tests. Pre-existing failures: explain clearly
 ## Worktree prerequisite — env files must be symlinked before any stack bring-up or push
 
 `.env.e2e` and `apps/api/.env` are **untracked** (`git ls-files` returns nothing for either), so a
-new worktree never carries them. The pre-push E2E gate resolves them at the *worktree* root
-(`.githooks/pre-push` uses `git rev-parse --show-toplevel`), finds nothing, prints a one-line
-warning and **proceeds anyway** into `npm run test:e2e:local` — which then fails for a reason
-that looks nothing like its cause. The usual next move is `--no-verify`, at which point the E2E
-gate silently stops running — a gate lost to environment rather than to policy.
+new worktree never carries them. The pre-push hook does not run E2E: it runs the two static guards
+(estate guard + journey static check) and prints that it is NOT the E2E gate. The one authoritative
+E2E gate is `npm run test:e2e:gate` (`.claude/E2E_GATE.md`). In the default local mode the gate
+generates role users per run and reads no env file. E2E_ENV_FILE / .env.e2e* are read only by
+E2E_AUTH_MODE=hosted, which is ENVIRONMENT_GATED (exit 6) and never a pass. A gate that cannot run is `NOT_RUN`, never PASS. `--no-verify` skips the static
+guards and must be reported as a bypass, not a pass.
 
 This is endemic, not hypothetical: measured 2026-09-10, **16 of the 41 worktrees other than the
 main clone were missing at least one of these two files** — roughly two in five. (`git worktree

@@ -65,10 +65,10 @@ evidence   = ".claude/handoffs/issue-<N>/product-sweep.toml"
 [product_level.real_data_smoke_j1]
 key       = "real_data_smoke_j1"
 journey   = "J1 area-first anon"
-command   = "bash scripts/run-e2e-local.sh --project=full e2e/discover-real-data-smoke.spec.ts"
+command   = "npm run test:e2e:gate"   # E2E gate evidence slot (canonical suite e2e/canonical/**, local auth stack); the retired discover-real-data-smoke spec no longer exists
 exit_code = 0
-status    = "PASS"                 # PASS | FAIL | NOT_RUN | TEST_ENV_FAILURE | SKIPPED
-notes     = "Real backend, no page.route() mocks (source-of-truth per discover.md testing.real_data_smoke)."
+status    = "PASS"                 # PASS | FAIL | NOT_RUN | TEST_ENV_FAILURE | SKIPPED  (gate exit 5 / 6 = NOT_RUN / ENVIRONMENT_GATED, never PASS)
+notes     = "Real backend, no page.route() mocks. Cite the gate line `CANONICAL E2E GATE: PASS @ <sha>` and that .e2e-passed == HEAD; this key name is historical (referenced by definition-of-done.toml)."
 
 [product_level.real_data_smoke_j2]
 key       = "real_data_smoke_j2"
@@ -90,7 +90,7 @@ status    = "PASS"
 
 [product_level.real_data_smoke_all_journeys]
 key        = "real_data_smoke_all_journeys"
-command    = "bash scripts/run-e2e-local.sh --project=full e2e/discover-real-data-smoke.spec.ts"
+command    = "npm run test:e2e:gate"   # gate evidence slot; counts come from the gate's `list:`/`results:` lines
 total_pass = 4
 total_fail = 0
 exit_code  = 0

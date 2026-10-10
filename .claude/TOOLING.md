@@ -117,8 +117,9 @@ Rules:
 
 | Layer | When | How |
 |-------|------|-----|
-| Pre-push (local) | Before every `git push` | `.githooks/pre-push` → `npm run test:e2e:local` |
-| Post-deploy (production) | After every merge to `main` | `.github/workflows/e2e-post-deploy.yml` — waits for Cloudflare + Render, then runs full suite |
+| **E2E gate** (local + CI) | Before relying on any E2E-affecting change; CI job `e2e-canonical` | `npm run test:e2e:gate` (`scripts/run-e2e-gate.sh`, canonical suite `e2e/canonical/**`, local auth stack). Writes `.e2e-passed` (bare HEAD sha) only on full PASS, clean tree |
+| Pre-push (local) | Before every `git push` | `.githooks/pre-push` → E2E static guards only (not the gate); `PREPUSH_E2E=gate` opt-in runs the gate |
+| Post-deploy (production) — secondary, not the E2E gate | After every merge to `main` | `.github/workflows/e2e-post-deploy.yml` — waits for Cloudflare + Render, then runs the write-free, credential-free reachability check (`playwright.deployed.config.ts`). Says nothing about the merged backend (Render autoDeploy is off) |
 
 Post-deploy failures upload a Playwright report artifact (traces + screenshots)
 to GitHub Actions for 14 days. Sentry catches JS errors that slip through.

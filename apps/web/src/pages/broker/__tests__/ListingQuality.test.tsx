@@ -409,6 +409,42 @@ describe('ListingQuality page', () => {
     expect(refetch).toHaveBeenCalledOnce();
   });
 
+  // (n) Rendered contract of the page shell + fix-plan edit link (#2750 PR-2 D3: replaces the
+  // retired e2e/broker-listing-quality.spec.ts LQ2/LQ3/LQ4/LQ5-empty assertions, which ran against live data)
+  it('renders the page shell, opens the fix-plan panel, and links Edit to the listing edit route', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderPage();
+
+    // LQ2: page heading + "All" chip pressed by default
+    expect(screen.getByRole('heading', { level: 1, name: 'Listing Quality' })).toBeDefined();
+    const group = screen.getByRole('group', { name: /filter listings/i });
+    expect(within(group).getByRole('button', { name: /^all/i, pressed: true })).toBeDefined();
+
+    // LQ3: panel is absent before selection, present (with the listing title) after
+    expect(screen.queryByRole('button', { name: /close fix plan panel/i })).toBeNull();
+    const list = screen.getByRole('list', { name: /listings worklist/i });
+    await user.click(within(list).getByText('Test Plot, Udupi').closest('[role="button"]')!);
+    expect(await screen.findByRole('button', { name: /close fix plan panel/i })).toBeDefined();
+    expect(screen.getByRole('heading', { level: 3, name: 'Test Plot, Udupi' })).toBeDefined();
+
+    // LQ4: the rendered Edit link targets the listing's edit route
+    const editLink = screen.getByRole('link', { name: 'Edit listing for: Add a detailed property description' });
+    expect(editLink.getAttribute('href')).toBe('/broker/listings/listing-abc-123/edit');
+    unmount();
+
+    // LQ5 empty branch: a filter with no matches shows the honest empty message
+    mockQualityHook.current = {
+      data: makeFullResponse({ listings: [makeListing()] }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+    renderPage();
+    await user.click(screen.getByRole('button', { name: /^Not Scored/ }));
+    expect(await screen.findByText('No listings match this filter.')).toBeDefined();
+  });
+
   // (m) Fix-plan panel shows "Not yet scored" for NOT_SCORED listing
   it('fix-plan panel shows not-scored message when listing is NOT_SCORED', async () => {
     const user = userEvent.setup();

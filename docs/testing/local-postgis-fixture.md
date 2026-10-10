@@ -1,33 +1,35 @@
 # Local PostGIS Test Fixture
 
-**Issue #1347** — reusable local Postgres/PostGIS test infrastructure for Discover E2E smoke.
+**Issue #1347** — reusable local Postgres/PostGIS test infrastructure for local E2E runs.
+The E2E gate is `npm run test:e2e:gate` (canonical suite `e2e/canonical/**`, local auth stack);
+this fixture is a local-only data source, not a gate.
 
 ---
 
 ## Overview
 
-The local PostGIS fixture lets you run `e2e/discover-real-data-smoke.spec.ts` against a fully
-migrated throwaway database instead of the shared Supabase cloud database. This gives:
+The local PostGIS fixture gives you a fully migrated throwaway database instead of the shared
+Supabase cloud database (the retired `discover-real-data-smoke` spec and its
+`scripts/test/run-real-data-smoke.sh` runner no longer exist). This gives:
 
 - **Deterministic seed data** — 12 LIVE `[E2E]` listings, 1 Manipal school, synthetic broker
   account; all idempotent.
 - **No production blast radius** — ephemeral Docker container torn down after each run.
 - **No Supabase credentials required** — schema applied from the committed Flyway migrations.
-- **Fast iteration** — entire setup (container start → migrate → seed → smoke) takes ~2 minutes.
+- **Fast iteration** — entire setup (container start → migrate → seed) takes ~2 minutes.
 
 ---
 
 ## Quick Start
 
 ```bash
-# 1. Start the fixture, migrate, and seed (one command)
+# Start the fixture, migrate, and seed (one command)
 bash scripts/db/restore-test-fixture.sh
-
-# 2. Run the smoke spec against the fixture
-bash scripts/test/run-real-data-smoke.sh
 ```
 
-That's it. The container is torn down automatically on exit.
+To run the E2E gate (which provisions its own fixture), use `npm run test:e2e:gate`.
+`restore-test-fixture.sh` rejects any non-empty `E2E_FIXTURE_PROFILE` (the `udupi-canonical`
+profile was retired).
 
 ---
 
@@ -73,28 +75,6 @@ Capture it for downstream use:
 ```bash
 export DATABASE_URL=$(bash scripts/db/restore-test-fixture.sh | grep '^postgresql://')
 ```
-
-### `scripts/test/run-real-data-smoke.sh`
-
-End-to-end runner: calls `restore-test-fixture.sh`, captures `DATABASE_URL`, passes it to
-`scripts/run-e2e-local.sh --project=full e2e/discover-real-data-smoke.spec.ts`.
-
-```bash
-# Basic run (J3 skips if broker creds absent)
-bash scripts/test/run-real-data-smoke.sh
-
-# With J3 broker credentials
-PLAYWRIGHT_BROKER_EMAIL=broker@example.com \
-PLAYWRIGHT_BROKER_PASSWORD=secret \
-bash scripts/test/run-real-data-smoke.sh
-
-# Leave container running after tests (for inspection)
-KEEP_FIXTURE=true bash scripts/test/run-real-data-smoke.sh
-```
-
-**J3 graceful skip**: `J3 — school-first auth` requires `PLAYWRIGHT_BROKER_EMAIL` and
-`PLAYWRIGHT_BROKER_PASSWORD`. When unset the test calls `test.skip(...)` inside the spec —
-this is expected behaviour, not a failure.
 
 ### `scripts/db/export-test-fixture.sh`
 
@@ -250,12 +230,6 @@ automatically when the migration file starts with `-- flyway:no-transaction`.
 
 The `postgis/postgis:15-3.4` image ships with PostGIS pre-installed. If V73 fails, check
 that `CREATE EXTENSION IF NOT EXISTS postgis` ran (it is in V73).
-
-**J3 always skipped**
-
-Set `PLAYWRIGHT_BROKER_EMAIL` and `PLAYWRIGHT_BROKER_PASSWORD` to valid broker credentials
-before running. The seed only provides DB rows; J3 authentication goes through the running
-backend → Supabase auth, so real credentials are needed.
 
 **geog column NULL after seed**
 

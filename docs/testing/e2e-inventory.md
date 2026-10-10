@@ -7,8 +7,8 @@ static source counts (`test(...)` call sites); the number Playwright COLLECTS is
 
 | metric | before | after | delta |
 |---|---:|---:|---:|
-| legacy_spec_files | 215 | 196 | -19 |
-| legacy_static_test_callsites | 1043 | 972 | -71 |
+| legacy_spec_files | 215 | 190 | -25 |
+| legacy_static_test_callsites | 1043 | 939 | -104 |
 | canonical_spec_files | 12 | 17 | +5 |
 | canonical_static_tests | 34 | 45 | +11 |
 | parity_spec_files | 2 | 2 | +0 |
@@ -144,34 +144,33 @@ Ref: `HEAD`
   "canonical_spec_files": 17,
   "canonical_static_tests": 45,
   "ci_jobs_invoking_playwright": [
+    "ci.yml:backend-integration",
     "ci.yml:e2e-canonical",
     "ci.yml:frontend",
-    "ci.yml:playwright-pr",
-    "e2e-post-deploy.yml:smoke"
+    "e2e-post-deploy.yml:reachability"
   ],
   "journey_matrix_present": true,
   "legacy_by_bucket": {
     "discover_subdir": 74,
     "journey": 10,
-    "top_level": 112
+    "top_level": 106
   },
   "legacy_files_with_loop_generated_tests": 15,
-  "legacy_files_with_network_mocks": 102,
-  "legacy_files_with_skip_or_fixme": 58,
+  "legacy_files_with_network_mocks": 100,
+  "legacy_files_with_skip_or_fixme": 53,
   "legacy_project_membership": {
-    "full": 195,
+    "full": 190,
     "integration-ui": 3,
-    "journey": 10,
-    "smoke": 7,
-    "udupi-canonical-smoke": 1
+    "journey": 10
   },
-  "legacy_spec_files": 196,
-  "legacy_static_test_callsites": 972,
+  "legacy_spec_files": 190,
+  "legacy_static_test_callsites": 939,
   "manifest_present": true,
   "package_scripts_mentioning_e2e": {
     "prepare": "chmod +x scripts/run-e2e-local.sh scripts/run-e2e-gate.sh .githooks/pre-push && git config core.hooksPath .githooks",
     "test:e2e": "playwright test",
     "test:e2e:canonical": "VITE_BUILD_SHA=$(git rev-parse HEAD) npm run build --workspace=apps/web && playwright test --config=playwright.canonical.config.ts",
+    "test:e2e:deployed": "playwright test --config=playwright.deployed.config.ts",
     "test:e2e:full": "playwright test --project=full",
     "test:e2e:gate": "bash scripts/run-e2e-gate.sh",
     "test:e2e:guard": "node scripts/e2e/check-e2e-estate.mjs && node scripts/e2e/check-canonical-journeys.mjs --phase=static",
@@ -179,7 +178,6 @@ Ref: `HEAD`
     "test:e2e:headed": "bash scripts/run-e2e-local.sh --headed --workers=1",
     "test:e2e:journey": "playwright test --project=journey",
     "test:e2e:local": "bash scripts/run-e2e-local.sh",
-    "test:e2e:smoke": "playwright test --project=smoke",
     "test:e2e:watch": "bash scripts/e2e-watch.sh",
     "test:e2e:watch:slow": "bash scripts/e2e-watch.sh --slow"
   },
@@ -188,6 +186,7 @@ Ref: `HEAD`
     "e2e-parity/mock-capture/playwright.mock-capture.config.ts",
     "playwright.canonical.config.ts",
     "playwright.config.ts",
+    "playwright.deployed.config.ts",
     "playwright.parity.config.ts"
   ]
 }
