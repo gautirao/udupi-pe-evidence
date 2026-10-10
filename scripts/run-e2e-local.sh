@@ -3,6 +3,10 @@
 # Usage: bash scripts/run-e2e-local.sh [playwright args]
 set -euo pipefail
 
+# #2750: this runs the LEGACY Playwright estate (the `smoke` project by default). A green run here is
+# NOT E2E evidence: the authoritative gate is `npm run test:e2e:gate` (canonical suite, fail-closed).
+echo "[e2e] LEGACY Playwright suite - NOT the authoritative E2E gate. Run: npm run test:e2e:gate" >&2
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORKTREE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="$WORKTREE_ROOT/.env.e2e"

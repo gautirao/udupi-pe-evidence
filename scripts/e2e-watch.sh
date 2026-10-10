@@ -25,6 +25,9 @@
 set -euo pipefail
 set -m
 
+# #2750: this runs the LEGACY Playwright estate (playwright.config.ts projects), which is being retired.
+echo "[e2e-watch] LEGACY Playwright suite - NOT the authoritative E2E gate. Run: npm run test:e2e:gate" >&2
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR/.."
 ENV_FILE="$PROJECT_ROOT/.env.e2e"

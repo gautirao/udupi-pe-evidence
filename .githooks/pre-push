@@ -1,19 +1,31 @@
 #!/usr/bin/env bash
-# Git pre-push hook — E2E gate.
+# Git pre-push hook - E2E static guards (issue #2750; previously the #2592 smoke gate).
 #
-# How it works:
-#   1. If only doc files changed → skip E2E entirely (SKIPPED).
-#   2. Otherwise → run the smoke E2E suite (PASSED/FAILED).
-#   3. Any changed e2e/ file the smoke run's default project will not
-#      actually collect (a canonical-harness spec, or a spec outside the
-#      smoke allowlist) is reported as an explicit SKIPPED line — never
-#      silently folded into a green "e2e passed" banner (#2592).
+# What it does:
+#   1. Doc-only change set -> SKIPPED, exit 0. "Doc-only" excludes e2e/**, e2e-parity/**, scripts/e2e/**,
+#      playwright*.config.ts, .github/workflows/**, .githooks/**, package.json: touching any of those runs the guards.
+#   2. Otherwise run the two STATIC E2E guards (~1s, no stack, no browser):
+#        node scripts/e2e/check-e2e-estate.mjs                         (estate vs retirement manifest)
+#        node scripts/e2e/check-canonical-journeys.mjs --phase=static  (journey matrix vs canonical sources)
+#      Either failing BLOCKS the push.
+#   3. PREPUSH_E2E=gate (opt-in) additionally runs the real gate: npm run test:e2e:gate.
 #
-# See .claude/E2E_GATE.md for the full design rationale and
-# scripts/dev/lib/pre-push-classify.sh for the classification logic itself
-# (kept in a separate, unit-tested library — see
-# scripts/dev/tests/pre-push-classify.test.sh).
+# What it deliberately does NOT do: run any E2E test, or claim that E2E passed. Passing the static
+# guards says the estate and the journey matrix are consistent, nothing about product behaviour. The
+# authoritative gate is `npm run test:e2e:gate`; in CI it is the e2e-canonical job. The old output
+# line "e2e passed - push proceeding" is gone on purpose: it described a smoke run that proved
+# little and read as a full pass (#2592, #2750).
+#
+# Multi-ref pushes: EVERY pushed ref is evaluated (a deletion or doc-only ref `continue`s to the next
+# one; it no longer ends the hook). The static guards run at most once per push.
+# KNOWN LIMITATION: the guards read the WORKING TREE, not the pushed $local_sha, so when the checked-out
+# tree differs from a pushed ref (pushing a non-HEAD ref, or a dirty tree) they validate what is on
+# disk. Only the changed-file LIST is computed from $local_sha. Evaluating the guards at $local_sha would
+# need a temporary worktree per ref and is deliberately out of scope; push from the branch checkout.
+#
+# See .claude/E2E_GATE.md. scripts/dev/lib/pre-push-classify.sh holds the (unit-tested) classification.
 set -e
+guards_ran=0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -21,9 +33,9 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$REPO_ROOT/scripts/dev/lib/pre-push-classify.sh"
 
 while read -r local_ref local_sha remote_ref remote_sha; do
-  # Branch deletion — nothing to check
+  # Branch deletion - nothing to check
   if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
-    exit 0
+    continue
   fi
 
   # New branch: diff against merge-base with main
@@ -38,54 +50,51 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     changed=$(git diff --name-only "$remote_sha" "$local_sha")
   fi
 
-  # Filter to code-only files
-  code_changes=$(echo "$changed" | filter_code_changes)
+  # Code changes PLUS changes to the E2E estate/machinery that live under scripts/, .github/, .githooks/
+  # (scripts/e2e/**, ci.yml, playwright*.config.ts, package.json ...): those must run the static guards too.
+  code_changes=$(echo "$changed" | filter_guard_triggers)
 
   if [ -z "$code_changes" ]; then
-    echo "[pre-push] SKIPPED — doc-only changes, no e2e run needed."
-    exit 0
+    echo "[pre-push] SKIPPED - doc-only changes in $local_ref, no E2E guards needed."
+    continue
   fi
 
   echo "[pre-push] Code changes detected:"
   echo "$code_changes" | sed 's/^/  /'
   echo ""
 
-  # #2592: name any changed e2e/ file the smoke run below will NOT actually
-  # collect, before running anything, so a later "e2e passed" banner can
-  # never be mistaken for coverage of these files.
-  uncovered_e2e=$(echo "$code_changes" | classify_e2e_coverage)
-  if [ -n "$uncovered_e2e" ]; then
-    echo "[pre-push] SKIPPED — the following changed e2e file(s) are not collected by the"
-    echo "  'smoke' project this gate runs by default:"
-    echo "$uncovered_e2e" | sed 's/^/    /'
-    echo "  Run the matching suite manually before pushing, e.g.:"
-    echo "    npm run test:e2e:canonical   (for e2e/canonical/**)"
-    echo "    npm run test:e2e:journey     (for e2e/journey/**)"
-    echo "    npx playwright test --project=full <file>   (any other project)"
+  # Name every changed e2e file up front: this hook does not execute any of them.
+  e2e_changes=$(echo "$code_changes" | classify_e2e_changes)
+  if [ -n "$e2e_changes" ]; then
+    echo "[pre-push] NOTE - these changed E2E file(s) are NOT executed by this hook (static guards only):"
+    echo "$e2e_changes" | sed 's/^/    /'
+    echo "  Run the gate before relying on them:  npm run test:e2e:gate"
     echo ""
   fi
 
-  echo "━━━ pre-push: running e2e tests ━━━"
-  # Ports are resolved per-worktree by scripts/run-e2e-local.sh itself
-  # (.env.e2e.local when this worktree has explicit assigned ports, else
-  # .env.e2e) — never hard-code them here, or this message drifts from
-  # reality for every worktree that isn't on the repo's static defaults (#2078).
-  E2E_LOCAL_FILE="$(git rev-parse --show-toplevel)/.env.e2e.local"
-  E2E_FILE="$(git rev-parse --show-toplevel)/.env.e2e"
-  RESOLVED_E2E_FILE="$E2E_FILE"
-  [ -f "$E2E_LOCAL_FILE" ] && RESOLVED_E2E_FILE="$E2E_LOCAL_FILE"
-  if [ -f "$RESOLVED_E2E_FILE" ]; then
-    FE_URL=$(grep -E '^PLAYWRIGHT_BASE_URL=' "$RESOLVED_E2E_FILE" | tail -1 | cut -d= -f2-)
-    BE_URL=$(grep -E '^BACKEND_BASE_URL=' "$RESOLVED_E2E_FILE" | tail -1 | cut -d= -f2-)
-    echo "Backend: ${BE_URL:-see $RESOLVED_E2E_FILE}   Frontend: ${FE_URL:-see $RESOLVED_E2E_FILE} ($RESOLVED_E2E_FILE)"
-  else
-    echo "No .env.e2e / .env.e2e.local found — scripts/run-e2e-local.sh will report the error."
+  if [ "$guards_ran" -eq 1 ]; then
+    echo "[pre-push] static E2E guards already ran for this push; not repeating them for $local_ref."
+    continue
   fi
+  guards_ran=1
+  echo "━━━ pre-push: static E2E guards ━━━"
+  if ! node "$REPO_ROOT/scripts/e2e/check-e2e-estate.mjs"; then
+    echo "[pre-push] BLOCKED - the E2E estate guard failed (see above). Fix it or update docs/testing/e2e-retirement-manifest.csv." >&2
+    exit 1
+  fi
+  if ! node "$REPO_ROOT/scripts/e2e/check-canonical-journeys.mjs" --phase=static; then
+    echo "[pre-push] BLOCKED - the canonical journey static check failed (see above)." >&2
+    exit 1
+  fi
+  echo "[pre-push] E2E static guards PASSED — this is NOT the E2E gate. Run: npm run test:e2e:gate"
   echo ""
 
-  npm run test:e2e:local
-
-  echo ""
-  echo "━━━ e2e passed — push proceeding ━━━"
-  echo ""
+  if [ "${PREPUSH_E2E:-}" = "gate" ]; then
+    echo "━━━ pre-push: PREPUSH_E2E=gate - running the E2E gate ━━━"
+    if ! npm run test:e2e:gate; then
+      echo "[pre-push] BLOCKED - the E2E gate did not pass." >&2
+      exit 1
+    fi
+    echo ""
+  fi
 done

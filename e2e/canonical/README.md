@@ -8,6 +8,42 @@ there is no mocked-API mode. If you cannot bring up all three, run
 straight to the frontend-only unit/integration suite and call it equivalent
 coverage.
 
+## THE gate, the journey matrix and the fail-closed checks (#2750)
+
+Run the whole thing with one command:
+
+```bash
+npm run test:e2e:gate
+```
+
+`scripts/run-e2e-gate.sh` starts an isolated fixture stack (per-worktree container, loopback only, ports
+`E2E_GATE_FRONTEND_PORT` / `E2E_GATE_BACKEND_PORT`, defaults 5375 / 8375), runs this suite, and then
+verifies the run with `scripts/e2e/check-canonical-journeys.mjs --phase=results`. A green Playwright exit
+code alone is not a pass: the results phase also fails on skipped, flaky, interrupted or unexecuted tests,
+on any journey that did not finish `expected` + `passed` in its own project, on an executed count that
+differs from the `--list` count, and on any role credential value found in the report. It prints
+`CANONICAL E2E GATE: PASS @ <sha>` or fails; `NOT A GATE RUN: <reason>` means nothing was started. See
+`.claude/E2E_GATE.md`. The manual sequence below remains valid for debugging a single spec.
+
+**Which journeys must exist:** [`journey-matrix.json`](journey-matrix.json) is the single source for the
+supported journeys J01-J16 and the canonical test id (and Playwright project) that proves each one. An id
+is matched as the leading token of a describe/test title (after any `[role:x]` tag), so `CC1` is never
+satisfied by `CC1b`. Human view: `docs/testing/e2e-journey-matrix.md`. A row whose proof is still to land
+carries status `GAP_CLOSING_IN_C2`, never a silent absence; a journey may only be dropped through an
+explicit `DESCOPED_DARK` row with a written reason. Editing a title so an id no longer matches fails the
+`--phase=list` / `--phase=static` check, in CI and in the pre-push hook.
+
+**T15_ENABLED coupling:** `listing-lifecycle.canonical.ts` carries `const T15_ENABLED`, the sanctioned way to
+descope T15 honestly (never `test.skip` / `test.fixme`). Setting it to `false` de-registers T15; the matrix
+lists T15 under J06, so the static phase fails until the same change removes that matrix entry.
+
+**Banned in this directory:** literal `test.skip` / `test.fixme` / `test.only` (the estate guard,
+`scripts/e2e/check-e2e-estate.mjs`, fails on them), `*.canonical.ts` files anywhere else, tracked
+`.auth/` storageState files and tracked Playwright reports.
+
+**Results file:** the config now also writes a JSON report (`test-results/canonical/results.json`,
+overridable with `PLAYWRIGHT_JSON_OUTPUT_NAME`) for the checker.
+
 ## Why the backend is NOT started by Playwright
 
 `playwright.canonical.config.ts`'s `webServer` block starts **only** the

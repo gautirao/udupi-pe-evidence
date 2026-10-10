@@ -1,0 +1,10 @@
+# scripts/e2e/auth-stack/images.lock - issue #2750 (local canonical auth stack).
+# Images the local canonical auth stack runs. The gate and CI run the DIGEST form, never the tag alone:
+# stack-up.sh reads the first matching line, pull-images.sh pulls every line that carries @sha256.
+supabase/gotrue:v2.197.0@sha256:1736a63078f5922b198c4cbe50f80ab9a2d3b54fe8b7b6cfb2e9dc5dbbc12c6b
+postgrest/postgrest:v13.0.4@sha256:a312f4b2e48530a01fc26f5310d547d6c26d087858360e164522e415723a7732
+nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+# Pre-existing fixture images (used by scripts/db/restore-test-fixture.sh, which pins them by tag itself).
+# Listed for provenance only; commented so pull-images.sh does not pull them.
+# postgis/postgis:15-3.4@sha256:3f4a5d48e0be9580ed70ed618cd039ce57bbb2dd113053d3836e28513f1f87cd
+# flyway/flyway:10.20.1@sha256:88dfed741ab3f5604140e8106ad837579e0ff2efe53bf60a78b79ba6a851a658

@@ -237,6 +237,19 @@ FROM (VALUES
 JOIN public.cities c ON c.slug = 'bangalore'
 ON CONFLICT (city_id, area_key) DO NOTHING;
 
+-- (e) #2750 C2 (AG1-AG3): a curated alias so a broker-created agricultural listing whose locality text is
+-- 'Rajarajeshwari Nagar' (RR Nagar's full name) resolves to the RR Nagar area through the product's own alias-first
+-- ListingAreaResolutionService path. Without a row the resolver would need a live geocoder (absent in the gate) and the
+-- approved listing would never reach a promoted agri destination. Fixture-only, same shape as V127's curated aliases.
+INSERT INTO public.area_alias (city_id, area_key, alias, alias_normalised, source)
+SELECT c.id, v.area_key, v.alias, v.alias_normalised, v.source
+FROM (VALUES
+    ('IN|KA|Bengaluru|RR Nagar', 'Rajarajeshwari Nagar', 'rajarajeshwari nagar', 'e2e_2750_fixture_alias')
+) AS v(area_key, alias, alias_normalised, source)
+JOIN public.cities c ON c.slug = 'bangalore'
+JOIN public.areas a ON a.area_key = v.area_key AND a.city_id = c.id
+ON CONFLICT (city_id, alias_normalised) DO NOTHING;
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Validation assertions — sanity-check THIS seed's own rows only.
 -- ─────────────────────────────────────────────────────────────────────────────

@@ -168,6 +168,16 @@ if (!BACKEND_BASE_URL) {
 assertLocalOnlyUrl('PLAYWRIGHT_BASE_URL', PLAYWRIGHT_BASE_URL);
 assertLocalOnlyUrl('BACKEND_BASE_URL', BACKEND_BASE_URL);
 
+// #2750 FC-25b: the canonical gate authenticates against a LOCAL GoTrue/PostgREST gateway (scripts/e2e/auth-stack).
+// When the process carries VITE_SUPABASE_URL it must be loopback too, so a stale hosted URL exported in a shell can
+// never steer sign-in at a hosted project while the suite believes it is local. Unset is allowed (this config does
+// not require it). The ONLY exemption is the explicit, separately-labelled ENVIRONMENT_GATED hosted mode
+// (E2E_AUTH_MODE=hosted, scripts/run-e2e-gate.sh): it can never produce a gate pass, sentinel or exit 0.
+const VITE_SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+if (VITE_SUPABASE_URL && process.env.E2E_AUTH_MODE !== 'hosted') {
+  assertLocalOnlyUrl('VITE_SUPABASE_URL', VITE_SUPABASE_URL);
+}
+
 // Redundant secondary check — belt-and-braces only, see comment above
 // HOSTED_TARGET_PATTERN. Anything it would catch, the positive predicate
 // above has already thrown on; this exists only to give a sharper error
@@ -334,6 +344,9 @@ function roleAwareProjects() {
   return projects;
 }
 
+const CANONICAL_GATE_OR_CI =
+  process.env.E2E_CANONICAL_GATE === '1' || Boolean(process.env.CI) || Boolean(process.env.GITHUB_ACTIONS);
+
 export default defineConfig({
   testDir: './e2e/canonical',
   testMatch: '**/*.canonical.ts',
@@ -349,7 +362,18 @@ export default defineConfig({
   // one `git add -A` from being committed. Nesting reuses the existing
   // ignore coverage without touching the root .gitignore (out of scope for
   // this slice) or any other harness's report/output directories.
-  reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report/canonical' }]],
+  // #2750: the JSON reporter feeds scripts/e2e/check-canonical-journeys.mjs --phase=results, which is
+  // what actually decides whether a run counts (skipped/flaky/interrupted/unexecuted all fail closed).
+  // Path is env-overridable (PLAYWRIGHT_JSON_OUTPUT_NAME) so the gate and CI can pin it.
+  // The HTML reporter records every step verbatim, including the sign-in helpers' fill() of the role email and
+  // password, so a gate/CI run that produced one would always trip the K3 credential scan (#2750 Q0). It is
+  // therefore OFF whenever the gate (scripts/run-e2e-gate.sh exports E2E_CANONICAL_GATE=1) or CI runs, and stays
+  // available only for local, non-gate debugging runs. K3 is unchanged and still covers everything that remains.
+  reporter: [
+    ['list'],
+    ...(CANONICAL_GATE_OR_CI ? [] : [['html', { open: 'never', outputFolder: 'playwright-report/canonical' }] as const]),
+    ['json', { outputFile: process.env.PLAYWRIGHT_JSON_OUTPUT_NAME ?? 'test-results/canonical/results.json' }],
+  ],
   outputDir: 'test-results/canonical',
   webServer: {
     // FRONTEND ONLY — see module docstring. Never add a backend start command here.

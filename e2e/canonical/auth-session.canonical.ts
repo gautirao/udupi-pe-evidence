@@ -524,7 +524,16 @@ test('[role:user] T2 — returnTo round-trip preserves a deep Discover URL inclu
   // therefore NOT the final settled URL. Wait for that enrichment to land
   // (a real, observable signal — not an arbitrary timeout) before capturing
   // "the deep URL" this test's returnTo contract is actually about.
-  await expect(page).toHaveURL(/[?&]lat=/, { timeout: 10_000 });
+  //
+  // #2750 R2 DRIFT NOTE: for an area-first LEAF node deep link the app no longer writes lat/lon/zoom at all (measured
+  // with anon, console + network capture, 14 s: the map fits the node, the bbox queries fire, and the URL settles at
+  // 1.3 s to `?city&node&rscope=areas&rareas=<same area>` and stays there; the bare city view still gets lat/lon/zoom,
+  // and T1 keeps asserting that). Waiting for `lat=` therefore waited for something the product does not do on this
+  // surface. The falsifiable settle signal is the areas-journey write itself: `rscope=areas` appearing next to the
+  // `node=` we asked for. The contract below is unchanged and now stricter: every journey-defining param of the
+  // settled URL (including rscope/rareas) must round-trip exactly; camera params are still presence-checked
+  // whenever the settled URL carries them. See evidence/c0-local/data-questions.md Q3.
+  await expect(page).toHaveURL(/[?&]node=[^&]+.*[?&]rscope=areas\b/, { timeout: 10_000 });
   const resolvedDeepUrlObj = new URL(page.url());
   const resolvedDeepUrl = resolvedDeepUrlObj.pathname + resolvedDeepUrlObj.search;
 
@@ -571,8 +580,17 @@ test('[role:user] T2 — returnTo round-trip preserves a deep Discover URL inclu
   await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
   await page.locator('#signin-email').fill(userEmail);
   await page.locator('#signin-password').fill(userPassword);
+  // CR r2 MEDIUM-3: the after-sign-in URL wait below also matches the returnTo URL ITSELF (it already carries node= and
+  // rscope=), so on its own it could pass before the app has settled. Arm the app's own navigation/resolve response BEFORE the
+  // click and await it before the contract assertion: that response only exists once Discover has re-resolved the node after sign-in.
+  const postSignInResolve = page.waitForResponse(
+    (resp) => resp.url().includes('/navigation/resolve') && resp.request().method() === 'GET',
+    { timeout: 20_000 },
+  );
   await page.locator('button[type="submit"]').filter({ hasText: /sign in/i }).first().click();
   await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });
+  const postSignInResolveResp = await postSignInResolve;
+  expect(postSignInResolveResp.ok(), 'the post-sign-in navigation/resolve must respond 2xx').toBe(true);
 
   // Auth.tsx reads safeReturnTo and navigates there on sign-in
   // (src/pages/Auth.tsx:16,22,26-27) — must land back on the original deep
@@ -590,10 +608,74 @@ test('[role:user] T2 — returnTo round-trip preserves a deep Discover URL inclu
   // wait for that real signal before capturing "the final URL", rather than
   // comparing against a not-yet-settled one (which would fail the "camera
   // param present" check for a reason that has nothing to do with returnTo).
-  await expect(page).toHaveURL(/[?&]lat=/, { timeout: 15_000 });
+  // (#2750 R2: the settle signal is the same one used pre-login — see the drift note above; `lat=` is not written here.)
+  await expect(page).toHaveURL(/[?&]node=[^&]+.*[?&]rscope=areas\b/, { timeout: 15_000 });
   const finalUrlObj = new URL(page.url());
   const finalPathAndSearch = finalUrlObj.pathname + finalUrlObj.search;
   assertReturnToContract(finalPathAndSearch, resolvedDeepUrl, 'Post-sign-in landing URL');
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// T2b — return-to onto a gated NON-Discover route (J08).
+// ─────────────────────────────────────────────────────────────────────────
+
+// T2 proves the returnTo round trip for a Discover deep link; it cannot prove the route-guard path, which is a different
+// mechanism: Discover is public, so its "Sign in" link carries ?returnTo=, whereas a gated route is guarded by
+// ProtectedRoute (src/components/auth/ProtectedRoute.tsx), which Navigates an anonymous visitor to
+// `/auth?redirect=<path+search>` and ALSO passes `state.from`. Auth.tsx (src/pages/Auth.tsx:15-22) honours `returnTo` OR `redirect`
+// (getSafeReturnTo) and falls back to location.state.from; after sign-in it navigates there, replacing the /auth entry.
+//
+// Route choice: /my-bookings (ProtectedRoute, no role restriction beyond signed-in, so the plain smoke user is allowed). Not
+// /saved-homes (T21 owns that page's data) and not a broker route (role landing would add a second reason to land elsewhere).
+//
+// Sign-in is inlined with loginAsUser's own selectors (NOT loginAsUser): its first line is page.goto('/auth'), which would
+// discard the `?redirect=` query this test is about — the same reason T2 inlines it.
+//
+// FALSIFIABLE: with ProtectedRoute navigating to bare /auth AND no state.from (the redirect param dropped everywhere) the sign-in
+// lands on the role default ('/discover'), so the final URL/heading assertions fail; with the guard removed the gated heading
+// would render for the anonymous visitor, so the pre-sign-in absence assertion fails.
+// NOT falsifiable by an Auth.tsx returnTo-ignore: mutation #1 showed T2b stays GREEN under that mutation, because ProtectedRoute
+// also passes location.state.from and Auth.tsx falls back to it. T2 is the test that isolates the returnTo parser.
+test('[role:user] T2b — an anonymous visit to a gated non-Discover route is sent to /auth with a return path, and signing in lands back on that route, unlocked', async ({ page }) => {
+  if (!hasRealCredentials(userEmail, userPassword)) {
+    throw new Error('[T2b] SMOKE_USER_EMAIL/PASSWORD absent — this test should not have run.');
+  }
+
+  const GATED_ROUTE = '/my-bookings';
+  const gatedHeading = page.getByRole('heading', { name: 'My Bookings', exact: true });
+
+  // 1) Anonymous visit -> bounced to /auth carrying the original path (as `redirect`, ProtectedRoute's own param name).
+  await page.goto(GATED_ROUTE);
+  await expect(page).toHaveURL(/\/auth\?/, { timeout: 15_000 });
+  const authUrl = new URL(page.url());
+  expect(authUrl.pathname, 'the guard must send an anonymous visitor to /auth').toBe('/auth');
+  expect(
+    authUrl.searchParams.get('returnTo') ?? authUrl.searchParams.get('redirect'),
+    'the /auth URL must carry the gated route as its return path (returnTo or redirect)',
+  ).toBe(GATED_ROUTE);
+
+  // 2) PRE-STATE / absence: the gated content was never rendered to the anonymous visitor, and the sign-in form IS there
+  //    (positive control — an empty page would satisfy the absence alone).
+  await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
+  await expect(gatedHeading).toHaveCount(0);
+
+  // 3) Real sign-in through the UI, on the very /auth URL we were sent to.
+  await page.locator('#signin-email').fill(userEmail);
+  await page.locator('#signin-password').fill(userPassword);
+  const bookingsPromise = page.waitForResponse(
+    (r) => r.url().includes('/api/bookings/mine') && r.request().method() === 'GET',
+    { timeout: 20_000 },
+  );
+  await page.locator('button[type="submit"]').filter({ hasText: /sign in/i }).first().click();
+
+  // 4) Landed back on the gated route (path exact, query none), and it is UNLOCKED: the page's own heading and its real data
+  //    request (a 2xx here is also the session-restored proof — a pre-session request would 401).
+  await expect(page).toHaveURL(/\/my-bookings$/, { timeout: 20_000 });
+  expect(new URL(page.url()).pathname).toBe(GATED_ROUTE);
+  const bookingsResp = await bookingsPromise;
+  expect(bookingsResp.ok(), 'GET /api/bookings/mine must respond 2xx once signed in on the gated route').toBe(true);
+  await expect(gatedHeading).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('user-menu')).toBeVisible({ timeout: 15_000 });
 });
 
 // ─────────────────────────────────────────────────────────────────────────

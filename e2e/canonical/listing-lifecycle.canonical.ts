@@ -311,6 +311,17 @@ const T15_ENABLED = true;
 // again be read by T15 too.
 let listingId: string | null = null;
 
+// T15b falsifiability link (J06). T14 records here, BEFORE it approves, that the still-PENDING_REVIEW listing is absent from the
+// exhaustive Discover result set for its city. T15b asserts the same id is PRESENT afterwards, so "member of Discover" is shown
+// to be a consequence of approval rather than a property of the query (a query that returns every row passes a presence check
+// alone). `null` = T14 has not reached its pre-approval probe, which T15b treats as a failure, never as "absent".
+let absentFromDiscoverBeforeApproval: boolean | null = null;
+
+/** Ids of an /api/discover/listings page body (`content[].id`). */
+function discoverIds(body: { content?: Array<{ id?: string }> }): string[] {
+  return (body.content ?? []).map((x) => String(x.id));
+}
+
 test('[role:broker] T13 — broker fills core fields, arranges photos+pin out-of-band, and submits for review', async ({ page }) => {
     const backendBaseUrl = requireBackendBaseUrl();
 
@@ -357,9 +368,17 @@ test('[role:broker] T13 — broker fills core fields, arranges photos+pin out-of
     await t13Description.fill(`Canonical Residential lifecycle fixture for ${UNIQUE_TITLE}.`);
     await page.locator('#price').fill('7500000');
     await page.getByRole('radio', { name: '2 BHK' }).click();
-    await page.getByRole('radio', { name: '1,000 sqft' }).click();
+    // Built-up area is the field the form marks "Required to submit this listing for review". Since #2642 the
+    // Carpet area input renders the SAME apartment preset chips (a second radiogroup also named "Common area sizes"),
+    // so an unscoped getByRole('radio', { name: '1,000 sqft' }) is ambiguous (strict-mode violation, 2 elements). Scope
+    // it to the Built-up area field: the nearest `.space-y-3` ancestor of its #builtArea input is AreaField's own root,
+    // which holds exactly that field's chip group (ResidentialPropertyDetailsSection.tsx, AreaField.tsx).
+    const builtUpArea = page.locator('#builtArea').locator('xpath=ancestor::div[contains(@class, "space-y-3")][1]');
+    await builtUpArea.getByRole('radio', { name: '1,000 sqft' }).click();
+    await expect(builtUpArea.getByRole('radio', { name: '1,000 sqft' })).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator('#builtArea')).toHaveValue('1000');
 
-    // ── Step 2 — Save draft (real POST /api/listings; draft creation is
+    // ── Step 2— Save draft (real POST /api/listings; draft creation is
     //     NOT automatic) — capture both the draft id AND the broker's own
     //     real bearer token from this same real request (see module
     //     docstring's "AUTH TOKEN" note).
@@ -565,11 +584,38 @@ test.describe.serial('T14 — admin approve (depends on T13\'s listingId)', () =
     await expect(row, 'the row located by testid must be the SAME row carrying the unique title').toBeVisible();
     await expect(row.getByText(UNIQUE_TITLE, { exact: false })).toBeVisible();
 
+    // T15b PRE-STATE (J06): while the listing is still PENDING_REVIEW it must NOT be a member of the Discover result set. Read with
+    // the admin bearer the page's own pending-queue request just carried (page.request does not carry the Supabase session), over
+    // the same exhaustive city query T15b uses afterwards. totalElements === returned proves the page is the whole set, so
+    // "absent" cannot be a pagination artefact.
+    const adminBearer = pendingQueueResp.request().headers()['authorization'];
+    expect(adminBearer, 'the pending-queue request must carry the admin bearer token').toBeTruthy();
+    const preResp = await page.request.get(
+      `${requireBackendBaseUrl()}/api/discover/listings?city=udupi&listingPurpose=sale&page=0&size=200`,
+      { headers: { Authorization: adminBearer ?? '' } },
+    );
+    expect(preResp.ok(), 'pre-approval exhaustive Discover query must respond 2xx').toBe(true);
+    const preBody = (await preResp.json()) as { content?: Array<{ id?: string }>; totalElements?: number };
+    const preIds = discoverIds(preBody);
+    expect(preBody.totalElements, 'pre-approval Discover page must be the WHOLE set, or absence below proves only pagination').toBe(preIds.length);
+    expect(preIds.length, 'pre-approval control: the seeded Udupi inventory must be present, or the absence below is vacuous').toBeGreaterThan(0);
+    expect(preIds, 'a PENDING_REVIEW listing must not be in the Discover result set before approval').not.toContain(listingId);
+    absentFromDiscoverBeforeApproval = true;
+
+    // #2513: approval is NOT a row button. PendingApprovalsTable renders a checkbox and a "Review" column only
+    // (verified by the failure snapshot: the row's sole button is "Review"); approving is the drawer flow that
+    // commercial-lifecycle CC2 already uses: open the row -> ListingReviewDrawer -> "Approve" (opens the confirm
+    // dialog, fires nothing) -> `confirm-approve-action` (fires POST .../approve). The 2xx on that POST, the
+    // success toast and the row leaving the queue below are all still asserted unchanged.
+    await row.click();
+    await expect(page.getByTestId('listing-review-drawer')).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: 'Approve', exact: true }).click();
+
     const approvePromise = page.waitForResponse(
       (r) => r.url().endsWith(`/api/admin/listings/${listingId}/approve`) && r.request().method() === 'POST',
       { timeout: 15_000 },
     );
-    await row.getByRole('button', { name: 'Approve' }).click();
+    await page.getByTestId('confirm-approve-action').click();
     const approveResp = await approvePromise;
     expect(approveResp.ok(), 'POST /api/admin/listings/{id}/approve must respond 2xx').toBe(true);
 
@@ -649,3 +695,70 @@ if (T15_ENABLED) {
     // matching listing-detail-gating.canonical.ts's T11/T12 precedent.
   });
 }
+
+// T15b (J06) — Discover MEMBERSHIP of the listing T13 created and T14 approved. T13/T14/T15 prove create, approve and the anon detail
+// page; none of them proves a buyer can FIND it. Mirrors CC4's technique (commercial-lifecycle.canonical.ts): drive the browser to
+// the area node so the PRODUCT fires its own Discover query, assert membership on that response, and cross-check the same scope
+// with an exhaustive direct fetch (totalElements === returned) so absence/presence cannot be a pagination artefact.
+//
+// FALSIFIABLE, three ways:
+//   1. PRE-STATE: T14 recorded the id ABSENT from the exhaustive city set while it was still PENDING_REVIEW (see
+//      absentFromDiscoverBeforeApproval). Presence here is therefore caused by approval, not a query that returns everything.
+//   2. SCOPE: a seeded listing from a DIFFERENT area (Malpe) is PRESENT in the unfiltered city control yet ABSENT from the
+//      node-scoped set, so "member of the area node" is not "member of the city".
+//   3. POSITIVE CONTROL: the seeded Manipal fixture listing is in the node-scoped set, so an empty/erroring response cannot
+//      satisfy the assertions (mutation proof: asserting a wrong id here goes red - evidence/c2/mutations.txt).
+test('[role:broker] T15b — the approved listing is a member of the Discover result set for its area node (and was absent before approval)', async ({ page }) => {
+  if (!listingId) {
+    throw new Error('[T15b] listingId was not captured by T13 — see this file\'s PROJECT-TOPOLOGY DEVIATION note.');
+  }
+  expect(
+    absentFromDiscoverBeforeApproval,
+    'T14 must have proven the PENDING_REVIEW listing ABSENT from Discover before approving it; without that pre-state, presence below proves nothing about approval',
+  ).toBe(true);
+
+  const backendBaseUrl = requireBackendBaseUrl();
+  const MANIPAL_FIXTURE_LISTING = 'e2e00001-0000-0000-0000-000000000001';  // seeded LIVE '[E2E] 1 Lakh Manipal Apartment'
+  const MALPE_FIXTURE_LISTING = 'e2e00002-0000-0000-0000-000000000001';    // seeded LIVE '[E2E] 1 Lakh Malpe Apartment' (other area)
+
+  // The area LEAF is where the product asks for listings (a bare city URL is the area-first city root and never does; see CC4's R2 drift note).
+  const appListings = page.waitForResponse(
+    (r) => /\/api\/discover\/cities\/udupi\/listings\?/.test(r.url())
+      && r.url().includes('areaKeys=')
+      && /listingPurpose=sale/i.test(r.url())
+      && r.request().method() === 'GET',
+    { timeout: 20_000 },
+  );
+  await page.goto(`/discover?city=udupi&node=${encodeURIComponent('a:IN|KA|Udupi|Manipal')}`);
+  const appResp = await appListings;
+  expect(appResp.status(), 'the app\'s own Discover query must respond 2xx').toBeLessThan(300);
+  const bearer = appResp.request().headers()['authorization'];
+  expect(bearer, 'the app\'s own Discover request must carry the broker bearer token').toBeTruthy();
+  // Node-scoped shape: { areas: [ { areaKey, listings: [ { id, ... } ] } ] } — one entry per requested area key.
+  const appBody = (await appResp.json()) as { areas?: Array<{ areaKey?: string; listings?: Array<{ id?: string }> }> };
+  expect((appBody.areas ?? []).map((a) => a.areaKey), 'the node-scoped query must answer for exactly the Manipal area').toEqual(['IN|KA|Udupi|Manipal']);
+  const appIds = (appBody.areas ?? []).flatMap((a) => (a.listings ?? []).map((l) => String(l.id)));
+
+  // Exhaustive direct fetch of the whole city set (control) — asked AFTER the app query, with the same principal.
+  const cityResp = await page.request.get(
+    `${backendBaseUrl}/api/discover/listings?city=udupi&listingPurpose=sale&page=0&size=200`,
+    { headers: { Authorization: bearer ?? '' } },
+  );
+  expect(cityResp.ok(), 'exhaustive city Discover query must respond 2xx').toBe(true);
+  const cityBody = (await cityResp.json()) as { content?: Array<{ id?: string }>; totalElements?: number };
+  const cityIds = discoverIds(cityBody);
+  expect(cityBody.totalElements, 'the city control must be the WHOLE set').toBe(cityIds.length);
+  expect(cityIds, 'CONTROL: the approved listing is servable at all (LIVE, not duplicate, not archived)').toContain(listingId);
+  expect(cityIds, 'CONTROL: a seeded listing from another area is in the city set, so the node-scope absence below is attributable to scope').toContain(MALPE_FIXTURE_LISTING);
+
+  expect(appIds.length, 'T15b control: the area-node result set must be non-empty').toBeGreaterThan(0);
+  expect(appIds, 'POSITIVE CONTROL: the seeded Manipal fixture listing is in the Manipal node result set').toContain(MANIPAL_FIXTURE_LISTING);
+  expect(appIds, 'T15b: the listing T13 created and T14 approved must be a member of the Manipal node result set').toContain(listingId);
+  expect(appIds, 'SCOPE: a Malpe listing must not be in the Manipal node result set').not.toContain(MALPE_FIXTURE_LISTING);
+
+  // And the buyer SEES it: the Manipal area panel renders a card titled with the broker's unique title.
+  await expect(
+    page.getByRole('heading', { name: UNIQUE_TITLE, exact: true }),
+    'the area panel must render the approved listing\'s card',
+  ).toBeVisible({ timeout: 15_000 });
+});

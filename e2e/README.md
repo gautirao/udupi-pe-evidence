@@ -1,4 +1,35 @@
-# E2E Tests — Watch Modes & Journey Structure
+# E2E Tests - the gate, the canonical suite, and the legacy estate
+
+## THE gate: `npm run test:e2e:gate` (#2750)
+
+There is exactly one authoritative E2E command:
+
+```bash
+npm run test:e2e:gate
+```
+
+It is `scripts/run-e2e-gate.sh`: static guards, then `playwright --list` collection, then the
+canonical suite against a real frontend build + real backend + a disposable local PostGIS fixture
+(per-worktree container, never the shared fixture, loopback-only), then the results phase of
+`scripts/e2e/check-canonical-journeys.mjs`. It prints `CANONICAL E2E GATE: PASS @ <sha>` only after the
+results phase verified the run, and fails closed on any skipped, flaky, interrupted, missing or
+unexecuted journey, and on any role credential value found in the run artefacts.
+`NOT A GATE RUN: <reason>` (exit 3) means a precondition was missing and nothing ran. CI's
+`e2e-canonical` job calls the same checker script, so a local pass validates the code CI runs.
+
+- Supported journeys J01-J16: [`e2e/canonical/journey-matrix.json`](canonical/journey-matrix.json)
+  (single source), human view in [`docs/testing/e2e-journey-matrix.md`](../docs/testing/e2e-journey-matrix.md).
+- Retirement of the legacy estate, one row per file with a final decision:
+  [`docs/testing/e2e-retirement-manifest.csv`](../docs/testing/e2e-retirement-manifest.csv).
+- Counts (generated, never hand-typed): [`docs/testing/e2e-inventory.md`](../docs/testing/e2e-inventory.md),
+  regenerate with `python3 -I scripts/e2e/gen-e2e-inventory.py`.
+- Guards: `npm run test:e2e:guard` (estate guard + journey static check, ~1s, also run by the
+  pre-push hook and CI) and `npm run test:e2e:guard:unit` (`node --test scripts/e2e/*.test.mjs`).
+- New permanent Playwright coverage must extend the canonical suite for a documented journey gap, or
+  carry an explicit specialist reason as a `RETAIN_SPECIALIST` manifest row; the estate guard fails on
+  any unlisted spec.
+- Everything else below (`test:e2e:local`, `e2e-watch.sh`, the `smoke`/`journey`/`full` projects) is the
+  LEGACY estate: NOT the gate, scheduled for retirement per the manifest.
 
 ## Three suites, one authoritative gate (#2187)
 
@@ -43,40 +74,25 @@ a role's coverage without the CI job noticing. In other words: in CI, a
 missing/empty role secret is a hard gate failure, never a silent reduction to
 anon-only.
 
-**File/test counts** (verified programmatically against this branch, not
-hand-typed — see the counting method note at the bottom of this section):
-
-- Canonical: **11 spec files**, **28 static `test()` call sites** under
-  `e2e/canonical/*.canonical.ts` (plus 1 shared auth-setup file). The
-  suite's own certified GREEN_3X run counted **31 executed tests** — some
-  static call sites are role-gated and run once per included role project, so
-  the executed count depends on how many role projects are active for a given
-  run (see "Role coverage in CI" above). Treat the CI job's own Playwright
-  summary line as the source of truth for a given run, not either number here.
-- Legacy smoke (7 files that `playwright.config.ts`'s `smoke` project
-  matches): **31 static `test()` call sites** — `quick-smoke.spec.ts` (8),
-  `broker-smoke.spec.ts` (4), `broker-listing-quality.spec.ts` (5),
-  `broker-dashboard-v2.spec.ts` (4), `admin-smoke.spec.ts` (4),
-  `discover-real-data-smoke.spec.ts` (4), `discover-schools-canonical-2124.spec.ts` (2).
-- Total `*.spec.ts` files under `e2e/`: **168** (includes the 7 legacy smoke
-  files above, `journey/` and `integration-ui/` project files, and the
-  remaining historical/specialist files not wired into any CI job).
-
-Counting method: `find e2e -name '*.spec.ts'` / `find e2e/canonical -name
-'*.canonical.ts'` for file counts; a `grep -c '^\s*test('`-equivalent scan per
-file for static test-call counts. Re-run these yourself before trusting a
-stale number here — this table will drift the moment a spec file changes.
+**File/test counts:** generated, not hand-typed. See
+[`docs/testing/e2e-inventory.md`](../docs/testing/e2e-inventory.md) (BEFORE = the base the retirement
+series started from, AFTER = current) and regenerate it with
+`python3 -I scripts/e2e/gen-e2e-inventory.py`. The number Playwright actually collects and executes is
+printed by `npm run test:e2e:gate` (`--list` count and executed count must match); role-gated tests run
+once per role project, so static call sites and executed tests differ by design.
 
 ## Quick reference
 
 | Command | What it does |
 |---|---|
-| `npm run test:e2e:canonical` | **The merge gate** — builds with the current commit's sha baked in, runs the canonical suite. Requires a real local backend already running (see `e2e/canonical/README.md`) or CI's `e2e-canonical` job, which starts one itself. |
+| `npm run test:e2e:gate` | **THE gate** (#2750): guards + collection + isolated stack + canonical run + fail-closed results phase. Prints `CANONICAL E2E GATE: PASS @ <sha>` or fails. |
+| `npm run test:e2e:guard` | Static estate guard + journey-matrix check (~1s, no stack; the pre-push hook runs the same) |
+| `npm run test:e2e:canonical` | Builds with the current commit's sha baked in and runs the canonical suite WITHOUT the guards, stack or results phase (what the gate and CI call internally). **The merge gate** — builds with the current commit's sha baked in, runs the canonical suite. Requires a real local backend already running (see `e2e/canonical/README.md`) or CI's `e2e-canonical` job, which starts one itself. |
 | `npm run test:e2e:watch` | Headed browser, 1 worker, normal speed (legacy/specialist suites) |
 | `npm run test:e2e:watch:slow` | Headed browser, 1 worker, 800ms between actions |
 | `bash scripts/e2e-watch.sh --slow --project=journey` | Watch all journeys slowly |
 | `bash scripts/e2e-watch.sh --debug` | Open Playwright Inspector on failure |
-| `npm run test:e2e:local` | Local-only legacy gate (headless, smoke project) — NOT the CI merge gate; see table above |
+| `npm run test:e2e:local` | LEGACY runner (smoke project) - NOT the authoritative gate; prints a banner saying so. Use `npm run test:e2e:gate`. |
 
 ---
 
@@ -240,7 +256,7 @@ bash scripts/e2e-watch.sh --project=full             # everything
 |---|---|
 | **CI merge gate** (`.github/workflows/ci.yml`, `e2e-canonical` job) | **#2187: this is now the authoritative gate.** Builds frontend+backend from the PR's own commit, stands up a real local Postgres/PostGIS fixture + Spring Boot backend inside the job, runs `npm run test:e2e:canonical`. See the suite table at the top of this file. |
 | CI legacy job (`.github/workflows/ci.yml`, `playwright-pr` job) | Still runs `--project=smoke` headless against the deployed Cloudflare Pages site. Kept as a secondary, low-cost auth-free reachability check — not where a real regression should be caught (see suite table above). |
-| Local pre-push hook (`scripts/run-e2e-local.sh`) | Unchanged by this PR. Runs `--project=smoke` headless against a locally-started dev backend/frontend (via `.env.e2e`). This is a **local developer convenience gate**, distinct from the CI merge gate above — it was never itself a CI job. |
+| Local pre-push hook (`.githooks/pre-push`) | #2750: runs the two static guards (estate guard + journey static check) and BLOCKS the push on failure. It prints `E2E static guards PASSED - this is NOT the E2E gate` and never claims E2E passed. `PREPUSH_E2E=gate` opts in to the real gate. |
 | `playwright.config.ts` defaults | `headless: true`, no `slowMo`, `workers: 2`. |
 | `playwright.canonical.config.ts` defaults | `headless: true`, no `slowMo`, `workers: 1` (single shared local fixture DB — see `e2e/canonical/README.md`). |
 | Slow mode | Only activates via explicit `--slow` flag or `--slow-mo=N` arg in `e2e-watch.sh`. Never injected by config or CI. |

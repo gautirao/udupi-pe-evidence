@@ -936,17 +936,57 @@ test('[role:broker] CC4 — the created Commercial listing is discoverable under
   // Navigating fires an /api/discover/listings BEFORE the URL filters apply,
   // and a predicate accepting any matching URL captures that one — an empty
   // pre-filter body then reads as "Commercial+Shop returns nothing".
+  // MEASURED (fix cycle r2, evidence/fix-r2/diag-cc4-all-listings-requests.txt): navigating to the Manipal leaf fires THREE
+  // SHOP+rent listings requests, in this order: (0) scopeFingerprint scope:null (before the area set commits), (1) scope AREA_SET
+  // [IN|KA|Udupi|Manipal], (2) the same plus a map bbox. Only (1) is the committed, un-bbox'd, area-scoped query, and a predicate
+  // that accepted any of them made the arm that was compared depend on response arrival order (a bbox'd response has a smaller
+  // totalElements). The predicate therefore selects (1) explicitly: it must carry an AREA_SET scopeFingerprint and no bbox.
   const listingsPromise = page.waitForResponse(
-    (r) => r.url().includes('/api/discover/listings')
-      && r.url().toUpperCase().includes('SHOP')
-      && /listingPurpose=rent/i.test(r.url())
-      && r.request().method() === 'GET',
+    (r) => {
+      if (!r.url().includes('/api/discover/listings') || r.request().method() !== 'GET') return false;
+      if (!r.url().toUpperCase().includes('SHOP') || !/listingPurpose=rent/i.test(r.url())) return false;
+      const u = new URL(r.url());
+      if (u.searchParams.has('bbox')) return false;
+      try {
+        const fp = JSON.parse(u.searchParams.get('scopeFingerprint') ?? 'null') as { scope?: { kind?: string } | null } | null;
+        return fp?.scope?.kind === 'AREA_SET';
+      } catch { return false; }
+    },
     { timeout: 20_000 },
   );
   // `type` and `subtype` are the URL contract, read and written in
   // features/discover/state/url/filters.ts (by FILE, not line — the previous
   // `:61,202` citation had drifted; 202 landed on an unrelated param delete).
-  await page.goto('/discover?city=udupi&type=commercial&subtype=SHOP&intent=rent');
+  //
+  // #2750 R2 DRIFT NOTE — THE URL BELOW NOW CARRIES node=. The long note further down says the bare city URL fires
+  // /api/discover/listings because Udupi had no navigation graph. That stopped being true when #2707 (c93f9191) made
+  // the Udupi hierarchy reachable (scripts/db/fixtures/area-trends-2581-udupi-navigation-seed.sql, loaded by
+  // restore-test-fixture.sh): the bare city URL is now the area-first city root, which fires nearby-candidates and
+  // navigation/root/counts and NEVER /api/discover/listings (measured, 12 s capture; the 20 s waitForResponse below
+  // timed out on exactly that, in a gate run that is independent of where auth lives). The area LEAF is where the
+  // product asks for listings, so the deep link goes to the Manipal AREA node (where CC1/CC1b/CC1c create their
+  // rows). The waitForResponse predicate ABOVE (listingsPromise) was changed in r2 to match this deep link; it still has to
+  // be the app's own GET /api/discover/listings carrying SHOP and listingPurpose=rent.
+  //
+  // CR r2 SHOULD-1 (the earlier version of this note said "every C13/C16/C17 assertion after it is untouched", which was
+  // FALSE, see below): the reference SCOPE (the exhaustive list fetch AND the markers fetch, further down) must ask the SAME
+  // geography question as the app arm, otherwise C17 `shopBody.totalElements === fullListBody.totalElements` can only hold
+  // because every Udupi SHOP/rent row happens to sit in Manipal.
+  //
+  // MEASURED (fix cycle r2, evidence/fix-r2/diag-cc4-all-listings-requests.txt): the reviewer's premise "the app arm sends
+  // nodeKey" is NOT what the wire shows for this URL - NONE of the three SHOP+rent listings requests carries nodeKey or areaKeys.
+  // The committed-scope one (the one selected above) is
+  //   ?city=udupi&page=0&size=50&includeAggregates=true&propertyTypes=commercial&commercialSubtypes=SHOP&listingPurpose=rent
+  //   &scopeFingerprint={"filters":{...},"listingPurpose":"rent","scope":{"areaKeys":["IN|KA|Udupi|Manipal"],"kind":"AREA_SET"}}
+  // i.e. NO nodeKey and NO areaKeys param; the Manipal AREA_SET scope travels only inside the opaque scopeFingerprint (the
+  // surface that fires it is the area-set results controller, not NodeListingsSurface). So asserting nodeKey on that request is
+  // red for a reason that is not a regression. What this test does instead is DERIVE the reference geography from the app
+  // request itself (nodeKey / areaKeys params exactly as sent, none when none were sent) so the two arms can never silently
+  // differ, and it asserts the scope the app CLAIMS (the fingerprint) is the Manipal area set. That the area-first leaf fetches
+  // without sending its scope on the wire is recorded as an open product question (see the QA transcript).
+  const NODE_KEY = 'a:IN|KA|Udupi|Manipal';
+  const NODE = encodeURIComponent(NODE_KEY);
+  await page.goto(`/discover?city=udupi&node=${NODE}&type=commercial&subtype=SHOP&intent=rent`);
   const listingsResp = await listingsPromise;
   expect(listingsResp.status(), 'the app own Discover query should be 2xx').toBeLessThan(300);
 
@@ -963,6 +1003,35 @@ test('[role:broker] CC4 — the created Commercial listing is discoverable under
   // two axes that must hold. Do not cite them as the guard.
   expect(listingsResp.url(), 'C13: must assert on the SUBTYPE-FILTERED query').toMatch(/SHOP/i);
   expect(listingsResp.url(), 'C13: must assert on the RENT-scoped query, matching what CC1 created').toMatch(/listingPurpose=rent/i);
+  // The geography the app arm asks for, exactly as sent on the wire (see the SHOULD-1 note above). The reference SCOPE below
+  // repeats these params verbatim, so the two arms cannot differ in geography.
+  const appUrl = new URL(listingsResp.url());
+  const scopeParams = new URLSearchParams();
+  // And the scope the app CLAIMS for this fetch (its own cache identity) must be the Manipal area set: a navigation that landed
+  // on another node, or lost the scope, goes red here rather than being compared against a differently-scoped reference.
+  const fingerprintRaw = appUrl.searchParams.get('scopeFingerprint');
+  expect(fingerprintRaw, `C17 scope: the app's /api/discover/listings call must carry its scopeFingerprint. Query was: ${listingsResp.url()}`).toBeTruthy();
+  const fingerprint = JSON.parse(fingerprintRaw ?? '{}') as { scope?: { kind?: string; areaKeys?: string[] } };
+  expect(
+    fingerprint.scope,
+    `C17 scope: the app arm's committed scope must be the Manipal AREA_SET (the node we deep-linked to). Query was: ${listingsResp.url()}`,
+  ).toEqual({ kind: 'AREA_SET', areaKeys: ['IN|KA|Udupi|Manipal'] });
+  // CR r2 cycle2 MEDIUM-A: never copy the app's wire geography into the reference unvalidated (a drifted app param would then
+  // silently drag the reference with it). Validate BEFORE copying. Today neither param is on the wire (branch 'none'); the
+  // params are NOT required to be present, but if one ever appears it must be inside the claimed scope / the deep-linked node.
+  const claimedAreaKeys = fingerprint.scope?.areaKeys ?? [];
+  const wireAreaKeys = appUrl.searchParams.getAll('areaKeys');
+  const wireNodeKeys = appUrl.searchParams.getAll('nodeKey');
+  for (const v of wireAreaKeys) {
+    expect(claimedAreaKeys, `C17 scope: wire areaKeys value ${v} must be a member of the fingerprint scope. Query was: ${listingsResp.url()}`).toContain(v);
+  }
+  for (const v of wireNodeKeys) {
+    expect(v, `C17 scope: wire nodeKey must equal the deep-linked node. Query was: ${listingsResp.url()}`).toBe(NODE_KEY);
+  }
+  const scopeBranch = `areaKeys:${wireAreaKeys.length ? 'wire' : 'none'}/nodeKey:${wireNodeKeys.length ? 'wire' : 'none'}`;
+  expect(['areaKeys:none/nodeKey:none', 'areaKeys:wire/nodeKey:none', 'areaKeys:none/nodeKey:wire', 'areaKeys:wire/nodeKey:wire'], 'C17 scope: branch recorded').toContain(scopeBranch);
+  test.info().annotations.push({ type: 'c17-scope-branch', description: scopeBranch });
+  for (const k of ['nodeKey', 'areaKeys']) for (const v of appUrl.searchParams.getAll(k)) scopeParams.append(k, v);
 
   const shopBody = (await listingsResp.json()) as { content?: Array<{ id?: string }>, totalElements?: number };
   const shopIds = idsOf(shopBody);
@@ -993,7 +1062,10 @@ test('[role:broker] CC4 — the created Commercial listing is discoverable under
   // Omitting purpose on either side compares two DIFFERENTLY-SCOPED feeds —
   // the app's marker hook sends the same intent-derived purpose — so the
   // comparison would pass or fail for reasons unrelated to membership.
-  const SCOPE = 'city=udupi&propertyTypes=commercial&commercialSubtypes=SHOP&listingPurpose=rent';
+  // The geography params are COPIED from the app's own request (CR r2 SHOULD-1, see the note above): list and markers fetches
+  // below ask the same geography question as the app arm, whatever that is on the wire.
+  const geo = scopeParams.toString();
+  const SCOPE = `city=udupi${geo ? `&${geo}` : ''}&propertyTypes=commercial&commercialSubtypes=SHOP&listingPurpose=rent`;
 
   // THERE IS NO IDENTITY SPLIT. A long note here used to claim one, and it
   // was wrong — corrected rather than trimmed, because it was the first thing

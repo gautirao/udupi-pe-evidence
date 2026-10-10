@@ -66,6 +66,36 @@ filter_code_changes() {
   grep -Ev "$PRE_PUSH_DOC_PATTERN" | grep -v '^$' || true
 }
 
+# PRE_PUSH_E2E_GUARD_PATTERN: paths that change the E2E estate or the machinery that guards it. They
+# sit under scripts/, .github/, .githooks/ (all "doc" by PRE_PUSH_DOC_PATTERN) yet MUST still run the
+# static guards (#2750 P1): a push touching only scripts/e2e/**, ci.yml, playwright*.config.ts or
+# package.json would otherwise skip the very checks that police them. Markdown stays doc-only.
+PRE_PUSH_E2E_GUARD_PATTERN='^(e2e/|e2e-parity/|e2e/canonical/journey-matrix\.json$|scripts/e2e/|scripts/run-e2e-gate\.sh$|scripts/dev/lib/pre-push-classify\.sh$|docs/testing/e2e-retirement-manifest\.csv$|playwright[^/]*\.config\.ts$|\.github/workflows/|\.githooks/|package\.json$)'
+
+# filter_guard_triggers STDIN -> STDOUT
+# Reads changed paths on stdin and prints those that require the static E2E guards: every code change
+# (filter_code_changes) plus every PRE_PUSH_E2E_GUARD_PATTERN path that is not a .md file, in input
+# order, deduplicated. Empty output means a pure doc-only push (the hook then SKIPS).
+filter_guard_triggers() {
+  local f
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    if ! [[ "$f" =~ $PRE_PUSH_DOC_PATTERN ]]; then
+      echo "$f"
+    elif [[ "$f" =~ $PRE_PUSH_E2E_GUARD_PATTERN && ! "$f" =~ \.md$ ]]; then
+      echo "$f"
+    fi
+  done
+  return 0
+}
+
+# classify_e2e_changes STDIN -> STDOUT
+# Reads CODE changes on stdin and prints every changed path under e2e/ or e2e-parity/ - the files
+# the pre-push hook does NOT execute (it runs static guards only; the gate runs the canonical suite).
+classify_e2e_changes() {
+  grep -E '^(e2e|e2e-parity)/' || true
+}
+
 _is_smoke_spec_basename() {
   local base="$1" candidate
   for candidate in "${SMOKE_SPEC_BASENAMES[@]}"; do
@@ -90,6 +120,10 @@ _is_smoke_spec_basename() {
 # run already exercises them transitively through whichever covered spec
 # imports them, so flagging every helper edit would be a false positive,
 # not a real gap.
+#
+# #2750: the hook no longer runs the smoke suite at all, so it no longer calls this function. It is
+# retained (the `smoke` project still exists until the retirement series removes it, and T-SYNC keeps
+# the list honest); the hook uses classify_e2e_changes below.
 classify_e2e_coverage() {
   local f base
   while IFS= read -r f; do

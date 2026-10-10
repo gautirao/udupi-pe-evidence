@@ -50,8 +50,15 @@
 
 import { test, expect } from './support/canonical-test';
 import type { Page } from './support/canonical-test';
+import { loginAsBroker, hasRealCredentials } from '../helpers';
 
 const FIXTURE_LISTING_ID = 'e2e00001-0000-0000-0000-000000000001';
+
+const brokerEmail = process.env.BROKER_EMAIL || process.env.DEALER_EMAIL || '';
+const brokerPassword = process.env.BROKER_PASSWORD || process.env.DEALER_PASSWORD || '';
+
+/** What T17 booked, handed to T17b through this file's module scope (same project, same worker, declaration order). */
+let t17Booking: { id: string; date: string; slot: string } | null = null;
 
 // T17_ENABLED — see the module docstring's "T17 RE-ENABLED" section above.
 // Distinct from listing-lifecycle.canonical.ts's T14_T15_ENABLED, which
@@ -346,6 +353,10 @@ test('[role:user] T17 — authed: real booking POST succeeds; success state rend
   await submitButton.click();
   const bookingPostResp = await bookingPostPromise;
   expect(bookingPostResp.ok(), 'POST /api/bookings must respond 2xx for an authed submit').toBe(true);
+  // T17b links to THIS booking by id (BookingResponse.id) — captured from the real response, never re-derived.
+  const createdBooking = (await bookingPostResp.json()) as { id?: string };
+  expect(createdBooking.id, 'POST /api/bookings must return the created booking id').toBeTruthy();
+  t17Booking = { id: String(createdBooking.id), date: selectedDateIso, slot: selectedSlot };
 
   // MIRROR CONTROL — proves the testid T16 asserts absent CAN genuinely
   // render, making T16's negative assertion meaningful rather than vacuous.
@@ -395,5 +406,68 @@ test('[role:user] T17 — authed: real booking POST succeeds; success state rend
   ).first();
   await expect(bookingRow.getByText(selectedDateIso, { exact: false })).toBeVisible();
   await expect(bookingRow.getByText(selectedSlot, { exact: true })).toBeVisible();
+});
+
+// T17b (J10) — the broker who OWNS the booked listing sees THE SAME booking on /broker/bookings.
+//
+// OWNERSHIP (an arranged precondition, stated so it is never mistaken for a proven one): a booking's broker is the listing's
+// created_by (BookingService.createBooking), and GET /api/bookings/broker returns only the caller's own. The seeded fixture
+// listing T17 books belongs to the synthetic fixture broker, not to this run's generated broker, so
+// scripts/e2e/auth-stack/create-users.sh hands that one listing to the run's broker (per-run, disposable fixture only, no grant
+// changed) right after the role users are created. Without it this test would find nothing for a reason that looks like a product bug.
+//
+// PLACEMENT: tagged [role:user] on purpose (canonical-user), declared right after T17 — the two share `t17Booking` through
+// module scope, which only works inside one project's queue (see listing-lifecycle.canonical.ts' PROJECT-TOPOLOGY note). The
+// in-test identity switch is the established T14 pattern: clear the page's storage and perform a REAL UI sign-in as the broker
+// on the same tracked page (a second untracked context would escape installNoApiMockGuard).
+//
+// FALSIFIABLE: the match is on the booking ID returned by T17's POST, in the broker's own API response, plus the UI row carrying
+// the same date and slot. A different/missing booking id, or a broker who does not own the listing, fails the id assertion.
+test('[role:user] T17b — the broker who owns the booked listing sees the same booking on /broker/bookings', async ({ page }) => {
+  if (!t17Booking) {
+    throw new Error('[T17b] T17 did not record its booking (T17 failed or was not run before T17b in this project).');
+  }
+  if (!hasRealCredentials(brokerEmail, brokerPassword)) {
+    throw new Error('[T17b] BROKER_EMAIL/PASSWORD absent — this test needs the broker credential IN ADDITION to the user credential that put it in canonical-user.');
+  }
+  const booking = t17Booking;
+
+  // This default page starts as the signed-in USER (project storageState). Become the broker through the real sign-in form.
+  await page.goto('/my-bookings');
+  await expect(page.getByRole('heading', { name: 'My Bookings', exact: true })).toBeVisible({ timeout: 15_000 });
+  await page.evaluate(() => localStorage.clear());
+  await page.context().clearCookies();
+
+  await loginAsBroker(page, brokerEmail, brokerPassword);
+  await expect(page.getByRole('link', { name: 'Broker dashboard', exact: true })).toBeVisible({ timeout: 15_000 });
+
+  const brokerBookingsPromise = page.waitForResponse(
+    (r) => /\/api\/bookings\/broker(\?|$)/.test(r.url()) && r.request().method() === 'GET',
+    { timeout: 20_000 },
+  );
+  await page.goto('/broker/bookings');
+  const brokerBookingsResp = await brokerBookingsPromise;
+  expect(brokerBookingsResp.ok(), 'GET /api/bookings/broker must respond 2xx').toBe(true);
+
+  // The broker's own API response carries THE booking T17 created, by id, for the booked listing, still REQUESTED.
+  const body = (await brokerBookingsResp.json()) as { items?: Array<{ id: string; listingId: string; status: string; requestedDate: string; requestedTimeSlot: string }> };
+  const items = body.items ?? [];
+  expect(items.length, 'CONTROL: the broker\'s booking list must be non-empty (an unowned listing yields an empty list)').toBeGreaterThan(0);
+  const mine = items.find((b) => b.id === booking.id);
+  expect(mine, `T17 booking ${booking.id} must be in the owning broker's /api/bookings/broker response (got ids: ${items.map((b) => b.id).join(', ')})`).toBeTruthy();
+  expect(mine?.listingId).toBe(FIXTURE_LISTING_ID);
+  expect(mine?.status).toBe('REQUESTED');
+  expect(mine?.requestedDate).toBe(booking.date);
+  expect(mine?.requestedTimeSlot).toBe(booking.slot);
+
+  // And the page renders it: Pending Requests carries a card with the same date and time slot, with the Confirm/Decline actions.
+  await expect(page.getByRole('heading', { name: 'Booking Requests', exact: true })).toBeVisible({ timeout: 15_000 });
+  const pendingCard = page
+    .getByRole('button', { name: 'Confirm', exact: true })
+    .locator(`xpath=ancestor::div[.//*[contains(text(),"${booking.date}")]][.//*[contains(text(),"${booking.slot}")]][1]`)
+    .first();
+  await expect(pendingCard, 'the broker page must render a pending card with the T17 booking\'s date and slot').toBeVisible({ timeout: 15_000 });
+  await expect(pendingCard.getByText(booking.date, { exact: false })).toBeVisible();
+  await expect(pendingCard.getByText(booking.slot, { exact: true })).toBeVisible();
 });
 }

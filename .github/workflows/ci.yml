@@ -66,6 +66,19 @@ jobs:
       - name: Unit tests
         run: npm run test
 
+      # #2750: the E2E estate/gate guards are plain node scripts and shell tests with no stack
+      # requirement, so they run on every PR here (cheapest job that has node). The same scripts run
+      # in the pre-push hook and in the local gate (scripts/run-e2e-gate.sh), so a local pass
+      # validates the code CI runs. scripts/e2e/ci-drift.test.mjs pins this wiring.
+      - name: E2E estate guard + canonical journey static check
+        run: npm run test:e2e:guard
+
+      - name: E2E guard unit tests (node --test scripts/e2e)
+        run: node --test scripts/e2e/*.test.mjs
+
+      - name: Pre-push hook classification test
+        run: bash scripts/dev/tests/pre-push-classify.test.sh
+
       - name: Build
         run: npm run build
         env:
@@ -181,15 +194,11 @@ jobs:
   # e2e/canonical/README.md for the full contract this mirrors (build-sha
   # provenance, CORS probe, rate-limit env overrides, required seed order).
   #
-  # Role-gated projects (canonical-user/broker/admin) are ADDITIVE — the
-  # canonical config only includes a role's project when that role's
-  # credentials are present in the environment (see roleCredentialsPresent()
-  # in playwright.canonical.config.ts). This repo's ADMIN_EMAIL/PASSWORD,
-  # DEALER_EMAIL/PASSWORD (legacy alias for BROKER_EMAIL/PASSWORD), and
-  # SMOKE_USER_EMAIL/PASSWORD secrets already exist (reused from
-  # e2e-post-deploy.yml) so all four projects (anon + user + broker + admin)
-  # run here. SUPABASE_PROJECT_REF is derived from the VITE_SUPABASE_URL
-  # secret's own hostname rather than requiring a separate secret.
+  # Role-gated projects (canonical-user/broker/admin) are ADDITIVE in the canonical config (a role's project is added
+  # only when its credentials are present); the gate script generates all three role users per run in the local
+  # GoTrue and the results phase fails closed if any project or journey is missing, so coverage cannot shrink silently.
+  # AUTH IS LOCAL (#2750 amendment 1): no hosted Supabase secret is read, no project ref is derived, and the backend's
+  # issuer is overridden through the process env of the gate's backend subshell only (application.yml is untouched).
   e2e-canonical:
     name: E2E canonical (Playwright, real backend — merge gate)
     runs-on: ubuntu-latest
@@ -197,6 +206,23 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # #2750 (FC-15, K6): CANONICAL_SKIP_SHA_PROVENANCE disables the build-sha provenance
+      # assertion ("is the served build the code under review?"). It exists for local harness
+      # debugging only and must never be set on this merge gate, whether by a repository variable,
+      # a workflow-level env or a step env. The list and results phases of
+      # scripts/e2e/check-canonical-journeys.mjs refuse it too; this step fails fast and loudly.
+      - name: Refuse the SHA-provenance opt-out (CANONICAL_SKIP_SHA_PROVENANCE)
+        run: |
+          # Check BOTH the value inherited from the runner/workflow env and the repository variable.
+          # The variable is read under a different name on purpose: a step-level env entry named
+          # CANONICAL_SKIP_SHA_PROVENANCE would shadow (and so hide) an inherited value.
+          if [ -n "${CANONICAL_SKIP_SHA_PROVENANCE:-}" ] || [ -n "${CANONICAL_SKIP_SHA_PROVENANCE_REPO_VAR:-}" ]; then
+            echo "ERROR: CANONICAL_SKIP_SHA_PROVENANCE is set (inherited env or repository variable). This is the merge gate; the opt-out is refused (NOT A GATE RUN)." >&2
+            exit 1
+          fi
+        env:
+          CANONICAL_SKIP_SHA_PROVENANCE_REPO_VAR: ${{ vars.CANONICAL_SKIP_SHA_PROVENANCE }}
 
       - uses: actions/setup-node@v4
         with:
@@ -215,276 +241,47 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps
 
-      - name: Write local env files required by scripts/dev/local-fixture-backend.sh
+      # #2750 amendment 1 (local auth): hosted Supabase Auth is no longer a dependency of this gate. The job pulls the
+      # pinned (by digest) GoTrue / PostgREST / nginx images and then runs THE SAME script a developer runs
+      # (scripts/run-e2e-gate.sh), so CI and the local gate cannot drift: static guards, FC-26, fixture restore + grants
+      # overlay, local role users with generated passwords, FC-27 live probes (a)(b)(c), FC-28 bundle check, the
+      # collected-journey list phase, the suite, the K3 credential scan and the fail-closed results phase all live in
+      # that script and in scripts/e2e/*.mjs. No secret is needed or passed: the role credentials are generated per run.
+      - name: Pull the pinned local-auth images (digest-pinned, scripts/e2e/auth-stack/images.lock)
+        run: bash scripts/e2e/auth-stack/pull-images.sh
+
+      - name: Run the canonical E2E gate (scripts/run-e2e-gate.sh, local auth)
+        id: canonical_gate
+        run: bash scripts/run-e2e-gate.sh
+
+      # K3 is performed INSIDE the gate, before it prints anything from run.log and before this job uploads anything:
+      # it scans test-results/, playwright-report/ and the backend log (inflating traces and the HTML report's base64
+      # zip), treats an artefact it cannot scan as a hit, and purges all three on a hit. The gate writes
+      # test-results/gate/k3-scan.ok ONLY after a clean scan. This step turns that marker into a step outcome that the
+      # upload steps below require (steps.canonical_scan.outcome == 'success'), so a leaked or unscannable artefact is
+      # never uploaded, even when the gate step itself failed.
+      - name: Credential scan (K3) outcome gates every upload
+        id: canonical_scan
+        if: always()
         run: |
-          set -euo pipefail
-          SUPABASE_PROJECT_REF="$(printf '%s' "${VITE_SUPABASE_URL}" | sed -E 's#^https://([^.]+)\.supabase\.co.*#\1#')"
-          if [[ -z "$SUPABASE_PROJECT_REF" || "$SUPABASE_PROJECT_REF" == "$VITE_SUPABASE_URL" ]]; then
-            echo "ERROR: could not derive SUPABASE_PROJECT_REF from VITE_SUPABASE_URL secret." >&2
+          if [ ! -f test-results/gate/k3-scan.ok ]; then
+            echo "ERROR: the gate did not complete a clean K3 credential scan; run artefacts are NOT uploaded." >&2
             exit 1
           fi
-          echo "::add-mask::$SUPABASE_PROJECT_REF"
-
-          cat > .env <<EOF
-          VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-          VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY}
-          EOF
-
-          cat > apps/api/.env <<EOF
-          SUPABASE_DB_HOST=unused-local-fixture-overrides-this
-          SUPABASE_DB_USER=postgres
-          SUPABASE_DB_PASSWORD=unused-local-fixture-overrides-this
-          SUPABASE_PROJECT_REF=${SUPABASE_PROJECT_REF}
-          AI_API_KEY=ci-placeholder
-          EOF
-
-          cat > .env.e2e <<EOF
-          PLAYWRIGHT_BASE_URL=http://localhost:5251
-          BACKEND_BASE_URL=http://localhost:8251
-          ADMIN_EMAIL=${ADMIN_EMAIL}
-          ADMIN_PASSWORD=${ADMIN_PASSWORD}
-          BROKER_EMAIL=${DEALER_EMAIL}
-          BROKER_PASSWORD=${DEALER_PASSWORD}
-          SMOKE_USER_EMAIL=${SMOKE_USER_EMAIL}
-          SMOKE_USER_PASSWORD=${SMOKE_USER_PASSWORD}
-          EOF
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
-          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
-          DEALER_EMAIL: ${{ secrets.DEALER_EMAIL }}
-          DEALER_PASSWORD: ${{ secrets.DEALER_PASSWORD }}
-          SMOKE_USER_EMAIL: ${{ secrets.SMOKE_USER_EMAIL }}
-          SMOKE_USER_PASSWORD: ${{ secrets.SMOKE_USER_PASSWORD }}
-
-      - name: Start local fixture backend (Postgres/PostGIS + real Spring Boot)
-        run: |
-          set -euo pipefail
-          SERVER_PORT=8251 \
-          PG_TEST_PORT=5434 \
-          CORS_ALLOWED_ORIGINS="http://localhost:5251" \
-          RATE_LIMIT_DISCOVER_ENABLED=false \
-          RATE_LIMIT_TRENDS_ENABLED=false \
-          nohup bash scripts/dev/local-fixture-backend.sh > /tmp/local-fixture-backend.log 2>&1 &
-          echo "$!" > /tmp/local-fixture-backend.pid
-
-          echo "Waiting for backend health at http://localhost:8251/actuator/health ..."
-          for i in $(seq 1 60); do
-            if curl -sf http://localhost:8251/actuator/health > /dev/null 2>&1; then
-              echo "Backend ready after ${i}0s."
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "ERROR: backend did not become healthy in time. Log:"
-          cat /tmp/local-fixture-backend.log
-          exit 1
-
-      # Fail-closed preflight (PR #2334 review fix): #2187 requires this gate to
-      # fail/report when required credentials are unavailable, never to quietly
-      # keep running anon-only. playwright.canonical.config.ts's
-      # roleCredentialsPresent() is intentionally ADDITIVE for local developer
-      # runs (see its own docstring above) — a dev with no role creds exported
-      # should still get the anon project. CI is different: this job's whole
-      # point is being the authoritative merge gate, so here a missing/blank
-      # secret must fail the job outright rather than silently drop that
-      # role's coverage. This step checks BEFORE the canonical run, and the
-      # next one checks the roster the run actually produced — together they
-      # mean a future secret rename or roleCredentialsPresent() alias drift
-      # can't silently shrink coverage without CI noticing.
-      - name: Verify required role credential secrets are present
-        run: |
-          set -euo pipefail
-          missing=()
-          [[ -z "${ADMIN_EMAIL:-}" ]] && missing+=("ADMIN_EMAIL")
-          [[ -z "${ADMIN_PASSWORD:-}" ]] && missing+=("ADMIN_PASSWORD")
-          [[ -z "${DEALER_EMAIL:-}" ]] && missing+=("DEALER_EMAIL (BROKER_EMAIL alias)")
-          [[ -z "${DEALER_PASSWORD:-}" ]] && missing+=("DEALER_PASSWORD (BROKER_PASSWORD alias)")
-          [[ -z "${SMOKE_USER_EMAIL:-}" ]] && missing+=("SMOKE_USER_EMAIL")
-          [[ -z "${SMOKE_USER_PASSWORD:-}" ]] && missing+=("SMOKE_USER_PASSWORD")
-          if [[ ${#missing[@]} -gt 0 ]]; then
-            echo "ERROR: this merge gate requires all role credential secrets to be set." >&2
-            echo "Missing: ${missing[*]}" >&2
-            echo "The canonical config's role-gated projects (canonical-user/broker/admin)" >&2
-            echo "are additive-only, so a blank secret here would otherwise make the merge" >&2
-            echo "gate go green anon-only while silently losing that role's coverage." >&2
-            exit 1
-          fi
-        env:
-          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
-          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
-          DEALER_EMAIL: ${{ secrets.DEALER_EMAIL }}
-          DEALER_PASSWORD: ${{ secrets.DEALER_PASSWORD }}
-          SMOKE_USER_EMAIL: ${{ secrets.SMOKE_USER_EMAIL }}
-          SMOKE_USER_PASSWORD: ${{ secrets.SMOKE_USER_PASSWORD }}
-
-      # Second half of the fail-closed contract: confirms the projects that
-      # actually resolve at config-load time include every expected role, not
-      # just that the secrets above were non-empty. This is what catches a
-      # future rename/alias drift between this workflow's env var names and
-      # roleCredentialsPresent()'s own env var reads in
-      # playwright.canonical.config.ts, which the secrets check above cannot
-      # see (it would still pass even if the config stopped reading a renamed
-      # var). `--list` resolves config + project selection without starting
-      # webServer or globalSetup, so it's cheap and needs no backend/frontend
-      # up yet. Uses the `json` reporter (not the default `list` text
-      # reporter, which only prints a pass/fail/skipped count, no project
-      # names) so project selection can be verified programmatically.
-      - name: Verify all expected canonical role projects are selected
-        run: |
-          set -euo pipefail
-          npx playwright test --config=playwright.canonical.config.ts --list --reporter=json > /tmp/canonical-list.json
-          node -e '
-            const fs = require("fs");
-            const data = JSON.parse(fs.readFileSync("/tmp/canonical-list.json", "utf8"));
-            const found = new Set();
-            const titlesByProject = new Map();
-            const walk = (suite) => {
-              for (const spec of suite.specs ?? []) {
-                for (const t of spec.tests ?? []) {
-                  found.add(t.projectName);
-                  if (!titlesByProject.has(t.projectName)) titlesByProject.set(t.projectName, []);
-                  titlesByProject.get(t.projectName).push(spec.title);
-                }
-              }
-              for (const sub of suite.suites ?? []) walk(sub);
-            };
-            for (const suite of data.suites ?? []) walk(suite);
-            const expected = ["canonical-anon", "canonical-user", "canonical-broker", "canonical-admin"];
-            const missing = expected.filter((p) => !found.has(p));
-            console.log("Projects selected:", [...found].sort().join(", "));
-            if (missing.length > 0) {
-              console.error("ERROR: expected canonical project(s) missing from --list output:", missing.join(", "));
-              console.error("All six role credential secrets are present (checked in the prior step),");
-              console.error("so every canonical-{user,broker,admin} project should have been selected.");
-              console.error("This means playwright.canonical.config.ts roleCredentialsPresent() is no");
-              console.error("longer reading the env var name(s) this workflow sets - fix the drift before");
-              console.error("merging, since this is the authoritative cross-stack merge gate.");
-              process.exit(1);
-            }
-
-            // #2434: the project check above is necessary but not sufficient.
-            // It asserts the four PROJECTS resolve; it asserts nothing about
-            // any TEST inside them. A renamed spec file, a typo-ed
-            // [role:<role>] tag, or a filename that stops matching
-            // **/*.canonical.ts removes that spec entirely while its project
-            // still resolves via the OTHER specs that share it - green run,
-            // coverage silently gone.
-            //
-            // Observed for real while authoring #2434: a single bad import in
-            // one new spec took the WHOLE suite to zero collected tests across
-            // all seven projects. That total wipe the check above does catch
-            // (no tests means no projects found). The partial case - one file
-            // dropping out while its project survives - it does not.
-            //
-            // Each entry names a journey that must exist, not an exact title,
-            // so ordinary rewording does not break the gate but deletion does.
-            // ENTRIES MUST STAY ALPHANUMERIC. Each `match` is interpolated
-            // into new RegExp("\\b" + match + "\\b") below, so a value
-            // containing regex syntax — "C16/C17", "CC1+", "T13." — would
-            // silently change the meaning of the pattern, or throw at gate time.
-            // Every current entry is alphanumeric and therefore safe; this is
-            // the obvious place a later journey gets added, and whoever adds
-            // it will not be thinking about escaping.
-            //
-            // NO APOSTROPHES ANYWHERE IN THIS SCRIPT — NOT EVEN IN A COMMENT.
-            // This whole block is ONE single-quoted shell argument to node -e.
-            // An apostrophe closes that string, and everything up to the next
-            // one is then parsed as bare shell — which here means the array
-            // literal below, with its braces, brackets, semicolons and a
-            // literal "#". The step dies with a bash syntax error before node
-            // ever starts, so BOTH this check and the project check above stop
-            // running. It fails closed rather than green, but the gate is
-            // inert either way. Two apostrophes in these comments did exactly
-            // that and were caught in review, not by CI (Actions billing is
-            // blocked) and not by replaying this script from a file — running
-            // it as a file bypasses the shell quoting that breaks it.
-            // Verify with: bash -n on the extracted run: body, never by
-            // executing the JavaScript on its own.
-            //
-            // COUPLED TO T15_ENABLED. listing-lifecycle.canonical.ts carries a
-            // const T15_ENABLED flag, documented there as the sanctioned way to
-            // descope a journey honestly (never test.skip / test.fixme).
-            // Flipping it to false de-registers T15, which then collects ZERO
-            // tests and fails the check below — so a legitimate descope must
-            // remove the matching entry here in the SAME change. Stated at the
-            // point of failure, because that is where whoever descopes will be
-            // standing. T14 has no such flag, so only T15 is exposed.
-            const requiredTests = [
-              { project: "canonical-broker", match: "T13",  journey: "Residential lifecycle: broker create/submit" },
-              { project: "canonical-broker", match: "T14",  journey: "Residential lifecycle: admin approve" },
-              { project: "canonical-broker", match: "T15",  journey: "Residential lifecycle: anon views LIVE" },
-              { project: "canonical-broker", match: "CC1",  journey: "Commercial lifecycle: broker create/submit (#2434)" },
-              { project: "canonical-broker", match: "CC1b", journey: "Commercial lifecycle: second listing for C16 parity (#2434)" },
-              { project: "canonical-broker", match: "CC1c", journey: "Commercial lifecycle: OFFICE row making CC4 subtype narrowing falsifiable (#2434)" },
-              { project: "canonical-broker", match: "CC2",  journey: "Commercial lifecycle: admin approve (#2434)" },
-              { project: "canonical-broker", match: "CC4",  journey: "Commercial lifecycle: Discover membership C13/C16/C17 (#2434)" },
-              { project: "canonical-broker", match: "CC3",  journey: "Commercial lifecycle: anon teaser gating (#2434)" },
-            ];
-            // WORD-BOUNDARY match, not substring. `t.includes("CC1")` is
-            // satisfied by the CC1b title, so deleting CC1 left the gate
-            // green for as long as CC1b survived — the entry was listed and
-            // unguarded at the same time. \b before and after the id fixes
-            // that: "CC1b" does not satisfy /\bCC1\b/, because the boundary
-            // after "1" requires a non-word character and "b" is one.
-            //
-            // CC4 was missing from this list entirely, which meant the gate
-            // could not catch deletion of the test carrying C13/C16/C17 —
-            // the whole Discover-membership substance of #2434. A gate that
-            // omits its principal deliverable reports success by doing
-            // nothing, which is the failure family this step exists to close.
-            const absent = requiredTests.filter(
-              (r) => !(titlesByProject.get(r.project) ?? []).some(
-                (t) => new RegExp("\\b" + r.match + "\\b").test(t),
-              ),
-            );
-            for (const [p, titles] of [...titlesByProject].sort()) {
-              console.log("  " + p + ": " + titles.length + " tests");
-            }
-            if (absent.length > 0) {
-              console.error("ERROR: required canonical journey(s) collected ZERO tests:");
-              for (const a of absent) {
-                console.error("  - [" + a.project + "] " + a.match + " - " + a.journey);
-              }
-              console.error("The project itself still resolved, so the prior check passed. That is the");
-              console.error("exact false-green this assertion exists to close: the journey is gone while");
-              console.error("the roster looks intact. Check for a renamed file, a typo-ed [role:] tag, or");
-              console.error("a filename no longer matching **/*.canonical.ts.");
-              process.exit(1);
-            }
-          '
-        env:
-          PLAYWRIGHT_BASE_URL: http://localhost:5251
-          BACKEND_BASE_URL: http://localhost:8251
-          SMOKE_USER_EMAIL: ${{ secrets.SMOKE_USER_EMAIL }}
-          SMOKE_USER_PASSWORD: ${{ secrets.SMOKE_USER_PASSWORD }}
-          BROKER_EMAIL: ${{ secrets.DEALER_EMAIL }}
-          BROKER_PASSWORD: ${{ secrets.DEALER_PASSWORD }}
-          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
-          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
-
-      - name: Run canonical E2E suite (npm run test:e2e:canonical)
-        run: npm run test:e2e:canonical
-        env:
-          PLAYWRIGHT_BASE_URL: http://localhost:5251
-          BACKEND_BASE_URL: http://localhost:8251
-          VITE_API_BASE_URL: http://localhost:8251
-          SMOKE_USER_EMAIL: ${{ secrets.SMOKE_USER_EMAIL }}
-          SMOKE_USER_PASSWORD: ${{ secrets.SMOKE_USER_PASSWORD }}
-          BROKER_EMAIL: ${{ secrets.DEALER_EMAIL }}
-          BROKER_PASSWORD: ${{ secrets.DEALER_PASSWORD }}
-          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
-          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
 
       - name: Dump backend log on failure
-        if: failure()
-        run: cat /tmp/local-fixture-backend.log || true
+        if: failure() && steps.canonical_scan.outcome == 'success'
+        run: tail -n 300 test-results/gate/backend.log || true
 
-      - name: Upload Playwright canonical report on failure
+      - name: Upload canonical results.json
         uses: actions/upload-artifact@v4
-        if: failure()
+        if: always() && steps.canonical_scan.outcome == 'success'
         with:
-          name: playwright-canonical-report-${{ github.run_id }}-${{ github.run_attempt }}
-          path: playwright-report/canonical/
+          name: playwright-canonical-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/canonical/results.json
           retention-days: 14
+          if-no-files-found: warn
+
+      # No HTML report is uploaded (#2750 Q0): the gate and CI run with the list + json reporters only, because the HTML
+      # reporter records the sign-in fill() values (the role email and password) verbatim. playwright.canonical.config.ts
+      # turns it off whenever E2E_CANONICAL_GATE=1 or CI is set; results.json above is the only run artefact uploaded.

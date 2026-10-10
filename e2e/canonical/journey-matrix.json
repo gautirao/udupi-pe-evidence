@@ -1,0 +1,374 @@
+{
+  "$comment": "Single source of truth for the supported-journey matrix (issue #2750). Consumed by scripts/e2e/check-canonical-journeys.mjs (static | list | results). Human view: docs/testing/e2e-journey-matrix.md. Each canonical_ids entry names a test that MUST exist in the given Playwright project AND finish 'expected/passed' in a gate run; the id is matched as the LEADING token of a title segment (describe or test, after any [role:x] tag), so CC1 can never be satisfied by CC1b. Ids must stay alphanumeric. T15_ENABLED coupling (listing-lifecycle.canonical.ts): flipping it to false de-registers T15, which fails the list phase; a legitimate descope must remove the T15 entry below in the SAME change, and the static phase refuses a matrix that lists T15 while the flag is false.",
+  "version": 1,
+  "required_projects": [
+    "canonical-anon",
+    "canonical-user",
+    "canonical-broker",
+    "canonical-admin"
+  ],
+  "required_setup_projects": [
+    "canonical-setup-user",
+    "canonical-setup-broker",
+    "canonical-setup-admin"
+  ],
+  "statuses": [
+    "COVERED",
+    "GAP_CLOSING_IN_C2",
+    "DESCOPED_DARK"
+  ],
+  "harness": [
+    {
+      "id": "harness-smoke",
+      "match": "canonical harness smoke",
+      "project": "canonical-anon",
+      "notes": "Build-sha provenance + real fixture content probe; fails the whole run if the served build is stale."
+    }
+  ],
+  "rows": [
+    {
+      "id": "J01",
+      "journey": "Area-first Discover",
+      "family": "discover",
+      "status": "COVERED",
+      "canonical_ids": [
+        {
+          "id": "T4",
+          "project": "canonical-user"
+        },
+        {
+          "id": "T5",
+          "project": "canonical-user"
+        },
+        {
+          "id": "T6",
+          "project": "canonical-user"
+        },
+        {
+          "id": "T18",
+          "project": "canonical-user"
+        }
+      ],
+      "notes": "City root settles area-first, Direction writes node=, bounded browse excludes other Directions, exactly one shell mounts."
+    },
+    {
+      "id": "J02",
+      "journey": "School-first Discover",
+      "family": "discover",
+      "status": "COVERED",
+      "canonical_ids": [
+        {
+          "id": "T7",
+          "project": "canonical-user"
+        },
+        {
+          "id": "T18",
+          "project": "canonical-user"
+        }
+      ],
+      "notes": "Canonical node= renders the real school shell with a real count and seeded school names."
+    },
+    {
+      "id": "J03",
+      "journey": "Agricultural Discover",
+      "family": "agri",
+      "status": "COVERED",
+      "canonical_ids": [
+        {
+          "id": "T8",
+          "project": "canonical-user"
+        },
+        {
+          "id": "T9",
+          "project": "canonical-user"
+        }
+      ],
+      "notes": "region + maxKm renders real agri destination data; legacy group=DIR:BAND rewrites to the same result set."
+    },
+    {
+      "id": "J04",
+      "journey": "Residential buyer discovery",
+      "family": "discover",
+      "status": "COVERED",
+      "canonical_ids": [
+        {
+          "id": "T5",
+          "project": "canonical-user"
+        },
+        {
+          "id": "T6",
+          "project": "canonical-user"
+        },
+        {
+          "id": "T10",
+          "project": "canonical-anon"
+        },
+        {
+          "id": "T11",
+          "project": "canonical-anon"
+        },
+        {
+          "id": "T12",
+          "project": "canonical-user"
+        }
+      ],
+      "notes": "Anon teaser and detail gating (T10/T11) plus the authed relaxation (T12) on top of node browse."
+    },
+    {
+      "id": "J05",
+      "journey": "Commercial buyer discovery",
+      "family": "commercial",
+      "status": "COVERED",
+      "canonical_ids": [
+        {
+          "id": "CC4",
+          "project": "canonical-broker"
+        }
+      ],
+      "notes": "Commercial + Shop narrowing; list and marker membership agree (C13/C16/C17, #2434)."
+    },
+    {
+      "id": "J06",
+      "journey": "Residential create -> submit -> approve -> LIVE -> buyer Discover membership",
+      "family": "lifecycle",
+      "status": "COVERED",
+      "canonical_ids": [
+        {
+          "id": "T13",
+          "project": "canonical-broker"
+        },
+        {
+          "id": "T14",
+          "project": "canonical-broker"
+        },
+        {
+          "id": "T15",
+          "project": "canonical-broker"
+        },
+        {
+          "id": "T15b",
+          "project": "canonical-broker"
+        }
+      ],
+      "notes": "T13/T14/T15 prove create, approve and anon detail; T15b proves Discover MEMBERSHIP of the approved listing in its area node (falsifiable: T14 records the id ABSENT from the exhaustive city set while PENDING_REVIEW; a Malpe listing is absent from the Manipal node set). T15_ENABLED coupling applies to T15."
+    },
+    {
+      "id": "J07",
+      "journey": "Commercial lifecycle",
+      "family": "commercial",
+      "status": "COVERED",
+      "canonical_ids": [
+        {
+          "id": "CC1",
+          "project": "canonical-broker"
+        },
+        {
+          "id": "CC1b",
+          "project": "canonical-broker"
+        },
+        {
+          "id": "CC1c",
+          "project": "canonical-broker"
+        },
+        {
+          "id": "CC2",
+          "project": "canonical-broker"
+        },
+        {
+          "id": "CC3",
+          "project": "canonical-broker"
+        },
+        {
+          "id": "CC4",
+          "project": "canonical-broker"
+        }
+      ],
+      "notes": "Broker creates three Commercial listings, admin approves, buyer finds them under Commercial + Shop, anon sees the gated teaser."
+    },
+    {
+      "id": "J08",
+      "journey": "Auth sign-in + return-to",
+      "family": "auth",
+      "status": "COVERED",
+      "canonical_ids": [
+        {
+          "id": "T1",
+          "project": "canonical-user"
+        },
+        {
+          "id": "T1",
+          "project": "canonical-broker"
+        },
+        {
+          "id": "T1",
+          "project": "canonical-admin"
+        },
+        {
+          "id": "T2",
+          "project": "canonical-user"
+        },
+        {
+          "id": "T3",
+          "project": "canonical-user"
+        },
+        {
+          "id": "T2b",
+          "project": "canonical-user"
+        }
+      ],
+      "notes": "T1/T2/T3 prove per-role sign-in, a Discover returnTo round trip and the typed-create route; T2b proves return-to onto a gated NON-Discover route (/my-bookings -> /auth -> back, unlocked)."
+    },
+    {
+      "id": "J09",
+      "journey": "Listing detail gating -> unlock",
+      "family": "gating",
+      "status": "COVERED",
+      "canonical_ids": [
+        {
+          "id": "T11",
+          "project": "canonical-anon"
+        },
+        {
+          "id": "T12",
+          "project": "canonical-user"
+        }
+      ],
+      "notes": "Anon sees real teaser content and an honest image gate; an authed user sees the gate relax."
+    },
+    {
+      "id": "J10",
+      "journey": "Booking buyer -> My Bookings -> Broker Bookings",
+      "family": "booking",
+      "status": "COVERED",
+      "canonical_ids": [
+        {
+          "id": "T16",
+          "project": "canonical-anon"
+        },
+        {
+          "id": "T17",
+          "project": "canonical-user"
+        },
+        {
+          "id": "T17b",
+          "project": "canonical-user"
+        }
+      ],
+      "notes": "T16 anon never books; T17 authed POST succeeds and the row appears on /my-bookings; T17b proves the owning broker sees the SAME booking id on /broker/bookings (the run's broker is made owner of the booked fixture listing by scripts/e2e/auth-stack/create-users.sh)."
+    },
+    {
+      "id": "J11",
+      "journey": "Map marker interaction",
+      "family": "map",
+      "status": "COVERED",
+      "canonical_ids": [
+        {
+          "id": "T19",
+          "project": "canonical-anon"
+        },
+        {
+          "id": "T20",
+          "project": "canonical-anon"
+        }
+      ],
+      "notes": "Coincident markers fan apart and stay reachable; the mobile preview sheet never occludes the usable map."
+    },
+    {
+      "id": "J12",
+      "journey": "Request-a-property buyer flow + Admin visibility (#1793)",
+      "family": "request",
+      "status": "COVERED",
+      "canonical_ids": [
+        {
+          "id": "RQ1",
+          "project": "canonical-user"
+        },
+        {
+          "id": "RQ2",
+          "project": "canonical-admin"
+        }
+      ],
+      "notes": "RQ1 (user submits on the zero-result Bangalore/Avalahalli surface, real POST, success state) and RQ2 (admin lists the same request by id, contact masked). Both flags are enabled in the canonical TEST STACK ONLY (scripts/run-e2e-gate.sh); production defaults stay false (FC-14 guards this)."
+    },
+    {
+      "id": "J13",
+      "journey": "Saved Homes persistence",
+      "family": "saved",
+      "status": "COVERED",
+      "canonical_ids": [
+        {
+          "id": "T21",
+          "project": "canonical-user"
+        }
+      ],
+      "notes": "T21: save a fixture listing from a Discover card, survives reload, listed on /saved-homes by id, unsave removes it (also after reload)."
+    },
+    {
+      "id": "J14",
+      "journey": "Broker edit persistence",
+      "family": "lifecycle",
+      "status": "COVERED",
+      "canonical_ids": [
+        {
+          "id": "T13",
+          "project": "canonical-broker"
+        },
+        {
+          "id": "T22",
+          "project": "canonical-broker"
+        }
+      ],
+      "notes": "T13 proves create through the real form; T22 edits one field (description) on a DRAFT the test creates, saves through the real edit form, and reads it back after reload and from the server."
+    },
+    {
+      "id": "J15",
+      "journey": "Agricultural create -> submit -> approve -> LIVE -> agri discovery",
+      "family": "agri",
+      "status": "COVERED",
+      "canonical_ids": [
+        {
+          "id": "T8",
+          "project": "canonical-user"
+        },
+        {
+          "id": "T9",
+          "project": "canonical-user"
+        },
+        {
+          "id": "AG1",
+          "project": "canonical-broker"
+        },
+        {
+          "id": "AG2",
+          "project": "canonical-broker"
+        },
+        {
+          "id": "AG3",
+          "project": "canonical-broker"
+        }
+      ],
+      "notes": "T8/T9 prove agri discovery over seeded data; AG1 (created via the real agri form; closed submit gate proven in UI; submit via the product endpoint (arranged) - the UI Submit click is NOT exercised because AgriculturalListingForm has no draft hydration, an open product question), AG2 (admin approve), AG3 (approved parcel is in the SW agri corridor: total +1, listed by id, rendered)."
+    },
+    {
+      "id": "J16",
+      "journey": "Buy/Rent intent continuity",
+      "family": "discover",
+      "status": "COVERED",
+      "canonical_ids": [
+        {
+          "id": "T5",
+          "project": "canonical-user"
+        },
+        {
+          "id": "T6",
+          "project": "canonical-user"
+        },
+        {
+          "id": "T23",
+          "project": "canonical-user"
+        }
+      ],
+      "notes": "T5/T6 prove node browse under one intent; T23 proves Buy -> Rent changes the result set by id on RR Nagar and the intent survives a List -> Map -> List switch (mobile shell)."
+    }
+  ]
+}
