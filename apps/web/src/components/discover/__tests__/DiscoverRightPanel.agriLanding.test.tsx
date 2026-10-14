@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
@@ -151,6 +151,22 @@ describe('DiscoverRightPanel agri-landing — corridor-first UX (Issue #1429)', 
     expect(screen.getByTestId('corridor-group-name')).toHaveTextContent(
       'N towards Brahmavar',
     );
+  });
+
+  // G1-N10 (#2750 PR-3 B1) — LOW VALUE, copy only: the landing intro heading + framing sentence.
+  // This is NOT coverage for the 1375 AC1/AC2 journey-card/click rows; it only pins the visible copy
+  // (and that the city label is threaded: 'Manipal' differs from the component's 'Udupi' fallback).
+  it('G1-N10 the landing intro heading and corridor-framing sentence are exactly the approved copy for the passed city label', () => {
+    renderLanding({ corridorGroups: [SAMPLE_CORRIDOR], cityLabel: 'Manipal' } as RenderProps);
+
+    const intro = screen.getByTestId('agri-landing-intro');
+    expect(within(intro).getByRole('heading', { level: 3 })).toHaveTextContent(/^Agricultural land near Manipal$/);
+    expect(
+      within(intro).getByText(
+        'Farmland is searched by corridor, direction and distance from town — not by residential neighbourhood.',
+        { exact: true },
+      ),
+    ).toBeInTheDocument();
   });
 
   it('renders empty state when corridorGroups is empty (no crash)', () => {

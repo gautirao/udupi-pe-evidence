@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
@@ -400,6 +400,29 @@ describe('AgriGroupSelectedPanel — destination buckets (towns list)', () => {
     await user.click(screen.getByTestId('agri-group-locality-btn'));
     expect(onSelectLocality).toHaveBeenCalledTimes(1);
     expect(onSelectLocality).toHaveBeenCalledWith('IN|KA|Udupi|Shirva');
+  });
+
+  // G1-N4 (#2750 PR-3 B1) — raw-key negative. The fixture displayName DIFFERS from the areaKey
+  // (the existing containment assertion above passes even if the raw key were rendered, because
+  // 'Shirva' is a substring of 'IN|KA|Udupi|Shirva'). Retires the "no raw IN|KA key" assertions
+  // of agri-destination-identity-2151 (g), discover-agri-direction-first-1448 (AC2) and
+  // discover-agri-locality-marker-1468 (AC1).
+  it('G1-N4 destination rows show EXACTLY the displayName and never the raw areaKey (no "IN|KA" / "|" anywhere in the panel)', () => {
+    mockDestinations({
+      destinations: [
+        makeBucket('IN|KA|Udupi|Shirva', { displayName: 'Shirva', parcelCount: 3 }),
+        makeBucket('IN|KA|Udupi|Hebri', { displayName: 'Hebri', parcelCount: 1 }),
+      ],
+    });
+    const { container } = render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
+    const btns = screen.getAllByTestId('agri-group-locality-btn');
+    expect(btns).toHaveLength(2);
+    // Exact element text (not containment): the name node is exactly the displayName.
+    expect(within(btns[0]).getByText('Shirva', { exact: true })).toBeInTheDocument();
+    expect(within(btns[1]).getByText('Hebri', { exact: true })).toBeInTheDocument();
+    expect(btns[0]).toHaveAccessibleName('View Shirva parcels');
+    expect(container.textContent).not.toContain('IN|KA');
+    expect(container.textContent).not.toContain('|');
   });
 
   it('does not render inline listing rows for the towns view', () => {

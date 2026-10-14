@@ -60,6 +60,11 @@ vi.mock('react-leaflet', () => ({
   MapContainer: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   TileLayer: () => null,
   ZoomControl: () => null,
+  // G1-CoK-1551 (#2750 PR-3 B1) — SchoolRadiusOverlay renders these; stubs so the school
+  // circle/marker are observable next to the property-marker layer.
+  Circle: ({ radius }: { radius: number }) => <div data-testid="school-circle" data-radius={String(radius)} />,
+  Marker: () => <div data-testid="school-marker" />,
+  Tooltip: () => null,
   Polygon: vi.fn(({ pathOptions }: { pathOptions?: { interactive?: boolean } }) => (
     <div
       data-testid="mock-sector-polygon"
@@ -583,5 +588,136 @@ describe('PropertyMap — AgriDestinationMarkerLayer, Level-2 destinations (Issu
     expect(onSelectAgriDestination).toHaveBeenCalledWith('IN|KA|Udupi|Brahmavar');
     // The generic listing-popover flow must NOT fire for a destination-bucket click.
     expect(onSelectListing).not.toHaveBeenCalled();
+  });
+});
+
+// ─── G1-CoK-1551 (#2750 PR-3 B1) ─────────────────────────────────────────────────
+// school-first + selected school: the school-radius circle and the property-marker layer
+// mount TOGETHER under the same props (discover-agri-price-gate-1551 AC-MKR: "property markers
+// appear AND the school circle coexists"). Both arms are pinned: dropping either one is red.
+describe('PropertyMap — G1-CoK-1551 school circle and property markers coexist', () => {
+  beforeEach(() => {
+    capturedDivIconCalls.length = 0;
+    vi.mocked(L.markerClusterGroup).mockClear();
+    vi.mocked(L.marker).mockClear();
+  });
+
+  it('G1-CoK-1551 one school circle (2 km = 2000 m) AND the residential layer with one marker at the listing coordinates are mounted together', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+    render(
+      <PropertyMap
+        listings={[houseListing]}
+        schoolCircle={{ lat: 13.35, lon: 74.79, radiusKm: 2, name: 'Test School' }}
+      />,
+    );
+    const circles = screen.getAllByTestId('school-circle');
+    expect(circles).toHaveLength(1);
+    expect(circles[0]).toHaveAttribute('data-radius', '2000');
+    expect(vi.mocked(L.markerClusterGroup)).toHaveBeenCalledTimes(1);
+    const markerPositions = vi.mocked(L.marker).mock.calls.map((c) => c[0]);
+    expect(markerPositions).toEqual([[houseListing.latitude, houseListing.longitude]]);
+  });
+});
+
+// ─── G1-N6 (#2750 PR-3 B1) ───────────────────────────────────────────────────────
+// (a) a Level-3 PARCEL marker click selects THAT listing; (b) agri mode mounts exactly
+// ONE cluster group and it is the agri one (no residential layer underneath it).
+// Retires discover-agri-destination-identity-2151 (b-desktop marker click),
+// discover-agri-journey-1375 AC6+11 (.agri-cluster, no .custom-marker-cluster) and
+// verify-agri-clusters-1372 AC1/AC4 exclusivity.
+describe('PropertyMap — G1-N6 Level-3 parcel marker click + agri/residential layer exclusivity', () => {
+  const defaultMarkerImpl = () =>
+    ({ on: vi.fn().mockReturnThis(), bindTooltip: vi.fn().mockReturnThis() }) as unknown as ReturnType<typeof L.marker>;
+
+  beforeEach(() => {
+    capturedDivIconCalls.length = 0;
+    mockAddLayer.mockClear();
+    mockRemoveLayer.mockClear();
+    mockClusterGroupAddLayer.mockClear();
+    vi.mocked(L.markerClusterGroup).mockClear();
+    vi.mocked(L.divIcon).mockClear();
+    vi.mocked(L.marker).mockClear();
+  });
+
+  it('G1-N6 clicking the Level-3 parcel marker calls onSelectListing with THAT listing (id, coordinates) exactly once', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+    const onSelectListing = vi.fn();
+    const clicks: Array<{ latlng: unknown; fire: () => void }> = [];
+    vi.mocked(L.marker).mockImplementation(((latlng: unknown) => {
+      const m = {
+        on: vi.fn((event: string, handler: () => void) => {
+          if (event === 'click') clicks.push({ latlng, fire: handler });
+          return m;
+        }),
+        bindTooltip: vi.fn().mockReturnThis(),
+      };
+      return m;
+    }) as unknown as typeof L.marker);
+
+    try {
+      render(<PropertyMap listings={[agriListing]} isAgriMode={true} onSelectListing={onSelectListing} />);
+      expect(clicks).toHaveLength(1);
+      expect(clicks[0].latlng).toEqual([agriListing.latitude, agriListing.longitude]);
+      expect(onSelectListing).not.toHaveBeenCalled();
+      clicks[0].fire();
+    } finally {
+      vi.mocked(L.marker).mockImplementation(defaultMarkerImpl as unknown as typeof L.marker);
+    }
+
+    expect(onSelectListing).toHaveBeenCalledTimes(1);
+    expect(onSelectListing.mock.calls[0][0]).toMatchObject({
+      id: 'agri-1',
+      latitude: 13.4,
+      longitude: 74.8,
+    });
+  });
+
+  // Mounted cluster-group count, observed on the real constructions (not on mock props):
+  // every markerClusterGroup constructed in agri mode must be the agri one.
+  function clusterGroupHtmls(): string[] {
+    const htmls: string[] = [];
+    for (const call of vi.mocked(L.markerClusterGroup).mock.calls) {
+      const opts = call[0] as { iconCreateFunction?: (c: { getChildCount: () => number }) => unknown } | undefined;
+      capturedDivIconCalls.length = 0;
+      opts?.iconCreateFunction?.({ getChildCount: () => 5 });
+      htmls.push(capturedDivIconCalls[capturedDivIconCalls.length - 1]?.html ?? '');
+    }
+    return htmls;
+  }
+
+  it('G1-N6 agri mode mounts EXACTLY ONE cluster group and it is the agri cluster (no residential custom-marker-cluster layer)', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+    render(<PropertyMap listings={[agriListing]} isAgriMode={true} />);
+    const htmls = clusterGroupHtmls();
+    expect(htmls).toHaveLength(1);
+    expect(htmls[0]).toContain('agri-cluster');
+    expect(htmls[0]).not.toContain('custom-marker-cluster');
+  });
+
+  // G1-CoK-1372 — the PRODUCT CONFIG that makes agri clusters dissolve into individual parcel
+  // markers when zoomed in (the property verify-agri-clusters-1372 observed in a browser by
+  // clicking zoom): the agri group is constructed with disableClusteringAtZoom=16 and a 50px
+  // cluster radius. Literal values are pinned on purpose (a constants import would move with the
+  // product line it guards).
+  it('G1-CoK-1372 the agri cluster group is constructed to dissolve at zoom 16 with a 50px radius (spiderfy + zoom-on-click on)', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+    render(<PropertyMap listings={[agriListing]} isAgriMode={true} />);
+    const calls = vi.mocked(L.markerClusterGroup).mock.calls;
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0]).toMatchObject({
+      disableClusteringAtZoom: 16,
+      maxClusterRadius: 50,
+      spiderfyOnMaxZoom: true,
+      zoomToBoundsOnClick: true,
+    });
+  });
+
+  it('G1-N6 residential mode (control) mounts EXACTLY ONE cluster group and it is the residential cluster (no agri layer)', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+    render(<PropertyMap listings={[houseListing]} isAgriMode={false} />);
+    const htmls = clusterGroupHtmls();
+    expect(htmls).toHaveLength(1);
+    expect(htmls[0]).toContain('custom-marker-cluster');
+    expect(htmls[0]).not.toContain('agri-cluster');
   });
 });

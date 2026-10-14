@@ -251,6 +251,63 @@ describe('useDiscoverListings', () => {
     expect(params.has('schoolRadiusKm')).toBe(false);
   });
 
+  // G2-N10 (#2750 PR-3 B1) — retires discover-school-selected E2E-6 (ONE listings request carries the
+  // school coords + radius 3 AND the property-type filter) and the E2E-6 URL co-presence arm. The
+  // existing school_proximity_included_when_complete pins the school params alone; nothing pinned them
+  // TOGETHER with another filter in the same single request.
+  it('G2-N10 one request carries schoolLat, schoolLon, schoolRadiusKm=3 AND propertyTypes=house together', async () => {
+    mockGet.mockResolvedValue(BASE_PAGE);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverListings({
+          city: 'udupi',
+          page: 0,
+          filters: { schoolLat: 13.3525, schoolLon: 74.7864, schoolRadiusKm: 3, propertyTypes: ['house'] },
+          enabled: true,
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.getAll('schoolLat')).toEqual(['13.3525']);
+    expect(params.getAll('schoolLon')).toEqual(['74.7864']);
+    expect(params.getAll('schoolRadiusKm')).toEqual(['3']);
+    expect(params.getAll('propertyTypes')).toEqual(['house']);
+  });
+
+  // G3-M7 (#2750 PR-3 B1) — retires discover-school-keyword-radius E2E-1 (ONE listings request has the
+  // school params AND q). q alone is pinned by T12; school alone by the test above; the combination was not.
+  it('G3-M7 one request carries schoolLat, schoolLon, schoolRadiusKm=5 AND q=villa together', async () => {
+    mockGet.mockResolvedValue(BASE_PAGE);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverListings({
+          city: 'udupi',
+          page: 0,
+          filters: { schoolLat: 13.3525, schoolLon: 74.7864, schoolRadiusKm: 5 },
+          enabled: true,
+          q: 'villa',
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.getAll('schoolLat')).toEqual(['13.3525']);
+    expect(params.getAll('schoolLon')).toEqual(['74.7864']);
+    expect(params.getAll('schoolRadiusKm')).toEqual(['5']);
+    expect(params.getAll('q')).toEqual(['villa']);
+  });
+
   it('includeAggregates_true_when_flag_set', async () => {
     mockGet.mockResolvedValue(BASE_PAGE);
 

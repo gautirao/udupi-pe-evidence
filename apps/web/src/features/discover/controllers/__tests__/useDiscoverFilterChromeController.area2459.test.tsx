@@ -147,3 +147,67 @@ describe('useDiscoverFilterChromeController — area chip clear wiring (#2459 AC
     expect(next.areaMaxSqft).toBe(1200);
   });
 });
+
+// ─── G2-N6 (#2750 PR-3 B1) — board/category chips are URL-authoritative + dismiss wiring ───
+// Retires discover-school-first-hardening HRD-1..HRD-4/HRD-6 wiring half: the chips element the
+// controller hands to the right panel reads nav.filters.* (URL), NOT the local `filters` state, and
+// the board dismiss writes the URL-side list minus the dismissed board through actions.setBoardFilters.
+describe('useDiscoverFilterChromeController — board/category chips (G2-N6)', () => {
+  function setupBoard(
+    navFilters: { boardFilters?: string[]; categoryFilters?: string[] },
+    localFilters: Record<string, unknown> = {},
+  ) {
+    const boardActions = {
+      setSearchQuery: vi.fn(),
+      setBoardFilters: vi.fn(),
+      setCategoryFilters: vi.fn(),
+      clearAllFiltersAndSearch: vi.fn(),
+    };
+    const boardNav = { q: '', filters: navFilters } as unknown as DiscoverNavContextValue;
+    const { result } = renderHook(() =>
+      useDiscoverFilterChromeController({
+        nav: boardNav,
+        actions: boardActions as unknown as DiscoverUrlActions,
+        filters: localFilters as PropertyFilters,
+        setFilters: vi.fn(),
+        handleFiltersChange: vi.fn(),
+        selectedSchool: null,
+        onSchoolSelect: vi.fn(),
+        schoolBoardFilter: [],
+        onSchoolBoardFilterChange: vi.fn(),
+        city: 'udupi',
+        effectiveSelectedArea: null,
+        trendsAreaKeys: undefined,
+        isFetching: false,
+      }),
+    );
+    render(result.current.activeContextChips);
+    return boardActions;
+  }
+
+  it('G2-N6 chips come from nav.filters (URL), not from stale local filters: URL [CBSE]/[secondary] wins over local [ICSE]/[primary]', () => {
+    setupBoard(
+      { boardFilters: ['CBSE'], categoryFilters: ['secondary'] },
+      { boardFilters: ['ICSE'], categoryFilters: ['primary'] },
+    );
+    expect(screen.getByTestId('active-chip-board-cbse')).toBeInTheDocument();
+    expect(screen.getByTestId('active-chip-category-secondary')).toBeInTheDocument();
+    expect(screen.queryByTestId('active-chip-board-icse')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('active-chip-category-primary')).not.toBeInTheDocument();
+  });
+
+  it('G2-N6 dismissing the only CBSE chip writes setBoardFilters([]) (once, and no category write)', async () => {
+    const boardActions = setupBoard({ boardFilters: ['CBSE'], categoryFilters: ['secondary'] });
+    await userEvent.setup().click(screen.getByTestId('active-chip-board-cbse-dismiss'));
+    expect(boardActions.setBoardFilters).toHaveBeenCalledTimes(1);
+    expect(boardActions.setBoardFilters).toHaveBeenCalledWith([]);
+    expect(boardActions.setCategoryFilters).not.toHaveBeenCalled();
+  });
+
+  it('G2-N6 dismissing CBSE among [CBSE, ICSE] keeps ICSE: setBoardFilters([ICSE])', async () => {
+    const boardActions = setupBoard({ boardFilters: ['CBSE', 'ICSE'] });
+    await userEvent.setup().click(screen.getByTestId('active-chip-board-cbse-dismiss'));
+    expect(boardActions.setBoardFilters).toHaveBeenCalledTimes(1);
+    expect(boardActions.setBoardFilters).toHaveBeenCalledWith(['ICSE']);
+  });
+});

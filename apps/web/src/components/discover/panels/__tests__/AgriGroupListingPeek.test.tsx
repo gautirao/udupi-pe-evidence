@@ -17,7 +17,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -124,6 +124,18 @@ describe('AgriGroupListingPeek — first-paint fields (synchronous)', () => {
   it('AC1: does not render price element when pricePaise is null', () => {
     renderPeek({ pricePaise: null });
     expect(screen.queryByTestId('agri-listing-peek-price')).not.toBeInTheDocument();
+  });
+
+  // G1-N5 (#2750 PR-3 B1) — raw-key negative. The fixture's areaKey ('IN|KA|Udupi|Shirva') differs
+  // from its locality ('Shirva'), so a regression that sources the Locality row from areaKey is
+  // visible. Exact element text, not containment. Retires the peek half of
+  // agri-destination-identity-2151 (g).
+  it('G1-N5 the Locality row is EXACTLY the display locality; the raw areaKey never appears in the peek', () => {
+    const { container } = renderPeek({ areaKey: 'IN|KA|Udupi|Shirva', locality: 'Shirva' });
+    const row = screen.getByTestId('agri-listing-peek-locality');
+    expect(within(row).getByText('Shirva', { exact: true })).toBeInTheDocument();
+    expect(container.textContent).not.toContain('IN|KA');
+    expect(container.textContent).not.toContain('|');
   });
 });
 

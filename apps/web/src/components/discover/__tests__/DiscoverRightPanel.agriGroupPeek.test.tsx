@@ -10,7 +10,8 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
+import { formatPrice } from '@/lib/formatters';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
@@ -317,6 +318,111 @@ describe('DiscoverRightPanel — agri-group-peek routing (Issue #1430)', () => {
     renderPanel(<DiscoverRightPanel {...baseProps} city="udupi" panelContent="area-selection" />);
 
     expect(mockUseAgriDestinations).not.toHaveBeenCalled();
+  });
+
+  // ── G1-N8 (#2750 PR-3 B1) — R4 SECURITY: price visibility threading ──────────────────────────
+  // The REAL AgriJourneyPanel (via the flat DiscoverRightPanel adapter) renders the REAL
+  // AgriGroupLocalityPanel — nothing between them is mocked — so the `isAuthenticated`
+  // threaded at AgriJourneyPanel.tsx (`isAuthenticated={context.isAuthenticated}`) is what
+  // decides the card's price branch. The fixture carries a NON-NULL pricePaise, so the anon arm
+  // cannot false-pass on a missing value. Retires discover-agri-price-gate-1551 AC-ANON/AC-AUTHED
+  // (the "isAuthenticated actually reaches the card" half — the original #1551 bug).
+  describe('G1-N8 isAuthenticated threading AgriJourneyPanel -> AgriGroupLocalityPanel (R4)', () => {
+    const pricedItem = makeAgriItem('priced-1'); // pricePaise = 3000000 * 100 (non-null)
+
+    function renderLocality(isAuthenticated: boolean) {
+      return renderPanel(
+        <DiscoverRightPanel
+          {...baseProps}
+          city="udupi"
+          panelContent="agri-group-locality"
+          selectedLocality="IN|KA|Udupi|Manipal"
+          isAuthenticated={isAuthenticated}
+          agriGroupListings={[pricedItem]}
+          isLoadingAgriGroupListings={false}
+          isAgriGroupListingsError={false}
+          onRetryAgriGroupListings={vi.fn()}
+          onClearLocality={vi.fn()}
+        />,
+      );
+    }
+
+    it('G1-N8 ANON: the card shows the sign-in affordance and NO price (no rupee glyph, no formatted value) although pricePaise is non-null', () => {
+      renderLocality(false);
+      const list = screen.getByTestId('agri-locality-listings-list');
+      expect(within(list).getAllByTestId('agri-locality-listing-row')).toHaveLength(1);
+      expect(within(list).getByTestId('agri-locality-price-signin')).toHaveTextContent('Sign in to view price');
+      expect(list.textContent).not.toMatch(/₹/);
+      expect(list.textContent).not.toContain(formatPrice(3000000));
+    });
+
+    it('G1-N8 AUTHED (control, identical fixture): the card shows the exact formatted price and NO sign-in affordance', () => {
+      renderLocality(true);
+      const list = screen.getByTestId('agri-locality-listings-list');
+      expect(within(list).getAllByTestId('agri-locality-listing-row')).toHaveLength(1);
+      expect(within(list).queryByTestId('agri-locality-price-signin')).not.toBeInTheDocument();
+      expect(within(list).getByText(formatPrice(3000000), { exact: true })).toBeInTheDocument();
+    });
+
+    // G1-N8 (1468 AC3) — the Level-3 list handed to the locality panel is filtered to the
+    // selected destination key (AgriJourneyPanel.tsx localityListings filter).
+    it('G1-N8 Level-3 rows are filtered to the selected destKey: a mixed-areaKey list renders only the matching parcel', () => {
+      const other = { ...makeAgriItem('other-area-1'), areaKey: 'IN|KA|Udupi|Shirva' };
+      renderPanel(
+        <DiscoverRightPanel
+          {...baseProps}
+          city="udupi"
+          panelContent="agri-group-locality"
+          selectedLocality="IN|KA|Udupi|Manipal"
+          isAuthenticated
+          agriGroupListings={[pricedItem, other]}
+          isLoadingAgriGroupListings={false}
+          isAgriGroupListingsError={false}
+          onRetryAgriGroupListings={vi.fn()}
+          onClearLocality={vi.fn()}
+        />,
+      );
+      const rows = screen.getAllByTestId('agri-locality-listing-row');
+      expect(rows).toHaveLength(1);
+      expect(screen.getByTestId('agri-locality-count')).toHaveTextContent('1');
+    });
+
+    // G1-N8 (1375 AC8 / 1412 AC4+AC5) — the polygon-selected agri-detail peek's "View full details"
+    // CTA routes to the listing's own detail page (AgriJourneyPanel `onNavigate`).
+    it("G1-N8 agri-detail: the 'View full details' CTA navigates to /listing/<selected marker id>", () => {
+      mockUseAgriListingDetail.mockReturnValue({
+        data: {
+          id: 'marker-xyz',
+          status: 'LIVE',
+          propertyType: 'agricultural_land',
+          title: 'Polygon parcel',
+          locality: 'Shirva',
+          price: 5000000,
+          pricePaise: 500000000,
+          landArea: 2.5,
+          landAreaUnit: 'acres',
+          latitude: 13.2,
+          longitude: 74.8,
+          images: [],
+        },
+        isLoading: false,
+        isError: false,
+        refetch: vi.fn(),
+      });
+      const marker = { id: 'marker-xyz', latitude: 13.2, longitude: 74.8 } as unknown as PropertyListingWithImages;
+      renderPanel(
+        <DiscoverRightPanel
+          {...baseProps}
+          panelContent="agri-detail"
+          selectedMarkerListing={marker}
+          onClearAgriSelection={vi.fn()}
+        />,
+      );
+      expect(mockNavigate).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByTestId('agri-view-full-details-cta'));
+      expect(mockNavigate).toHaveBeenCalledTimes(1);
+      expect(mockNavigate).toHaveBeenCalledWith('/listing/marker-xyz');
+    });
   });
 
   it('gates the destinations fetch: passes the real city when panelContent is agri-group-locality', () => {

@@ -61,6 +61,10 @@ vi.mock('react-leaflet', () => ({
     getContainer: vi.fn(() => document.body),
     invalidateSize: vi.fn(),
     remove: vi.fn(),
+    // G1-N7 — map-level listeners registered by the residential MarkerClusterLayer.
+    on: vi.fn(),
+    off: vi.fn(),
+    once: vi.fn(),
   })),
   useMapEvents: vi.fn(() => ({
     getBounds: vi.fn(() => ({
@@ -89,6 +93,10 @@ vi.mock('leaflet', () => ({
     })),
     markerClusterGroup: vi.fn(() => ({
       addLayer: vi.fn(),
+      // G1-N7 (#2750 PR-3 B1) — the residential MarkerClusterLayer (mounted when
+      // isAgriMode=false) registers cluster listeners on the group.
+      on: vi.fn().mockReturnThis(),
+      off: vi.fn().mockReturnThis(),
     })),
     point: vi.fn((x: number, y: number) => ({ x, y })),
   },
@@ -314,6 +322,53 @@ describe('AgriPolygonLayer — click handler (AC3)', () => {
     polygon.click();
 
     expect(onSelectListing).toHaveBeenCalledWith(expect.objectContaining({ id: 'l1' }));
+  });
+});
+
+// G1-N7 (#2750 PR-3 B1) — non-agri mode never mounts the agri polygon layer, even with a
+// stored boundary at zoom >= 16 (AgriPolygonLayer only mounts in isAgriMode). Retires the
+// "no polygon in area-first" half of discover-agri-journey-1375 AC10 and
+// discover-agri-polygons-1373 AC6.
+describe('AgriPolygonLayer — G1-N7 non-agri mode never renders a polygon', () => {
+  beforeEach(() => {
+    capturedPolygons.length = 0;
+  });
+
+  it('G1-N7 isAgriMode=false + boundary + zoom 16 renders NO polygon; the identical props with isAgriMode=true render exactly one (control)', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+    const listing = makeAgriListing('l1', SAMPLE_GEOJSON);
+
+    const off = render(<PropertyMap listings={[listing]} isAgriMode={false} mapZoom={16} />);
+    expect(screen.queryAllByTestId('agri-polygon')).toHaveLength(0);
+    off.unmount();
+
+    render(<PropertyMap listings={[listing]} isAgriMode={true} mapZoom={16} />);
+    expect(screen.queryAllByTestId('agri-polygon')).toHaveLength(1);
+  });
+});
+
+// G1-CoK-1373 (#2750 PR-3 B1) — the polygon COUNT under the zoom gate: with 2 boundary
+// listings + 1 without, zoom 15 renders 0 polygons and zoom 16 renders exactly 2 (one per
+// listing that has a boundary). Retires discover-agri-polygons-1373 AC1/AC4/AC5.
+describe('AgriPolygonLayer — G1-CoK-1373 polygon count under the zoom gate', () => {
+  beforeEach(() => {
+    capturedPolygons.length = 0;
+  });
+
+  it('G1-CoK-1373 two boundary listings + one without: 0 polygons at zoom 15, exactly 2 at zoom 16', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+    const listings = [
+      makeAgriListing('b1', SAMPLE_GEOJSON),
+      makeAgriListing('b2', SAMPLE_GEOJSON),
+      makeAgriListing('nb', null),
+    ];
+
+    const low = render(<PropertyMap listings={listings} isAgriMode={true} mapZoom={15} />);
+    expect(screen.queryAllByTestId('agri-polygon')).toHaveLength(0);
+    low.unmount();
+
+    render(<PropertyMap listings={listings} isAgriMode={true} mapZoom={16} />);
+    expect(screen.queryAllByTestId('agri-polygon')).toHaveLength(2);
   });
 });
 

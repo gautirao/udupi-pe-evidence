@@ -492,3 +492,40 @@ describe('ActiveContextChips', () => {
     expect(onClearBoolean).toHaveBeenCalledWith('readyToMove');
   });
 });
+
+// ─── G2-N5 (#2750 PR-3 B1) — board / category chips (school-first hardening) ──────────────
+// Retires discover-school-first-hardening HRD-1 (board chip from URL), HRD-2 (category chip),
+// HRD-3 (both), HRD-4 (dismiss -> onClearBoard), HRD-6 (chips on first paint) at the chip level.
+// The URL -> chips wiring is G2-N6 (useDiscoverFilterChromeController.area2459.test.tsx).
+describe('G2-N5 ActiveContextChips board/category chips (school-first hardening)', () => {
+  it('G2-N5 boardFilters=[CBSE] renders exactly active-chip-board-cbse with label CBSE (and no category chip)', () => {
+    render(<ActiveContextChips filters={{ ...emptyFilters, boardFilters: ['CBSE'] }} {...noOps} />);
+    const chip = screen.getByTestId('active-chip-board-cbse');
+    expect(chip).toHaveAccessibleName('Active filter: CBSE');
+    expect(screen.queryByTestId('active-chip-category-secondary')).not.toBeInTheDocument();
+  });
+
+  it('G2-N5 categoryFilters=[secondary] renders exactly active-chip-category-secondary (and no board chip)', () => {
+    render(<ActiveContextChips filters={{ ...emptyFilters, categoryFilters: ['secondary'] }} {...noOps} />);
+    const chip = screen.getByTestId('active-chip-category-secondary');
+    expect(chip).toHaveAccessibleName('Active filter: secondary');
+    expect(screen.queryByTestId('active-chip-board-cbse')).not.toBeInTheDocument();
+  });
+
+  it('G2-N5 dismissing the CBSE chip calls onClearBoard once with exactly "CBSE" (and not onClearCategory)', async () => {
+    const onClearBoard = vi.fn();
+    const onClearCategory = vi.fn();
+    render(
+      <ActiveContextChips
+        filters={{ ...emptyFilters, boardFilters: ['CBSE', 'ICSE'], categoryFilters: ['secondary'] }}
+        {...noOps}
+        onClearBoard={onClearBoard}
+        onClearCategory={onClearCategory}
+      />,
+    );
+    await userEvent.click(screen.getByTestId('active-chip-board-cbse-dismiss'));
+    expect(onClearBoard).toHaveBeenCalledTimes(1);
+    expect(onClearBoard).toHaveBeenCalledWith('CBSE');
+    expect(onClearCategory).not.toHaveBeenCalled();
+  });
+});

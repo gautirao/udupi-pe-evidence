@@ -403,6 +403,51 @@ describe('useDiscoverUrlState — setSearchQuery (debounced)', () => {
     expect(result.current[0].q).toBe('');
   });
 
+  // G3-M8 (#2750 PR-3 B1) — retires discover-school-keyword-radius E2E-2 (schoolId/radiusKm survive the
+  // search-chip dismiss). Placed HERE, not in MapDiscovery.issue1186.test.tsx (4/4 red at base: stale
+  // testids). The chip dismiss calls actions.setSearchQuery(''); the product line is the `q` write in
+  // filters.ts setSearchQuery (the delete branch for the dismiss, the set branch for typing).
+  it('G3-M8 dismissing the keyword (setSearchQuery("")) removes q and leaves schoolId=sch-1, radiusKm=3, journey, areaKey intact in the URL', () => {
+    const { result } = renderHook(
+      () => ({ url: useDiscoverUrlState(), location: useLocation() }),
+      {
+        wrapper: wrapper(
+          '/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=sch-1&radiusKm=3&q=villa',
+        ),
+      },
+    );
+    expect(new URLSearchParams(result.current.location.search).get('q')).toBe('villa');
+
+    act(() => {
+      result.current.url[1].setSearchQuery('');
+      vi.runAllTimers();
+    });
+
+    const search = new URLSearchParams(result.current.location.search);
+    expect(search.has('q')).toBe(false);
+    expect(search.get('schoolId')).toBe('sch-1');
+    expect(search.get('radiusKm')).toBe('3');
+    expect(search.get('journey')).toBe('school-first');
+    expect(search.get('areaKey')).toBe('IN|KA|Udupi|Manipal');
+  });
+
+  it('G3-M8 typing a keyword (setSearchQuery("villa")) writes q and leaves schoolId=sch-1, radiusKm=3 intact', () => {
+    const { result } = renderHook(
+      () => ({ url: useDiscoverUrlState(), location: useLocation() }),
+      { wrapper: wrapper('/discover?city=udupi&journey=school-first&schoolId=sch-1&radiusKm=3') },
+    );
+
+    act(() => {
+      result.current.url[1].setSearchQuery('villa');
+      vi.runAllTimers();
+    });
+
+    const search = new URLSearchParams(result.current.location.search);
+    expect(search.get('q')).toBe('villa');
+    expect(search.get('schoolId')).toBe('sch-1');
+    expect(search.get('radiusKm')).toBe('3');
+  });
+
   it('debounces rapid calls — only last value wins', () => {
     const { result } = renderHook(() => useDiscoverUrlState(), {
       wrapper: wrapper('/discover?city=udupi'),
@@ -1067,6 +1112,47 @@ describe('useDiscoverUrlState — startOver', () => {
     expect(result.current[0].city).toBe('bangalore');
   });
 
+  // R-1 (#2750 PR-3 B1; plan D12) — replaces the pre-existing 1036 `it`, which is RED at base
+  // (expects journey null; the product now virtual-defaults to 'area-first', #2088) and is NOT edited.
+  // Retires: school-first-back-nav BN-5, school-first-hardening HRD-7, discover-school-first-grouping-1485 AC6,
+  // discover-school-journey #1142 Start Over. Asserts the WIRE (the URL) as well as the parsed state:
+  // after Start Over the URL carries `city` and nothing else, and the journey is not school-first.
+  it('R-1 startOver from a full school-first URL: groupId/areaKey/schoolId/radiusKm/board/category/q are cleared, city kept, journey is NOT school-first', () => {
+    const { result } = renderHook(
+      () => ({ url: useDiscoverUrlState(), location: useLocation() }),
+      {
+        wrapper: wrapper(
+          '/discover?city=udupi&journey=school-first&groupId=university-belt&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=sch-1&radiusKm=5&board=CBSE&board=ICSE&category=primary&q=villa',
+        ),
+      },
+    );
+    // pre-condition: every one of those keys is really present (so "cleared" is a transition)
+    const before = new URLSearchParams(result.current.location.search);
+    for (const key of ['journey', 'groupId', 'areaKey', 'schoolId', 'radiusKm', 'board', 'category', 'q']) {
+      expect(before.has(key)).toBe(true);
+    }
+    expect(result.current.url[0].journey).toBe('school-first');
+
+    act(() => {
+      result.current.url[1].startOver();
+    });
+
+    const state = result.current.url[0];
+    expect(state.groupId).toBeNull();
+    expect(state.areaKey).toBeNull();
+    expect(state.schoolId).toBeNull();
+    expect(state.radiusKm).toBeNull();
+    expect(state.filters.boardFilters).toBeUndefined();
+    expect(state.filters.categoryFilters).toBeUndefined();
+    expect(state.q).toBe('');
+    expect(state.journey).not.toBe('school-first');
+    expect(state.city).toBe('udupi');
+
+    const after = new URLSearchParams(result.current.location.search);
+    expect([...after.keys()]).toEqual(['city']);
+    expect(after.get('city')).toBe('udupi');
+  });
+
   // AC1 + AC3: all property filters are cleared; URL contains only city
   it('clears all property filters (type, beds, price, seller, booleans, dates) after startOver', () => {
     const { result } = renderHook(() => useDiscoverUrlState(), {
@@ -1456,6 +1542,31 @@ describe('useDiscoverUrlState — clearSchoolSelection (Issue #1143 AC2)', () =>
     });
 
     expect(result.current[0].journey).toBe('school-first');
+  });
+
+  // G2-CLEAR-KEEPS-GROUPID (#2750 PR-3 B1; the spec-specific addition of discover-school-first-grouping-1485
+  // AC5 L4->L3: Back clears schoolId only). The pre-existing its above never put a groupId in the URL.
+  it('G2-CLEAR-KEEPS-GROUPID clearSchoolSelection keeps groupId (and areaKey/journey) while removing schoolId and radiusKm', () => {
+    const { result } = renderHook(
+      () => ({ url: useDiscoverUrlState(), location: useLocation() }),
+      {
+        wrapper: wrapper(
+          '/discover?city=udupi&journey=school-first&groupId=university-belt&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=sch-1&radiusKm=2',
+        ),
+      },
+    );
+
+    act(() => {
+      result.current.url[1].clearSchoolSelection();
+    });
+
+    const search = new URLSearchParams(result.current.location.search);
+    expect(search.get('groupId')).toBe('university-belt');
+    expect(search.get('areaKey')).toBe('IN|KA|Udupi|Manipal');
+    expect(search.get('journey')).toBe('school-first');
+    expect(search.has('schoolId')).toBe(false);
+    expect(search.has('radiusKm')).toBe(false);
+    expect(result.current.url[0].groupId).toBe('university-belt');
   });
 
   it('preserves city after clearSchoolSelection', () => {

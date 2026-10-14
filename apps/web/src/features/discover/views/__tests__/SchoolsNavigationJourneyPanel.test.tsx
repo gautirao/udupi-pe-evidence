@@ -19,6 +19,20 @@ vi.mock('@/features/discover/context/useDiscoverContext', () => ({
   useDiscoverViewport: () => ({ isPanelMobile: false }),
 }));
 
+// G2-N4 (#2750 PR-3 B1) — lets one test drive the school-search RESULT list while every
+// other test in this file keeps the real hook (delegation when no override is set).
+const mockSchoolSearchOverride = vi.hoisted(() => ({ current: null as null | (() => unknown) }));
+vi.mock('@/hooks/useSchoolSearch', async () => {
+  const actual = await vi.importActual<typeof import('@/hooks/useSchoolSearch')>('@/hooks/useSchoolSearch');
+  return {
+    ...actual,
+    useSchoolSearch: (...args: Parameters<typeof actual.useSchoolSearch>) =>
+      mockSchoolSearchOverride.current
+        ? (mockSchoolSearchOverride.current() as ReturnType<typeof actual.useSchoolSearch>)
+        : actual.useSchoolSearch(...args),
+  };
+});
+
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
 const NOOP_BUILD_HREF = () => null;
@@ -184,6 +198,91 @@ describe('SchoolsNavigationJourneyPanel', () => {
 
     await user.type(input, 'A');
     expect(onSearch).toHaveBeenCalledWith('XYZ' + 'A');
+  });
+
+  // G2-N4 (+ G3 N4-ext areaKey) — retires discover-school-first-journey E2E-11 (result click ->
+  // schoolId), discover-school-first-marker-parity PAR-1/PAR-3 (pick writes areaKey), popular-schools
+  // click (successor), issue-2205 card-click arm. The call is asserted with toStrictEqual: ANY extra
+  // key (a stray `groupId` is the #2205 regression) or a missing/changed key fails.
+  describe('G2-N4 search-result click -> setSchoolJourney args', () => {
+    const SCHOOL = {
+      id: 'sch-1',
+      name: 'Manipal Public School',
+      board: 'CBSE',
+      boardType: null,
+      latitude: 13.3525,
+      longitude: 74.7864,
+      address: 'Manipal, Udupi',
+      distanceKm: 0,
+      areaKey: 'IN|KA|Udupi|Manipal',
+    };
+
+    async function clickResultCard() {
+      mockActions.setSchoolJourney.mockClear();
+      mockSchoolSearchOverride.current = () => ({ data: [SCHOOL], isLoading: false });
+      try {
+        const user = userEvent.setup();
+        render(
+          <MemoryRouter>
+            <QueryClientProvider client={queryClient}>
+              <SchoolsNavigationJourneyPanel
+                journey={makeJourney({ node: makeNode(), children: [] })}
+                onSelectAreaKey={vi.fn()}
+                buildNodeHref={NOOP_BUILD_HREF}
+                schoolSearchQuery="Manipal"
+                onSchoolSearchQueryChange={vi.fn()}
+              />
+            </QueryClientProvider>
+          </MemoryRouter>,
+        );
+        await user.click(screen.getByTestId('school-card'));
+      } finally {
+        mockSchoolSearchOverride.current = null;
+      }
+    }
+
+    it('G2-N4 clicking the result card calls setSchoolJourney once with EXACTLY {schoolId, radiusKm:3, lat, lon, zoom, areaKey} and no groupId', async () => {
+      await clickResultCard();
+      expect(mockActions.setSchoolJourney).toHaveBeenCalledTimes(1);
+      expect(mockActions.setSchoolJourney.mock.calls[0][0]).toStrictEqual({
+        schoolId: 'sch-1',
+        radiusKm: 3,
+        lat: 13.3525,
+        lon: 74.7864,
+        zoom: 14,
+        areaKey: 'IN|KA|Udupi|Manipal',
+      });
+    });
+
+    it('G2-N4-ext the school\'s own areaKey is passed straight through (a different school area yields a different areaKey)', async () => {
+      mockActions.setSchoolJourney.mockClear();
+      mockSchoolSearchOverride.current = () => ({
+        data: [{ ...SCHOOL, id: 'sch-2', areaKey: 'IN|KA|Udupi|Malpe' }],
+        isLoading: false,
+      });
+      try {
+        const user = userEvent.setup();
+        render(
+          <MemoryRouter>
+            <QueryClientProvider client={queryClient}>
+              <SchoolsNavigationJourneyPanel
+                journey={makeJourney({ node: makeNode(), children: [] })}
+                onSelectAreaKey={vi.fn()}
+                buildNodeHref={NOOP_BUILD_HREF}
+                schoolSearchQuery="Manipal"
+                onSchoolSearchQueryChange={vi.fn()}
+              />
+            </QueryClientProvider>
+          </MemoryRouter>,
+        );
+        await user.click(screen.getByTestId('school-card'));
+      } finally {
+        mockSchoolSearchOverride.current = null;
+      }
+      const arg = mockActions.setSchoolJourney.mock.calls[0][0] as { schoolId: string; areaKey: string };
+      expect(arg.schoolId).toBe('sch-2');
+      expect(arg.areaKey).toBe('IN|KA|Udupi|Malpe');
+    });
   });
 
   // #2170 — the preview counts endpoint flags Schools as not-yet-simulated for

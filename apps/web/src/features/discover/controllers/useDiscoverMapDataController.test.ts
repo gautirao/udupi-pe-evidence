@@ -1229,3 +1229,222 @@ describe('useDiscoverMapDataController — Issue #2480 (Return-to-scope camera r
     expect(result.current.pendingRemountCameraIntentSeqRef.current).toBeNull();
   });
 });
+
+// ─── G1-N1 (#2750 PR-3 B1) — markersEnabled gate, observed at the network layer ─────
+// The gate is ONE expression (useDiscoverMapDataController.ts markersEnabled). Each
+// case varies exactly ONE term while every other term is held in the "enabled"
+// position, and observes the real GET /api/discover/markers call on the mocked
+// api.get — never a hook flag. Retires the markers assertions of the legacy specs
+// discover-agri-journey-1375 / verify-agri-clusters-1372 / discover-agri-polygons-1373
+// / discover-agri-grouped-journey-1412 / discover-agri-price-gate-1551 (AC-MKR).
+describe('useDiscoverMapDataController — G1-N1 markersEnabled gate (network-observed)', () => {
+  function markersCalls(): string[] {
+    return mockApiGet.mock.calls
+      .map(([url]: [string]) => url)
+      .filter((url: string) => url.includes('/api/discover/markers'));
+  }
+
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 60));
+
+  function renderAgri(params: Record<string, unknown> = {}, navOverrides: Record<string, unknown> = {}) {
+    return renderHook(
+      () =>
+        useDiscoverMapDataController({
+          ...BASE_CONTROLLER_PARAMS,
+          nav: makeNav({ journey: 'agri-first', selectedRegion: 'N', ...navOverrides } as Partial<DiscoverNavContextValue>),
+          effectiveSelectedArea: null,
+          areasNavigationJourney: makeAreasNavigationJourney(),
+          ...params,
+        }),
+      { wrapper: makeWrapper() },
+    );
+  }
+
+  function renderSchoolFirst(params: Record<string, unknown> = {}) {
+    return renderHook(
+      () =>
+        useDiscoverMapDataController({
+          ...BASE_CONTROLLER_PARAMS,
+          filters: { schoolLat: 13.1, schoolLon: 77.6, schoolRadiusKm: 3 },
+          boundedSearchTriggered: true,
+          nav: makeNav({ journey: 'school-first', schoolId: 'school-42' }),
+          effectiveSelectedArea: null,
+          areasNavigationJourney: makeAreasNavigationJourney(),
+          ...params,
+        }),
+      { wrapper: makeWrapper() },
+    );
+  }
+
+  it('G1-N1 agri-first + authed + region + zoom>12: exactly one markers call carrying propertyTypes=agricultural_land', async () => {
+    renderAgri();
+    await waitFor(() => {
+      expect(markersCalls()).toHaveLength(1);
+    });
+    const params = new URLSearchParams(markersCalls()[0].split('?')[1]);
+    expect(params.getAll('propertyTypes')).toEqual(['agricultural_land']);
+  });
+
+  it('G1-N1 agri-first ANON (only isAuthenticated varied): zero markers calls (R4: /api/discover/markers is auth-gated)', async () => {
+    renderAgri({ isAuthenticated: false });
+    await settle();
+    expect(markersCalls()).toHaveLength(0);
+  });
+
+  it('G1-N1 agri-first with no region/locality (only top-grouped term varied): zero markers calls', async () => {
+    renderAgri({}, { selectedRegion: null });
+    await settle();
+    expect(markersCalls()).toHaveLength(0);
+  });
+
+  it('G1-N1 agri-first authed at zoom 10 (only zoom term varied, nodeListings falsy): zero markers calls', async () => {
+    renderAgri({ mapZoom: 10 });
+    await settle();
+    expect(markersCalls()).toHaveLength(0);
+  });
+
+  it('G1-N1 school-first + schoolId + coords + boundedSearchTriggered + authed: exactly one markers call (paired control)', async () => {
+    renderSchoolFirst();
+    await waitFor(() => {
+      expect(markersCalls()).toHaveLength(1);
+    });
+  });
+
+  it('G1-N1 school-first authed but boundedSearchTriggered=false (only that term varied): zero markers calls', async () => {
+    renderSchoolFirst({ boundedSearchTriggered: false });
+    await settle();
+    expect(markersCalls()).toHaveLength(0);
+  });
+
+  it('G1-N1 school-first bounded ANON (only isAuthenticated varied vs the control above): zero markers calls', async () => {
+    renderSchoolFirst({ isAuthenticated: false });
+    await settle();
+    expect(markersCalls()).toHaveLength(0);
+  });
+});
+
+// ─── G2-N9 / G3-M2 (#2750 PR-3 B1) — school-first markers request + public-endpoint enable arg ───
+// R4 NOTE (security, G3-M1): the anon arm that proves `isAuthenticated &&` at
+// useDiscoverMapDataController.ts:262 is the G1-N1 pair above ("school-first bounded ANON" vs the
+// authed "paired control", MUT-10: ONLY the two anon arms turn red, the control stays green). Its
+// setup already meets the M1 requirements: journey=school-first, schoolId, schoolLat/Lon,
+// boundedSearchTriggered:true, mapZoom 14 > AREA_LAYER_MAX_ZOOM (12), nodeListings falsy (makeNav default).
+// The tests below are the REMAINING G2-N9 / G3-M2 arms and deliberately do not repeat it.
+// Retire: school-first-map-focus MF-9/MF-12, discover-school-bounded-search BSC-2 (exactly one call),
+// issue-2205 (no markers call without a school), discover-anon-school-radius SR-1/AUTH-SR-1 (M2).
+describe('useDiscoverMapDataController — G2-N9 school-first markers request params + remaining gate terms', () => {
+  function markersUrls(): string[] {
+    return mockApiGet.mock.calls
+      .map(([url]: [string]) => url)
+      .filter((url: string) => url.includes('/api/discover/markers'));
+  }
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 60));
+  const SCHOOL_FILTERS = { schoolLat: 13.3525, schoolLon: 74.7864, schoolRadiusKm: 3 };
+
+  function render(params: Record<string, unknown> = {}, navOverrides: Record<string, unknown> = {}) {
+    return renderHook(
+      (p: Record<string, unknown>) =>
+        useDiscoverMapDataController({
+          ...BASE_CONTROLLER_PARAMS,
+          filters: SCHOOL_FILTERS,
+          boundedSearchTriggered: true,
+          nav: makeNav({ journey: 'school-first', schoolId: 'school-42', ...navOverrides } as Partial<DiscoverNavContextValue>),
+          effectiveSelectedArea: null,
+          areasNavigationJourney: makeAreasNavigationJourney(),
+          ...p,
+        }),
+      { wrapper: makeWrapper(), initialProps: params },
+    );
+  }
+
+  it('G2-N9(a) authed bounded search: the markers URL carries schoolLat=13.3525, schoolLon=74.7864, schoolRadiusKm=3 EXACTLY, and every markers call has schoolLat', async () => {
+    render();
+    await waitFor(() => {
+      expect(markersUrls()).toHaveLength(1);
+    });
+    const params = new URLSearchParams(markersUrls()[0].split('?')[1]);
+    expect(params.getAll('schoolLat')).toEqual(['13.3525']);
+    expect(params.getAll('schoolLon')).toEqual(['74.7864']);
+    expect(params.getAll('schoolRadiusKm')).toEqual(['3']);
+    for (const url of markersUrls()) {
+      expect(new URLSearchParams(url.split('?')[1]).has('schoolLat')).toBe(true);
+    }
+  });
+
+  it('G2-N9(a)-ext the CTA flip (boundedSearchTriggered false -> true) takes the markers call count from 0 to EXACTLY 1', async () => {
+    const { rerender } = render({ boundedSearchTriggered: false });
+    await settle();
+    expect(markersUrls()).toHaveLength(0);
+
+    rerender({ boundedSearchTriggered: true });
+    await waitFor(() => {
+      expect(markersUrls()).toHaveLength(1);
+    });
+    await settle();
+    expect(markersUrls()).toHaveLength(1);
+  });
+
+  it('G2-N9 coord guard: schoolLat missing (all other terms enabled) -> zero markers calls', async () => {
+    render({ filters: { schoolLon: 74.7864, schoolRadiusKm: 3 } });
+    await settle();
+    expect(markersUrls()).toHaveLength(0);
+  });
+
+  it('G2-N9 coord guard: schoolLon missing (all other terms enabled) -> zero markers calls', async () => {
+    render({ filters: { schoolLat: 13.3525, schoolRadiusKm: 3 } });
+    await settle();
+    expect(markersUrls()).toHaveLength(0);
+  });
+
+  it('G2-N9 schoolId guard: school-first with coords + bounded + authed but NO schoolId (areaKey set so the top-grouped guard is NOT what blocks it) -> zero markers calls', async () => {
+    // With areaKey null/schoolId null the #1655 top-grouped guard would block the call on its own and
+    // the schoolId term would never be exercised (a dropped term stayed green: MUT-68 first run).
+    // areaKey set => isTopGroupedLevel false => the schoolId term is the only thing that varies.
+    render({}, { schoolId: null, areaKey: 'IN|KA|Udupi|Manipal' });
+    await settle();
+    expect(markersUrls()).toHaveLength(0);
+  });
+
+  // G3-M2: the PUBLIC school-radius endpoint's `enabled` arg (useDiscoverMapData.ts schoolRadiusEnabled).
+  // Observed on the mocked useSchoolRadiusListings hook's LAST call args (a layer assertion; the
+  // outgoing no-Authorization-header half is an OPEN ITEM, see G2G3-tests.md: the allowed-file list
+  // does not include useSchoolRadiusListings.test.ts).
+  describe('G3-M2 useSchoolRadiusListings enabled arg', () => {
+    function lastRadiusArgs(): { enabled: boolean; schoolLat?: number } {
+      return mockSchoolRadiusListings.mock.calls.at(-1)?.[0] as { enabled: boolean; schoolLat?: number };
+    }
+
+    it('G3-M2 anon + coords -> enabled true (their only listing source)', async () => {
+      render({ isAuthenticated: false });
+      await waitFor(() => {
+        expect(lastRadiusArgs()).toBeDefined();
+      });
+      expect(lastRadiusArgs().enabled).toBe(true);
+      expect(lastRadiusArgs().schoolLat).toBe(13.3525);
+    });
+
+    it('G3-M2 authed, markers NOT yet enabled (pre-CTA) + coords -> enabled true (fallback pins)', async () => {
+      render({ boundedSearchTriggered: false });
+      await waitFor(() => {
+        expect(lastRadiusArgs()).toBeDefined();
+      });
+      expect(lastRadiusArgs().enabled).toBe(true);
+    });
+
+    it('G3-M2 authed, markers enabled (post-CTA) + coords -> enabled false', async () => {
+      render();
+      await waitFor(() => {
+        expect(markersUrls()).toHaveLength(1);
+      });
+      expect(lastRadiusArgs().enabled).toBe(false);
+    });
+
+    it('G3-M2 anon without coords -> enabled false', async () => {
+      render({ isAuthenticated: false, filters: {} });
+      await waitFor(() => {
+        expect(lastRadiusArgs()).toBeDefined();
+      });
+      expect(lastRadiusArgs().enabled).toBe(false);
+    });
+  });
+});

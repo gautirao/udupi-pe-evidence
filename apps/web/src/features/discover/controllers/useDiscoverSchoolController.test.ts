@@ -126,6 +126,50 @@ describe('useDiscoverSchoolController (#2142 Commit 3 — moved verbatim from Ma
     );
   });
 
+  // G2-N11 (#2750 PR-3 B1) — retires discover-school-journey E2E-9 (area-first + areaKey must not
+  // fetch schools-by-area). The fixture sets nav.areaKey (so a dropped panelContent guard WOULD fall
+  // back to it) AND leaves the canonical AREA leaf unresolved (areasNavigationJourney.node null =>
+  // canonicalSchoolsAreaKey undefined), so the `panelContent === 'schools-in-area'` guard is the ONLY
+  // thing that yields undefined. Without both being explicit, dropping the guard stays green.
+  it('G2-N11 panelContent=area-selected with nav.areaKey set and NO canonical AREA leaf: useSchoolsByArea gets areaKey undefined', () => {
+    renderHook(() =>
+      useDiscoverSchoolController(
+        baseParams({
+          panelContent: 'area-selected' as never,
+          nav: {
+            journey: 'area-first',
+            areaKey: 'IN|KA|Udupi|Manipal',
+            schoolId: null,
+            schoolPicking: null,
+            filters: {},
+          } as never,
+          areasNavigationJourney: { node: null, children: [], isLoading: false, error: null, selectNode: vi.fn() } as never,
+        }),
+      ),
+    );
+    expect(mockUseSchoolsByArea).toHaveBeenCalledWith(undefined, [], [], 20);
+    expect(mockUseSchoolsByArea).not.toHaveBeenCalledWith('IN|KA|Udupi|Manipal', expect.anything(), expect.anything(), expect.anything());
+  });
+
+  it('G2-N11 control: the same nav with panelContent=schools-in-area DOES pass nav.areaKey (so the guard, not the fixture, produces undefined above)', () => {
+    renderHook(() =>
+      useDiscoverSchoolController(
+        baseParams({
+          panelContent: 'schools-in-area' as never,
+          nav: {
+            journey: 'area-first',
+            areaKey: 'IN|KA|Udupi|Manipal',
+            schoolId: null,
+            schoolPicking: null,
+            filters: {},
+          } as never,
+          areasNavigationJourney: { node: null, children: [], isLoading: false, error: null, selectNode: vi.fn() } as never,
+        }),
+      ),
+    );
+    expect(mockUseSchoolsByArea).toHaveBeenCalledWith('IN|KA|Udupi|Manipal', [], [], 20);
+  });
+
   it('schools defaults to all fetched schools when urlBoardFilters is empty', () => {
     const { result } = renderHook(() => useDiscoverSchoolController(baseParams({ nav: { journey: null, areaKey: null, schoolId: null, schoolPicking: null, filters: {} } as never })));
     expect(result.current.schools).toEqual([SCHOOL_A, SCHOOL_B]);

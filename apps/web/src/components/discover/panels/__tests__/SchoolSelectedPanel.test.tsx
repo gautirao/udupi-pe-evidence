@@ -179,6 +179,26 @@ describe('SchoolSelectedPanel', () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
+  // ── G2-N8 (#2750 PR-3 B1): PanelHeader Back chevron iff onBack ────────────────
+  // Retires school-first-back-nav BN-1 (L2 back button present), BN-2 (L1), BN-3 (L0: no back button
+  // in DOM). Both arms: `onBack != null &&` -> `true &&` breaks the absent arm; -> `false &&` breaks
+  // the present arm; each mutation flips exactly one of the two tests.
+  it('G2-N8 panel-header-back-button is present and calls onBack exactly once when onBack is provided', () => {
+    const onBack = vi.fn();
+    renderPanel({ onBack });
+    const back = screen.getByTestId('panel-header-back-button');
+    expect(back).toHaveAccessibleName('Back');
+    fireEvent.click(back);
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('G2-N8 panel-header-back-button is absent from the DOM when onBack is undefined', () => {
+    renderPanel({ onBack: undefined });
+    expect(screen.queryByTestId('panel-header-back-button')).not.toBeInTheDocument();
+    // sanity: the panel itself did render (the absence is not "nothing rendered")
+    expect(screen.getByRole('heading', { name: 'Find homes near a school' })).toBeInTheDocument();
+  });
+
   // ── AC2: radius chips [3, 5, 10] ─────────────────────────────────────────────
 
   it('renders radius chips [3, 5, 10] only (ReTrends redesign)', () => {
@@ -344,6 +364,22 @@ describe('SchoolSelectedPanel', () => {
     expect(screen.getByTestId('school-radius-empty-state')).toBeInTheDocument();
     expect(screen.getByTestId('school-radius-empty-state')).toHaveTextContent('Manipal Public School');
     expect(screen.getByTestId('school-radius-empty-state')).toHaveTextContent('3 km');
+  });
+
+  // G3-FOCUS4-COPY (#2750 PR-3 B1; close-or-keep for discover-school-first-markers FOCUS-4, :390). The spec
+  // asserted `/no properties/i`, a string that no longer exists anywhere in the school empty state (the
+  // copy is "No {homes|rentals} found within {r} km of {school}", SchoolRadiusEmptyState.tsx:76-78).
+  // The regex is OBSOLETE; this pins the CURRENT copy exactly, for both intents.
+  it('G3-FOCUS4-COPY empty radius copy is exactly "No homes found within 3 km of Manipal Public School" (buy) / "No rentals found ..." (rent), and never "No properties"', () => {
+    const { unmount } = renderPanel({ listings: [], radiusKm: 3, intent: 'buy' });
+    const buy = screen.getByTestId('school-radius-empty-state');
+    expect(buy).toHaveTextContent('No homes found within 3 km of Manipal Public School');
+    expect(buy).not.toHaveTextContent(/no properties/i);
+    unmount();
+
+    renderPanel({ listings: [], radiusKm: 5, intent: 'rent' });
+    const rent = screen.getByTestId('school-radius-empty-state');
+    expect(rent).toHaveTextContent('No rentals found within 5 km of Manipal Public School');
   });
 
   it('"Try 5 km" button present when active radius is 3 km', () => {

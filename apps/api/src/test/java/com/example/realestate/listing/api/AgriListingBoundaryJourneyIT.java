@@ -248,6 +248,39 @@ class AgriListingBoundaryJourneyIT {
         assertThat(listingRepository.findBoundaryGeoJson(id)).isEmpty();
     }
 
+    /** Valid, closed, non-self-intersecting polygon in London — outside the India bounding box. */
+    private static final String LONDON_POLYGON =
+            "{\"type\":\"Polygon\",\"coordinates\":[[[-0.2,51.4],[-0.1,51.4],[-0.1,51.5],[-0.2,51.5],[-0.2,51.4]]]}";
+
+    /**
+     * G1-N12 (#2750 PR-3 B1) — retires broker-agri-listing AC4 "London": the rejected PUT is a
+     * validation failure AND leaves the boundary unset. The polygon is geometrically valid and
+     * small, so ONLY the India-bounding-box rule can reject it (not ST_IsValid, not the area cap);
+     * if the validator call were skipped the PUT would succeed and persist it.
+     */
+    @Test
+    @DisplayName("G1-N12: outside-India (London) boundary → BOUNDARY_OUTSIDE_INDIA and boundary left unset")
+    void agriBoundaryJourney_outsideIndia_isRejectedAndBoundaryStaysUnset() {
+        UUID id = seedSubmittableAgriDraft();
+
+        assertThatThrownBy(() -> crudService.updateListing(
+                id, OWNER_ID, false,
+                "agricultural_land", "Agri plot near Udupi", "Udupi",
+                new BigDecimal("5000000"), "Fertile agricultural land",
+                new BigDecimal("5"), null, null,
+                true, null, null, "acre", null, null, false, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null,
+                LONDON_POLYGON))
+                .isInstanceOf(ListingValidationException.class)
+                .satisfies(ex -> assertThat(((ListingValidationException) ex).getErrors())
+                        .extracting(e -> e.get("code"))
+                        .containsExactly("BOUNDARY_OUTSIDE_INDIA"));
+
+        // Boundary must remain unset after the rejected update.
+        assertThat(listingRepository.findBoundaryGeoJson(id)).isEmpty();
+    }
+
     @Test
     @DisplayName("AC6: non-agri type + boundary → BOUNDARY_NON_AGRI_TYPE (no PostGIS call)")
     void nonAgriType_withBoundary_throwsNonAgriType() {

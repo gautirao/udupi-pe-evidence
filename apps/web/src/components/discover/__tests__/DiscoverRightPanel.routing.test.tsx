@@ -845,6 +845,35 @@ describe('DiscoverRightPanel — agri-selected (Issue #1371)', () => {
     expect(screen.getAllByTestId('agri-listing-card')).toHaveLength(3);
   });
 
+  // G1-N9 (#2750 PR-3 B1) — clicking an agri-selected listing card navigates to THAT listing's
+  // detail page. Retires discover-agri-journey-1375 AC8b and discover-agri-grouped-journey-1412 AC4.
+  it('G1-N9 clicking the second agri listing card navigates to /listing/<that id> exactly once', async () => {
+    mockNavigate.mockClear();
+    const listings = [makeAgriListing('a1'), makeAgriListing('a2'), makeAgriListing('a3')];
+    const agriAreasData = [{
+      areaKey: 'IN|KA|Udupi|Manipal',
+      name: 'Manipal',
+      geoCenterLat: 13.3,
+      geoCenterLon: 74.7,
+      listingCount: 3,
+      schoolCount: 3,
+    }];
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-selected"
+        selectedArea={agriArea}
+        areaListings={listings}
+        isLoadingListings={false}
+        agriAreasData={agriAreasData}
+      />,
+    );
+    expect(mockNavigate).not.toHaveBeenCalled();
+    await userEvent.click(screen.getAllByTestId('agri-listing-card')[1]);
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledWith('/listing/a2');
+  });
+
   it('renders land area on listing cards when present', () => {
     const listings = [makeAgriListing('a1')];
     // agriAreasData must have non-zero listingCount to suppress the empty-state guard.

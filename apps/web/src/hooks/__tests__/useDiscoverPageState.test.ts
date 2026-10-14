@@ -390,6 +390,46 @@ describe('useDiscoverPageState — handleFiltersChange with selectedSchool', () 
     expect(setSchoolParams).toHaveBeenCalledWith({ schoolId: 'sch-1', radiusKm: 5 });
   });
 
+  // G2-SPEC-DEFAULT-RADIUS (#2750 PR-3 B1; the spec-specific addition of discover-school-selected
+  // E2E-5): a cold-loaded school with NO radius in the filters gets the default 3 km written into
+  // filters.schoolRadiusKm (alongside lat/lon), so the listings request uses schoolRadiusKm=3. The
+  // control arm keeps an already-set 5 (the fallback must not overwrite an explicit radius).
+  it('G2-DEFAULT-RADIUS cold-load school with no radius: filters get schoolLat/Lon and schoolRadiusKm exactly 3', () => {
+    const { result } = renderHook(() =>
+      useDiscoverPageState({
+        urlState: makeUrlState({ schoolId: 'sch-1', radiusKm: null }),
+        urlActions: makeUrlActions(),
+      }),
+    );
+    expect(result.current.filters.schoolRadiusKm).toBeUndefined();
+
+    act(() => {
+      result.current.setSelectedSchool(mockSchool);
+    });
+
+    expect(result.current.filters.schoolRadiusKm).toBe(3);
+    expect(result.current.filters.schoolLat).toBe(13.3525);
+    expect(result.current.filters.schoolLon).toBe(74.7864);
+  });
+
+  it('G2-DEFAULT-RADIUS control: an already-set radius of 5 is kept (the 3 km default does not overwrite it)', () => {
+    const { result } = renderHook(() =>
+      useDiscoverPageState({
+        urlState: makeUrlState({ schoolId: 'sch-1', radiusKm: 5 }),
+        urlActions: makeUrlActions(),
+      }),
+    );
+    act(() => {
+      result.current.setFilters({ schoolRadiusKm: 5 });
+    });
+    act(() => {
+      result.current.setSelectedSchool(mockSchool);
+    });
+
+    expect(result.current.filters.schoolRadiusKm).toBe(5);
+    expect(result.current.filters.schoolLat).toBe(13.3525);
+  });
+
   it('does NOT call setSchoolParams when selectedSchool is null', () => {
     const setSchoolParams = vi.fn();
     const { result } = renderHook(() =>
@@ -600,6 +640,46 @@ describe('useDiscoverUrlState — board filters (issue #1131)', () => {
     expect(result.current.state.city).toBe('udupi');
     expect(result.current.state.journey).toBeNull();
     expect(result.current.state.areaKey).toBeNull();
+  });
+
+  // G3-M5 (#2750 PR-3 B1) — the WRITER half. Retires discover-school-board-filter AC12-A (chip click
+  // writes board=CBSE as a repeated param) and AC4 (removing the last board leaves no `board` key).
+  // The reader half (hydrate) is the pre-existing 558 `it` above. Debounced write: fake timers.
+  // NOTE: this file OOMs as a whole at base because of an unrelated pre-existing `it`
+  // (handleAreaBack_clears_an_AREA_SET_scope_but_never_a_committed_POLYGON) — see G2G3-tests.md;
+  // this `it` is run by name.
+  it('G3-M5 setFiltersLive boardFilters writes REPEATED board params (CBSE; then CBSE+ICSE as two params, not comma-joined) and [] leaves no board key', () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useHookAndLocation(), {
+        wrapper: makeWrapper('/discover?city=udupi&journey=school-first&areaKey=IN|KA|Udupi|Manipal'),
+      });
+
+      act(() => {
+        result.current.actions.setFiltersLive({ boardFilters: ['CBSE'] });
+        vi.advanceTimersByTime(400);
+      });
+      expect(new URLSearchParams(result.current.location.search).getAll('board')).toEqual(['CBSE']);
+
+      act(() => {
+        result.current.actions.setFiltersLive({ boardFilters: ['CBSE', 'ICSE'] });
+        vi.advanceTimersByTime(400);
+      });
+      expect(new URLSearchParams(result.current.location.search).getAll('board')).toEqual(['CBSE', 'ICSE']);
+
+      act(() => {
+        result.current.actions.setFiltersLive({ boardFilters: [] });
+        vi.advanceTimersByTime(400);
+      });
+      const search = new URLSearchParams(result.current.location.search);
+      expect(search.getAll('board')).toEqual([]);
+      expect(search.has('board')).toBe(false);
+      // the unrelated scope params were not disturbed by the filter write
+      expect(search.get('areaKey')).toBe('IN|KA|Udupi|Manipal');
+      expect(search.get('journey')).toBe('school-first');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

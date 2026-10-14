@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { useState } from 'react';
 import { renderHook, act } from '@testing-library/react';
 import { useDiscoverJourneyTransitions, type UseDiscoverJourneyTransitionsParams } from './useDiscoverJourneyTransitions';
 import type { DiscoverUrlActions, DiscoverUrlState } from '@/hooks/useDiscoverUrlState';
@@ -567,6 +568,36 @@ describe('useDiscoverJourneyTransitions', () => {
       expect(result.current.view.cityRestoreTick).toBe(1);
       expect(selectGroup).toHaveBeenCalledWith(null);
     });
+
+    // G2-N7 (#2750 PR-3 B1) — retires school-first-back-nav BN-2 (L1 back), school-first-map-focus
+    // MF-8 (Back L1->L0 bumps cityRestoreTick) and the BN-1/BN-2 "back button present" half
+    // (onBack defined). schools-in-area is the level-1 rung: it must resolve to handleSchoolFirstBackLevel1
+    // (clear the AREA only), not to the level-0 (clear group) or level-2 (clear school) rung.
+    it('G2-N7 schools-in-area resolves to backLevel1: bumps cityRestoreTick, clears the area once, touches neither group nor school selection', () => {
+      const clearAreaSelection = vi.fn();
+      const selectGroup = vi.fn();
+      const clearSchoolSelection = vi.fn();
+      const setSelectedArea = vi.fn();
+      const params = makeParams({
+        urlState: makeUrlState({ journey: 'school-first', areaKey: 'IN|KA|Udupi|Manipal' }),
+        panelContent: 'schools-in-area',
+        urlActions: makeUrlActions({ clearAreaSelection, selectGroup, clearSchoolSelection }),
+        setSelectedArea,
+      });
+      const { result } = renderHook(() => useDiscoverJourneyTransitions(params));
+      expect(result.current.view.schoolFirstOnBack).toBeDefined();
+
+      act(() => {
+        result.current.view.schoolFirstOnBack?.();
+      });
+
+      expect(result.current.view.cityRestoreTick).toBe(1);
+      expect(result.current.view.areaRestoreTick).toBe(0);
+      expect(clearAreaSelection).toHaveBeenCalledTimes(1);
+      expect(setSelectedArea).toHaveBeenCalledWith(null);
+      expect(selectGroup).not.toHaveBeenCalled();
+      expect(clearSchoolSelection).not.toHaveBeenCalled();
+    });
   });
 
   // Issue #1940 — journey-change teardown for stale school-first map overlays.
@@ -854,6 +885,100 @@ describe('useDiscoverJourneyTransitions', () => {
 
       expect(setSelectedSchool).not.toHaveBeenCalledWith(null);
       expect(setFilters).not.toHaveBeenCalled();
+    });
+  });
+
+  // G3-M6 (#2750 PR-3 B1) — radius change re-gates the bounded search. Retires
+  // discover-school-bounded-search BSC-3 (radius change -> CTA reappears, no auto-refetch).
+  // Asserted on STATE (a real useState behind boundedSearchTriggered), not on a spy: the CTA in
+  // SchoolSelectedPanel renders iff `!boundedSearchTriggered`, so `bst === false` after the
+  // change IS "the CTA reappears".
+  describe('G3-M6 changeRadius re-gates the bounded search', () => {
+    function renderStateful(urlState: DiscoverUrlState, setSchoolParams = vi.fn()) {
+      return renderHook(() => {
+        const [bst, setBst] = useState(true);
+        const t = useDiscoverJourneyTransitions(
+          makeParams({
+            urlState,
+            urlActions: makeUrlActions({ setSchoolParams }),
+            boundedSearchTriggered: bst,
+            setBoundedSearchTriggered: setBst,
+          }),
+        );
+        return { t, bst };
+      });
+    }
+
+    it('G3-M6 changeRadius(5) writes setSchoolParams({schoolId, radiusKm:5}) AND flips boundedSearchTriggered true -> false', () => {
+      const setSchoolParams = vi.fn();
+      const { result } = renderStateful(
+        makeUrlState({ journey: 'school-first', schoolId: 'sch-1', radiusKm: 3 }),
+        setSchoolParams,
+      );
+      expect(result.current.bst).toBe(true);
+
+      act(() => {
+        result.current.t.commands.changeRadius(5);
+      });
+
+      expect(setSchoolParams).toHaveBeenCalledTimes(1);
+      expect(setSchoolParams).toHaveBeenCalledWith({ schoolId: 'sch-1', radiusKm: 5 });
+      expect(result.current.bst).toBe(false);
+    });
+
+    it('G3-M6 control: with no schoolId changeRadius is a no-op (gate stays armed, nothing written)', () => {
+      const setSchoolParams = vi.fn();
+      const { result } = renderStateful(makeUrlState({ journey: 'school-first', schoolId: null }), setSchoolParams);
+
+      act(() => {
+        result.current.t.commands.changeRadius(5);
+      });
+
+      expect(setSchoolParams).not.toHaveBeenCalled();
+      expect(result.current.bst).toBe(true);
+    });
+  });
+
+  // G3-M10 (#2750 PR-3 B1) — cold-load school restore vs the radius in the URL. Retires
+  // school-deep-link-radius DL-RAD-1 (radiusKm=5 survives restore) and DL-RAD-2 (absent radiusKm is
+  // backfilled with the default 3 by a REPLACE, i.e. no phantom history entry).
+  describe('G3-M10 cold-load school restore: radius backfill', () => {
+    it('G3-M10 urlRadiusKm absent: backfills the default 3 into the URL via setSchoolParams({schoolId, radiusKm:3}, {replace:true}) and into filters', () => {
+      const setSchoolParams = vi.fn();
+      const setFilters = vi.fn();
+      const school = makeSchool();
+      const params = makeParams({
+        urlState: makeUrlState({ schoolId: 'sch-1', radiusKm: null }),
+        urlActions: makeUrlActions({ setSchoolParams }),
+        schoolById: school,
+        selectedSchool: null,
+        filters: {} as PropertyFilters,
+        setFilters,
+      });
+      renderHook(() => useDiscoverJourneyTransitions(params));
+
+      expect(setSchoolParams).toHaveBeenCalledTimes(1);
+      expect(setSchoolParams).toHaveBeenCalledWith({ schoolId: 'sch-1', radiusKm: 3 }, { replace: true });
+      const updater = setFilters.mock.calls[0][0] as (prev: PropertyFilters) => PropertyFilters;
+      expect(updater({} as PropertyFilters)).toEqual({ schoolLat: 13.35, schoolLon: 74.79, schoolRadiusKm: 3 });
+    });
+
+    it('G3-M10 urlRadiusKm=5 on-grid: restore does NOT rewrite the URL (no setSchoolParams) and keeps 5 in filters', () => {
+      const setSchoolParams = vi.fn();
+      const setFilters = vi.fn();
+      const params = makeParams({
+        urlState: makeUrlState({ schoolId: 'sch-1', radiusKm: 5 }),
+        urlActions: makeUrlActions({ setSchoolParams }),
+        schoolById: makeSchool(),
+        selectedSchool: null,
+        filters: {} as PropertyFilters,
+        setFilters,
+      });
+      renderHook(() => useDiscoverJourneyTransitions(params));
+
+      expect(setSchoolParams).not.toHaveBeenCalled();
+      const updater = setFilters.mock.calls[0][0] as (prev: PropertyFilters) => PropertyFilters;
+      expect(updater({} as PropertyFilters).schoolRadiusKm).toBe(5);
     });
   });
 });

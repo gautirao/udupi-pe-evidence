@@ -169,6 +169,66 @@ describe('useSchoolRadiusListings', () => {
   });
 });
 
+describe('useSchoolRadiusListings outgoing request layer (S2-HDR)', () => {
+  it('S2-HDR: anonymous school-radius request reaches fetch with NO Authorization header even when a session token exists', async () => {
+    // Real api client (this file mocks '@/lib/api' wholesale): delegate the mocked api.get to it.
+    // Session source is deterministic: a dummy token that WOULD be attached if skipAuth were ignored.
+    vi.doMock('@/integrations/supabase/client', () => ({
+      supabase: {
+        auth: {
+          getSession: vi.fn().mockResolvedValue({
+            data: { session: { access_token: 'dummy-token' } },
+          }),
+        },
+      },
+    }));
+    const real = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
+    mockGet.mockImplementation((path: string, opts?: Parameters<typeof real.api.get>[1]) =>
+      real.api.get(path, opts),
+    );
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify(PAGE), { status: 200 }));
+
+    try {
+      const { result } = renderHook(
+        () =>
+          useSchoolRadiusListings({
+            city: 'udupi',
+            schoolLat: 13.35,
+            schoolLon: 74.79,
+            schoolRadiusKm: 3,
+          }),
+        { wrapper: makeWrapper() },
+      );
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      // (a) the school-radius request was actually made, exactly once, at the expected URL.
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [rawUrl, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      const url = new URL(String(rawUrl));
+      expect(url.pathname).toBe('/api/discover/cities/udupi/school-radius-listings');
+      expect(url.searchParams.get('schoolLat')).toBe('13.35');
+      expect(url.searchParams.get('schoolLon')).toBe('74.79');
+      expect(url.searchParams.get('schoolRadiusKm')).toBe('3');
+      expect(init.method).toBe('GET');
+
+      // (b) outgoing headers carry no Authorization header (case-insensitive; Headers or plain object).
+      const names = Object.keys(
+        init.headers instanceof Headers
+          ? Object.fromEntries(init.headers.entries())
+          : ((init.headers ?? {}) as Record<string, string>),
+      ).map((n) => n.toLowerCase());
+      expect(names).toContain('accept'); // headers were inspected, not an empty/absent bag
+      expect(names).not.toContain('authorization');
+    } finally {
+      fetchSpy.mockRestore();
+      mockGet.mockReset();
+      vi.doUnmock('@/integrations/supabase/client');
+    }
+  });
+});
+
 describe('mapSchoolRadiusCard (AC5)', () => {
   it('maps the full card to the DiscoverCityListingItem shape', () => {
     const item = mapSchoolRadiusCard(FULL_CARD);

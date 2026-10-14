@@ -218,6 +218,26 @@ describe('School-first selected-area redesign — RealSchoolsInAreaPanel', () =>
     );
   });
 
+  // G3-M4 (#2750 PR-3 B1) — retires discover-school-board-filter AC12-A (chip aria-pressed=true),
+  // AC12-D (cold load: chip pressed from URL), AC4 (click the active chip removes the board;
+  // aria-pressed=false). The writer side (board -> repeated URL param) is G3-M5.
+  it('G3-M4(a) boardFilters=[CBSE] from URL state: board-chip-cbse is aria-pressed=true, every other board chip false', () => {
+    mockUrlState = { ...mockUrlState, filters: { boardFilters: ['CBSE'], categoryFilters: [] } };
+    renderPanel();
+    expect(screen.getByTestId('board-chip-cbse')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('board-chip-icse')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('board-chip-state')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('board-chip-international')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('G3-M4(b) clicking the ACTIVE CBSE chip removes it: setFiltersLive called once with boardFilters exactly []', () => {
+    mockUrlState = { ...mockUrlState, filters: { boardFilters: ['CBSE'], categoryFilters: [] } };
+    renderPanel();
+    fireEvent.click(screen.getByTestId('board-chip-cbse'));
+    expect(setFiltersLive).toHaveBeenCalledTimes(1);
+    expect(setFiltersLive.mock.calls[0][0].boardFilters).toEqual([]);
+  });
+
   it('search filters the school cards and updates the result count', () => {
     renderPanel();
     expect(screen.getAllByTestId('school-card')).toHaveLength(2);

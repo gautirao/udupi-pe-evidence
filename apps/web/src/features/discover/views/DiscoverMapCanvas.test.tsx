@@ -128,6 +128,9 @@ vi.mock('@/components/map/PropertyMap', () => ({
       lat: number;
       lon: number;
     }>;
+    // G1-N2 (#2750 PR-3 B1) — the agri sector overlay value DiscoverMapCanvas
+    // resolves (gate: DiscoverMapCanvas.tsx sectorOverlay={...}).
+    sectorOverlay?: { directionCode: string; maxKm: number } | null;
   }) => (
     <div
       data-testid="property-map-mock"
@@ -151,6 +154,7 @@ vi.mock('@/components/map/PropertyMap', () => ({
       data-area-set-at-max={String(props.areaSetAtMax ?? false)}
       data-area-set-nearby-candidates={JSON.stringify(props.areaSetNearbyCandidates ?? null)}
       data-area-set-draft-members={JSON.stringify(props.areaSetDraftMembers ?? null)}
+      data-sector-overlay={props.sectorOverlay === undefined ? 'UNDEFINED' : JSON.stringify(props.sectorOverlay)}
       onClick={() => props.onSelectAgriDestination?.('IN|KA|Udupi|Brahmavar')}
     >
       <button
@@ -988,6 +992,45 @@ describe('DiscoverMapCanvas', () => {
     });
   });
 
+  // G1-N2 (#2750 PR-3 B1) — the sector-overlay GATE at the canvas -> PropertyMap boundary
+  // (DiscoverMapCanvas.tsx: isAgriJourney && selectedRegion && selectedMaxKm != null).
+  // Retires the overlay assertions of discover-agri-direction-first-1448 (AC2/3/6/9/10)
+  // and discover-agri-overlay-peek-journey-1431 (AC1a-c/AC5/AC5b).
+  describe('G1-N2 sectorOverlay gate', () => {
+    const overlayOf = () => screen.getByTestId('property-map-mock').getAttribute('data-sector-overlay');
+
+    it('G1-N2 agri journey + region N + maxKm 25 resolves to exactly {directionCode:"N",maxKm:25}; maxKm 50 resolves to maxKm 50', () => {
+      const first = renderCanvas(
+        <DiscoverMapCanvas {...baseProps({ isAgriJourney: true, selectedRegion: 'N', selectedMaxKm: 25 })} />,
+      );
+      expect(overlayOf()).toBe('{"directionCode":"N","maxKm":25}');
+      first.unmount();
+      renderCanvas(
+        <DiscoverMapCanvas {...baseProps({ isAgriJourney: true, selectedRegion: 'N', selectedMaxKm: 50 })} />,
+      );
+      expect(overlayOf()).toBe('{"directionCode":"N","maxKm":50}');
+    });
+
+    it('G1-N2 agri journey but NO region (landing) resolves to null; region without maxKm resolves to null', () => {
+      const first = renderCanvas(
+        <DiscoverMapCanvas {...baseProps({ isAgriJourney: true, selectedRegion: null, selectedMaxKm: null })} />,
+      );
+      expect(overlayOf()).toBe('null');
+      first.unmount();
+      renderCanvas(
+        <DiscoverMapCanvas {...baseProps({ isAgriJourney: true, selectedRegion: 'N', selectedMaxKm: null })} />,
+      );
+      expect(overlayOf()).toBe('null');
+    });
+
+    it('G1-N2 NON-agri journey (area-first / school-first) with region+maxKm still present resolves to null', () => {
+      renderCanvas(
+        <DiscoverMapCanvas {...baseProps({ isAgriJourney: false, selectedRegion: 'N', selectedMaxKm: 25 })} />,
+      );
+      expect(overlayOf()).toBe('null');
+    });
+  });
+
   it('shows the error card instead of PropertyMap when error is set', () => {
     renderCanvas(<DiscoverMapCanvas {...baseProps({ error: new Error('boom') })} />);
     expect(screen.queryByTestId('property-map-mock')).not.toBeInTheDocument();
@@ -1713,6 +1756,54 @@ describe('Issue #2698 — mobile Map bottom chrome', () => {
     const hint = screen.getByTestId('school-radius-more-hint');
     expect(hint).toHaveClass('bottom-28', 'right-4');
     expect(hint).not.toHaveClass('bottom-[192px]');
+  });
+
+  // G3-M3 (#2750 PR-3 B1) — retires discover-anon-school-radius SR-4 (text `Showing the first 2 homes`)
+  // and the anon-only half of the hint gate. `schoolListingsCount` is NOT a flat prop: the canvas
+  // passes `schoolListings.length` into DiscoverMapStatusHints (DiscoverMapCanvas.tsx:1377), so the
+  // count is driven here through the `schoolListings` array. Both arms: the copy carries the real
+  // count (2, then 3), and the same inputs for an AUTHENTICATED viewer render no hint at all.
+  describe('G3-M3 anon school-radius "showing first N" hint copy + auth gate', () => {
+    const listing = (id: string): DiscoverCityListingItem =>
+      ({
+        id,
+        pricePaise: 5000000 * 100,
+        propertyType: 'apartment',
+        locality: 'Manipal',
+        primaryImageUrl: null,
+        lat: 13.354,
+        lon: 74.791,
+      }) as DiscoverCityListingItem;
+
+    it('G3-M3 anon: hint copy is exactly "Showing the first 2 homes near this school." for 2 listings (and 3 for 3)', () => {
+      const { unmount } = renderCanvas(
+        <DiscoverMapCanvas {...baseProps({ ...SCHOOL_RADIUS_MORE_HINT, schoolListings: [listing('a'), listing('b')] })} />,
+      );
+      expect(screen.getByTestId('school-radius-more-hint')).toHaveTextContent(
+        'Showing the first 2 homes near this school. Zoom or refine your search to narrow results.',
+      );
+      unmount();
+
+      renderCanvas(
+        <DiscoverMapCanvas
+          {...baseProps({ ...SCHOOL_RADIUS_MORE_HINT, schoolListings: [listing('a'), listing('b'), listing('c')] })}
+        />,
+      );
+      expect(screen.getByTestId('school-radius-more-hint')).toHaveTextContent('Showing the first 3 homes near this school.');
+    });
+
+    it('G3-M3 authed viewer with the SAME school-radius inputs: no hint (anon-only affordance)', () => {
+      renderCanvas(
+        <DiscoverMapCanvas
+          {...baseProps({
+            ...SCHOOL_RADIUS_MORE_HINT,
+            isAuthenticated: true,
+            schoolListings: [listing('a'), listing('b')],
+          })}
+        />,
+      );
+      expect(screen.queryByTestId('school-radius-more-hint')).not.toBeInTheDocument();
+    });
   });
 
   // Owner follow-up 3 (PR #2725, issue #2724) — desktop "N properties" badge + "Recenter on

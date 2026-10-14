@@ -24,15 +24,17 @@
  * composition root AND the real background-click DOM wiring together.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent, within } from '@testing-library/react';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import React from 'react';
 import MapDiscovery from '../MapDiscovery';
 import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
 import { useDiscoverFilteredMarkers } from '@/hooks/useDiscoverFilteredMarkers';
 import { useSchoolRadiusListings } from '@/hooks/useSchoolRadiusListings';
+import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
+import { useDiscoverCityListings } from '@/hooks/useDiscoverCityListings';
 
 const mockUseAuth = vi.hoisted(() =>
   vi.fn(() => ({ user: null, isLoading: false, isAdmin: false, isDealer: false })),
@@ -311,5 +313,136 @@ describe('#2149 repro — second marker tap in mobile school-first Map mode', ()
       expect(screen.getByTestId('mobile-listing-preview-sheet')).toBeInTheDocument();
     });
     expect(screen.getByText('Home Near School B')).toBeInTheDocument();
+  });
+
+  // G3-M9 (#2750 PR-3 B1) — retires issue-2149-mobile-school-first-marker-preview "tap A" (schoolId/radiusKm
+  // survive the tap), "tap B" (URL unchanged; no desktop popover alongside the sheet) and the desktop
+  // title (popover shown, no mobile sheet). Real bubbling clicks, real composition root.
+  function LocationProbe() {
+    const location = useLocation();
+    return <div data-testid="loc-probe">{location.search}</div>;
+  }
+  const renderAtWithProbe = (url: string) =>
+    render(
+      <QueryClientProvider client={makeQC()}>
+        <MemoryRouter initialEntries={[url]}>
+          <LocationProbe />
+          <Routes>
+            <Route path="*" element={<DiscoverProvider><MapDiscovery /></DiscoverProvider>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  const SCHOOL_FIRST_URL = `/discover?city=udupi&lat=13.34000&lon=74.74000&zoom=14&journey=school-first&schoolId=sch-1&radiusKm=3`;
+  const probeParams = () => new URLSearchParams(screen.getByTestId('loc-probe').textContent ?? '');
+
+  it('G3-M9 mobile: after tapping marker A then B the sheet shows B, NO desktop marker-popover-card is rendered alongside it, and schoolId=sch-1/radiusKm=3 are still in the URL', async () => {
+    installMobileMatchMediaMock();
+    renderAtWithProbe(SCHOOL_FIRST_URL);
+
+    fireEvent.click(await screen.findByTestId('control-bar-map-trigger'));
+    await waitFor(() => {
+      expect(screen.getByTestId('mobile-map-close-list-button')).toBeInTheDocument();
+      expect(capturedOnReady).toBeDefined();
+    });
+    act(() => {
+      capturedOnReady!();
+    });
+    const [markerA, markerB] = screen.getAllByTestId('property-marker');
+
+    fireEvent.click(markerA);
+    await waitFor(() => {
+      expect(screen.getByTestId('mobile-listing-preview-sheet')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('marker-popover-card')).not.toBeInTheDocument();
+    const afterA = probeParams();
+    expect(afterA.get('schoolId')).toBe('sch-1');
+    expect(afterA.get('radiusKm')).toBe('3');
+
+    // NB: scope the text query to the sheet — the mock PropertyMap's marker buttons ALSO carry the
+    // listing titles, which is what makes the pre-existing `it` above fail at base ("multiple elements").
+    expect(within(screen.getByTestId('mobile-listing-preview-sheet')).getByText('Home Near School A')).toBeInTheDocument();
+    fireEvent.click(markerB);
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId('mobile-listing-preview-sheet')).getByText('Home Near School B'),
+      ).toBeInTheDocument();
+    });
+    expect(within(screen.getByTestId('mobile-listing-preview-sheet')).queryByText('Home Near School A')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('marker-popover-card')).not.toBeInTheDocument();
+    const afterB = probeParams();
+    expect(afterB.get('schoolId')).toBe('sch-1');
+    expect(afterB.get('radiusKm')).toBe('3');
+  });
+
+  it('G3-M9 desktop (no mobile matchMedia): a school-first marker click shows marker-popover-card with the listing, and mobile-listing-preview-sheet is absent', async () => {
+    renderAtWithProbe(SCHOOL_FIRST_URL);
+
+    await waitFor(() => {
+      expect(capturedOnReady).toBeDefined();
+    });
+    act(() => {
+      capturedOnReady!();
+    });
+    const [markerA] = await screen.findAllByTestId('property-marker');
+    fireEvent.click(markerA);
+
+    const card = await screen.findByTestId('marker-popover-card');
+    expect(card).toHaveTextContent('Home Near School A');
+    expect(screen.queryByTestId('mobile-listing-preview-sheet')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('mobile-map-close-list-button')).not.toBeInTheDocument();
+  });
+
+  // G3-M9-1738 (#2750 PR-3 B1; the page-level popover render for discover/school-radius-marker-click-repro-1738
+  // AC1 + AC2). markerPopoverEligibility.test.ts proves the PURE gate; these two prove the page actually RENDERS
+  // the popover from a real marker click in the area-first states the 1738 spec drove (AC5 school-first is
+  // contradicted by #1973 and covered by the desktop `it` above).
+  it.each([
+    ['AC1 area-first, area only', `/discover?city=udupi&lat=13.34000&lon=74.74000&zoom=14&journey=area-first&areaKey=IN%7CKA%7CUdupi%7CManipal`],
+    ['AC2 area-first, area + school', `/discover?city=udupi&lat=13.34000&lon=74.74000&zoom=14&journey=area-first&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=sch-1&radiusKm=3`],
+  ])('G3-M9-1738 desktop %s: a marker click renders marker-popover-card with the listing', async (_label, url) => {
+    // area-first marker listings come from the SELECTED AREA's city-listings payload (resolveMarkerListings
+    // selectedArea branch), not from /api/discover/markers, so resolve the area + give it the same two listings.
+    const AREA_KEY = 'IN|KA|Udupi|Manipal';
+    vi.mocked(useDiscoverAreas).mockReturnValue({
+      data: {
+        city: 'udupi',
+        areas: [
+          {
+            areaKey: AREA_KEY, name: 'Manipal', geoCenterLat: 13.34, geoCenterLon: 74.74,
+            minLat: 13.3, minLon: 74.7, maxLat: 13.38, maxLon: 74.78, listingCount: 2, schoolCount: 3,
+          },
+        ],
+      },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useDiscoverAreas>);
+    vi.mocked(useDiscoverCityListings).mockReturnValue({
+      data: {
+        city: 'udupi',
+        limitPerArea: 50,
+        areas: [{ areaKey: AREA_KEY, areaName: 'Manipal', listings: AUTH_SCHOOL_FIRST_MARKERS.map((m) => ({ ...m, title: undefined })) }],
+      },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useDiscoverCityListings>);
+    try {
+      renderAtWithProbe(url);
+
+      await waitFor(() => {
+        expect(capturedOnReady).toBeDefined();
+      });
+      act(() => {
+        capturedOnReady!();
+      });
+      const [markerA] = await screen.findAllByTestId('property-marker');
+      fireEvent.click(markerA);
+
+      const card = await screen.findByTestId('marker-popover-card');
+      expect(card).toHaveTextContent('Home Near School A');
+      expect(screen.queryByTestId('mobile-listing-preview-sheet')).not.toBeInTheDocument();
+    } finally {
+      vi.mocked(useDiscoverAreas).mockReturnValue({ data: { city: 'udupi', areas: [] }, isLoading: false } as unknown as ReturnType<typeof useDiscoverAreas>);
+      vi.mocked(useDiscoverCityListings).mockReturnValue({ data: { areas: [] }, isLoading: false } as unknown as ReturnType<typeof useDiscoverCityListings>);
+    }
   });
 });

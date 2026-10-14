@@ -82,8 +82,14 @@ vi.mock('@/components/poi/PoiManager', () => ({
   PoiManager: () => <div data-testid="poi-manager-stub" />,
 }));
 
+// G1-N11 (#2750 PR-3 B1) — the stub now records its props, so a test can assert the step-4
+// MOUNT DECISION (stub invoked with the listing's coordinates / declared area) rather than text.
+const mockBoundaryDrawStep = vi.hoisted(() => vi.fn());
 vi.mock('@/components/dealer/BoundaryDrawStep', () => ({
-  BoundaryDrawStep: () => <div data-testid="boundary-draw-stub" />,
+  BoundaryDrawStep: (props: Record<string, unknown>) => {
+    mockBoundaryDrawStep(props);
+    return <div data-testid="boundary-draw-stub" />;
+  },
 }));
 
 vi.mock('@/components/broker/PriceField', () => ({
@@ -165,9 +171,9 @@ function makeQC() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
 
-function renderEditListing() {
+function renderEditListing(search = '') {
   return render(
-    <MemoryRouter initialEntries={['/broker/listings/edit/test-id']}>
+    <MemoryRouter initialEntries={[`/broker/listings/edit/test-id${search}`]}>
       <QueryClientProvider client={makeQC()}>
         <Routes>
           <Route path="/broker/listings/edit/:id" element={<EditListing />} />
@@ -250,7 +256,57 @@ function getAgriSelects(): NodeListOf<HTMLSelectElement> {
 beforeEach(() => {
   mockUpdateMutate.mockReset();
   mockNavigate.mockReset();
+  mockBoundaryDrawStep.mockReset();
   mockListingData.current = null;
+});
+
+// ── G1-N11 (#2750 PR-3 B1): ?step=4 mounts the boundary step for an agri draft only ──────
+// Retires broker-agri-listing AC1 (EditListing `?step=4` for an agri draft mounts the boundary
+// step). BoundaryDrawStep itself is a stub here (its own behaviour is covered in
+// BoundaryDrawStep.test.tsx); this pins the step-ROUTING decision in EditListingForm.
+
+describe('EditListing — G1-N11 ?step=4 boundary step mount', () => {
+  it('G1-N11 agri draft at ?step=4 mounts step-4-panel and invokes BoundaryDrawStep with the listing coordinates + declared area', async () => {
+    mockListingData.current = makeBaseListing({ latitude: 13.34, longitude: 74.74, landArea: 2.5, landAreaUnit: 'acre' });
+
+    renderEditListing('?step=4');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('step-4-panel')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('boundary-draw-stub')).toBeInTheDocument();
+    expect(mockBoundaryDrawStep).toHaveBeenCalled();
+    const props = mockBoundaryDrawStep.mock.calls[0][0] as Record<string, unknown>;
+    expect(props.center).toEqual([13.34, 74.74]);
+    expect(props.declaredArea).toBe(2.5);
+    expect(props.declaredUnit).toBe('acre');
+    expect(typeof props.onSave).toBe('function');
+    expect(typeof props.onSkip).toBe('function');
+  });
+
+  it('G1-N11 agri draft at ?step=1 (control): the boundary step is NOT mounted', async () => {
+    mockListingData.current = makeBaseListing();
+
+    renderEditListing('?step=1');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agri-fields-section')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('step-4-panel')).not.toBeInTheDocument();
+    expect(mockBoundaryDrawStep).not.toHaveBeenCalled();
+  });
+
+  it('G1-N11 NON-agri draft at ?step=4 (control): the boundary step is NOT mounted (step 4 is Review there)', async () => {
+    mockListingData.current = makeBaseListing({ propertyType: 'apartment' });
+
+    renderEditListing('?step=4');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('step-review-panel')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('step-4-panel')).not.toBeInTheDocument();
+    expect(mockBoundaryDrawStep).not.toHaveBeenCalled();
+  });
 });
 
 // ── (a) Load: existing values pre-populate the 4 structured fields ─────────

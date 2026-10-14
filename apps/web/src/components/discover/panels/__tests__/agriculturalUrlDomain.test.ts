@@ -32,8 +32,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { renderHook, act, render } from '@testing-library/react';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
@@ -229,5 +229,118 @@ describe('agricultural URL domain — destination-key migration (C-F1)', () => {
       // values" behaviour.
       expect(renders[0]).toBe('IN|KA|Udupi|Kota');
     });
+  });
+});
+
+// ─── G1-N3 (#2750 PR-3 B1) — real history semantics: PUSH vs REPLACE ──────────────
+// A MemoryRouter history stack with >= 2 prior entries and navigate(-1/1). With a
+// single-step history a PUSH and a REPLACE both "land without the new param", so the
+// flip would stay green; the extra entry makes Back land on a DIFFERENT, exactly
+// known URL for each. Every assertion compares the FULL sorted param list.
+// Retires the Back/Forward/close-semantics assertions of agri-destination-identity-2151
+// (d), discover-agri-direction-first-1448 (AC4 close, AC5 Back), and
+// discover-agri-locality-marker-1468 (AC4, AC6).
+describe('agricultural URL domain — G1-N3 history PUSH/REPLACE semantics (createMemoryRouter)', () => {
+  type Actions = ReturnType<typeof useDiscoverUrlState>[1];
+
+  const LANDING = '/discover?city=udupi&journey=agri-first';
+  const REGION = `${LANDING}&region=N&maxKm=25`;
+  const DEST = 'IN|KA|Udupi|Manipal';
+  const REGION_DEST = `${REGION}&destKey=${encodeURIComponent(DEST)}`;
+  const REGION_DEST_LISTING = `${REGION_DEST}&listing=parcel-1`;
+
+  function paramsOf(url: string): Array<[string, string]> {
+    return [...new URLSearchParams(url.split('?')[1] ?? '').entries()].sort(([a], [b]) => a.localeCompare(b));
+  }
+
+  function mount(entries: string[]) {
+    // A declarative MemoryRouter (NOT createMemoryRouter/RouterProvider: the data router builds a
+    // fetch Request per navigation, which jsdom's AbortSignal rejects). The history semantics under
+    // test — a real entry stack with initialIndex at the top and navigate(-1/1) — are identical.
+    const holder: {
+      actions: Actions | null;
+      navigate: ReturnType<typeof useNavigate> | null;
+      search: string;
+    } = { actions: null, navigate: null, search: '' };
+    function Probe(): null {
+      holder.actions = useDiscoverUrlState()[1];
+      holder.navigate = useNavigate();
+      const loc = useLocation();
+      holder.search = loc.pathname + loc.search;
+      return null;
+    }
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      React.createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        React.createElement(
+          MemoryRouter,
+          { initialEntries: entries, initialIndex: entries.length - 1 },
+          React.createElement(Probe),
+        ),
+      ),
+    );
+    const here = () => paramsOf(holder.search);
+    const go = async (delta: number) => {
+      await act(async () => {
+        holder.navigate?.(delta);
+      });
+    };
+    return { holder, here, go };
+  }
+
+  it('G1-N3 setRegionWithMaxKm is a PUSH: Back returns to the EXACT pre-click URL (no region/maxKm)', async () => {
+    const { holder, here, go } = mount(['/discover?city=udupi', LANDING]);
+    act(() => holder.actions?.setRegionWithMaxKm('N'));
+    expect(here()).toEqual(paramsOf(REGION));
+    await go(-1);
+    expect(here()).toEqual(paramsOf(LANDING));
+  });
+
+  it('G1-N3 setLocality is a PUSH: Back drops destKey (exact pre-click URL), Forward restores it', async () => {
+    const { holder, here, go } = mount([LANDING, REGION]);
+    act(() => holder.actions?.setLocality(DEST));
+    expect(here()).toEqual(paramsOf(REGION_DEST));
+    await go(-1);
+    expect(here()).toEqual(paramsOf(REGION));
+    await go(1);
+    expect(here()).toEqual(paramsOf(REGION_DEST));
+  });
+
+  it('G1-N3 clearLocality is a REPLACE: keeps region+maxKm, and Back skips the destKey entry (lands on the entry BEFORE it)', async () => {
+    const { holder, here, go } = mount([LANDING, REGION_DEST]);
+    act(() => holder.actions?.clearLocality());
+    expect(here()).toEqual(paramsOf(REGION));
+    await go(-1);
+    expect(here()).toEqual(paramsOf(LANDING));
+  });
+
+  it('G1-N3 setSelectedListing is a PUSH: Back returns to the exact pre-click URL (listing gone, destKey kept)', async () => {
+    const { holder, here, go } = mount([LANDING, REGION_DEST]);
+    act(() => holder.actions?.setSelectedListing('parcel-1'));
+    expect(here()).toEqual(paramsOf(REGION_DEST_LISTING));
+    await go(-1);
+    expect(here()).toEqual(paramsOf(REGION_DEST));
+  });
+
+  it('G1-N3 clearSelectedListing is a REPLACE that KEEPS destKey/region/maxKm; Back skips the listing entry', async () => {
+    const { holder, here, go } = mount([LANDING, REGION_DEST, REGION_DEST_LISTING]);
+    act(() => holder.actions?.clearSelectedListing());
+    expect(here()).toEqual(paramsOf(REGION_DEST));
+    // REPLACE: the listing entry was overwritten, so Back lands on the entry before it
+    // (destKey, no listing). A PUSH would leave the listing entry reachable here.
+    await go(-1);
+    expect(here()).toEqual(paramsOf(REGION_DEST));
+    await go(-1);
+    expect(here()).toEqual(paramsOf(LANDING));
+  });
+
+  it('G1-N3 clearRegionAndMaxKm is a PUSH: removes region+maxKm, Back restores the exact corridor URL', async () => {
+    const { holder, here, go } = mount(['/discover?city=udupi', REGION]);
+    act(() => holder.actions?.clearRegionAndMaxKm());
+    expect(here()).toEqual(paramsOf(LANDING));
+    await go(-1);
+    expect(here()).toEqual(paramsOf(REGION));
   });
 });
