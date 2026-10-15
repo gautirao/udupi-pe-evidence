@@ -220,6 +220,26 @@ describe('buildPanelSurfaceModel', () => {
     expect(view.geography.selectedArea).toBe(area);
   });
 
+  // #2750 PR-4 (retires e2e issue-2528-back-forward-filter-sync, composition link). The leaf chips
+  // paint from `view.filters.filters` (-> AreaFirstJourneyPanel `results.filters` ->
+  // AreaLeafListingsSurface). That value must be the PAGE-level filters object — the one
+  // useDiscoverPageState re-syncs on Back/Forward — and not the URL-derived `nav.filters`. The two
+  // fixtures below DIFFER on purpose: if they were equal, a source swap would pass unnoticed.
+  it('#2528: view.filters.filters is the page-level filters object itself (the stale-path chip feeder), never nav.filters', () => {
+    const pageFilters = { propertyTypes: ['apartment'] } as never;
+    const navFilters = { propertyTypes: ['villa'] } as never;
+    const view = buildPanelSurfaceModel(
+      makeParams({
+        pageState: { filters: pageFilters },
+        pageContext: { nav: { filters: navFilters } as never },
+      }),
+    );
+
+    expect(view.filters.filters).toBe(pageFilters);
+    expect(view.filters.filters).not.toBe(navFilters);
+    expect(view.filters.filters.propertyTypes).toEqual(['apartment']);
+  });
+
   it('projects geography.regionScopedGroupsData?.groups onto `regionScopedGroups`, tolerating an unresolved fetch', () => {
     const groups = [{ id: 'g1' }] as never;
     expect(

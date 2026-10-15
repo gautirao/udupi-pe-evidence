@@ -1100,6 +1100,120 @@ describe('DiscoverMapCanvas', () => {
     expect(screen.queryByRole('link', { name: /sign in/i })).not.toBeInTheDocument();
   });
 
+  // #2750 PR-4 B1 T1 (anon-zoom-past-area-guidance, wiring row). MapEmptyGuidance.test.tsx proves the
+  // gate with props passed DIRECTLY; this proves the REAL canvas feeds that gate the live values
+  // (isAuthenticated, mapZoom, hasAreaSelected, and `suppressAnonZoomPrompt = nav.journey ===
+  // 'area-first'`). journey is set to school-first EXPLICITLY (area-first suppresses the prompt) and
+  // cityTotal > 0 (the gate's own `cityTotal > 0` arm). The prompt is asserted PRESENT before any
+  // absence check, so an all-absent render (undefined auth, wrong journey, cityTotal 0) can never
+  // read as a pass.
+  it('#2750 anon-zoom wiring: anon + school-first + zoomed past the area layer + no area → the real canvas renders the sign-in prompt with the exact /auth?returnTo=/discover href; authed, threshold-zoom and area-first controls render none', () => {
+    const originalJourney = BASE_NAV.journey;
+    const wired = (over: Partial<DiscoverMapCanvasFlatProps> = {}) =>
+      baseProps({
+        isAuthenticated: false,
+        mapZoom: 14,
+        areaLayerMaxZoom: 12,
+        selectedArea: null,
+        isBoundedBrowseState: false,
+        cityTotal: 5,
+        ...over,
+      });
+    try {
+      BASE_NAV.journey = 'school-first';
+
+      // ARM 1 (anon, discriminating): the prompt is PRESENT, with the exact href.
+      const anon = renderCanvas(
+        <MemoryRouter>
+          <DiscoverMapCanvas {...wired()} />
+        </MemoryRouter>,
+      );
+      expect(screen.getByTestId('map-anon-zoom-prompt')).toBeInTheDocument();
+      expect(screen.getByText(/Select an area to see properties/)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /sign in/i })).toHaveAttribute('href', '/auth?returnTo=/discover');
+      anon.unmount();
+
+      // CONTROL A (authed, else identical): absent. Same journey/zoom/cityTotal as ARM 1.
+      const authed = renderCanvas(
+        <MemoryRouter>
+          <DiscoverMapCanvas {...wired({ isAuthenticated: true })} />
+        </MemoryRouter>,
+      );
+      expect(screen.queryByTestId('map-anon-zoom-prompt')).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /sign in/i })).not.toBeInTheDocument();
+      authed.unmount();
+
+      // CONTROL B (zoom exactly at the threshold, else identical): absent — mapZoom reaches the gate.
+      const atThreshold = renderCanvas(
+        <MemoryRouter>
+          <DiscoverMapCanvas {...wired({ mapZoom: 12 })} />
+        </MemoryRouter>,
+      );
+      expect(screen.queryByTestId('map-anon-zoom-prompt')).not.toBeInTheDocument();
+      atThreshold.unmount();
+
+      // CONTROL D (a selected area, else identical): absent — `hasAreaSelected={!!selectedArea || …}` is wired.
+      const withArea = renderCanvas(
+        <MemoryRouter>
+          <DiscoverMapCanvas {...wired({ selectedArea: { areaKey: 'IN|KA|Bangalore|Hebbal' } as never })} />
+        </MemoryRouter>,
+      );
+      expect(screen.queryByTestId('map-anon-zoom-prompt')).not.toBeInTheDocument();
+      withArea.unmount();
+
+      // CONTROL C (journey area-first, else identical to ARM 1): absent — suppressAnonZoomPrompt is wired.
+      BASE_NAV.journey = 'area-first';
+      const areaFirst = renderCanvas(
+        <MemoryRouter>
+          <DiscoverMapCanvas {...wired()} />
+        </MemoryRouter>,
+      );
+      expect(screen.queryByTestId('map-anon-zoom-prompt')).not.toBeInTheDocument();
+      areaFirst.unmount();
+    } finally {
+      BASE_NAV.journey = originalJourney;
+    }
+  });
+
+  // #2750 PR-4 B1 T1 (issue-2674-mobile-viewport-debounce-orphan, canvas half). A pan just before the
+  // map closes to List leaves a 300ms debounced viewport write armed; the canvas must cancel it when
+  // it REAL-unmounts (and ONLY then — the empty-dep ref pattern, so a re-render never cancels a
+  // legitimate in-flight debounce). The facade half (the cancel really disarms the timer) is in
+  // postPopViewportCancellation.test.ts.
+  it('#2674: unmounting the canvas calls urlActions.cancelViewportCommit exactly once; a re-render does NOT', () => {
+    const actions = URL_ACTIONS as unknown as { cancelViewportCommit?: () => void };
+    const original = actions.cancelViewportCommit;
+    const cancel = vi.fn();
+    actions.cancelViewportCommit = cancel;
+    try {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const tree = (props: DiscoverMapCanvasProps) => (
+        <QueryClientProvider client={queryClient}>
+          <AreaSetDraftProvider>
+            <MemoryRouter>
+              <DiscoverMapCanvas {...props} />
+            </MemoryRouter>
+          </AreaSetDraftProvider>
+        </QueryClientProvider>
+      );
+      const first = baseProps({ mapZoom: 10 });
+      const view = render(tree(first));
+      expect(cancel).not.toHaveBeenCalled();
+
+      // Re-render the SAME instance with different props: the facade hands the canvas a fresh
+      // closure every render, so a cleanup keyed on it would fire here. It must not.
+      view.rerender(tree(baseProps({ mapZoom: 11 })));
+      view.rerender(tree(baseProps({ mapZoom: 12 })));
+      expect(cancel).not.toHaveBeenCalled();
+
+      view.unmount();
+      expect(cancel).toHaveBeenCalledTimes(1);
+    } finally {
+      if (original === undefined) delete actions.cancelViewportCommit;
+      else actions.cancelViewportCommit = original;
+    }
+  });
+
   // Issue #1793 SR-024 (AC A3) — the REAL canvas must not turn a failed /api/discover/areas
   // request (cityTotal 0) into "No properties listed in {city} yet". The signal and its refetch
   // arrive through the same view/commands contract buildMapSurfaceModel/buildMapSurfaceCommands

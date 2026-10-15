@@ -268,6 +268,61 @@ describe('useDiscoverUrlState — setFiltersCommitted', () => {
     expect(filters.bedrooms).toBeUndefined();
     expect(filters.priceMin).toBeUndefined();
   });
+
+  // ── #2750 PR-4 B1 T3 — retires e2e active-context-chips-and-badge (CHIP-3 clear) ──────────────
+  // The e2e clicked "Remove Apartment" and asserted only `type` left the URL: groupId, areaKey and
+  // the lat/lon/zoom camera survive the filter write. The two sibling tests above start from URLs
+  // with NO scope/camera params, so a filter write that rebuilt the query string from scratch
+  // would pass them. Both writers the chip can reach (committed PUSH, debounced live REPLACE) are
+  // pinned on a full area URL.
+  const FULL_AREA_URL =
+    '/discover?city=udupi&groupId=coastal-strip&areaKey=IN%7CKA%7CUdupi%7CManipal' +
+    '&lat=13.34090&lon=74.74210&zoom=14&type=apartment&intent=rent';
+
+  it('#2750 B1 T3 filter clear (committed) on a full area URL drops only `type`; groupId/areaKey/lat/lon/zoom/city/intent survive', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), { wrapper: wrapper(FULL_AREA_URL) });
+
+    // Precondition: the chip's source filter really is in the URL, with the scope + camera beside it.
+    expect(result.current[0].filters.propertyTypes).toEqual(['apartment']);
+    expect(result.current[0].groupId).toBe('coastal-strip');
+    expect(result.current[0].areaKey).toBe('IN|KA|Udupi|Manipal');
+    expect(result.current[0].viewport).toEqual({ lat: 13.3409, lon: 74.7421, zoom: 14 });
+
+    act(() => {
+      result.current[1].setFiltersCommitted({ ...result.current[0].filters, propertyTypes: undefined });
+    });
+
+    const s = result.current[0];
+    expect(s.filters.propertyTypes).toBeUndefined();
+    expect(s.groupId).toBe('coastal-strip');
+    expect(s.areaKey).toBe('IN|KA|Udupi|Manipal');
+    expect(s.viewport).toEqual({ lat: 13.3409, lon: 74.7421, zoom: 14 });
+    expect(s.city).toBe('udupi');
+    expect(s.intent).toBe('rent');
+  });
+
+  it('#2750 B1 T3 filter clear (live, the path the chip x takes) on a full area URL drops only `type`; scope + camera survive', () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useDiscoverUrlState(), { wrapper: wrapper(FULL_AREA_URL) });
+      expect(result.current[0].filters.propertyTypes).toEqual(['apartment']);
+
+      act(() => {
+        result.current[1].setFiltersLive({ ...result.current[0].filters, propertyTypes: undefined });
+        vi.advanceTimersByTime(400);
+      });
+
+      const s = result.current[0];
+      expect(s.filters.propertyTypes).toBeUndefined();
+      expect(s.groupId).toBe('coastal-strip');
+      expect(s.areaKey).toBe('IN|KA|Udupi|Manipal');
+      expect(s.viewport).toEqual({ lat: 13.3409, lon: 74.7421, zoom: 14 });
+      expect(s.city).toBe('udupi');
+      expect(s.intent).toBe('rent');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('useDiscoverUrlState — reportViewport (debounced)', () => {

@@ -1222,6 +1222,37 @@ class NavigationControllerTest {
     }
 
     /**
+     * #2750 PR-4 (retires e2e issue-2083-nav-counts-purpose-badge "ground truth"): the {@code
+     * ?purpose=} request param must be BOUND into the {@link AreaCountQuery} that drives the
+     * counts. Without that, the Buy/Rent toggle would silently return blended counts. The second
+     * call is the control arm (no {@code purpose}) so the assertion cannot pass on a query that
+     * always carries (or never carries) a purpose.
+     */
+    @Test
+    void getCounts_purposeParam_isBoundIntoTheCountQuery_andAbsentPurposeStaysBlended() {
+        NavigationGraph graph = buildGraph();
+        when(graphCache.getActiveGraph("testcity")).thenReturn(Optional.of(graph));
+        when(rollupService.areaCountsForCity(eq("testcity"), eq(42L), any())).thenReturn(Map.of("leaf1", 5L));
+        when(rollupService.schoolCoverageForCity(eq("testcity"), eq(42L))).thenReturn(AreaSchoolCoverage.empty());
+        when(rollupService.countForNode(any(), any(), any())).thenReturn(5L);
+        when(rollupService.childCounts(any(), any(), any(), any())).thenReturn(List.of());
+
+        controller.getCounts("testcity", "root", "rent", null, null, null, null, null, null, null, null);
+        controller.getCounts("testcity", "root", null, null, null, null, null, null, null, null, null);
+
+        ArgumentCaptor<AreaCountQuery> queryCaptor = ArgumentCaptor.forClass(AreaCountQuery.class);
+        verify(rollupService, org.mockito.Mockito.times(2))
+                .areaCountsForCity(eq("testcity"), eq(42L), queryCaptor.capture());
+        List<AreaCountQuery> queries = queryCaptor.getAllValues();
+        assertThat(queries.get(0).listingPurpose())
+                .as("?purpose=rent must reach the count query as listingPurpose=rent")
+                .isEqualTo("rent");
+        assertThat(queries.get(1).listingPurpose())
+                .as("control: no purpose param -> blended (null), not a defaulted purpose")
+                .isNull();
+    }
+
+    /**
      * The other half of the ruling: removing the params from the ENDPOINT must not narrow {@link
      * AreaCountQuery} itself. Callers that construct the record directly keep full price support,
      * including normalisation and participation in the cache-key hash — so the PR that first renders

@@ -191,12 +191,85 @@ describe('DiscoverAreasJourneyPanel — AREA-leaf filter identity + listing-erro
     // Distinguishable from a genuine zero-result: the "0 results" empty
     // state must NOT render, and the error/retry affordance must.
     expect(screen.queryByTestId('area-empty-state')).not.toBeInTheDocument();
+    // #2750 PR-4 B1 T3 — the zero-result testid is `area-zero-result-recovery` (#2018); the line above
+    // names the retired id, so on its own it could not fail.
+    expect(screen.queryByTestId('area-zero-result-recovery')).not.toBeInTheDocument();
     expect(screen.queryByTestId('area-result-summary')).not.toBeInTheDocument();
     expect(screen.getByTestId('areas-journey-panel-listings-error')).toBeInTheDocument();
     expect(screen.queryByText(/0 verified/i)).not.toBeInTheDocument();
+    // #2750 PR-4 B1 T3 (retires e2e issue-1956-pr4-listings-error-state `error copy`): the failure is
+    // worded as a load failure, naming the area — the testid alone would also pass for a silent box.
+    expect(screen.getByTestId('areas-journey-panel-listings-error')).toHaveTextContent(
+      "We couldn't load properties in Manipal. Please try again.",
+    );
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: /retry/i }));
     expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  // #2750 PR-4 B1 T3 (retires e2e issue-1956-pr4-listings-error-state `404 also error`).
+  // Every test above injects `isError: true` into a mocked hook, so none of them reaches the line that
+  // DECIDES a non-2xx is an error: `lib/api.ts` `if (!response.ok) throw new ApiError(...)`. Here the
+  // REAL `useDiscoverCityListings` (via vi.importActual, which the file-level factory already spreads)
+  // runs over the REAL `lib/api.ts`; only the network edge (`fetch`) is stubbed. A 404 must end in the
+  // same error affordance as a 500 and must NOT read as a genuine "0 verified properties".
+  it('#2750 B1 T3 a real HTTP 404 from the city-listings endpoint (through lib/api.ts) renders the error affordance, not the empty state; a 200 with no listings still renders the empty state', async () => {
+    mockUseAuth.mockReturnValue({ user: null, isLoading: false });
+    const actual = await vi.importActual<typeof import('@/hooks/useDiscoverCityListings')>(
+      '@/hooks/useDiscoverCityListings',
+    );
+    mockUseDiscoverCityListings.mockImplementation(actual.useDiscoverCityListings);
+    const jsonResponse = (status: number, statusText: string, body: unknown) =>
+      new Response(JSON.stringify(body), {
+        status,
+        statusText,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    // A fresh Response per call (a body can be read once). Only the city-listings URL is under test;
+    // any other incidental request the panel makes gets an inert 200 `{}`.
+    const respondToListingsWith = (status: number, statusText: string, body: unknown) =>
+      fetchMock.mockImplementation((url: unknown) =>
+        Promise.resolve(
+          String(url).includes('/api/discover/cities/bangalore/listings')
+            ? jsonResponse(status, statusText, body)
+            : jsonResponse(200, 'OK', {}),
+        ),
+      );
+    try {
+      respondToListingsWith(404, 'Not Found', { message: 'not found' });
+      const notFound = renderPanel(makeAreaLeafNode());
+
+      expect(await screen.findByTestId('areas-journey-panel-listings-error')).toBeInTheDocument();
+      expect(screen.queryByTestId('area-empty-state')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('area-zero-result-recovery')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('area-result-summary')).not.toBeInTheDocument();
+      expect(screen.queryByText(/0 verified/i)).not.toBeInTheDocument();
+      // The request really went through the real hook to the real endpoint path.
+      expect(
+        fetchMock.mock.calls.some((c) => String(c[0]).includes('/api/discover/cities/bangalore/listings')),
+      ).toBe(true);
+      notFound.unmount();
+
+      // Control arm, same wiring and same URL: a 200 whose area has no listings is the GENUINE empty
+      // state — so the error affordance above is caused by the 404, not by this harness.
+      fetchMock.mockReset();
+      respondToListingsWith(200, 'OK', {
+        city: 'bangalore',
+        limitPerArea: 5,
+        areas: [{ areaKey: 'IN|KA|Bangalore|Manipal', areaName: 'Manipal', listings: [] }],
+      });
+      renderPanel(makeAreaLeafNode());
+
+      // (`area-zero-result-recovery` is the zero-result testid since #2018; `area-empty-state` above is
+      // the older name and no longer renders anywhere, so it is checked but never relied on alone.)
+      expect(await screen.findByTestId('area-zero-result-recovery')).toBeInTheDocument();
+      expect(screen.queryByTestId('areas-journey-panel-listings-error')).not.toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+      mockUseDiscoverCityListings.mockReset();
+    }
   });
 });

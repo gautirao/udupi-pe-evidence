@@ -445,4 +445,124 @@ describe('#2149 repro — second marker tap in mobile school-first Map mode', ()
       vi.mocked(useDiscoverCityListings).mockReturnValue({ data: { areas: [] }, isLoading: false } as unknown as ReturnType<typeof useDiscoverCityListings>);
     }
   });
+
+  // #2750 PR-4 B1 T1 — issue-2089-filter-list-map-parity (LIST HALF + URL survival only). Caveat: the map half is NOT pinned here — `useDiscoverFilteredMarkers` is stubbed to undefined, so no marker count is asserted, and markers not narrowing by property type (useSchoolListings.ts ~L173-180) is a possible defect this test deliberately does not lock in.
+  // The e2e spec (RR Nagar, anon, 390x844) asserted ONE filter state drives both the list cards and the map marker
+  // set: Apartments chip → list 2→1, `type=apartment` in the URL, Map exactly 1 marker, and back to List keeps count
+  // + URL. This drives the anon school-first feed (apartment + house in the public school-radius payload) through the
+  // real page: `applyAnonPropertyFilters` (useSchoolListings) narrows the cards. Oracle = `listing-card` testids (never
+  // titles: cards and the mock marker buttons carry the same text — the duplicate-text hazard behind the red :275).
+  // The unfiltered arm is the positive control (2 cards) so the narrowing is measured, not assumed.
+  const SCHOOL_RADIUS_CARDS = [
+    { id: 'fp-apartment', propertyType: 'apartment', title: 'Filter Parity Apartment', locality: 'Manipal', latitude: 13.34, longitude: 74.74, priceBand: '₹50L–1Cr', listingPurpose: 'sale' },
+    { id: 'fp-house', propertyType: 'house', title: 'Filter Parity House', locality: 'Manipal', latitude: 13.341, longitude: 74.741, priceBand: '₹50L–1Cr', listingPurpose: 'sale' },
+  ];
+
+  it('#2089 filter parity (anon, mobile, school-first): type=apartment narrows the list cards 2→1 with type=apartment in the URL, and the narrowing + URL survive a List→Map→List toggle', async () => {
+    mockUseAuth.mockReturnValue({ user: null, isLoading: false, isAdmin: false, isDealer: false });
+    vi.mocked(useDiscoverFilteredMarkers).mockReturnValue({
+      data: undefined, isLoading: false, isFetching: false,
+    } as unknown as ReturnType<typeof useDiscoverFilteredMarkers>);
+    vi.mocked(useSchoolRadiusListings).mockReturnValue({
+      data: { content: SCHOOL_RADIUS_CARDS, page: 0, size: 50, hasMore: false },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useSchoolRadiusListings>);
+    installMobileMatchMediaMock();
+
+    // ARM 1 (positive control, no filter): the page really renders the feed — 2 cards.
+    const unfiltered = renderAtWithProbe(SCHOOL_FIRST_URL);
+    await waitFor(() => {
+      expect(screen.getAllByTestId('listing-card')).toHaveLength(2);
+    });
+    expect(probeParams().get('type')).toBeNull();
+    unfiltered.unmount();
+
+    // ARM 2 (type=apartment): 1 card, URL keeps type=apartment, and both survive the List→Map→List toggle.
+    renderAtWithProbe(`${SCHOOL_FIRST_URL}&type=apartment`);
+    await waitFor(() => {
+      expect(screen.getAllByTestId('listing-card')).toHaveLength(1);
+    });
+    expect(probeParams().get('type')).toBe('apartment');
+
+    fireEvent.click(await screen.findByTestId('control-bar-map-trigger'));
+    await waitFor(() => {
+      expect(screen.getByTestId('mobile-map-close-list-button')).toBeInTheDocument();
+    });
+    expect(probeParams().get('type')).toBe('apartment');
+
+    fireEvent.click(screen.getByTestId('mobile-map-close-list-button'));
+    await waitFor(() => {
+      expect(screen.getAllByTestId('listing-card')).toHaveLength(1);
+    });
+    expect(probeParams().get('type')).toBe('apartment');
+  });
+
+  // #2750 PR-4 B1 T1 — issue-2089-marker-swap-fixture. The e2e spec (RR Nagar, two markers 300 m apart, 390x844)
+  // asserted: tap marker A → sheet shows A; tap marker B (NO Close) → the sheet stays open showing B, and the
+  // `listing=` URL param follows A → B. The sheet-swap half is the G3-M9 mobile `it` above (school-first, where
+  // `listing=` is deliberately NOT written — #1973); the `listing=` half is only observable in an AREA-FIRST
+  // area state (useMarkerSelection's URL-write gate), so this `it` is the area-first variant and reads ONLY the
+  // URL probe (the mock PropertyMap's marker buttons carry the listing titles too — the duplicate-text hazard
+  // behind the red :275 `it` above — so no getByText on titles). The legacy areaKey area state does not mount the
+  // mobile sheet (it is the canonical node= AREA leaf that does); the property here is the URL one: a marker-to-
+  // marker tap moves listing= and is never mistaken for a background tap that clears it.
+  it('#2089 marker swap (area-first, mobile): tapping marker A then marker B (no Close) keeps the sheet open on B and moves the URL listing= from A to B', async () => {
+    const AREA_KEY = 'IN|KA|Udupi|Manipal';
+    vi.mocked(useDiscoverAreas).mockReturnValue({
+      data: {
+        city: 'udupi',
+        areas: [
+          {
+            areaKey: AREA_KEY, name: 'Manipal', geoCenterLat: 13.34, geoCenterLon: 74.74,
+            minLat: 13.3, minLon: 74.7, maxLat: 13.38, maxLon: 74.78, listingCount: 2, schoolCount: 3,
+          },
+        ],
+      },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useDiscoverAreas>);
+    vi.mocked(useDiscoverCityListings).mockReturnValue({
+      data: {
+        city: 'udupi',
+        limitPerArea: 50,
+        areas: [{ areaKey: AREA_KEY, areaName: 'Manipal', listings: AUTH_SCHOOL_FIRST_MARKERS.map((m) => ({ ...m, title: undefined })) }],
+      },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useDiscoverCityListings>);
+    try {
+      installMobileMatchMediaMock();
+      renderAtWithProbe(
+        `/discover?city=udupi&lat=13.34000&lon=74.74000&zoom=14&journey=area-first&areaKey=${encodeURIComponent(AREA_KEY)}`,
+      );
+
+      fireEvent.click(await screen.findByTestId('control-bar-map-trigger'));
+      await waitFor(() => {
+        expect(screen.getByTestId('mobile-map-close-list-button')).toBeInTheDocument();
+        expect(capturedOnReady).toBeDefined();
+      });
+      act(() => {
+        capturedOnReady!();
+      });
+      const [markerA, markerB] = screen.getAllByTestId('property-marker');
+      expect(probeParams().get('listing')).toBeNull();
+
+      fireEvent.click(markerA);
+      await waitFor(() => {
+        expect(probeParams().get('listing')).toBe('sf-auth-1');
+      });
+
+      // Real bubbling click on B, no Close in between. If the bubbled marker click were taken for a
+      // background tap, handlePopoverDismiss would CLEAR listing= here instead of moving it to B.
+      fireEvent.click(markerB);
+      await waitFor(() => {
+        expect(probeParams().get('listing')).toBe('sf-auth-2');
+      });
+      // And it stays B (not cleared a tick later by a trailing dismiss).
+      await new Promise((r) => setTimeout(r, 50));
+      expect(probeParams().get('listing')).toBe('sf-auth-2');
+    } finally {
+      vi.mocked(useDiscoverAreas).mockReturnValue({ data: { city: 'udupi', areas: [] }, isLoading: false } as unknown as ReturnType<typeof useDiscoverAreas>);
+      vi.mocked(useDiscoverCityListings).mockReturnValue({ data: { areas: [] }, isLoading: false } as unknown as ReturnType<typeof useDiscoverCityListings>);
+    }
+  });
 });

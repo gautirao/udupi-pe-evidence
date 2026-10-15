@@ -138,4 +138,26 @@ describe('#2083 RC_A part 1 — a viewport debounce armed just before a browser 
     // "nothing writes" failure, only the viewport commit was cancelled.
     expect(result.current[0].filters.propertyTypes).toEqual(['apartment']);
   });
+
+  // #2750 PR-4 B1 T1 (issue-2674-mobile-viewport-debounce-orphan, facade half). The map unmount
+  // (DiscoverMapCanvas, mobile List<->Map toggle) is NOT a URL navigation, so neither the per-writer
+  // cancels nor the `location.key` guard above fire for it: the only thing that disarms the armed
+  // 300ms debounce is the explicit `cancelViewportCommit()` action the canvas calls on unmount.
+  it('#2674: an explicit cancelViewportCommit() after a pan disarms the debounce — no lat/lon/zoom is written 400ms later (no navigation involved)', () => {
+    const { Wrapper } = makeWrapper(['/discover?city=bangalore&node=root'], 0);
+    const { result } = renderHook(() => useDiscoverUrlState(), { wrapper: Wrapper });
+
+    act(() => {
+      result.current[1].reportViewport({ lat: 12.9, lon: 77.6, zoom: 14 });
+    });
+    // The map closes to List: the canvas's unmount cleanup calls exactly this.
+    act(() => {
+      result.current[1].cancelViewportCommit();
+    });
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+
+    expect(result.current[0].viewport).toBeNull();
+  });
 });

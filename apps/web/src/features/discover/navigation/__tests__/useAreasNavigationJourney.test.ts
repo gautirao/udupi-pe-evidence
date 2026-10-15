@@ -13,7 +13,7 @@
  *      camera hook can key its OWN fit-once guard on the TRANSITION.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
@@ -35,6 +35,7 @@ vi.mock('@/lib/api', () => ({
 
 import { useAreasNavigationJourney } from '../useAreasNavigationJourney';
 import { ApiError } from '@/lib/api';
+import { NavigationLevelPanel } from '@/components/discover/navigation/NavigationLevelPanel';
 import type { NavigationChildSummary, NavigationResolveResponseWire } from '../types';
 
 function makeClient() {
@@ -380,6 +381,62 @@ describe('useAreasNavigationJourney', () => {
     expect(result.current.children.map((c) => c.nodeKey).sort()).toEqual(
       serverChildren.map((c) => c.nodeKey).sort(),
     );
+  });
+
+  // #2750 PR-4 V3 (retires e2e issue-2086 AC12 "South-West 4 cards incl. the zero-listing leaf"):
+  // the previously-cited rows carried no zero-listing AREA child, so a filter that dropped such
+  // children left them green (MUT-451 VACUOUS). Here one AREA leaf has a real count of 0 beside
+  // two non-zero siblings, and ALL THREE must be in the child list in server order.
+  it('#2086 V3 — a zero-listing AREA leaf child stays in the child list beside non-zero siblings (not dropped)', async () => {
+    mockGet.mockImplementation(async (path: string) => {
+      if (path.includes('/navigation/resolve')) {
+        return makeResolveResponse({
+          node: {
+            nodeKey: 'd:sw',
+            nodeType: 'DIRECTION',
+            displayLabel: 'South-West Bangalore',
+            depth: 0,
+            ancestry: [],
+            nextLevelType: 'AREA',
+            children: [
+              makeChild('a:alpha', 'AREA', 1),
+              makeChild('a:empty', 'AREA', 2),
+              makeChild('a:beta', 'AREA', 3),
+            ],
+            revisionId: 1,
+          },
+        });
+      }
+      if (path.includes('/counts')) {
+        return {
+          ...makeCountsResponse(),
+          nodeKey: 'd:sw',
+          children: [
+            { nodeKey: 'a:alpha', count: 4, schoolCount: 0 },
+            { nodeKey: 'a:empty', count: 0, schoolCount: 0 },
+            { nodeKey: 'a:beta', count: 2, schoolCount: 0 },
+          ],
+        };
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const client = makeClient();
+    const { result } = renderHook(
+      () =>
+        useAreasNavigationJourney({
+          city: 'bangalore',
+          requestedNodeKey: 'd:sw',
+          onSelectNode: vi.fn(),
+        }),
+      { wrapper: wrapper(client) },
+    );
+
+    // Wait for the COUNTS to land (alpha === 4) so the zero is a real server value, not "not loaded yet".
+    await waitFor(() => expect(result.current.children.find((c) => c.nodeKey === 'a:alpha')?.listingCount).toBe(4));
+    expect(result.current.children.map((c) => c.nodeKey)).toEqual(['a:alpha', 'a:empty', 'a:beta']);
+    const empty = result.current.children.find((c) => c.nodeKey === 'a:empty');
+    expect(empty?.listingCount).toBe(0);
+    expect(empty?.isLeafArea).toBe(true);
   });
 
   it('AC2 — a sparse group whose server response returns AREA children directly (no CLUSTER level) renders straight to Areas', async () => {
@@ -855,5 +912,126 @@ describe('useAreasNavigationJourney', () => {
 
     await waitFor(() => expect(result.current.nodeCount).not.toBeNull());
     expect(result.current.nodeCount?.matchingAreaCount).toBeNull();
+  });
+});
+
+// #2750 PR-4 B1 T1 — N7 (issue-1956-pr2-atomic-transition, "stale delayed response"). The e2e spec
+// delayed /navigation/resolve for d:e, pressed Back to the root before it landed, and asserted the late
+// response never repaints the URL/panel/breadcrumb/markers. All four read the ONE resolved `node`; this
+// pins that node against an out-of-order resolve with DEFERRED promises (resolution order is the test's,
+// not the scheduler's). The resolve query is keyed by the requested node (queryKey ...city, resolveKey),
+// which is what stops a superseded node's answer from being shown as the current node.
+describe('useAreasNavigationJourney — N7: a late resolve for a superseded node never repaints the current node', () => {
+  it('while d:e is pending the hook exposes NO node (never the previous root as d:e); after Back to root the root is current and stays current when the late d:e response lands', async () => {
+    const pending = new Map<string, (v: NavigationResolveResponseWire) => void>();
+    const resolvePaths: string[] = [];
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/navigation/resolve')) {
+        const requested = new URL(path, 'http://localhost').searchParams.get('node') ?? '';
+        resolvePaths.push(requested);
+        if (requested === 'root') return Promise.resolve(makeResolveResponse());
+        return new Promise<NavigationResolveResponseWire>((resolve) => {
+          pending.set(requested, resolve);
+        });
+      }
+      if (path.includes('/counts')) return Promise.resolve(makeCountsResponse());
+      return Promise.reject(new Error(`unexpected path: ${path}`));
+    });
+    const client = makeClient();
+    const { result, rerender } = renderHook(
+      ({ requestedNodeKey }: { requestedNodeKey: string | null }) =>
+        useAreasNavigationJourney({ city: 'bangalore', requestedNodeKey, onSelectNode: vi.fn() }),
+      { wrapper: wrapper(client), initialProps: { requestedNodeKey: null as string | null } },
+    );
+
+    // Committed root (positive control: the root really resolved, so "root is current" below is not vacuous).
+    await waitFor(() => expect(result.current.node?.nodeKey).toBe('root'));
+
+    // The user clicks East Bangalore: d:e is REQUESTED but its answer is held back.
+    rerender({ requestedNodeKey: 'd:e' });
+    await waitFor(() => expect(resolvePaths).toContain('d:e'));
+    expect(pending.has('d:e')).toBe(true);
+    // While d:e is unresolved the hook must not present the cached ROOT as the node for d:e.
+    expect(result.current.node).toBeNull();
+
+    // Back to the root BEFORE d:e lands.
+    rerender({ requestedNodeKey: null });
+    await waitFor(() => expect(result.current.node?.nodeKey).toBe('root'));
+
+    // The slow d:e response finally arrives, after the user has left d:e.
+    const eastNode = {
+      ...makeResolveResponse().node,
+      nodeKey: 'd:e',
+      nodeType: 'DIRECTION' as const,
+      displayLabel: 'East Bangalore',
+      depth: 0,
+      nextLevelType: 'AREA' as const,
+      children: [],
+    };
+    pending.get('d:e')!(makeResolveResponse({ requested: 'd:e', node: eastNode }));
+    // Let the late promise settle through react-query, then assert the current node is STILL the root.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(result.current.node?.nodeKey).toBe('root');
+    expect(result.current.node?.displayLabel).toBe('Bangalore');
+  });
+});
+
+// #2750 PR-4 B1 T1 — V2 (issue-1956-pr6-composed-seam; replaces the VACUOUS MUT-440 row). The e2e spec
+// asserted no `navigation-resolution-notice` at a fresh area-first root. The earlier cited tests were the
+// INVERSE (notice present when the journey carries one) and stayed green with the notice forced on at the
+// root. This drives the REAL hook against a fresh root resolve (resolution EXACT), renders the REAL
+// NavigationLevelPanel from that hook's own result, and asserts root content visible + notice ABSENT —
+// next to a stale-node control (ANCESTOR resolution) in which the same chain DOES show the notice, so the
+// absence is a measured absence on a path that can produce the notice.
+describe('useAreasNavigationJourney → NavigationLevelPanel — V2: a fresh area-first root shows NO resolution notice', () => {
+  function renderPanelFor(requestedNodeKey: string | null) {
+    const client = makeClient();
+    const { result } = renderHook(
+      () => useAreasNavigationJourney({ city: 'bangalore', requestedNodeKey, onSelectNode: vi.fn() }),
+      { wrapper: wrapper(client) },
+    );
+    return result;
+  }
+
+  it('fresh root (EXACT): hook resolutionNotice is null and the panel shows the root with no navigation-resolution-notice; a stale requested node (ANCESTOR) on the same chain shows the notice', async () => {
+    mockGet.mockImplementation(async (path: string) => {
+      if (path.includes('/navigation/resolve')) {
+        const requested = new URL(path, 'http://localhost').searchParams.get('node') ?? 'root';
+        if (requested === 'root') return makeResolveResponse();
+        // The requested node no longer exists: the server resolves to its nearest parent.
+        return makeResolveResponse({
+          requested,
+          resolution: 'ANCESTOR',
+          node: {
+            nodeKey: 'd:n',
+            nodeType: 'DIRECTION',
+            displayLabel: 'North Bangalore',
+            depth: 0,
+            ancestry: [],
+            nextLevelType: 'AREA',
+            children: [],
+            revisionId: 1,
+          },
+        });
+      }
+      if (path.includes('/counts')) return makeCountsResponse();
+      throw new Error(`unexpected path: ${path}`);
+    });
+
+    // CONTROL (stale node): the notice IS produced and IS rendered by the same chain.
+    const staleResult = renderPanelFor('a:stale');
+    await waitFor(() => expect(staleResult.current.node?.nodeKey).toBe('d:n'));
+    expect(staleResult.current.resolutionNotice).not.toBeNull();
+    const stale = render(React.createElement(NavigationLevelPanel, { journey: staleResult.current }));
+    expect(screen.getByTestId('navigation-resolution-notice')).toBeInTheDocument();
+    stale.unmount();
+
+    // FRESH ROOT (EXACT): content present, notice absent.
+    const rootResult = renderPanelFor(null);
+    await waitFor(() => expect(rootResult.current.node?.nodeKey).toBe('root'));
+    expect(rootResult.current.resolutionNotice).toBeNull();
+    render(React.createElement(NavigationLevelPanel, { journey: rootResult.current }));
+    expect(screen.getByTestId('navigation-level-panel')).toBeInTheDocument();
+    expect(screen.queryByTestId('navigation-resolution-notice')).not.toBeInTheDocument();
   });
 });

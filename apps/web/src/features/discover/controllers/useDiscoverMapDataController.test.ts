@@ -1175,6 +1175,60 @@ describe('useDiscoverMapDataController — Issue #2480 (Return-to-scope camera r
     );
   });
 
+  // #2750 PR-4 V1 (retires e2e issue-2494 L378 "mobile control: List->Map->List->Map with NO Return:
+  // camera seq/center unchanged"). The cited "N>1 unchanged ... exactly once" `it` above never
+  // re-runs the effect with an UNCHANGED signature, so deleting the same-signature guard left it
+  // green (MUT-417/452 VACUOUS). Here the committed N>1 signature stays put while the effect's OTHER
+  // dependency (`mapData.discoverAreasData`) changes identity — the real-world trigger for a
+  // re-run without a new commit event — and no second camera intent may be published.
+  it('no spurious re-publish (#2494): re-running the effect for the SAME committed N>1 signature (areas data refreshed, no Return) publishes nothing', async () => {
+    setupAreasMock([AREA_X, AREA_Y]);
+
+    const committedNav = makeNav({
+      journey: 'area-first',
+      resultScope: {
+        active: { kind: 'AREA_SET', areaKeys: [AREA_X.areaKey, AREA_Y.areaKey] },
+        previous: null,
+      },
+    });
+    const { result, rerender } = renderHook(
+      ({ nav, purpose }: { nav: DiscoverNavContextValue; purpose: string }) =>
+        useDiscoverMapDataController({
+          ...BASE_CONTROLLER_PARAMS,
+          intentListingPurpose: purpose,
+          nav,
+          effectiveSelectedArea: null,
+          areasNavigationJourney: makeAreasNavigationJourney(),
+        }),
+      { wrapper: makeWrapper(), initialProps: { nav: committedNav, purpose: 'sale' } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.cameraIntent?.framing).toBe('overview');
+    });
+    const seqAfterCommit = result.current.cameraIntent?.seq ?? 0;
+    expect(seqAfterCommit).toBeGreaterThan(0);
+    const areasDataBefore = result.current.discoverAreasData;
+    expect(areasDataBefore?.areas.length).toBe(2);
+
+    // Same committed scope object shape, but the areas query key changes (Buy -> Rent), which yields
+    // a NEW `discoverAreasData` object and therefore re-runs the camera effect for the same signature.
+    rerender({ nav: committedNav, purpose: 'rent' });
+    await waitFor(() => {
+      expect(mockApiGet.mock.calls.some(([url]: [string]) => url.includes('purpose=rent'))).toBe(true);
+    });
+    await waitFor(() => {
+      expect(result.current.discoverAreasData).not.toBe(areasDataBefore);
+      expect(result.current.discoverAreasData?.areas.length).toBe(2);
+    });
+    // Let any (wrongly) queued publish land before asserting its absence.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+
+    expect((result.current.cameraIntent?.seq ?? 0) - seqAfterCommit).toBe(0);
+  });
+
   // Issue #2496's named coverage gap — "a mutation that arms deliverOnRemount
   // on EVERY publish (not just the intended opt-in call sites) currently
   // passes the full existing suite 33/33". The N=1 no-regression test above

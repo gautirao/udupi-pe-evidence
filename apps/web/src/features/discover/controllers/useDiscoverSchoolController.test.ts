@@ -223,4 +223,60 @@ describe('useDiscoverSchoolController (#2142 Commit 3 — moved verbatim from Ma
     expect(result.current.schoolListings).toBe(SCHOOL_LISTINGS_RESULT.schoolListings);
     expect(result.current.schoolFirstZoneSchoolCount).toBe(SCHOOL_FIRST_COUNTS_RESULT.schoolFirstZoneSchoolCount);
   });
+
+  // #2750 PR-4 (retires e2e issue-2660 "School-within-Area": header Back at the picker is rung 2 —
+  // clearSchoolPicking — never a full area dismissal). Each arm varies the two nav terms the ladder
+  // reads and asserts WHICH of the three exits ran, so a reordered or collapsed ladder cannot pass.
+  describe('handleAreaFirstBack ladder (#2660)', () => {
+    function runBack(navOverrides: Record<string, unknown>) {
+      const urlActions = { clearSchoolPicking: vi.fn(), backToSchoolPicking: vi.fn() };
+      const handleAreaBack = vi.fn();
+      const setSelectedSchool = vi.fn();
+      const { result } = renderHook(() =>
+        useDiscoverSchoolController(
+          baseParams({
+            urlActions: urlActions as never,
+            handleAreaBack,
+            setSelectedSchool,
+            nav: {
+              journey: 'area-first',
+              areaKey: null,
+              schoolId: null,
+              schoolPicking: null,
+              filters: {},
+              ...navOverrides,
+            } as never,
+          }),
+        ),
+      );
+      result.current.handleAreaFirstBack();
+      return { urlActions, handleAreaBack, setSelectedSchool };
+    }
+
+    it('rung 2: schoolPicking set and NO schoolId clears school picking only (leaf listings return), not an area dismissal', () => {
+      const { urlActions, handleAreaBack, setSelectedSchool } = runBack({ schoolPicking: 1 });
+
+      expect(urlActions.clearSchoolPicking).toHaveBeenCalledTimes(1);
+      expect(urlActions.backToSchoolPicking).not.toHaveBeenCalled();
+      expect(handleAreaBack).not.toHaveBeenCalled();
+      expect(setSelectedSchool).not.toHaveBeenCalled();
+    });
+
+    it('rung 1 wins: a selected school (schoolId) goes back to the picker (backToSchoolPicking) even while schoolPicking is also set', () => {
+      const { urlActions, handleAreaBack, setSelectedSchool } = runBack({ schoolId: 's1', schoolPicking: 1 });
+
+      expect(urlActions.backToSchoolPicking).toHaveBeenCalledTimes(1);
+      expect(urlActions.clearSchoolPicking).not.toHaveBeenCalled();
+      expect(handleAreaBack).not.toHaveBeenCalled();
+      expect(setSelectedSchool).toHaveBeenCalledWith(null);
+    });
+
+    it('rung 3 (control): neither schoolId nor schoolPicking falls through to the canonical area back', () => {
+      const { urlActions, handleAreaBack } = runBack({});
+
+      expect(handleAreaBack).toHaveBeenCalledTimes(1);
+      expect(urlActions.clearSchoolPicking).not.toHaveBeenCalled();
+      expect(urlActions.backToSchoolPicking).not.toHaveBeenCalled();
+    });
+  });
 });

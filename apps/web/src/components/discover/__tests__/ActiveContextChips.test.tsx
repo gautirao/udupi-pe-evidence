@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { ActiveContextChips } from '../ActiveContextChips';
@@ -19,6 +19,110 @@ const noOps = {
   onClearBhk: vi.fn(),
   onClearPrice: vi.fn(),
 };
+
+// ── #2750 PR-4 B1 T3 — retires e2e active-context-chips-and-badge (CHIP-5 popover) ──────────────────
+// The test titled "opens the overflow popover and shows the hidden chips, each individually clearable"
+// opens a REAL Radix Popover, which stalls the jsdom worker (15 s, timeout) and is left red,
+// untouched. The property lives in ActiveContextChips (which chips overflow, what the popover holds,
+// that each is clearable, that "Clear all" inside it closes it). These tests swap
+// `@/components/ui/popover` for a minimal context-driven stand-in mirroring the Radix contract the
+// component relies on (trigger click -> onOpenChange(!open); content only while open), via vi.doMock +
+// a dynamic import INSIDE each test, so no other test in this file sees the mock.
+// Placement: ABOVE the pre-existing describe on purpose. The real-Radix tests time out and keep running in
+// the background after being marked failed; a test that ran after them saw that residue (measured: a
+// double onClick / a missing call). Run first, these are independent of the known-red tests.
+// So these describes MUST stay above the real-Radix describes; a reorder, shuffle or sharding change can flake them.
+// Limits: the stand-in is NOT Radix coverage — no portal, focus return, Escape / outside-click dismissal or
+// `asChild` forwarding, and it drops every PopoverContent prop except data-testid (Q-RADIX stays an owner decision).
+async function importChipsWithInlinePopover() {
+  vi.resetModules();
+  vi.doMock('@/components/ui/popover', () => {
+    const Ctx = React.createContext<{ open: boolean; onOpenChange?: (o: boolean) => void }>({ open: false });
+    return {
+      Popover: ({ open, onOpenChange, children }: { open?: boolean; onOpenChange?: (o: boolean) => void; children: React.ReactNode }) =>
+        React.createElement(Ctx.Provider, { value: { open: !!open, onOpenChange } }, children),
+      PopoverTrigger: ({ children }: { children: React.ReactElement<{ onClick?: (e: unknown) => void }> }) => {
+        const ctx = React.useContext(Ctx);
+        return React.cloneElement(children, {
+          onClick: (e: unknown) => {
+            children.props.onClick?.(e);
+            ctx.onOpenChange?.(!ctx.open);
+          },
+        });
+      },
+      PopoverContent: ({ children, ...rest }: { children: React.ReactNode } & Record<string, unknown>) => {
+        const ctx = React.useContext(Ctx);
+        return ctx.open
+          ? React.createElement('div', { 'data-testid': rest['data-testid'] as string }, children)
+          : null;
+      },
+    };
+  });
+  return (await import('../ActiveContextChips')).ActiveContextChips;
+}
+
+function releaseInlinePopover() {
+  vi.doUnmock('@/components/ui/popover');
+  vi.resetModules();
+}
+
+// Five filter chips: the first four stay inline, the fifth (seller) is the single overflow chip.
+const FIVE_FILTERS: DiscoverUrlFilters = {
+  backOnMarket: true,
+  newToMarket: true,
+  reraRegistered: true,
+  readyToMove: true,
+  sellerTypes: ['owner'],
+};
+
+describe('ActiveContextChips — overflow popover (inline Popover stand-in; #2750 PR-4 B1 T3)', () => {
+  it('#2750 B1 T3 the +N popover is absent until opened, then holds ONLY the hidden chip(s), each individually clearable', async () => {
+    try {
+      const Chips = await importChipsWithInlinePopover();
+      const onClearSeller = vi.fn();
+      const onClearBoolean = vi.fn();
+      render(
+        <Chips filters={FIVE_FILTERS} {...noOps} onClearSeller={onClearSeller} onClearBoolean={onClearBoolean} />,
+      );
+
+      const trigger = screen.getByTestId('active-chips-overflow-trigger');
+      expect(trigger.textContent).toContain('+1');
+      expect(screen.queryByTestId('active-chips-overflow-popover')).not.toBeInTheDocument();
+
+      await userEvent.click(trigger);
+      const popover = screen.getByTestId('active-chips-overflow-popover');
+      // Hidden chip is inside; the four inline chips are NOT duplicated inside the popover.
+      expect(within(popover).getByRole('button', { name: /remove seller: owner/i })).toBeInTheDocument();
+      expect(within(popover).queryByTestId('chip-bool-bom')).not.toBeInTheDocument();
+      expect(within(popover).queryByTestId('chip-bool-rtm')).not.toBeInTheDocument();
+      // ...and the seller chip is not ALSO inline.
+      expect(screen.getAllByTestId('chip-seller')).toHaveLength(1);
+
+      await userEvent.click(within(popover).getByRole('button', { name: /remove seller: owner/i }));
+      expect(onClearSeller).toHaveBeenCalledTimes(1);
+      expect(onClearBoolean).not.toHaveBeenCalled();
+    } finally {
+      releaseInlinePopover();
+    }
+  });
+
+  it('#2750 B1 T3 "Clear all filters" inside the popover calls onClearAll once and closes the popover', async () => {
+    try {
+      const Chips = await importChipsWithInlinePopover();
+      const onClearAll = vi.fn();
+      render(<Chips filters={FIVE_FILTERS} {...noOps} onClearAll={onClearAll} />);
+
+      await userEvent.click(screen.getByTestId('active-chips-overflow-trigger'));
+      const popover = screen.getByTestId('active-chips-overflow-popover');
+      await userEvent.click(within(popover).getByRole('button', { name: 'Clear all filters and search' }));
+
+      expect(onClearAll).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId('active-chips-overflow-popover')).not.toBeInTheDocument();
+    } finally {
+      releaseInlinePopover();
+    }
+  });
+});
 
 describe('ActiveContextChips', () => {
   it('returns null when no dimensions are active', () => {

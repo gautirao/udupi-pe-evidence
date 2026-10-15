@@ -26,9 +26,11 @@
  */
 import type { ComponentProps } from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
+import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
+import { useDiscoverPageState } from '@/hooks/useDiscoverPageState';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FlatPropsAreasJourneyPanel } from '@/features/discover/areas-journey/testing/FlatPropsAreasJourneyPanel';
 import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
@@ -634,5 +636,135 @@ describe('DiscoverAreasJourneyPanel — AREA-leaf duplicate-fetch dedup (Issue #
     // would leave this query empty (no `.pointer-events-none.opacity-50`
     // element), since AreaSelectedPanel would see `isFetching: false`.
     expect(container.querySelector('.pointer-events-none.opacity-50')).not.toBeNull();
+  });
+});
+
+// ─── #2750 PR-4 — retires e2e issue-2660 "School-within-Area" (branch swap half) ──────────────────
+// `schoolPicking=1` at an AREA leaf is a REAL branch swap (the leaf's own listings surface is gone,
+// the schools-in-area picker is mounted in its place), and dropping the param restores the SAME
+// leaf. Both arms render the same node so only the URL flag differs.
+describe('DiscoverAreasJourneyPanel — AREA leaf <-> schools-in-area branch swap (#2660)', () => {
+  it('schoolPicking=1 swaps the leaf listings for the schools-in-area picker; without it the same leaf shows its cards', () => {
+    mockUseAuth.mockReturnValue({ user: null, isLoading: false });
+    mockUseDiscoverCityListings.mockReturnValue({
+      data: { areas: [{ areaKey: 'IN|KA|Bangalore|Manipal', listings: [makeListing()] }] },
+      isLoading: false,
+    });
+
+    // Control arm first: no schoolPicking -> the leaf listings surface, no picker.
+    const leaf = renderPanel(makeAreaLeafNode(), '/discover?city=bangalore&journey=area-first&intent=buy');
+    expect(screen.getByTestId('areas-journey-panel-listings')).toBeInTheDocument();
+    expect(screen.getByTestId('property-card-listing-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('areas-journey-panel-schools-in-area')).not.toBeInTheDocument();
+    leaf.unmount();
+
+    // schoolPicking=1: the picker REPLACES the leaf surface (not an overlay).
+    renderPanel(makeAreaLeafNode(), '/discover?city=bangalore&journey=area-first&intent=buy&schoolPicking=1');
+    expect(screen.getByTestId('areas-journey-panel-schools-in-area')).toBeInTheDocument();
+    expect(screen.queryByTestId('areas-journey-panel-listings')).not.toBeInTheDocument();
+  });
+});
+
+// ─── #2750 PR-4 — retires e2e issue-2528-back-forward-filter-sync (leaf chip paint after Back) ──
+//
+// THE PATH THIS READS. The leaf chips paint from the PAGE-level `useDiscoverPageState().filters`
+// (committed filters -> `resolveEffectiveAreaLeafFilters` -> AreaSelectedPanel `filters`), which is
+// the STALE path: it only follows the URL because `useDiscoverPageState` re-syncs it on a POP. The
+// nav-count heading reads the live `urlDiscoverFilters` instead and passed the legacy e2e even with
+// the fix mutated out, so counts are NOT the oracle here — the chip's `aria-pressed` is. Swapping
+// the chip source to `nav.filters` is also NOT a failing mutant (the URL is already correct after
+// Back); deleting the POP sync is, and that is what this `it` is mutated with.
+describe('DiscoverAreasJourneyPanel — leaf chips follow the page-level filters across a real Back (#2528)', () => {
+  type Probe = {
+    page: ReturnType<typeof useDiscoverPageState>;
+    urlActions: ReturnType<typeof useDiscoverUrlState>[1];
+    navigate: ReturnType<typeof useNavigate>;
+    location: ReturnType<typeof useLocation>;
+    navigationType: ReturnType<typeof useNavigationType>;
+  };
+
+  function BackForwardHarness({ probe }: { probe: { current: Probe | null } }) {
+    const [urlState, urlActions] = useDiscoverUrlState();
+    const page = useDiscoverPageState({ urlState, urlActions });
+    const navigate = useNavigate();
+    const location = useLocation();
+    const navigationType = useNavigationType();
+    probe.current = { page, urlActions, navigate, location, navigationType };
+    return (
+      <DiscoverProvider>
+        <AreaSetDraftProvider>
+          <FlatPropsAreasJourneyPanel
+            journey={makeJourney({
+              node: makeAreaLeafNode(),
+              nodeCount: { listingCount: 1, schoolCount: 0, matchingAreaCount: null },
+              children: [],
+            })}
+            buildNodeHref={NOOP_BUILD_HREF}
+            areaLeafFilters={page.filters}
+            onAreaLeafFiltersChange={page.handleFiltersChange}
+          />
+        </AreaSetDraftProvider>
+      </DiscoverProvider>
+    );
+  }
+
+  it('Apartments chip is pressed after the click and UNPRESSED after a real Back to the unfiltered entry (chip reads page.filters)', () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mockUseAuth.mockReturnValue({ user: null, isLoading: false });
+      mockUseDiscoverCityListings.mockReturnValue({
+        data: { areas: [{ areaKey: 'IN|KA|Bangalore|Manipal', listings: [makeListing()] }] },
+        isLoading: false,
+      });
+      const probe: { current: Probe | null } = { current: null };
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/discover?city=bangalore&journey=area-first&intent=buy']}>
+            <BackForwardHarness probe={probe} />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      const entryA = probe.current!.location.key;
+
+      // Entry B: a PUSH, the history boundary the defect shows up across.
+      act(() => {
+        probe.current!.urlActions.selectArea('IN|KA|Bangalore|Manipal', {
+          kind: 'AREA_SET',
+          areaKeys: ['IN|KA|Bangalore|Manipal'],
+        });
+      });
+      expect(probe.current!.navigationType).toBe('PUSH');
+      expect(screen.getByTestId('quick-chip-apartment')).toHaveAttribute('aria-pressed', 'false');
+
+      // Refine on entry B (debounced REPLACE: mutates entry B, creates no entry).
+      fireEvent.click(screen.getByTestId('quick-chip-apartment'));
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      expect(new URLSearchParams(probe.current!.location.search).get('type')).toBe('apartment');
+      expect(screen.getByTestId('quick-chip-apartment')).toHaveAttribute('aria-pressed', 'true');
+
+      // BACK: a genuine traversal of the already-mounted tree onto the very entry we started from.
+      act(() => {
+        probe.current!.navigate(-1);
+      });
+      expect(probe.current!.navigationType).toBe('POP');
+      expect(probe.current!.location.key).toBe(entryA);
+      expect(new URLSearchParams(probe.current!.location.search).has('type')).toBe(false);
+
+      // THE DEFECT: the URL is unfiltered, yet (pre-fix) the chip kept painting the old selection.
+      expect(screen.getByTestId('quick-chip-apartment')).toHaveAttribute('aria-pressed', 'false');
+      expect(probe.current!.page.filters.propertyTypes).toBeUndefined();
+
+      // FORWARD restores the refinement and the chip with it.
+      act(() => {
+        probe.current!.navigate(1);
+      });
+      expect(probe.current!.navigationType).toBe('POP');
+      expect(screen.getByTestId('quick-chip-apartment')).toHaveAttribute('aria-pressed', 'true');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

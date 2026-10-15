@@ -152,3 +152,78 @@ describe('G2 school selection is a history PUSH and keeps board/category (#2750 
     expect(now.get('schoolId')).toBe('sch-1');
   });
 });
+
+// ─── #2750 PR-4 — retires e2e issue-2660-area-leaf-drilldown "School-within-Area" (URL half) ───────
+// Real history (3 entries so a PUSH and a REPLACE land on different entries after `navigate(-1)`).
+// NOTE the source contract: ENTERING school picking is a PUSH (school.ts enterSchoolPicking — "Back
+// returns to area-selected"), LEAVING it is a single REPLACE (clearSchoolPicking). The asserted
+// property is the part the e2e relies on: `node`/`journey`/filters survive both writes untouched, and
+// leaving removes ONLY `schoolPicking`.
+describe('school picking enter/exit URL writes at an AREA leaf (#2750 PR-4 / #2660)', () => {
+  const LANDING = '/discover?city=udupi';
+  const NODE = 'a:IN|KA|Udupi|Manipal';
+  const LEAF = `/discover?city=udupi&journey=area-first&node=${encodeURIComponent(NODE)}&type=apartment`;
+
+  function renderAt(entries: string[]) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const Wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        React.createElement(MemoryRouter, { initialEntries: entries, initialIndex: entries.length - 1 }, children),
+      );
+    return renderHook(
+      () => ({ url: useDiscoverUrlState(), navigate: useNavigate(), location: useLocation() }),
+      { wrapper: Wrapper },
+    );
+  }
+  const params = (r: { current: { location: { search: string } } }) =>
+    new URLSearchParams(r.current.location.search);
+
+  it('enterSchoolPicking adds schoolPicking=1 with node/journey/filters preserved, as ONE new history entry (Back returns to the same leaf)', () => {
+    const { result } = renderAt([LANDING, LEAF]);
+    expect(params(result).get('node')).toBe(NODE);
+    expect(params(result).has('schoolPicking')).toBe(false);
+
+    act(() => {
+      result.current.url[1].enterSchoolPicking();
+    });
+    const picking = params(result);
+    expect(picking.get('schoolPicking')).toBe('1');
+    expect(picking.get('node')).toBe(NODE);
+    expect(picking.get('journey')).toBe('area-first');
+    expect(picking.get('type')).toBe('apartment');
+
+    // Exactly one entry was added: Back lands on the LEAF (not on LANDING, which a REPLACE would give).
+    act(() => {
+      result.current.navigate(-1);
+    });
+    const back = params(result);
+    expect(back.get('node')).toBe(NODE);
+    expect(back.has('schoolPicking')).toBe(false);
+  });
+
+  it('clearSchoolPicking removes ONLY schoolPicking (node/journey/filters kept) as a single REPLACE (no new entry)', () => {
+    const { result } = renderAt([LANDING, `${LEAF}&schoolPicking=1`]);
+    expect(params(result).get('schoolPicking')).toBe('1');
+
+    act(() => {
+      result.current.url[1].clearSchoolPicking();
+    });
+    const cleared = params(result);
+    expect(cleared.has('schoolPicking')).toBe(false);
+    expect(cleared.get('node')).toBe(NODE);
+    expect(cleared.get('journey')).toBe('area-first');
+    expect(cleared.get('type')).toBe('apartment');
+    expect(cleared.get('city')).toBe('udupi');
+
+    // A REPLACE rewrote the picking entry in place, so Back goes straight to LANDING. (A PUSH would
+    // leave the `schoolPicking=1` entry one step back.)
+    act(() => {
+      result.current.navigate(-1);
+    });
+    const back = params(result);
+    expect(back.has('node')).toBe(false);
+    expect(back.has('schoolPicking')).toBe(false);
+  });
+});

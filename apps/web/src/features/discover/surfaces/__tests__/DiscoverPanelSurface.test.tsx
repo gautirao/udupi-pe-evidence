@@ -1578,3 +1578,64 @@ describe('DiscoverPanelSurface — group-focus panel (Issue #2213)', () => {
     expect(selectGroupMemberArea).toHaveBeenCalledWith('IN|KA|Bangalore|HSR');
   });
 });
+
+/**
+ * #2750 PR-4 B1 T1 — N9 (issue-1956-pr6-absence-discipline, `journey=school-first` + `groupId=`).
+ * The e2e spec's property is EXCLUSIVITY ("exactly one primary right-panel surface, never both, never
+ * neither"), not which surface — and its expectation (legacy `discover-right-panel` sole) is stale since
+ * #2213: a resolved group now pre-empts every journey branch with AreaGroupFocusPanel. This pins the
+ * CURRENT behaviour for that shape with a SUM over every primary-surface testid the router can mount,
+ * so a regression that mounts a second surface (or none) fails regardless of which one it is.
+ */
+describe('DiscoverPanelSurface — N9: journey=school-first + a resolved groupId mounts exactly one primary surface', () => {
+  const FOCUSED_GROUP = {
+    id: 'south-premium',
+    name: 'South Premium',
+    subtitle: null,
+    region_label: null,
+    school_count: 0,
+    area_keys: ['IN|KA|Bangalore|Koramangala'],
+  };
+  // The four top-level surfaces DiscoverPanelSurface can return (one testid each).
+  const PRIMARY_SURFACE_TESTIDS = [
+    'area-group-focus-panel',
+    'discover-areas-journey-panel-shell',
+    'discover-schools-journey-panel-shell',
+    'discover-right-panel-mock',
+  ] as const;
+  const surfaceCounts = () =>
+    Object.fromEntries(PRIMARY_SURFACE_TESTIDS.map((id) => [id, screen.queryAllByTestId(id).length]));
+
+  beforeEach(() => {
+    BASE_URL_STATE.journey = 'school-first';
+    BASE_URL_STATE.groupId = 'south-premium';
+  });
+
+  afterEach(() => {
+    BASE_URL_STATE.journey = null;
+    BASE_URL_STATE.groupId = null;
+    BASE_URL_STATE.areaKey = null;
+    BASE_URL_STATE.node = null;
+  });
+
+  it('school-first + groupId (group resolved, no area): the sum over every primary-surface testid is exactly 1, and that one is the group-focus panel', () => {
+    render(
+      <MemoryRouter>
+        <DiscoverPanelSurfaceHarness
+          {...baseProps({
+            resolvedPanelContent: 'area-groups-landing',
+            selectedArea: null,
+            focusedGroup: FOCUSED_GROUP,
+          })}
+        />
+      </MemoryRouter>,
+    );
+
+    const counts = surfaceCounts();
+    expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(1);
+    expect(counts['area-group-focus-panel']).toBe(1);
+    // Positive control for the counter itself: it reads real DOM (the group's own heading is rendered),
+    // so a sum of 1 is a measured 1, not a counter that can only ever return 0 or 1.
+    expect(screen.getByTestId('area-group-focus-heading')).toHaveTextContent('South Premium');
+  });
+});

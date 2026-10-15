@@ -27,7 +27,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
@@ -134,5 +134,138 @@ describe('applyNodeDelta — BR5 end-to-end through the real useDiscoverUrlState
     expect(result.current.location.search).not.toContain(CLUSTER_FOCUS_PARAM);
     const params = new URLSearchParams(result.current.location.search);
     expect(params.get('node')).toBe('root');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #2750 PR-4 B1 T1 — destination tests that retire four e2e/discover specs:
+//   N1a  issue-1956-pr2-filters-survive-navigation
+//   N1   issue-1956-pr2-guarded-hierarchy-back + issue-1956-pr6-canonical-back-rehome
+//   N2   issue-1956-pr6-journey-switch-conversion
+// N1 and N2 drive a REAL react-router history (`useNavigate()(-1/1)` over the REAL
+// `useDiscoverUrlState` facade writers) — a counting spy on `setUrlParams` cannot tell PUSH from
+// REPLACE where it matters (what Back actually lands on), and a hand-simulated `history.state.idx`
+// (HierarchyBackButton.test.tsx) cannot tell the writer's own mode.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function renderFacadeWithNavigate(initialUrl: string) {
+  return renderHook(
+    () => ({ urlState: useDiscoverUrlState(), location: useLocation(), navigate: useNavigate() }),
+    { wrapper: wrapper(initialUrl) },
+  );
+}
+
+const DIRECTION_NODE_KEY = 'd:central';
+
+describe('#2750 N1a — a node hop never drops the intent filter (issue-1956-pr2-filters-survive-navigation)', () => {
+  const START = `/discover?city=bangalore&intent=rent&node=${encodeURIComponent(DIRECTION_NODE_KEY)}`;
+
+  it('goToNode (City→Direction→Area), goToAncestorNode (breadcrumb hop) and buildNodeHrefFromParams all keep intent=rent', () => {
+    const { result } = renderFacadeWithNavigate(START);
+    // Precondition (positive control): the START url really carries intent=rent — a delete('intent')
+    // in the delta can only be seen if the starting URL has one.
+    expect(new URLSearchParams(result.current.location.search).get('intent')).toBe('rent');
+
+    act(() => {
+      result.current.urlState[1].goToNode(AREA_NODE_KEY);
+    });
+    let params = new URLSearchParams(result.current.location.search);
+    expect(params.get('node')).toBe(AREA_NODE_KEY);
+    expect(params.get('intent')).toBe('rent');
+
+    act(() => {
+      result.current.urlState[1].goToAncestorNode(DIRECTION_NODE_KEY);
+    });
+    params = new URLSearchParams(result.current.location.search);
+    expect(params.get('node')).toBe(DIRECTION_NODE_KEY);
+    expect(params.get('intent')).toBe('rent');
+
+    // The copy-link / middle-click affordance shares the same delta.
+    const href = buildNodeHrefFromParams(new URLSearchParams(result.current.location.search), AREA_NODE_KEY);
+    expect(new URLSearchParams(href!.slice(1)).get('intent')).toBe('rent');
+  });
+});
+
+describe('#2750 N1 — real native Back/Forward over the real goToNode writer (guarded-hierarchy-back + canonical-back-rehome)', () => {
+  const nodeOf = (search: string) => new URLSearchParams(search).get('node');
+
+  it('City→Direction→Area then Back×2 yields [AREA, D, null] (Back from Area lands on the DIRECTION — not the Area, not null); Forward×2 restores', () => {
+    const { result } = renderFacadeWithNavigate('/discover?city=bangalore');
+    expect(nodeOf(result.current.location.search)).toBeNull();
+
+    act(() => {
+      result.current.urlState[1].goToNode(DIRECTION_NODE_KEY);
+    });
+    act(() => {
+      result.current.urlState[1].goToNode(AREA_NODE_KEY);
+    });
+
+    const seen: Array<string | null> = [nodeOf(result.current.location.search)];
+    act(() => {
+      result.current.navigate(-1);
+    });
+    seen.push(nodeOf(result.current.location.search));
+    // The canonical-back-rehome property in isolation: ONE Back from the Area leaf is the Direction.
+    expect(seen[1]).toBe(DIRECTION_NODE_KEY);
+    act(() => {
+      result.current.navigate(-1);
+    });
+    seen.push(nodeOf(result.current.location.search));
+    expect(seen).toEqual([AREA_NODE_KEY, DIRECTION_NODE_KEY, null]);
+
+    // Forward ×2 restores the whole chain, in order (a REPLACE writer would have no entries to return to).
+    act(() => {
+      result.current.navigate(1);
+    });
+    expect(nodeOf(result.current.location.search)).toBe(DIRECTION_NODE_KEY);
+    act(() => {
+      result.current.navigate(1);
+    });
+    expect(nodeOf(result.current.location.search)).toBe(AREA_NODE_KEY);
+  });
+});
+
+describe('#2750 N2 — entering the Areas journey from a legacy URL is ONE atomic PUSH; Back restores the exact legacy URL (issue-1956-pr6-journey-switch-conversion)', () => {
+  const LEGACY_AREA_KEY = 'IN|KA|Bengaluru|Basaveshwara Nagar';
+  const LEGACY_URL =
+    `/discover?city=bangalore&scope=west&groupId=west-fixture-group&areaKey=${encodeURIComponent(LEGACY_AREA_KEY)}`;
+
+  it('from scope/groupId/areaKey: groupId + areaKey are cleared and journey=area-first&node= set in ONE entry; navigate(-1) restores groupId/areaKey and drops journey/node', () => {
+    const { result } = renderFacadeWithNavigate(LEGACY_URL);
+    const before = new URLSearchParams(result.current.location.search);
+    // Precondition (positive control): the START url carries every legacy param the writer must clear.
+    expect(before.get('groupId')).toBe('west-fixture-group');
+    expect(before.get('areaKey')).toBe(LEGACY_AREA_KEY);
+    expect(before.get('scope')).toBe('west');
+    expect(before.get('journey')).toBeNull();
+    expect(before.get('node')).toBeNull();
+
+    act(() => {
+      result.current.urlState[1].enterAreasJourney(AREA_NODE_KEY);
+    });
+    const after = new URLSearchParams(result.current.location.search);
+    expect(after.get('journey')).toBe('area-first');
+    expect(after.get('node')).toBe(AREA_NODE_KEY);
+    expect(after.get('groupId')).toBeNull();
+    expect(after.get('areaKey')).toBeNull();
+
+    // ONE history entry for the whole conversion: a single Back is the exact legacy URL.
+    act(() => {
+      result.current.navigate(-1);
+    });
+    const back = new URLSearchParams(result.current.location.search);
+    expect(back.get('groupId')).toBe('west-fixture-group');
+    expect(back.get('areaKey')).toBe(LEGACY_AREA_KEY);
+    expect(back.get('scope')).toBe('west');
+    expect(back.get('journey')).toBeNull();
+    expect(back.get('node')).toBeNull();
+
+    // And Forward returns to the converted state (the entry was a PUSH, not overwritten).
+    act(() => {
+      result.current.navigate(1);
+    });
+    const fwd = new URLSearchParams(result.current.location.search);
+    expect(fwd.get('journey')).toBe('area-first');
+    expect(fwd.get('node')).toBe(AREA_NODE_KEY);
   });
 });

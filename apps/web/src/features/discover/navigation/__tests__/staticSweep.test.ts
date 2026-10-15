@@ -588,3 +588,95 @@ function walkTypeScript(dir: string, acc: string[] = []): string[] {
   }
   return acc;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #2750 PR-4 B1 T1 — N8 (issue-1956-pr6-absence-discipline, "deleted panels never render").
+// The e2e spec asserted, in a live browser, that none of 26 former testids of the three DELETED
+// legacy Areas panels (AreaGroupsLandingPanel / AreaGroupResultsPanel / AreaGroupSelectedPanel)
+// has a DOM match on any entry URL. The lower-level equivalent is "no production module can emit one":
+// a testid that appears nowhere in production source cannot appear in the DOM. The permanence block
+// above only proves nothing IMPORTS the three panel modules; it does not prove the testids can't be
+// emitted by other code. Source: git show 1bd4ae0^:src/components/discover/panels/{AreaGroupsLandingPanel,
+// AreaGroupResultsPanel,AreaGroupSelectedPanel}.tsx (as the e2e spec's own header records).
+// ─────────────────────────────────────────────────────────────────────────────
+const DELETED_PANEL_TESTIDS = [
+  // AreaGroupsLandingPanel
+  'area-groups-intro',
+  'area-groups-loading',
+  'area-groups-list',
+  'area-group-level2',
+  'area-group-invalid-message',
+  'macro-region-filter-banner',
+  'clear-scope-button',
+  'region-scoped-groups-loading',
+  'region-scoped-groups-error',
+  'region-scoped-groups-retry-btn',
+  'group-card-area-names',
+  // AreaGroupResultsPanel
+  'area-group-results-header',
+  'area-group-results-back',
+  'area-group-results-count',
+  'area-group-results-anon-banner',
+  'area-group-results-anon-signin',
+  'area-group-results-body',
+  'area-group-results-no-areas',
+  'area-group-results-error',
+  'area-group-results-empty',
+  // AreaGroupSelectedPanel
+  'area-group-breadcrumb',
+  'area-group-back-to-all',
+  'area-group-back-to-region',
+  'area-marker-shown-of-total-note',
+  'area-group-selected-card',
+  'area-group-view-all',
+];
+
+/** The deleted testids that appear as a WHOLE quoted/backticked literal in the code part of `source`. */
+function deletedTestidLiterals(source: string): string[] {
+  const code = stripComments(source);
+  return DELETED_PANEL_TESTIDS.filter((id) =>
+    new RegExp(`(['"\`])${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\1`).test(code),
+  );
+}
+
+function isProductionSource(file: string): boolean {
+  const rel = path.relative(SRC_ROOT, file).split(path.sep).join('/');
+  return (
+    !/(^|\/)(__tests__|testing|test)\//.test(rel) &&
+    !/\.(test|spec)\.tsx?$/.test(rel) &&
+    !/\.d\.ts$/.test(rel) &&
+    !/(^|\/)setupTests?\.ts$/.test(rel)
+  );
+}
+
+describe('#2750 N8 — no production module emits any of the 26 deleted-panel testids (issue-1956-pr6-absence-discipline)', () => {
+  const PRODUCTION_FILES = walkTypeScript(SRC_ROOT).filter(isProductionSource);
+
+  it('POSITIVE CONTROL — the sweep corpus is the real production tree (non-empty, includes the router and a known panel), and the detector flags EVERY one of the 26 testids when planted', () => {
+    expect(DELETED_PANEL_TESTIDS).toHaveLength(26);
+    expect(new Set(DELETED_PANEL_TESTIDS).size).toBe(26);
+
+    expect(PRODUCTION_FILES.length).toBeGreaterThan(300);
+    const rels = PRODUCTION_FILES.map((f) => path.relative(SRC_ROOT, f).split(path.sep).join('/'));
+    expect(rels).toContain('features/discover/surfaces/DiscoverPanelSurface.tsx');
+    expect(rels.some((r) => r.includes('__tests__/'))).toBe(false);
+
+    // Planted: a synthetic production file that DOES emit all 26, in three quoting styles.
+    const planted = DELETED_PANEL_TESTIDS.map((id, i) =>
+      i % 3 === 0 ? `<div data-testid="${id}" />` : i % 3 === 1 ? `<div data-testid={'${id}'} />` : `const t = \`${id}\`;`,
+    ).join('\n');
+    expect(deletedTestidLiterals(planted)).toEqual(DELETED_PANEL_TESTIDS);
+    // A COMMENT mention is prose, not emission (comments are stripped), and a longer id is not a match.
+    expect(deletedTestidLiterals('// data-testid="area-groups-intro"')).toEqual([]);
+    expect(deletedTestidLiterals('<div data-testid="area-groups-intro-extended" />')).toEqual([]);
+  });
+
+  it('no file under src/ (production, non-test) contains any deleted-panel testid as a string literal', () => {
+    const offenders = PRODUCTION_FILES.flatMap((file) =>
+      deletedTestidLiterals(fs.readFileSync(file, 'utf8')).map(
+        (id) => `${path.relative(SRC_ROOT, file).split(path.sep).join('/')}: ${id}`,
+      ),
+    );
+    expect(offenders).toEqual([]);
+  });
+});

@@ -13,7 +13,8 @@
  * `onSelectAreaKey` are covered here directly against the real component.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import type { SchoolsNavigationJourneyPanelProps } from '@/features/discover/views/SchoolsNavigationJourneyPanel';
@@ -153,5 +154,78 @@ describe('SchoolFirstJourneyPanel onSelectAreaKey', () => {
     expect(selectArea).not.toHaveBeenCalled();
     expect(goToNodeAndClearSchoolSelection).not.toHaveBeenCalled();
     expect(handleAreaSelect).not.toHaveBeenCalled();
+  });
+});
+
+// #2750 PR-4 — retires e2e issue-2142-hierarchy-back-direction-root (school-first arm, spec L60-75).
+// The suite above stubs SchoolsNavigationJourneyPanel, so it cannot see whether the school-first panel
+// MOUNTS the hierarchy Back control. This `it` swaps in the REAL panel (file-scoped mocks above stay
+// for every other `it`) and queries ONLY inside the school-first panel container, because
+// `areas-hierarchy-back` is the same testid the Areas-journey panel renders.
+describe('SchoolFirstJourneyPanel — hierarchy Back control (#2142)', () => {
+  it('a top-level DIRECTION with empty ancestry mounts "Back to Bangalore" inside the school-first panel; the city root mounts none', async () => {
+    vi.resetModules();
+    vi.doUnmock('@/features/discover/views/SchoolsNavigationJourneyPanel');
+    vi.doMock('@/features/discover/context/useDiscoverContext', () => ({
+      useDiscoverActions: () => ({}),
+      useDiscoverViewport: () => null,
+    }));
+    vi.doMock('@/hooks/useSchoolSearch', () => ({
+      useSchoolSearch: () => ({ isLoading: false, data: [] }),
+    }));
+    const { SchoolFirstJourneyPanel: RealPanel } = await import('../SchoolFirstJourneyPanel');
+
+    const directionJourney = {
+      ...makeJourney([]),
+      node: {
+        nodeKey: 'd:central',
+        nodeType: 'DIRECTION',
+        displayLabel: 'Central Bangalore',
+        depth: 0,
+        // The live server shape for a top-level Direction: EMPTY ancestry (it is NOT the city root).
+        ancestry: [],
+        nextLevelType: 'AREA',
+        children: [],
+        revisionId: 1,
+      } as never,
+    } as UseAreasNavigationJourneyResult;
+    const rootJourney = {
+      ...makeJourney([]),
+      node: {
+        nodeKey: 'root',
+        nodeType: 'ROOT',
+        displayLabel: 'Bangalore',
+        depth: -1,
+        ancestry: [],
+        nextLevelType: 'DIRECTION',
+        children: [],
+        revisionId: 1,
+      } as never,
+    } as UseAreasNavigationJourneyResult;
+
+    const direction = makeProps({ areasNavigationJourney: directionJourney });
+    direction.commands.pageContext.actions.buildNodeHref = vi.fn((k: string) => `/discover?node=${k}`);
+    const { unmount } = render(
+      <MemoryRouter>
+        <RealPanel view={direction.view} commands={direction.commands} />
+      </MemoryRouter>,
+    );
+
+    const panel = screen.getByTestId('schools-journey-panel');
+    const back = within(panel).getByTestId('areas-hierarchy-back');
+    expect(back).toHaveTextContent('Back to Bangalore');
+    expect(back).toHaveAttribute('href', '/discover?node=root');
+    unmount();
+
+    // Control arm: the city root has no parent, so the same panel must mount NO Back control there.
+    const root = makeProps({ areasNavigationJourney: rootJourney });
+    root.commands.pageContext.actions.buildNodeHref = vi.fn((k: string) => `/discover?node=${k}`);
+    render(
+      <MemoryRouter>
+        <RealPanel view={root.view} commands={root.commands} />
+      </MemoryRouter>,
+    );
+    const rootPanel = screen.getByTestId('schools-journey-panel');
+    expect(within(rootPanel).queryByTestId('areas-hierarchy-back')).toBeNull();
   });
 });

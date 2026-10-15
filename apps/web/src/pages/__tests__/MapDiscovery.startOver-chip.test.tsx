@@ -189,3 +189,44 @@ describe('Issue #1153 — Start Over clears ActiveContextChips', () => {
     });
   });
 });
+
+// ── #2750 PR-4 B1 T3 — retires e2e active-context-chips-and-badge (CHIP-1 chip, CHIP-2 chip) ────────
+// The BHK test above proves the chip strip renders a cold-loaded URL filter for the BHK axis only.
+// The e2e asserted the PROPERTY-TYPE axis: a cold-loaded `type=apartment` renders `chip-type`
+// labelled "Apartment", at area scope (CHIP-1) and at group-only scope (CHIP-2). Same page harness,
+// same URL-seeded path; the type axis has its own branch in ActiveContextChips. The harness mocks
+// DiscoverRightPanel, which is the chip host only for the legacy  shell (the
+// canonical area-first shell hosts its chips inside the journey panel); the chip strip and its
+// type branch are the same component either way. CAVEAT recorded in the T3 evidence: this harness
+// mounts the mocked panel only once an AREA is selected, so the group scope is exercised as
+// group+area (the e2e URL), not group-only; a group-only page mount is not reachable here.
+describe('#2750 B1 T3 — cold-loaded type filter renders the Apartment chip', () => {
+  beforeEach(() => {
+    mockUseAuth.mockReturnValue({ user: null, isLoading: false, isAdmin: false, isDealer: false });
+  });
+
+  it('#2750 B1 T3 area scope: cold-load type=apartment renders chip-type "Apartment" beside the BHK chip, and no type chip without the param', async () => {
+    const base = '/discover?city=udupi&journey=school-first&areaKey=' + encodeURIComponent(KUNJIBETTU_AREA_KEY) + '&beds=2';
+    const first = renderAt(base + '&type=apartment');
+
+    const typeChip = await screen.findByTestId('chip-type');
+    expect(typeChip).toHaveTextContent('Apartment');
+    // Same strip, other axis present: proves the strip rendered at all (not a blank page).
+    expect(screen.getByTestId('chip-bhk')).toHaveTextContent('2 BHK');
+    first.unmount();
+
+    // Control arm: identical URL minus `type` -> the strip still renders (BHK) but there is no type chip.
+    renderAt(base);
+    expect(await screen.findByTestId('chip-bhk')).toBeInTheDocument();
+    expect(screen.queryByTestId('chip-type')).not.toBeInTheDocument();
+  });
+
+  it('#2750 B1 T3 group scope in the URL: cold-load groupId + areaKey + type=apartment renders chip-type "Apartment"', async () => {
+    renderAt('/discover?city=udupi&journey=school-first&groupId=coastal-strip&areaKey=' + encodeURIComponent(KUNJIBETTU_AREA_KEY) + '&type=apartment');
+
+    const typeChip = await screen.findByTestId('chip-type');
+    expect(typeChip).toHaveTextContent('Apartment');
+    // Scope is never a chip (AC2): the group id must not leak into the chip strip as text.
+    expect(screen.getByTestId('active-context-chips')).not.toHaveTextContent(/coastal/i);
+  });
+});
