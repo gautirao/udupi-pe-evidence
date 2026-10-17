@@ -183,4 +183,24 @@ class SavedListingsRepositoryIT {
         List<UUID> ids = savedListingRepository.findListingIdsByUserId(userId);
         assertThat(ids).containsExactly(listingId);
     }
+
+    @Test
+    @DisplayName("#2750 PILOT SH-8: after user A unsaves, the /ids hydration query no longer returns the listing for A but still does for B")
+    void idsHydration_excludesDeletedId_forThatUserOnly() {
+        UUID userA = UUID.randomUUID();
+        UUID userB = UUID.randomUUID();
+        UUID listingId = seedListing();
+
+        savedListingRepository.saveAndFlush(newSavedListing(userA, listingId));
+        savedListingRepository.saveAndFlush(newSavedListing(userB, listingId));
+        // Precondition: both users hydrate the id before the delete.
+        assertThat(savedListingRepository.findListingIdsByUserId(userA)).containsExactly(listingId);
+        assertThat(savedListingRepository.findListingIdsByUserId(userB)).containsExactly(listingId);
+
+        long deleted = savedListingRepository.deleteByUserIdAndListingId(userA, listingId);
+
+        assertThat(deleted).isEqualTo(1);
+        assertThat(savedListingRepository.findListingIdsByUserId(userA)).doesNotContain(listingId).isEmpty();
+        assertThat(savedListingRepository.findListingIdsByUserId(userB)).containsExactly(listingId);
+    }
 }

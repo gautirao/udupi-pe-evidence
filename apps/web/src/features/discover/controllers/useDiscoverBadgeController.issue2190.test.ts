@@ -313,4 +313,44 @@ describe('useDiscoverBadgeController — issue #2190 badge denominator', () => {
     expect(loading.result.current.discoverBadge.state).toBe('loading');
     expect(loading.result.current.discoverBadge.n).toBeNull();
   });
+
+  // ── #2750 PILOT N1 — retires e2e/discover/school-badge-suppression.spec.ts SBS-1 (controller arm) ──
+  // Anon + school radius active + ZERO radius results, while the area/city have inventory. The badge
+  // must stay VISIBLE at 0 (genuine empty), never fall back to the area (9 filtered / 18 total) or
+  // city (36) figure. The flag is DERIVED from filters, not typed as a literal.
+  it('#2750 PILOT SBS-1: anon school-radius with zero results keeps the badge visible at 0 (zero-empty), never the area/city figure; hidden while the radius query loads', () => {
+    const radiusFilters = { schoolLat: 13.05, schoolLon: 77.65, schoolRadiusKm: 3 };
+    const common = {
+      effectiveSelectedArea: null,
+      discoverAreas: THREE_AREAS,
+      areaListings: makeFilteredListings(9),
+      filters: radiusFilters,
+      isAuthenticated: false,
+      schoolListings: [] as DiscoverCityListingItem[],
+      schoolRadiusListings: [] as never,
+    };
+    const settled = renderHook(() => useDiscoverBadgeController(baseParams(common)));
+
+    // Preconditions: the radius is active (derived from filters) and the competing figures are > 0
+    // and different from the radius count, so a leak from any other scope would be visible.
+    expect(settled.result.current.schoolRadiusActive).toBe(true);
+    expect(settled.result.current.cityTotal).toBe(36);
+    expect(common.areaListings.length).toBe(9);
+
+    const badge = settled.result.current.discoverBadge;
+    expect(badge.visible).toBe(true);
+    expect(badge.state).toBe('zero-empty');
+    expect(badge.count).toBe(0);
+    expect(badge.n).toBe(0);
+    expect(badge.m).toBe(0);
+    expect([9, 18, 25, 36]).not.toContain(badge.count);
+
+    // Discrimination arm: while the anon radius query is in flight the badge hides (no "0" flash).
+    const loading = renderHook(() =>
+      useDiscoverBadgeController(baseParams({ ...common, schoolRadiusListingsLoading: true })),
+    );
+    expect(loading.result.current.discoverBadge.visible).toBe(false);
+    expect(loading.result.current.discoverBadge.state).toBe('loading');
+    expect(loading.result.current.discoverBadge.count).toBeNull();
+  });
 });

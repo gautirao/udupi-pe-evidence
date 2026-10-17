@@ -40,7 +40,7 @@ are or will be asserted (planned destinations are in the manifest).
 | Candidate journey | Supported now? | Existing canonical proof | Legacy proof | Cross-stack risk/value | Decision |
 |---|---|---|---|---|---|
 | Booking lifecycle | YES (`/my-bookings`, `/broker/bookings`) | T16, T17 (buyer side only) | `journey/booking-journey.spec.ts` (UB1-UB3) | HIGH | ADD CANONICAL: T17b (broker sees the same booking). Duplicate-booking validation stays lower-layer. |
-| Saved Homes | YES (`/saved-homes`) | NONE | `saved-homes.spec.ts` | HIGH/MED | ADD CANONICAL: T21 (save, reload, list, unsave) |
+| Saved Homes | YES (`/saved-homes`) | NONE | `saved-homes.spec.ts` (retired in the #2750 pilot; proof is now T21 plus the SH-8 lower-layer tests, see e2e-retirement-map-pilot.md#saved-homes) | HIGH/MED | ADD CANONICAL: T21 (save, reload, list, unsave) |
 | Broker edit/rework | YES (`/broker/listings/:id/edit`) | T13 creates only | `broker-listing-form.spec.ts` | HIGH/MED | ADD CANONICAL: T22 (edit one deterministic field, read back). Rejection -> resubmit: MOVE LOWER (backend state machine IT, manifest row `listing-rejection-resubmit.spec.ts`); the owner may override via Q2. |
 | Agricultural create -> LIVE | YES (`/broker/listings/new/agricultural`) | T8, T9 are discovery over seeded data | `broker-agri-listing.spec.ts` | HIGH | ADD CANONICAL: AG1-AG3 (create/submit, approve, agri discovery membership) |
 | Auth return-to | YES | T2 (Discover returnTo), T1/T3 | `auth-journey-1509.spec.ts`, `journey/anon-teaser.spec.ts` | MED | ADD CANONICAL: T2b (gated non-Discover route -> /auth -> back, unlocked) |
