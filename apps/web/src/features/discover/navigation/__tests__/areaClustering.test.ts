@@ -139,6 +139,24 @@ describe('clusterAreaMembers', () => {
     expect(result.clusters).toHaveLength(2);
   });
 
+  // #2750 PR-5 cluster-N3 — cell size. UPPER side + the `cellSizePx` option only: the LOWER side of the
+  // 64 px default is unobservable (cells smaller than the 172x140 card footprint are re-merged by footprint
+  // overlap, so the final clusters are footprint-overlap components whatever the default), hence not asserted.
+  it('cell size: members ~300 px apart stay singles by default and group once cellSizePx is enlarged', () => {
+    const members = [
+      member({ areaKey: 'far-a', lat: 13.0, lon: 77.6 }),
+      member({ areaKey: 'far-b', lat: 13.0, lon: 77.9 }), // 300 px east at this projection: beyond the 172 px footprint
+    ];
+    const byDefault = clusterAreaMembers(members, project, 12);
+    expect(byDefault.clusters).toHaveLength(2);
+    expect(byDefault.clusters.map((c) => c.members.length)).toEqual([1, 1]);
+
+    // Same members, same zoom: only the cellSizePx option changes, and both now share one 600 px cell.
+    const enlarged = clusterAreaMembers(members, project, 12, { cellSizePx: 600 });
+    expect(enlarged.clusters).toHaveLength(1);
+    expect(enlarged.clusters[0].members.map((m) => m.areaKey)).toEqual(['far-a', 'far-b']);
+  });
+
   it('omits a member with a null centroid, siblings still render', () => {
     const good = member({ areaKey: 'good', lat: 13.0, lon: 77.6 });
     const bad = member({ areaKey: 'bad', lat: null as unknown as number, lon: 77.6 });

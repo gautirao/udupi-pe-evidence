@@ -226,6 +226,48 @@ describe('useDiscoverNavigationController (#2142 Commit 3 — moved verbatim fro
     expect(result.current.setFocusedClusterMemberAreaKeys).toBe(CLUSTER_FOCUS_RESULT.setClusterFocus);
   });
 
+  // #2750 PR-5 2015-N18 (issue-2015-search-this-area-viewport "back-out guard", e2e L471-496): a node= deep link to a
+  // resolved AREA leaf auto-commits AREA_SET ONLY when no scope is committed; an explicit scope restored from a shared
+  // URL (here VIEWPORT, rscope=vp) must never be clobbered. The `active: null` arm in the SAME it proves the effect is
+  // live (so the not-called arm cannot pass because the effect never ran).
+  it('an AREA leaf node= deep link with an already-active rscope=vp is not auto-committed to AREA_SET (and with no scope it is, once, as REPLACE)', () => {
+    mockUseAreasNavigationJourney.mockReturnValue({ ...NODE_JOURNEY_RESULT, node: RESOLVED_AREA_NODE });
+    const viewportScope = { kind: 'VIEWPORT' as const, bounds: { s: 12.9, w: 77.5, n: 13.0, e: 77.6 } };
+
+    const guarded = vi.fn();
+    const withScope = renderHook(() =>
+      useDiscoverNavigationController({
+        nav: makeNav({ journey: 'area-first', resultScope: { active: viewportScope, previous: null } }),
+        goToNode: vi.fn(),
+        goToNodeReplacingCurrent: vi.fn(),
+        intentListingPurpose: 'sale',
+        commitResultScope: guarded,
+      }),
+    );
+    // The resolved AREA leaf is live for this nav, so the effect really evaluated the guard.
+    expect(withScope.result.current.isNodeAreaLeafActive).toBe(true);
+    expect(guarded).not.toHaveBeenCalled();
+    withScope.unmount();
+
+    // Control arm: same node, no committed scope -> exactly one AREA_SET commit, as a REPLACE.
+    const control = vi.fn();
+    const noScope = renderHook(() =>
+      useDiscoverNavigationController({
+        nav: makeNav({ journey: 'area-first', resultScope: { active: null, previous: null } }),
+        goToNode: vi.fn(),
+        goToNodeReplacingCurrent: vi.fn(),
+        intentListingPurpose: 'sale',
+        commitResultScope: control,
+      }),
+    );
+    expect(noScope.result.current.isNodeAreaLeafActive).toBe(true);
+    expect(control).toHaveBeenCalledTimes(1);
+    expect(control).toHaveBeenCalledWith(
+      { kind: 'AREA_SET', areaKeys: ['IN|KA|Udupi|Manipal'] },
+      { history: 'replace' },
+    );
+  });
+
   // Static guard (code-reviewer flag on the Commit 1-3 gate): the params
   // interface only ever accepts `goToNode` (a single narrow callback), never
   // the full `DiscoverUrlActions` bundle from useDiscoverActions(). This is

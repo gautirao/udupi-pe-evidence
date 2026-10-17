@@ -129,6 +129,44 @@ describe('resolveMarkerListings', () => {
     expect(result).toBe(markerListings);
   });
 
+  // #2750 PR-5 2193-N1 [SEC] — with NO area, markers are withheld at/below the area-layer max zoom and
+  // returned above it, and an anonymous viewer never gets them. NON-EMPTY markerListings throughout: with
+  // an empty array the tail `return markerListings` is also [], which made the legacy zoom check vacuous.
+  it('with no area, markers are withheld at or below the area-layer max zoom, returned above it, and never given to anon', () => {
+    const noArea = { selectedArea: null, isGroupResultsState: false, isNodeListingsState: false } as const;
+
+    // AUTHED arm: at the threshold and well below it -> [] even though 3 markers are available.
+    const authedAtMax = makeMarkers(3);
+    expect(
+      resolveMarkerListings(
+        baseInput({ ...noArea, isAuthenticated: true, mapZoom: AREA_LAYER_MAX_ZOOM, markerListings: authedAtMax }),
+      ),
+    ).toEqual([]);
+    const authedLow = makeMarkers(3);
+    expect(
+      resolveMarkerListings(
+        baseInput({ ...noArea, isAuthenticated: true, mapZoom: 3, markerListings: authedLow }),
+      ),
+    ).toEqual([]);
+
+    // Positive control (same authed fixture shape): one zoom step above the threshold returns the SAME array.
+    const authedAbove = makeMarkers(3);
+    expect(
+      resolveMarkerListings(
+        baseInput({ ...noArea, isAuthenticated: true, mapZoom: AREA_LAYER_MAX_ZOOM + 1, markerListings: authedAbove }),
+      ),
+    ).toBe(authedAbove);
+
+    // ANON arm: explicit isAuthenticated:false, zoom above the threshold (so the zoom gate is not what hides
+    // them), non-empty markerListings -> the tail's auth gate must still return [].
+    const anonMarkers = makeMarkers(3);
+    expect(
+      resolveMarkerListings(
+        baseInput({ ...noArea, isAuthenticated: false, mapZoom: AREA_LAYER_MAX_ZOOM + 1, markerListings: anonMarkers }),
+      ),
+    ).toEqual([]);
+  });
+
   describe('FIX-1 group-scope (L3267)', () => {
     it('isGroupResultsState returns groupResultsMarkers, never the city-wide markerListings', () => {
       const groupResultsMarkers = makeMarkers(2);

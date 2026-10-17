@@ -190,4 +190,52 @@ describe('getOrCreateSessionId', () => {
     // We only check the no-throw guarantee here — result depends on jsdom state.
     expect(typeof result === 'string' || result === null).toBe(true);
   });
+
+  // #2750 PR-5 1531-N2 — the session id must come from the REAL crypto.randomUUID (RFC-4122 v4),
+  // not a weak Math.random id. The file-level beforeEach stubs crypto with a non-UUID, so this it
+  // unstubs first to expose the real implementation.
+  it('1531-N2: getOrCreateSessionId returns an RFC-4122 v4 UUID from the real crypto.randomUUID and reuses it', () => {
+    vi.unstubAllGlobals();
+    expect(typeof crypto.randomUUID).toBe('function');
+    sessionStorage.removeItem(SESSION_KEY);
+
+    const id = getOrCreateSessionId();
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    expect(sessionStorage.getItem(SESSION_KEY)).toBe(id);
+    // Reused on the next call (same tab = same id).
+    expect(getOrCreateSessionId()).toBe(id);
+  });
+});
+
+// #2750 PR-5 1531-N6 — fail-closed when localStorage THROWS. A jsdom Storage spy never intercepts
+// (C4/GS6 use mockImplementationOnce on the real Storage), so this uses a real throwing stub via
+// vi.stubGlobal and asserts the stub was actually reached.
+describe('consent util fail-closed on throwing storage (stubGlobal)', () => {
+  it('1531-N6: storage that throws fails closed: not consented and getConsentState is undecided', () => {
+    const throwingGetItem = vi.fn((): string | null => {
+      throw new Error('SecurityError: storage access denied');
+    });
+    vi.stubGlobal('localStorage', {
+      getItem: throwingGetItem,
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    });
+
+    expect(isTelemetryConsented()).toBe(false);
+    expect(getConsentState()).toBe('undecided');
+    // The catch branch really ran: both calls reached the throwing stub.
+    expect(throwingGetItem).toHaveBeenCalledTimes(2);
+    expect(throwingGetItem).toHaveBeenCalledWith(CONSENT_KEY);
+
+    // Control arm: the stub IS honoured (a stub returning 'granted' flips both answers).
+    const grantedGetItem = vi.fn((): string | null => 'granted');
+    vi.stubGlobal('localStorage', {
+      getItem: grantedGetItem,
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    });
+    expect(isTelemetryConsented()).toBe(true);
+    expect(getConsentState()).toBe('granted');
+    expect(grantedGetItem).toHaveBeenCalledTimes(2);
+  });
 });

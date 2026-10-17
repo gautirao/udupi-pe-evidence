@@ -5,6 +5,9 @@ import React from 'react';
 import type { DiscoverUrlState, DiscoverUrlActions } from '@/hooks/useDiscoverUrlState';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
 import { CITY_CONFIG } from '@/lib/localityUtils';
+import { MemoryRouter, useLocation } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
 
 /**
  * Issue #1953 build step 5 — DiscoverControlBar (city + Buy/Rent + area
@@ -98,15 +101,28 @@ let currentIsMobileShell = false;
 // re-deriving it from `nav`. Settable here so tests can drive it directly.
 let currentCanonicalScopeLabel: string | null = null;
 
-vi.mock('@/features/discover/context/useDiscoverContext', () => ({
-  useDiscoverNav: () => currentNav,
-  useDiscoverActions: () => ACTIONS,
-  useDiscoverShell: () => ({
-    isMobileShell: currentIsMobileShell,
-    canonicalScopeLabel: currentCanonicalScopeLabel,
-    setCanonicalScopeLabel: () => {},
-  }),
-}));
+// #2750 PR-5 review-fix r3 (Codex P2 4292420356, discover-city-switch) — when `useLiveContext` is
+// true the three hooks delegate to the REAL context hooks, so one `it` can mount the real
+// <DiscoverProvider> (real useDiscoverUrlState + MemoryRouter) around the real control. Every other
+// `it` leaves it false and sees exactly the mocks below.
+let useLiveContext = false;
+
+vi.mock('@/features/discover/context/useDiscoverContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/discover/context/useDiscoverContext')>();
+  return {
+    ...actual,
+    useDiscoverNav: () => (useLiveContext ? actual.useDiscoverNav() : currentNav),
+    useDiscoverActions: () => (useLiveContext ? actual.useDiscoverActions() : ACTIONS),
+    useDiscoverShell: () =>
+      useLiveContext
+        ? actual.useDiscoverShell()
+        : {
+            isMobileShell: currentIsMobileShell,
+            canonicalScopeLabel: currentCanonicalScopeLabel,
+            setCanonicalScopeLabel: () => {},
+          },
+  };
+});
 
 const AREAS: DiscoverArea[] = [
   {
@@ -175,6 +191,7 @@ describe('DiscoverControlBar', () => {
     currentNav = BASE_NAV;
     currentIsMobileShell = false;
     currentCanonicalScopeLabel = null;
+    useLiveContext = false;
     mockResolveIsPending = false;
     mockUseDiscoverAreas.mockReturnValue({ data: { city: 'bangalore', areas: AREAS } });
   });
@@ -218,6 +235,63 @@ describe('DiscoverControlBar', () => {
       await user.click(screen.getByTestId('control-bar-city-option-bangalore'));
 
       expect(ACTIONS.changeCity).not.toHaveBeenCalled();
+    });
+
+    // #2750 PR-5 city-switch-N1 — the trigger label is derived from the URL city, not a fixed default.
+    // (The city listbox is a plain portaled <ul role="listbox">, not a Radix Popover/Select: D13 does not apply.)
+    it('the city control shows the URL city (Udupi), not a fixed default', () => {
+      currentNav = { ...BASE_NAV, city: 'udupi' };
+      render(<DiscoverControlBar />);
+
+      expect(screen.getByRole('button', { name: /udupi/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /bangalore/i })).not.toBeInTheDocument();
+    });
+
+    // #2750 PR-5 city-switch-N2
+    it("choosing Mangalore calls changeCity('mangalore') exactly once", async () => {
+      const user = userEvent.setup();
+      render(<DiscoverControlBar />);
+      await user.click(screen.getByRole('button', { name: /bangalore/i }));
+      await user.click(screen.getByTestId('control-bar-city-option-mangalore'));
+
+      expect(ACTIONS.changeCity).toHaveBeenCalledTimes(1);
+      expect(ACTIONS.changeCity).toHaveBeenCalledWith('mangalore');
+      expect(ACTIONS.setCity).not.toHaveBeenCalled();
+    });
+
+    // #2750 PR-5 review-fix r3 (Codex P2 4292420356) — the COMPOSED path option -> real facade/provider
+    // -> URL -> re-rendered control. No mocked changeCity, no mocked nav: the real <DiscoverProvider>
+    // (useDiscoverUrlState over a MemoryRouter) feeds the real control, and a location probe reads the URL.
+    it('composed: clicking Mangalore through the REAL DiscoverProvider writes ?city=mangalore, drops a stale areaKey, and the control re-renders as Mangalore', async () => {
+      useLiveContext = true;
+      const user = userEvent.setup();
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      function LocationProbe() {
+        const loc = useLocation();
+        return <output data-testid="probe-search">{loc.search}</output>;
+      }
+      render(
+        <QueryClientProvider client={qc}>
+          <MemoryRouter initialEntries={['/discover?city=udupi&areaKey=IN%7CKA%7CUdupi%7CManipal']}>
+            <DiscoverProvider>
+              <DiscoverControlBar />
+              <LocationProbe />
+            </DiscoverProvider>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      expect(screen.getByRole('button', { name: /udupi/i })).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /udupi/i }));
+      await user.click(screen.getByTestId('control-bar-city-option-mangalore'));
+
+      await waitFor(() => {
+        expect(new URLSearchParams(screen.getByTestId('probe-search').textContent ?? '').get('city')).toBe('mangalore');
+      });
+      const finalParams = new URLSearchParams(screen.getByTestId('probe-search').textContent ?? '');
+      expect(finalParams.getAll('areaKey')).toHaveLength(0);
+      expect(screen.getByRole('button', { name: /mangalore/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /udupi/i })).not.toBeInTheDocument();
     });
 
     it('sanity: the 3 declared coming-soon cities are disabled; everything else is active', () => {

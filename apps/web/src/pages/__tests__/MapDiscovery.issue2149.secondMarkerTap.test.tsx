@@ -26,7 +26,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act, fireEvent, within } from '@testing-library/react';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import React from 'react';
 import MapDiscovery from '../MapDiscovery';
 import { DiscoverProvider } from '@/features/discover/context/DiscoverContext';
@@ -62,16 +62,24 @@ vi.mock('@/components/map/PropertyMap', () => ({
       onSelectListing,
       onMarkerClickWithPosition,
       onReady,
+      selectedListingId,
     }: {
       onSelectListing?: (listing: PropertyListingWithImages | null) => void;
       onMarkerClickWithPosition?: (pos: { x: number; y: number }) => void;
       onReady?: () => void;
+      selectedListingId?: string | null;
     }) => {
       capturedOnReady = onReady;
       return (
         <div data-testid="property-map-mock">
           {mockMarkerListings.map((listing) => (
-            <div key={listing.id} data-listing-id={listing.id}>
+            // #2750 PR-5 review-fix r2 (C3): forward the URL-driven selection the way the real
+            // MarkerClusterLayer marks `.property-marker--selected`, so a cold ?listing= link can assert the highlight.
+            <div
+              key={listing.id}
+              data-listing-id={listing.id}
+              data-selected={selectedListingId === listing.id ? 'true' : undefined}
+            >
               <button
                 type="button"
                 data-testid="property-marker"
@@ -564,5 +572,233 @@ describe('#2149 repro — second marker tap in mobile school-first Map mode', ()
       vi.mocked(useDiscoverAreas).mockReturnValue({ data: { city: 'udupi', areas: [] }, isLoading: false } as unknown as ReturnType<typeof useDiscoverAreas>);
       vi.mocked(useDiscoverCityListings).mockReturnValue({ data: { areas: [] }, isLoading: false } as unknown as ReturnType<typeof useDiscoverCityListings>);
     }
+  });
+
+  // #2750 PR-5 B1 T3 — discover-1939-listing-peek-url-restore (AC1/AC2/AC3/AC4/AC9, F1, F3 A -> delayed B).
+  // Real MemoryRouter + Routes (a real /listing/:id route so "View details" UNMOUNTS MapDiscovery) + real
+  // DiscoverProvider; Back/Forward are the router's own navigate(-1)/navigate(1), never a prop call. Desktop
+  // (no mobile matchMedia), area-first on Manipal, authed. The popover is addressed by its own testid and
+  // read with within(): the mock PropertyMap's marker buttons carry the same titles (the duplicate-text hazard).
+  describe('#2750 PR-5 T3 1939 listing peek URL restore', () => {
+    const MANIPAL = 'IN|KA|Udupi|Manipal';
+    const TITLE_A = 'Peek Home A';
+    const TITLE_B = 'Peek Home B';
+    const baseCityListing = (id: string, title: string, lat: number, lon: number) =>
+      ({ id, title, lat, lon, propertyType: 'apartment', pricePaise: 5_000_000_00, locality: 'Manipal' });
+    const LISTING_A = baseCityListing('peek-a', TITLE_A, 13.34, 74.74);
+    const LISTING_B = baseCityListing('peek-b', TITLE_B, 13.341, 74.741);
+
+    let probeNavigate: ReturnType<typeof useNavigate> | undefined;
+    let probeLocation: ReturnType<typeof useLocation> | undefined;
+    function RouterProbe() {
+      probeNavigate = useNavigate();
+      probeLocation = useLocation();
+      return null;
+    }
+    const probeSearch = () => new URLSearchParams(probeLocation?.search ?? '');
+
+    function provideMarkers(listings: ReturnType<typeof baseCityListing>[]) {
+      vi.mocked(useDiscoverAreas).mockReturnValue({
+        data: {
+          city: 'udupi',
+          areas: [
+            {
+              areaKey: MANIPAL, name: 'Manipal', geoCenterLat: 13.34, geoCenterLon: 74.74,
+              minLat: 13.3, minLon: 74.7, maxLat: 13.38, maxLon: 74.78, listingCount: listings.length, schoolCount: 3,
+            },
+          ],
+        },
+        isLoading: false,
+      } as unknown as ReturnType<typeof useDiscoverAreas>);
+      vi.mocked(useDiscoverCityListings).mockReturnValue({
+        data: { city: 'udupi', limitPerArea: 50, areas: [{ areaKey: MANIPAL, areaName: 'Manipal', listings }] },
+        isLoading: false,
+        isError: false,
+      } as unknown as ReturnType<typeof useDiscoverCityListings>);
+      mockMarkerListings = listings.map((l) => makeListing(l.id, l.title));
+    }
+    const peekUrl = (listingId?: string) =>
+      `/discover?city=udupi&lat=13.34000&lon=74.74000&zoom=14&journey=area-first&areaKey=${encodeURIComponent(MANIPAL)}${
+        listingId ? `&listing=${listingId}` : ''
+      }`;
+    const treeAt = (url: string) => (
+      <QueryClientProvider client={peekQC}>
+        <MemoryRouter initialEntries={[url]}>
+          <RouterProbe />
+          <Routes>
+            <Route path="/listing/:id" element={<div data-testid="listing-detail-stub" />} />
+            <Route path="*" element={<DiscoverProvider><MapDiscovery /></DiscoverProvider>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    let peekQC: QueryClient;
+    const markReady = async () => {
+      await waitFor(() => {
+        expect(capturedOnReady).toBeDefined();
+      });
+      act(() => {
+        capturedOnReady!();
+      });
+    };
+    const popoverCard = () => screen.getByTestId('marker-popover-card');
+
+    beforeEach(() => {
+      peekQC = makeQC();
+      probeNavigate = undefined;
+      probeLocation = undefined;
+      provideMarkers([LISTING_A]);
+    });
+    afterEach(() => {
+      vi.mocked(useDiscoverAreas).mockReturnValue({ data: { city: 'udupi', areas: [] }, isLoading: false } as unknown as ReturnType<typeof useDiscoverAreas>);
+      vi.mocked(useDiscoverCityListings).mockReturnValue({ data: { areas: [] }, isLoading: false } as unknown as ReturnType<typeof useDiscoverCityListings>);
+    });
+
+    // #2750 PR-5 1939-N1
+    it('cold deep link ?listing=<id> hydrates the marker popover (dialog + title) and writes no other URL param', async () => {
+      const cold = render(treeAt(peekUrl('peek-a')));
+      await markReady();
+
+      const card = await screen.findByTestId('marker-popover-card');
+      expect(card).toHaveAttribute('role', 'dialog');
+      expect(card).toHaveTextContent(TITLE_A);
+
+      // C3 (Codex r2): the retired AC1/AC2 also required the SELECTED-MARKER highlight on the cold link — the URL id
+      // reaches the map as selectedListingId (DiscoverMapCanvas.tsx:1018), so the marker wrapper is data-selected.
+      expect(document.querySelector('[data-listing-id="peek-a"]')).toHaveAttribute('data-selected', 'true');
+
+      // AC9 (tripwire): hydration writes NOTHING — the unrelated params are exactly what the cold URL carried
+      // and the history entry is the one the router started on ('default': location.key never changed).
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const params = probeSearch();
+      expect(params.get('city')).toBe('udupi');
+      expect(params.get('journey')).toBe('area-first');
+      expect(params.get('areaKey')).toBe(MANIPAL);
+      expect(params.get('listing')).toBe('peek-a');
+      expect(probeLocation?.key).toBe('default');
+
+      // Control arm (same mount shape WITHOUT listing=): the marker is on the map but no popover is hydrated.
+      cold.unmount();
+      render(treeAt(peekUrl()));
+      await markReady();
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(screen.getAllByTestId('property-marker')).toHaveLength(1);
+      expect(screen.queryByTestId('marker-popover-card')).not.toBeInTheDocument();
+      expect(document.querySelector('[data-listing-id="peek-a"]')).not.toHaveAttribute('data-selected');
+    });
+
+    // #2750 PR-5 review-fix r3 sweep (composed X path): the retired AC6 "X closes the card and removes listing=".
+    // The hook (useMarkerSelection) and the URL facade were each proven alone; this drives the REAL popover X button
+    // through the page wiring (popover -> handlePopoverDismiss -> clearSelectedListing -> router URL -> popover gone).
+    it('the popover X button closes the card, removes listing= from the URL and clears the marker highlight (real router)', async () => {
+      render(treeAt(peekUrl('peek-a')));
+      await markReady();
+      expect(await screen.findByTestId('marker-popover-card')).toHaveTextContent(TITLE_A);
+      expect(probeSearch().get('listing')).toBe('peek-a');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Close property preview' }));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('marker-popover-card')).not.toBeInTheDocument();
+      });
+      expect(probeSearch().has('listing')).toBe(false);
+      expect(probeSearch().get('city')).toBe('udupi');
+      expect(probeSearch().get('areaKey')).toBe(MANIPAL);
+      expect(document.querySelector('[data-listing-id="peek-a"]')).not.toHaveAttribute('data-selected');
+    });
+
+    // #2750 PR-5 1939-N2
+    it('View details -> Back reopens the popover and restores listing=; Forward then Back reopens it again (real router)', async () => {
+      render(treeAt(peekUrl()));
+      await markReady();
+
+      fireEvent.click(screen.getAllByTestId('property-marker')[0]);
+      await waitFor(() => {
+        expect(probeSearch().get('listing')).toBe('peek-a');
+      });
+      fireEvent.click(within(await screen.findByTestId('marker-popover-card')).getByTestId('popover-view-details'));
+
+      // View details is a real PUSH to /listing/:id: MapDiscovery (and its popover) UNMOUNTS.
+      await screen.findByTestId('listing-detail-stub');
+      expect(probeLocation?.pathname).toBe('/listing/peek-a');
+      expect(screen.queryByTestId('marker-popover-card')).not.toBeInTheDocument();
+
+      // Back: MapDiscovery re-mounts cold on the URL that names listing=peek-a.
+      act(() => {
+        probeNavigate!(-1);
+      });
+      await waitFor(() => {
+        expect(probeLocation?.pathname).toBe('/discover');
+      });
+      expect(probeSearch().get('listing')).toBe('peek-a');
+      await markReady();
+      expect(await screen.findByTestId('marker-popover-card')).toHaveTextContent(TITLE_A);
+
+      // Forward -> the detail route again; Back a SECOND time -> the popover reopens a second time.
+      act(() => {
+        probeNavigate!(1);
+      });
+      await screen.findByTestId('listing-detail-stub');
+      expect(probeLocation?.pathname).toBe('/listing/peek-a');
+      act(() => {
+        probeNavigate!(-1);
+      });
+      await waitFor(() => {
+        expect(probeLocation?.pathname).toBe('/discover');
+      });
+      expect(probeSearch().get('listing')).toBe('peek-a');
+      await markReady();
+      expect(await screen.findByTestId('marker-popover-card')).toHaveTextContent(TITLE_A);
+
+      // F1 leg: from the open popover, Back removes listing= and CLOSES it; Forward restores listing= and REOPENS it.
+      act(() => {
+        probeNavigate!(-1);
+      });
+      await waitFor(() => {
+        expect(probeSearch().get('listing')).toBeNull();
+      });
+      await waitFor(() => {
+        expect(screen.queryByTestId('marker-popover-card')).not.toBeInTheDocument();
+      });
+      act(() => {
+        probeNavigate!(1);
+      });
+      await waitFor(() => {
+        expect(probeSearch().get('listing')).toBe('peek-a');
+      });
+      expect(await screen.findByTestId('marker-popover-card')).toHaveTextContent(TITLE_A);
+    });
+
+    // #2750 PR-5 1939-N3
+    it('in-app switch from open A to a not-yet-resolvable B closes A, keeps listing=B, then opens B (title B, never A)', async () => {
+      const view = render(treeAt(peekUrl('peek-a')));
+      await markReady();
+      expect(await screen.findByTestId('marker-popover-card')).toHaveTextContent(TITLE_A);
+
+      // In-app transition (client-side, the popover for A is live in memory) to B, which the marker set cannot resolve yet.
+      act(() => {
+        probeNavigate!(peekUrl('peek-b'));
+      });
+      await waitFor(() => {
+        expect(probeSearch().get('listing')).toBe('peek-b');
+      });
+      // A's card closes promptly and no card is shown for the unresolvable B; the URL keeps B.
+      await waitFor(() => {
+        expect(screen.queryByTestId('marker-popover-card')).not.toBeInTheDocument();
+      });
+      expect(probeSearch().get('listing')).toBe('peek-b');
+
+      // B's marker data lands.
+      provideMarkers([LISTING_A, LISTING_B]);
+      view.rerender(treeAt(peekUrl('peek-b')));
+      const cardB = await screen.findByTestId('marker-popover-card');
+      expect(cardB).toHaveTextContent(TITLE_B);
+      expect(within(cardB).queryByText(TITLE_A)).not.toBeInTheDocument();
+      expect(probeSearch().get('listing')).toBe('peek-b');
+    });
   });
 });

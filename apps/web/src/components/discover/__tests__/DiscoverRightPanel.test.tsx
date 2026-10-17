@@ -14,6 +14,7 @@ import { AreaSetDraftProvider } from '@/features/discover/state/AreaSetDraftCont
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { AnonViewportListingItem } from '@/lib/anonViewportListing';
+import { discoverKey } from '@/features/discover/state/DiscoverDataSourceContext';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
@@ -1455,5 +1456,116 @@ describe('DiscoverRightPanel — PANEL_OPEN mount lifetime across journey switch
 
     rerender(fullTreeFor(client, <DiscoverRightPanel {...baseProps} panelContent="guided-entry" areas={[]} city="udupi" />));
     expect(mockEmitPanelOpen).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── #2750 PR-5 B1 T3 2017-N12 — multi-area committed set: the header count IS the rendered card count ───
+// issue-2017-multi-area-areaset-commit-regression (L147-163): after "Show listings" on an AREA_SET the heading's
+// number must agree with the cards under it. The per-area metadata `listingCount` (24 + 5 = 29 here, lifetime/unfiltered)
+// is deliberately NOT the filtered result the shopper sees (3 cards), so a header that sums the metadata would disagree.
+// Real DiscoverProvider (committed scope read from the URL) + real AreaSelectedPanel/AreaSetSelectedExtras; only the
+// areas query payload is seeded into the QueryClient cache so the area NAMES resolve exactly as in production.
+describe('DiscoverRightPanel — multi-area committed set header count (#2750 PR-5 2017-N12)', () => {
+  const KEY_A = 'IN|KA|Bengaluru|JP Nagar';
+  const KEY_B = 'IN|KA|Bengaluru|Jayanagar';
+  const areaA = makeArea(KEY_A, 'JP Nagar', 24);
+  const areaB = makeArea(KEY_B, 'Jayanagar', 5);
+  const filteredCards: DiscoverCityListingItem[] = [
+    { id: 'ms-1', pricePaise: 4_000_000_00, propertyType: 'apartment', locality: 'JP Nagar', primaryImageUrl: null },
+    { id: 'ms-2', pricePaise: 4_500_000_00, propertyType: 'apartment', locality: 'JP Nagar', primaryImageUrl: null },
+    { id: 'ms-3', pricePaise: 5_000_000_00, propertyType: 'apartment', locality: 'Jayanagar', primaryImageUrl: null },
+  ];
+
+  function seededClient() {
+    const client = makeTestQueryClient();
+    client.setQueryData(discoverKey({ mode: 'live' } as Parameters<typeof discoverKey>[0], 'discover-areas', 'bangalore'), {
+      city: 'bangalore',
+      areas: [
+        { areaKey: KEY_A, name: 'JP Nagar', geoCenterLat: 12.9, geoCenterLon: 77.58, listingCount: 24, schoolCount: 3 },
+        { areaKey: KEY_B, name: 'Jayanagar', geoCenterLat: 12.93, geoCenterLon: 77.58, listingCount: 5, schoolCount: 2 },
+      ],
+    });
+    return client;
+  }
+  const urlFor = (areaKeys: string[]) =>
+    `/discover?city=bangalore&journey=area-first&areaKey=${encodeURIComponent(areaKeys[0])}&rscope=areas&rareas=${encodeURIComponent(
+      areaKeys.join(','),
+    )}`;
+  const headerNumber = () => screen.getByTestId('area-header-count').querySelector('p')?.textContent?.trim();
+
+  // #2750 PR-5 2017-N12
+  it('multi-area committed set: area-header-count equals the number of rendered listing cards', () => {
+    const multi = renderWithProviders(
+      <DiscoverProvider>
+        <AreaSetDraftProvider>
+          <DiscoverRightPanel
+            {...baseProps}
+            panelContent="area-selected"
+            areas={[areaA, areaB]}
+            selectedArea={areaA}
+            areaListings={filteredCards}
+            isLoadingListings={false}
+            isAuthenticated
+            journey="area-first"
+            city="bangalore"
+          />
+        </AreaSetDraftProvider>
+      </DiscoverProvider>,
+      { route: urlFor([KEY_A, KEY_B]), queryClient: seededClient() },
+    );
+
+    // It really is the multi-area committed header (names resolved from the seeded areas payload).
+    expect(screen.getByTestId('area-set-heading')).toHaveTextContent('JP Nagar');
+    expect(screen.getByTestId('area-set-heading')).toHaveTextContent('Jayanagar');
+    const cards = screen.getAllByTestId('listing-card');
+    expect(cards).toHaveLength(3);
+    // The header number is the filtered result (3), never the metadata sum (24 + 5 = 29).
+    expect(headerNumber()).toBe(String(cards.length));
+    expect(headerNumber()).not.toBe('29');
+    multi.unmount();
+
+    // Control: while listings are loading the count node is not rendered at all (no stale/summed number).
+    const loading = renderWithProviders(
+      <DiscoverProvider>
+        <AreaSetDraftProvider>
+          <DiscoverRightPanel
+            {...baseProps}
+            panelContent="area-selected"
+            areas={[areaA, areaB]}
+            selectedArea={areaA}
+            areaListings={[]}
+            isLoadingListings
+            isAuthenticated
+            journey="area-first"
+            city="bangalore"
+          />
+        </AreaSetDraftProvider>
+      </DiscoverProvider>,
+      { route: urlFor([KEY_A, KEY_B]), queryClient: seededClient() },
+    );
+    expect(screen.queryByTestId('area-header-count')).not.toBeInTheDocument();
+    loading.unmount();
+
+    // Control: a SINGLE selected area on the same fixture shows the same filtered number.
+    renderWithProviders(
+      <DiscoverProvider>
+        <AreaSetDraftProvider>
+          <DiscoverRightPanel
+            {...baseProps}
+            panelContent="area-selected"
+            areas={[areaA]}
+            selectedArea={areaA}
+            areaListings={filteredCards}
+            isLoadingListings={false}
+            isAuthenticated
+            journey="area-first"
+            city="bangalore"
+          />
+        </AreaSetDraftProvider>
+      </DiscoverProvider>,
+      { route: `/discover?city=bangalore&journey=area-first&areaKey=${encodeURIComponent(KEY_A)}`, queryClient: seededClient() },
+    );
+    expect(screen.getAllByTestId('listing-card')).toHaveLength(3);
+    expect(headerNumber()).toBe('3');
   });
 });

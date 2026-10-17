@@ -4,13 +4,19 @@
  * router harness and are exercised by the hook-level/component-level specs;
  * this file covers the domain's pure param algebra.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
+import React from 'react';
+import { MemoryRouter, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import {
   CLUSTER_FOCUS_PARAM,
   MAX_CLUSTER_FOCUS_KEYS,
   readClusterFocusParam,
   clearClusterFocusParam,
   applyClusterFocusDelta,
+  useClusterFocusUrlParam,
 } from '../clusterFocus';
 import { isWritableNodeKey } from '../navigation';
 import { AVALAHALLI_CLUSTER_MEMBER_AREA_KEYS } from '@/features/discover/navigation/__fixtures__/candidateNavigationTree';
@@ -151,5 +157,102 @@ describe('clusterFocus — BR7: excluded from hierarchy static-sweep scope', () 
     const path = new URL(import.meta.url).pathname;
     expect(path).toContain('/state/url/');
     expect(path).not.toContain('/navigation/__tests__/');
+  });
+});
+
+// ─── #2750 PR-5 B1 T2 destination tests (BR3 / BR4 history behaviour, real router) ───
+// Rows: cluster-N1 (select REPLACEs: Back skips it), cluster-N2 (replace then push then Back).
+// D6: a real MemoryRouter + useNavigate(-1), never a spy on setSearchParams.
+describe('clusterFocus — BR3/BR4 history behaviour through a real router (#2750 PR-5 T2)', () => {
+  const ROOT_ENTRY = '/discover?city=bangalore&journey=area-first';
+  const NODE_ENTRY = '/discover?city=bangalore&journey=area-first&node=d%3Acentral';
+
+  beforeEach(() => {
+    // The facade fires a default-journey probe only when no journey is in the URL; every URL here
+    // carries journey=area-first, but keep any stray call offline so a dev backend can never answer.
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('offline (test)'));
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function renderHistoryHarness(entries: string[], initialIndex: number) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function Wrapper({ children }: { children: React.ReactNode }) {
+      return React.createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        React.createElement(MemoryRouter, { initialEntries: entries, initialIndex }, children),
+      );
+    }
+    return renderHook(
+      () => ({
+        focus: useClusterFocusUrlParam(),
+        urlState: useDiscoverUrlState(),
+        location: useLocation(),
+        navigationType: useNavigationType(),
+        navigate: useNavigate(),
+      }),
+      { wrapper: Wrapper },
+    );
+  }
+
+  // #2750 PR-5 cluster-N1
+  it('selecting a cluster REPLACEs the current entry: Back skips it and lands on the entry before', () => {
+    const { result } = renderHistoryHarness([ROOT_ENTRY, NODE_ENTRY], 1);
+    const keyBefore = result.current.location.key;
+
+    act(() => {
+      result.current.focus.setClusterFocus([AREA_KEY_WITH_SPACE, AREA_KEY_2]);
+    });
+
+    const focused = new URLSearchParams(result.current.location.search);
+    expect(focused.has(CLUSTER_FOCUS_PARAM)).toBe(true);
+    expect(focused.get('node')).toBe('d:central');
+    expect(result.current.location.key).not.toBe(keyBefore);
+    expect(result.current.navigationType).toBe('REPLACE');
+
+    // One Back press must leave the cluster-focused entry AND land on the FIRST entry (no node):
+    // had the focus been a PUSH, Back would only have un-focused the cluster on the same node.
+    act(() => {
+      result.current.navigate(-1);
+    });
+    const afterBack = new URLSearchParams(result.current.location.search);
+    expect(afterBack.has('node')).toBe(false);
+    expect(afterBack.has(CLUSTER_FOCUS_PARAM)).toBe(false);
+    expect(result.current.location.search).toBe('?city=bangalore&journey=area-first');
+  });
+
+  // #2750 PR-5 cluster-N2
+  it('replace(cluster focus) then push(area) then Back restores the cluster-focused entry exactly', () => {
+    const { result } = renderHistoryHarness([ROOT_ENTRY, NODE_ENTRY], 1);
+
+    act(() => {
+      result.current.focus.setClusterFocus([AREA_KEY_WITH_SPACE, AREA_KEY_2]);
+    });
+    const focusedSearch = result.current.location.search;
+    expect(new URLSearchParams(focusedSearch).has(CLUSTER_FOCUS_PARAM)).toBe(true);
+
+    // Drilling into an area is a PUSH: a NEW entry, with the cluster focus dropped from it.
+    act(() => {
+      result.current.urlState[1].goToNode('a:IN|KA|Bengaluru|Hoskote');
+    });
+    expect(result.current.navigationType).toBe('PUSH');
+    const pushed = new URLSearchParams(result.current.location.search);
+    expect(pushed.get('node')).toBe('a:IN|KA|Bengaluru|Hoskote');
+    expect(pushed.has(CLUSTER_FOCUS_PARAM)).toBe(false);
+
+    // Back returns to the cluster-focused entry (same node, same clusterFocus value), not the root.
+    act(() => {
+      result.current.navigate(-1);
+    });
+    expect(result.current.location.search).toBe(focusedSearch);
+    const restored = new URLSearchParams(result.current.location.search);
+    expect(restored.get('node')).toBe('d:central');
+    expect(restored.get(CLUSTER_FOCUS_PARAM)).toBe(
+      applyClusterFocusDelta(new URLSearchParams(), [AREA_KEY_WITH_SPACE, AREA_KEY_2]).get(
+        CLUSTER_FOCUS_PARAM,
+      ),
+    );
   });
 });

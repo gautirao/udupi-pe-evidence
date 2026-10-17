@@ -287,6 +287,39 @@ describe('Full pipe areaKey redirect — guide renders with real area data (AC14
   });
 });
 
+// ─── #2750 PR-5 1528-api-error: composed page error pass-through (AC9) ────────
+
+describe('Area-guide route — useAreaIntelligence error is passed to the guide (#2750 PR-5 1528 row 11)', () => {
+  it('1528-api-error: guide=1 area route with useAreaIntelligence isError shows the calm error copy and NO numeric metric', () => {
+    mockUseAreaIntelligence.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+    } as ReturnType<typeof useAreaIntelligence>);
+
+    renderTrends('/trends?city=udupi&areaKey=IN%7CKA%7CUdupi%7CMalpe&guide=1');
+
+    expect(screen.getByText(/couldn.t load area details/i)).toBeInTheDocument();
+    // No fake values (legacy asserted no `31` and no `₹55`)
+    expect(screen.queryByText('31')).not.toBeInTheDocument();
+    expect(screen.queryByText(/₹\s?55/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Price Change')).not.toBeInTheDocument();
+  });
+
+  it('1528-api-error control: same route with isError false and data renders the guide, not the error copy', () => {
+    mockUseAreaIntelligence.mockReturnValue({
+      data: FULL_AREA_INTELLIGENCE,
+      isLoading: false,
+      isError: false,
+    } as ReturnType<typeof useAreaIntelligence>);
+
+    renderTrends('/trends?city=udupi&areaKey=IN%7CKA%7CUdupi%7CMalpe&guide=1');
+
+    expect(screen.queryByText(/couldn.t load area details/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: /malpe/i })).toBeInTheDocument();
+  });
+});
+
 // ─── Edge case: non-pipe areaKey falls through to legacy (safety net) ─────────
 
 describe('Non-pipe areaKey edge case — falls through to legacy #771 flow', () => {

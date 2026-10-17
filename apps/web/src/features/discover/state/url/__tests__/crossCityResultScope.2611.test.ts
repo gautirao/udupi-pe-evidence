@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { MemoryRouter, useLocation, useNavigationType } from 'react-router-dom';
+import { MemoryRouter, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
@@ -209,5 +209,48 @@ describe('Issue #2611 — Cross-city result scope state ownership and normalizat
 
     const countsFilters = buildNavigationCountsFilters('buy', {});
     expect(countsFilters.purpose).toBe('buy');
+  });
+
+  // #2750 PR-5 city-switch-N3 — drives the REAL router so Back is observed, not inferred from a flag.
+  it('switching city drops areaKey and viewport, keeps filters, and is one PUSH that Back undoes', () => {
+    const initialUrl =
+      '/discover?city=udupi&journey=area-first&areaKey=IN%7CKA%7CUdupi%7CManipal&lat=13.3&lon=74.8&zoom=14&type=apartment';
+    const { result } = renderHook(
+      () => ({
+        urlState: useDiscoverUrlState(),
+        location: useLocation(),
+        navigationType: useNavigationType(),
+        navigate: useNavigate(),
+      }),
+      { wrapper: wrapper(initialUrl) },
+    );
+    const initialSearch = result.current.location.search;
+    expect(new URLSearchParams(initialSearch).get('areaKey')).toBe('IN|KA|Udupi|Manipal');
+
+    act(() => {
+      result.current.urlState[1].changeCity('kundapur');
+    });
+
+    const switched = new URLSearchParams(result.current.location.search);
+    expect(switched.get('city')).toBe('kundapur');
+    expect(switched.has('areaKey')).toBe(false);
+    expect(switched.has('lat')).toBe(false);
+    expect(switched.has('lon')).toBe(false);
+    expect(switched.has('zoom')).toBe(false);
+    // Property filters survive a city switch.
+    expect(switched.get('type')).toBe('apartment');
+    expect(result.current.navigationType).toBe('PUSH');
+
+    // PUSH means Back restores the Udupi entry exactly (area + viewport back); a REPLACE would leave the page.
+    act(() => {
+      result.current.navigate(-1);
+    });
+    expect(result.current.location.search).toBe(initialSearch);
+    const restored = new URLSearchParams(result.current.location.search);
+    expect(restored.get('city')).toBe('udupi');
+    expect(restored.get('areaKey')).toBe('IN|KA|Udupi|Manipal');
+    expect(restored.get('lat')).toBe('13.3');
+    expect(restored.get('lon')).toBe('74.8');
+    expect(restored.get('zoom')).toBe('14');
   });
 });

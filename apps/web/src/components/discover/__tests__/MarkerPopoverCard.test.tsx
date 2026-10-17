@@ -173,6 +173,32 @@ describe('MarkerPopoverCard — anon priceBand fallback (Issue #1941)', () => {
   });
 });
 
+// #2750 PR-5 1941-N1 [SEC] — the anon popover exposes the coarse band under its own testid; the authed popover
+// never does (it shows the exact price). Fresh fixtures per arm (no shared object), anon price null explicit.
+describe('MarkerPopoverCard — band vs exact price exposure (#2750 PR-5 1941-N1, security)', () => {
+  it('the anon popover exposes the band under popover-price-band, the authed popover never does', () => {
+    // ANON arm: price withheld (null), only the coarse band is present.
+    const anon = renderCard({
+      isAuthenticated: false,
+      listing: makeListing({ id: 'anon-1', price: null, priceBand: '₹1–2Cr' }),
+    });
+    expect(screen.getByTestId('popover-price-band')).toHaveTextContent(/^₹1–2Cr$/);
+    expect(screen.getByTestId('popover-price-band').textContent).toBe('₹1–2Cr');
+    // No exact rupee figure is rendered anywhere in the anon card (an exact amount looks like ₹ + digits + unit).
+    expect(screen.queryByText(/₹\d+(\.\d+)?\s?(Cr|L)\b/)).not.toBeInTheDocument();
+    anon.unmount();
+
+    // AUTHED arm: a brand-new fixture with BOTH an exact price and a band on the wire.
+    renderCard({
+      isAuthenticated: true,
+      listing: makeListing({ id: 'authed-1', price: 13_500_000, priceBand: '₹1–2Cr' }),
+    });
+    expect(screen.queryByTestId('popover-price-band')).not.toBeInTheDocument();
+    expect(screen.getByTestId('popover-price')).toHaveTextContent('₹1.35 Cr');
+    expect(screen.getByTestId('popover-price')).not.toHaveTextContent('₹1–2Cr');
+  });
+});
+
 describe('MarkerPopoverCard — rent/lease arms (Issue #2051, AC6b/AC7)', () => {
   it('anon + monthlyRentBand present → renders the band string with "/mo", NOT the misleading "Sign in to view price" (AC7)', () => {
     renderCard({

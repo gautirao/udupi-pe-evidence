@@ -84,4 +84,17 @@ describe('DiscoverConsentBanner', () => {
     // Key is absent (not a 'revoked' / 'denied' sentinel)
     expect(localStorage.getItem(CONSENT_KEY)).toBeNull();
   });
+
+  // #2750 PR-5 1576-N2 — Accept must REMOVE the banner from the DOM (not just write storage).
+  // B3 only reads storage; without the setDismissed(true) re-render the banner stays on screen.
+  it('1576-N2: Accept click removes the banner from the DOM (and storage is granted)', () => {
+    expect(localStorage.getItem(CONSENT_KEY)).toBeNull();
+    render(<DiscoverConsentBanner />);
+    expect(screen.getByTestId('discover-consent-banner')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /accept/i }));
+
+    expect(screen.queryByTestId('discover-consent-banner')).not.toBeInTheDocument();
+    expect(localStorage.getItem(CONSENT_KEY)).toBe('granted');
+  });
 });

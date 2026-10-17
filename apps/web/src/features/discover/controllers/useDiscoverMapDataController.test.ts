@@ -562,6 +562,51 @@ describe('useDiscoverMapDataController — Issue #2015 code-review BLOCKING fix:
     const [urlAfterPan] = findMarkersCall() as [string, unknown];
     expect(urlAfterPan).toBe(urlBeforePan);
   });
+
+  // #2750 PR-5 review-fix r2 (Codex C4, issue-2015 'filters' L384-422): adding a filter (ntm=1 -> newToMarket) while
+  // rscope=vp is active must fire a FRESH request that carries BOTH the frozen viewport rectangle and the filter.
+  it('changing a filter under a committed VIEWPORT scope fires a NEW markers request carrying both viewportScope and the filter (no bbox)', async () => {
+    const wrapper = makeWrapper();
+    const { rerender } = renderHook(
+      (props: { filters: Record<string, unknown> }) =>
+        useDiscoverMapDataController({
+          ...BASE_CONTROLLER_PARAMS,
+          filters: props.filters,
+          mapBbox: VIEWPORT_BOUNDS_AS_TUPLE(VIEWPORT_BOUNDS),
+          nav: makeNav({
+            journey: 'area-first',
+            rawNodeParam: 'n:area-1',
+            node: 'n:area-1',
+            resultScope: { active: { kind: 'VIEWPORT', bounds: VIEWPORT_BOUNDS }, previous: null },
+          }),
+          effectiveSelectedArea: EFFECTIVE_SELECTED_AREA,
+          areasNavigationJourney: makeAreasNavigationJourney({ node: AREA_LEAF }),
+        }),
+      { wrapper, initialProps: { filters: {} as Record<string, unknown> } },
+    );
+
+    await waitFor(() => {
+      expect(findMarkersCall()).toBeDefined();
+    });
+    const [urlBefore] = findMarkersCall() as [string, unknown];
+    const paramsBefore = new URLSearchParams(urlBefore.split('?')[1]);
+    expect(paramsBefore.get('viewportScope')).toBe('12.9,77.5,13,77.6');
+    expect(paramsBefore.has('newToMarket')).toBe(false);
+    const countBefore = markersCallCount();
+
+    rerender({ filters: { newToMarket: true } });
+
+    await waitFor(() => {
+      expect(markersCallCount()).toBe(countBefore + 1);
+    });
+    const markerUrls = mockApiGet.mock.calls
+      .map(([url]: [string]) => url)
+      .filter((url: string) => url.includes('/api/discover/markers'));
+    const paramsAfter = new URLSearchParams(markerUrls[markerUrls.length - 1].split('?')[1]);
+    expect(paramsAfter.get('newToMarket')).toBe('true');
+    expect(paramsAfter.get('viewportScope')).toBe('12.9,77.5,13,77.6');
+    expect(paramsAfter.has('bbox')).toBe(false);
+  });
 });
 
 function VIEWPORT_BOUNDS_AS_TUPLE(bounds: {
@@ -1459,6 +1504,48 @@ describe('useDiscoverMapDataController — G2-N9 school-first markers request pa
     expect(markersUrls()).toHaveLength(0);
   });
 
+  // #2750 PR-5 review-fix r3 (Codex P2 4292420347, regression-1240-marker-lat-lon): the composed
+  // RESPONSE -> mapper -> markerListings path. Before this `it`, every covering test proved only that
+  // the request fires, or that the mapper works alone, so a hook that stopped applying the mapper
+  // (or stopped forwarding `markerListings`) left them all green while authed users saw no pins.
+  // The api layer is mocked at the wire (the REAL backend field names lat/lon, NOT latitude/longitude);
+  // the real useDiscoverFilteredMarkers, the real mapper and the real useDiscoverMapData memo run.
+  it('G2-N9 composed 1240: an authed markers response with backend lat/lon fields surfaces as markerListings with DEFINED latitude/longitude; the anon arm gets none and fires no request', async () => {
+    const MARKERS_LAT_LON = {
+      city: 'bangalore',
+      markers: [
+        { id: 'reg-pin-1', lat: 13.3555, lon: 74.7894, pricePaise: 500_000_000, locality: 'Manipal' },
+        { id: 'reg-pin-2', lat: 13.3505, lon: 74.7884, pricePaise: 450_000_000, locality: 'Manipal' },
+      ],
+      truncated: false,
+    };
+    mockApiGet.mockImplementation((url: string) => {
+      if (url.includes('/api/discover/markers')) return Promise.resolve(MARKERS_LAT_LON);
+      if (url.includes('/listings')) return Promise.resolve({ city: 'bangalore', limitPerArea: 5, areas: [] });
+      return Promise.resolve(AREAS_RESPONSE);
+    });
+
+    const authed = render();
+    await waitFor(() => {
+      expect(authed.result.current.markerListings).toHaveLength(2);
+    });
+    const [pin1, pin2] = authed.result.current.markerListings;
+    expect(pin1.id).toBe('reg-pin-1');
+    expect(pin1.latitude).toBe(13.3555);
+    expect(pin1.longitude).toBe(74.7894);
+    expect(pin2.id).toBe('reg-pin-2');
+    expect(pin2.latitude).toBe(13.3505);
+    expect(pin2.longitude).toBe(74.7884);
+    authed.unmount();
+
+    // Anon control (only isAuthenticated varied): the same mocked response is never requested, so no pins.
+    mockApiGet.mockClear();
+    const anon = render({ isAuthenticated: false });
+    await settle();
+    expect(markersUrls()).toHaveLength(0);
+    expect(anon.result.current.markerListings).toEqual([]);
+  });
+
   // G3-M2: the PUBLIC school-radius endpoint's `enabled` arg (useDiscoverMapData.ts schoolRadiusEnabled).
   // Observed on the mocked useSchoolRadiusListings hook's LAST call args (a layer assertion; the
   // outgoing no-Authorization-header half is an OPEN ITEM, see G2G3-tests.md: the allowed-file list
@@ -1500,5 +1587,114 @@ describe('useDiscoverMapDataController — G2-N9 school-first markers request pa
       });
       expect(lastRadiusArgs().enabled).toBe(false);
     });
+  });
+});
+
+// ─── #2750 PR-5 2193-N2 [SEC] — grouped-overview guard: no node/area/group/school => no marker/listing fetch ───
+// The guard is `isTopGroupedLevel` (useDiscoverMapDataController.ts:134-147). A "zero calls" assertion alone
+// passes if it is read before the hook has had a chance to fetch, so the SAME `it` first proves the hook DOES
+// fetch (positive arm: the :224 resolved-leaf scenario, exactly one markers call carrying nodeKey), then runs the
+// negative arm and settles for the same window. Both arms are authed, area-first, zoom 14.
+describe('useDiscoverMapDataController — 2193-N2 [SEC] grouped overview issues no markers or listings fetch', () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 60));
+  function markersUrls(): string[] {
+    return mockApiGet.mock.calls
+      .map(([url]: [string]) => url)
+      .filter((url: string) => url.includes('/api/discover/markers'));
+  }
+  function listingsEnabledCalls(): number {
+    return mockDiscoverListings.mock.calls.filter(
+      ([args]: [{ enabled?: boolean }]) => args?.enabled === true,
+    ).length;
+  }
+
+  // #2750 PR-5 2193-N2
+  it('area-first with no node, area, group or school issues neither a markers call nor a listings call (positive arm: a resolved leaf does)', async () => {
+    // POSITIVE ARM (paired control): a resolved canonical AREA leaf -> exactly one markers call scoped by nodeKey,
+    // and the paginated-listings hook is enabled.
+    const positive = renderHook(
+      () =>
+        useDiscoverMapDataController({
+          ...BASE_CONTROLLER_PARAMS,
+          nav: makeNav({ journey: 'area-first', rawNodeParam: 'n:area-1', node: 'n:area-1' }),
+          effectiveSelectedArea: EFFECTIVE_SELECTED_AREA,
+          areasNavigationJourney: makeAreasNavigationJourney({ node: AREA_LEAF }),
+        }),
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => {
+      expect(markersUrls()).toHaveLength(1);
+    });
+    await settle();
+    expect(markersUrls()).toHaveLength(1);
+    expect(new URLSearchParams(markersUrls()[0].split('?')[1]).get('nodeKey')).toBe('n:area-1');
+    expect(listingsEnabledCalls()).toBeGreaterThan(0);
+    positive.unmount();
+
+    // NEGATIVE ARM: same authed/area-first/zoom-14 setup, but nothing selected at all.
+    mockApiGet.mockClear();
+    mockDiscoverListings.mockClear();
+    renderHook(
+      () =>
+        useDiscoverMapDataController({
+          ...BASE_CONTROLLER_PARAMS,
+          nav: makeNav({
+            journey: 'area-first',
+            nodeListings: false,
+            areaKey: null,
+            groupId: null,
+            schoolId: null,
+          }),
+          effectiveSelectedArea: null,
+          areasNavigationJourney: makeAreasNavigationJourney(),
+        }),
+      { wrapper: makeWrapper() },
+    );
+    await settle();
+    expect(markersUrls()).toEqual([]);
+    expect(findPanelCall()).toBeUndefined();
+    expect(listingsEnabledCalls()).toBe(0);
+    // The hook did run (it queried the areas list through the same mocked api.get): not a never-mounted false green.
+    expect(mockApiGet.mock.calls.length).toBeGreaterThan(0);
+  });
+});
+
+// ─── #2750 PR-5 B1 T3 2017-N11 — a committed AREA_SET scope broadens the area-listings request to EVERY key ───
+// Query side of issue-2017-multi-area-areaset-commit-regression ("Show listings" after adding a nearby area must not
+// keep fetching only the pre-commit single area). Real useDiscoverCityListings, mocked api.get (same harness as above).
+describe('useDiscoverMapDataController — 2017-N11 committed AREA_SET sends every area key on the city-listings request', () => {
+  const KEY_A = EFFECTIVE_SELECTED_AREA.areaKey;
+  const KEY_B = 'IN|KA|Bengaluru|Hebbal';
+
+  async function panelAreaKeysFor(resultScope: DiscoverNavContextValue['resultScope']): Promise<string[]> {
+    mockApiGet.mockClear();
+    const view = renderHook(
+      () =>
+        useDiscoverMapDataController({
+          ...BASE_CONTROLLER_PARAMS,
+          nav: makeNav({ journey: 'area-first', resultScope }),
+          effectiveSelectedArea: EFFECTIVE_SELECTED_AREA,
+          areasNavigationJourney: makeAreasNavigationJourney(),
+        }),
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => {
+      expect(findPanelCall()).toBeDefined();
+    });
+    const [panelUrl] = findPanelCall() as [string, unknown];
+    view.unmount();
+    return new URLSearchParams(panelUrl.split('?')[1]).getAll('areaKeys');
+  }
+
+  // #2750 PR-5 2017-N11
+  it('a committed AREA_SET [A,B] sends BOTH area keys on the city-listings request', async () => {
+    // Control arms first (they must hold whatever the multi-area behaviour is): a single-key AREA_SET and no scope at
+    // all both fetch exactly the one selected area.
+    expect(await panelAreaKeysFor({ active: { kind: 'AREA_SET', areaKeys: [KEY_A] }, previous: null })).toEqual([KEY_A]);
+    expect(await panelAreaKeysFor(undefined)).toEqual([KEY_A]);
+
+    // The committed multi-area set: BOTH keys (the request canonicalises the key order, so compare as a set).
+    const both = await panelAreaKeysFor({ active: { kind: 'AREA_SET', areaKeys: [KEY_A, KEY_B] }, previous: null });
+    expect([...both].sort()).toEqual([KEY_A, KEY_B].sort());
   });
 });

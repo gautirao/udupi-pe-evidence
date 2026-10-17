@@ -12,7 +12,7 @@
  * - Auth: price inputs present
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
@@ -207,5 +207,69 @@ describe('AgriFiltersPanel — sync from URL props', () => {
     );
     expect(screen.getByTestId('agri-price-min')).toHaveValue(50000);
     expect(screen.getByTestId('agri-price-max')).toHaveValue(200000);
+  });
+});
+
+// ─── #2750 PR-5 B1 T4 — FILTER_APPLY telemetry payload (retires the 1531 e2e price-band checks) ───
+// REAL useDiscoverTelemetry + REAL consent util (jsdom localStorage/sessionStorage); only fetch is stubbed.
+describe('AgriFiltersPanel — FILTER_APPLY telemetry payload (#2750 PR-5)', () => {
+  const CONSENT_KEY = 'discover_telemetry_consent';
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 202 });
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  function postedBody(): { raw: string; event: Record<string, unknown> } {
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const raw = (fetchMock.mock.calls[0][1] as RequestInit).body as string;
+    const parsed = JSON.parse(raw) as { events: Array<Record<string, unknown>> };
+    expect(parsed.events).toHaveLength(1);
+    return { raw, event: parsed.events[0] };
+  }
+
+  // #2750 PR-5 1531-N3
+  it('1531-N3: anon Apply emits FILTER_APPLY with only allow-listed fields and NO price_band', async () => {
+    render(<AgriFiltersPanel {...baseProps} isAuthenticated={false} priceMinRupees={1500000} />);
+
+    // Control arm: consent NOT granted -> Apply emits nothing (default-deny).
+    await userEvent.click(screen.getByTestId('agri-filters-apply'));
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Consent granted -> exactly one POST.
+    localStorage.setItem(CONSENT_KEY, 'granted');
+    await userEvent.click(screen.getByTestId('agri-filters-apply'));
+
+    const { raw, event } = postedBody();
+    expect(event.event_type).toBe('FILTER_APPLY');
+    expect(Object.keys(event).sort()).toEqual(['event_type', 'filters', 'property_type', 'session_id']);
+    expect(event.property_type).toBe('agricultural_land');
+    expect(event.filters).toEqual({ property_type: 'agricultural_land' });
+    expect(event.price_band).toBeUndefined();
+    expect(raw).not.toContain('1500000');
+  });
+
+  // #2750 PR-5 1531-N4
+  it('1531-N4: authed Apply emits a coarse price_band and never the raw price', async () => {
+    localStorage.setItem(CONSENT_KEY, 'granted');
+    render(<AgriFiltersPanel {...baseProps} isAuthenticated={true} priceMinRupees={1500000} />);
+
+    await userEvent.click(screen.getByTestId('agri-filters-apply'));
+
+    const { raw, event } = postedBody();
+    expect(event.event_type).toBe('FILTER_APPLY');
+    expect(event.price_band).toBe('5L_20L');
+    expect(event.filters).toEqual({ property_type: 'agricultural_land' });
+    expect(Object.keys(event).sort()).toEqual(['event_type', 'filters', 'price_band', 'property_type', 'session_id']);
+    expect(raw).not.toContain('1500000');
   });
 });

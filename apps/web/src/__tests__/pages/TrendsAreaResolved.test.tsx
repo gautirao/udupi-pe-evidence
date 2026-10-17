@@ -383,3 +383,60 @@ describe('TrendsAreaResolved — no broker/demand-gap language', () => {
     expect(html).not.toMatch(/your listings/);
   });
 });
+
+// ─── #2750 PR-5 B1 T1 destination tests (retire buyer-area-route-1539) ───────
+
+describe('TrendsAreaResolved — #2750 PR-5 buyer-area-route-1539 destination', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubOptionsEmpty();
+  });
+
+  // #2750 PR-5 1539-N1
+  it('matched slug: breadcrumb landmark names city and area, both View-homes CTAs carry the exact discover href', () => {
+    mockUseResolveArea.mockReturnValue({
+      data: MATCHED_RESOLVE,
+      isLoading: false,
+      isError: false,
+    } as ReturnType<typeof useResolveArea>);
+    mockUseAreaIntelligence.mockReturnValue({
+      data: AREA_INTELLIGENCE_RESPONSE,
+      isLoading: false,
+      isError: false,
+    } as ReturnType<typeof useAreaIntelligence>);
+
+    renderAtRoute('/trends/udupi/areas/malpe');
+
+    const breadcrumb = screen.getByRole('navigation', { name: /breadcrumb/i });
+    expect(breadcrumb).toHaveTextContent(/udupi/i);
+    expect(breadcrumb).toHaveTextContent(/malpe/i);
+
+    // Hero CTA and bottom CTA block: BOTH must carry the exact href (compared one by one so one cannot mask the other).
+    const expectedHref = '/discover?city=udupi&areaKey=IN%7CKA%7CUdupi%7CMalpe';
+    const ctas = screen.getAllByRole('link', { name: /view homes in malpe/i });
+    expect(ctas).toHaveLength(2);
+    expect(ctas[0].getAttribute('href')).toBe(expectedHref);
+    expect(ctas[1].getAttribute('href')).toBe(expectedHref);
+  });
+
+  // #2750 PR-5 1539-N2
+  it('unmatched slug: level-1 heading "Area not found" and the map link href', () => {
+    mockUseResolveArea.mockReturnValue({
+      data: NOT_MATCHED_RESOLVE,
+      isLoading: false,
+      isError: false,
+    } as ReturnType<typeof useResolveArea>);
+    mockUseAreaIntelligence.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+    } as ReturnType<typeof useAreaIntelligence>);
+
+    renderAtRoute('/trends/udupi/areas/nonexistent-area');
+
+    expect(screen.getByRole('heading', { level: 1, name: /^area not found$/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /explore udupi on map/i }).getAttribute('href'),
+    ).toBe('/discover?city=udupi');
+  });
+});

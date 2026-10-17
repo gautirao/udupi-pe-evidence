@@ -564,3 +564,42 @@ describe('useDiscoverViewportSearch — eligibility gating (MUST-HAVE #2, PR rev
     expect(commitResultScope).not.toHaveBeenCalled();
   });
 });
+
+// #2750 PR-5 B1 T3 — issue-2015-search-this-area-viewport ("panning alone does NOT commit", e2e L209-216).
+describe('useDiscoverViewportSearch — panning alone never commits (#2750 PR-5 2015-N9)', () => {
+  // #2750 PR-5 2015-N9
+  it('drift past tolerance with a user gesture sets isDirty but never calls commitResultScope until activate()', () => {
+    const commitResultScope = vi.fn();
+    const { result, rerender } = renderHook(
+      (props: UseDiscoverViewportSearchParams) => useDiscoverViewportSearch(props),
+      { initialProps: makeParams({ commitResultScope }) },
+    );
+
+    // Control arm: a gesture whose drift stays within tolerance is neither dirty nor a commit.
+    const withinTolerance: [number, number, number, number] = [12.901, 77.501, 13.001, 77.601];
+    rerender(makeParams({ commitResultScope, mapBbox: withinTolerance, userCameraGestureSeq: 1 }));
+    expect(result.current.isDirty).toBe(false);
+    expect(commitResultScope).not.toHaveBeenCalled();
+
+    // The pan: past tolerance AND a real gesture (so the gesture gate does not mask a dirty-time commit).
+    const driftedBbox: [number, number, number, number] = [12.95, 77.5, 13.05, 77.6];
+    rerender(makeParams({ commitResultScope, mapBbox: driftedBbox, userCameraGestureSeq: 1 }));
+    expect(result.current.isDirty).toBe(true);
+    expect(commitResultScope).not.toHaveBeenCalled();
+
+    // A further idle render with the same dirty viewport still commits nothing.
+    rerender(makeParams({ commitResultScope, mapBbox: driftedBbox, userCameraGestureSeq: 1 }));
+    expect(result.current.isDirty).toBe(true);
+    expect(commitResultScope).not.toHaveBeenCalled();
+
+    // Only the explicit activation commits, once, with the drifted bounds as a VIEWPORT REPLACE.
+    act(() => {
+      result.current.activate();
+    });
+    expect(commitResultScope).toHaveBeenCalledTimes(1);
+    expect(commitResultScope).toHaveBeenCalledWith(
+      { kind: 'VIEWPORT', bounds: { s: driftedBbox[0], w: driftedBbox[1], n: driftedBbox[2], e: driftedBbox[3] } },
+      { history: 'replace' },
+    );
+  });
+});

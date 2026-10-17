@@ -9,7 +9,9 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation, useNavigationType } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { NodeListingsSurface } from '../NodeListingsSurface';
 import type { NavigationNodeResponse } from '@/features/discover/navigation/types';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
@@ -357,5 +359,77 @@ describe('NodeListingsSurface — #2087', () => {
     // Ensure the fallback lat/lon were set correctly for AreaSelectedPanel
     expect(items[0].lat).toBe(12.0);
     expect(items[0].lon).toBe(77.0);
+  });
+
+  // #2750 PR-5 review-fix r3 sweep (discover-trust-badge-1567, composed list -> card path): PropertyCard renders the
+  // badge from `listing.trustBadge` (PropertyCard.test.tsx) and the wire carries it (backend tests), but nothing proved
+  // the surface FORWARDS the wire word to the cards. Allow-listed words only; absent stays null.
+  it('forwards each anon teaser listing\'s public trustBadge word to the panel unchanged (absent -> null), never the raw grade', () => {
+    mockIsAuthenticated = false;
+    mockUseDiscoverCityListings.mockReturnValue(
+      makeCityListingsResult([
+        {
+          areaKey: 'a:domlur',
+          listings: [
+            { id: 'tb-1', trustBadge: 'verified', lat: 12.0, lon: 77.0 },
+            { id: 'tb-2', trustBadge: 'trusted', lat: 12.1, lon: 77.1 },
+            { id: 'tb-3', lat: 12.2, lon: 77.2 },
+          ],
+        },
+      ]),
+    );
+
+    renderSurface(makeNode({ nodeKey: 'c:domlur' }));
+
+    const items = JSON.parse(screen.getByTestId('listings-json').textContent!);
+    expect(items.map((i: { id: string; trustBadge: unknown }) => [i.id, i.trustBadge])).toEqual([
+      ['tb-1', 'verified'],
+      ['tb-2', 'trusted'],
+      ['tb-3', null],
+    ]);
+    expect(items.every((i: Record<string, unknown>) => !('trustTier' in i))).toBe(true);
+  });
+
+  // #2750 PR-5 2087-N3 — Back-to-node goes through the REAL URL facade (not a spy).
+  describe('Back-to-node writes through the real URL facade', () => {
+    function FacadeSurfaceHarness() {
+      const [, urlActions] = useDiscoverUrlState();
+      const location = useLocation();
+      const navigationType = useNavigationType();
+      return (
+        <>
+          <span data-testid="harness-search">{location.search}</span>
+          <span data-testid="harness-navtype">{navigationType}</span>
+          <NodeListingsSurface
+            node={makeNode()}
+            buildNodeHref={() => null}
+            historyAdjacencyLog={[] as UseAreasNavigationJourneyResult['historyAdjacencyLog']}
+            selectNode={vi.fn()}
+            onClearNodeListings={urlActions.clearNodeListings}
+          />
+        </>
+      );
+    }
+
+    it('Back-to-node clears nodeListings with a REPLACE and keeps node', () => {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter
+            initialEntries={['/discover?city=bangalore&journey=area-first&node=d%3Acentral&nodeListings=1']}
+          >
+            <FacadeSurfaceHarness />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      expect(new URLSearchParams(screen.getByTestId('harness-search').textContent ?? '').get('nodeListings')).toBe('1');
+
+      fireEvent.click(screen.getByRole('button', { name: /Back to Domlur Layout/i }));
+
+      const after = new URLSearchParams(screen.getByTestId('harness-search').textContent ?? '');
+      expect(after.has('nodeListings')).toBe(false);
+      expect(after.get('node')).toBe('d:central');
+      expect(screen.getByTestId('harness-navtype').textContent).toBe('REPLACE');
+    });
   });
 });

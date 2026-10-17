@@ -9,7 +9,10 @@
  * it merely renders whatever real children it is handed).
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
+import { MemoryRouter, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { NavigationLevelPanel } from '../NavigationLevelPanel';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
 import type { NavigationNodeResponse } from '@/features/discover/navigation/types';
@@ -355,6 +358,69 @@ describe('NavigationLevelPanel', () => {
         />
       );
       expect(screen.getByRole('button', { name: /Browse all 42 listings/i })).toBeInTheDocument();
+    });
+  });
+
+  // #2750 PR-5 2087-N2 — the Browse-all click goes through the REAL URL facade (not a spy).
+  describe('Issue #2087 — Browse listings CTA writes nodeListings through the real URL facade', () => {
+    let navigateRef: ReturnType<typeof useNavigate> | null = null;
+
+    function FacadeHarness({ nodeDescendants }: { nodeDescendants: number }) {
+      const [, urlActions] = useDiscoverUrlState();
+      const location = useLocation();
+      const navigationType = useNavigationType();
+      navigateRef = useNavigate();
+      return (
+        <>
+          <span data-testid="harness-search">{location.search}</span>
+          <span data-testid="harness-navtype">{navigationType}</span>
+          <NavigationLevelPanel
+            journey={makeJourney({
+              node: makeNode({
+                nodeKey: 'd:central',
+                descendantAreaKeys: new Array(nodeDescendants).fill('a'),
+              }),
+            })}
+            onBrowseListings={urlActions.enterNodeListings}
+          />
+        </>
+      );
+    }
+
+    function renderFacadeHarness(nodeDescendants: number) {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      return render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/discover?city=bangalore&journey=area-first&node=d%3Acentral']}>
+            <FacadeHarness nodeDescendants={nodeDescendants} />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+    }
+
+    it('clicking Browse-all writes nodeListings=1 as a PUSH through the real URL facade', () => {
+      const eligible = renderFacadeHarness(10);
+      const initialSearch = screen.getByTestId('harness-search').textContent;
+      expect(initialSearch).not.toContain('nodeListings');
+
+      fireEvent.click(screen.getByTestId('browse-node-listings-cta'));
+
+      const afterClick = new URLSearchParams(screen.getByTestId('harness-search').textContent ?? '');
+      expect(afterClick.get('nodeListings')).toBe('1');
+      expect(afterClick.get('node')).toBe('d:central');
+      expect(screen.getByTestId('harness-navtype').textContent).toBe('PUSH');
+
+      // PUSH means Back returns to the entry without nodeListings (a REPLACE would overwrite it).
+      act(() => {
+        navigateRef?.(-1);
+      });
+      expect(screen.getByTestId('harness-search').textContent).toBe(initialSearch);
+      eligible.unmount();
+
+      // Control arm: 16 descendant keys is over the bound -> no CTA, nothing written.
+      renderFacadeHarness(16);
+      expect(screen.queryByTestId('browse-node-listings-cta')).not.toBeInTheDocument();
+      expect(screen.getByTestId('harness-search').textContent).toBe(initialSearch);
     });
   });
 });

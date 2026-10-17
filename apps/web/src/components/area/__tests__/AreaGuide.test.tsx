@@ -5,7 +5,7 @@
  * https://claude.ai/design/p/f3796631-064b-4956-94ba-14baa7af9bcf?file=ui_kits%2Fbuyer%2Farea-insights.html
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
@@ -871,5 +871,58 @@ describe('AC14 — Existing flow non-regression', () => {
     );
     // Skeleton renders (no content leaked from a previous city)
     expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
+  });
+});
+
+// ─── #2750 PR-5 B1 T1: composed-render destination tests (retire area-intelligence-1528) ──
+
+function renderComposedFullData() {
+  render(
+    <Wrapper>
+      <AreaGuide
+        citySlug="udupi"
+        cityLabel="Udupi"
+        areaKey="IN|KA|Udupi|Malpe"
+        isLoading={false}
+        isError={false}
+        data={FULL_DATA_RESPONSE}
+        nearbyAreaOptions={[]}
+      />
+    </Wrapper>,
+  );
+}
+
+describe('AreaGuide — composed full-data render (#2750 PR-5 area-intelligence-1528)', () => {
+  // #2750 PR-5 1528-N1
+  it('composed AreaGuide (full data) renders the trust note and the transparency footer', () => {
+    renderComposedFullData();
+    // Neither string occurs elsewhere in a full-data render (the no-data copy lives in a different branch).
+    expect(screen.getByText(/why we show this/i)).toBeInTheDocument();
+    expect(screen.getByText(/verified listing activity/i)).toBeInTheDocument();
+  });
+
+  // #2750 PR-5 1528-N2
+  it('composed AreaGuide (full data) shows the at-a-glance section', () => {
+    renderComposedFullData();
+    expect(
+      screen.getByRole('heading', { name: /how active is the market here/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Typical price')).toBeInTheDocument();
+    expect(screen.queryByText(/median price/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Most searched budget')).toBeInTheDocument();
+  });
+
+  // #2750 PR-5 1528-N2 (review r1 F1): hero chip + CTA scoped to the hero subtree.
+  // The full guide also renders 'Enough data' (AtAGlanceMetrics confidence card) and a second
+  // 'View homes in Malpe' link (AreaCtaBlock), so these must NOT be asserted on `screen`.
+  it('composed AreaGuide (full data) hero subtree carries the confidence chip and the primary CTA', () => {
+    renderComposedFullData();
+    // AreaGuideHero has no landmark/testid; its left-content container is the parent of the single h1.
+    const heroContainer = screen.getByRole('heading', { level: 1, name: 'Malpe' }).parentElement;
+    expect(heroContainer).not.toBeNull();
+    const hero = within(heroContainer as HTMLElement);
+    expect(hero.getByText('Enough data')).toBeInTheDocument();
+    const cta = hero.getByRole('link', { name: /view homes in malpe/i });
+    expect(cta).toHaveAttribute('href', expect.stringContaining('/discover?city=udupi&areaKey='));
   });
 });

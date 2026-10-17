@@ -335,3 +335,127 @@ describe('useDiscoverTelemetry', () => {
     }
   });
 });
+
+// ─── #2750 PR-5 B1 T4 — destination tests for the retired telemetry-consent e2e specs ────────────
+// The consent util is MOCKED in this file (mockIsConsented), so nothing below asserts storage
+// behaviour; that lives in src/lib/__tests__/discoverTelemetryConsent.test.ts.
+
+describe('useDiscoverTelemetry — payload allow-list and live consent (#2750 PR-5)', () => {
+  const ALLOWED_TOP = ['session_id', 'event_type', 'area_key', 'property_type', 'listing_purpose', 'price_band', 'filters'];
+  const ALLOWED_FILTERS = ['area_key', 'property_type', 'listing_purpose', 'price_band', 'sort_by', 'page'];
+  const FORBIDDEN = ['email', 'phone', 'name', 'user_id', 'userId', 'ip', 'user_agent'];
+
+  function parsedEvents(): Array<Record<string, unknown>> {
+    return fetchMock.mock.calls.map(
+      (c) => (JSON.parse((c[1] as RequestInit).body as string) as { events: Array<Record<string, unknown>> }).events[0],
+    );
+  }
+
+  // 1531-N1 — denied emits nothing; granted emits ONLY allow-listed keys, anonymously.
+  it('1531-N1: every emitter\'s POSTed event keys are within the allow-list (top level and filters); denied emits nothing', async () => {
+    // Arm D (denied): no emitter fetches.
+    mockIsConsented.mockReturnValue(false);
+    const denied = renderHook(() => useDiscoverTelemetry());
+    await act(async () => {
+      denied.result.current.emitFilterApply({ property_type: 'agricultural_land', price_band: '5L_20L', filters: { property_type: 'agricultural_land' } });
+      denied.result.current.emitPanelOpen({ area_key: 'udupi-town' });
+      denied.result.current.emitLeadIntent({ listing_purpose: 'buy' });
+    });
+    await act(async () => {});
+    expect(fetchMock).not.toHaveBeenCalled();
+    denied.unmount();
+
+    // Arm G (granted): all three emitters fetch, with allow-listed keys only.
+    mockIsConsented.mockReturnValue(true);
+    const granted = renderHook(() => useDiscoverTelemetry());
+    await act(async () => {
+      granted.result.current.emitFilterApply({
+        area_key: 'udupi-town',
+        property_type: 'agricultural_land',
+        listing_purpose: 'buy',
+        price_band: '5L_20L',
+        filters: { property_type: 'agricultural_land', price_band: '5L_20L', page: 1 },
+      });
+      granted.result.current.emitPanelOpen({ area_key: 'udupi-town', property_type: 'house', listing_purpose: 'buy' });
+      granted.result.current.emitLeadIntent({ area_key: 'udupi-town', property_type: 'house', listing_purpose: 'rent' });
+    });
+    await act(async () => {});
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const events = parsedEvents();
+    expect(events.map((e) => e.event_type)).toEqual(['FILTER_APPLY', 'PANEL_OPEN', 'LEAD_INTENT']);
+    for (const event of events) {
+      for (const key of Object.keys(event)) {
+        expect(ALLOWED_TOP).toContain(key);
+      }
+      for (const f of FORBIDDEN) {
+        expect(event[f]).toBeUndefined();
+      }
+      if (event.filters !== undefined) {
+        for (const key of Object.keys(event.filters as Record<string, unknown>)) {
+          expect(ALLOWED_FILTERS).toContain(key);
+        }
+      }
+    }
+    for (const call of fetchMock.mock.calls) {
+      const headers = (call[1] as RequestInit).headers as Record<string, string>;
+      expect(headers['Authorization']).toBeUndefined();
+    }
+  });
+
+  // 1531-N5 — a rejecting fetch is swallowed INSIDE sendEvent (no unhandled rejection escapes).
+  it('1531-N5: a rejecting fetch is swallowed: emit returns synchronously and no unhandledRejection escapes', async () => {
+    mockIsConsented.mockReturnValue(true);
+    fetchMock.mockRejectedValue(new Error('net'));
+    const seen: unknown[] = [];
+    const handler = (reason: unknown) => {
+      seen.push(reason);
+    };
+    process.on('unhandledRejection', handler);
+    try {
+      const { result } = renderHook(() => useDiscoverTelemetry());
+      let returned: unknown = 'unset';
+      expect(() => {
+        returned = result.current.emitFilterApply({ property_type: 'agricultural_land' });
+      }).not.toThrow();
+      expect(returned).toBeUndefined();
+      // The rejecting path really executed.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      // Let the microtask + a macrotask pass so an escaping rejection would surface.
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(seen).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', handler);
+    }
+  });
+
+  // 1576-N1 — consent is read LIVE at emit time, not cached at render (flip after mount, no rerender).
+  it('1576-N1: revocation between two emits on the SAME mounted hook stops the second emit; a later grant on a hook mounted denied resumes', async () => {
+    // Hook A: mounted granted, then revoked with NO rerender.
+    mockIsConsented.mockReturnValue(true);
+    const hookA = renderHook(() => useDiscoverTelemetry());
+    await act(async () => { hookA.result.current.emitPanelOpen({ area_key: 'udupi-town' }); });
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    mockIsConsented.mockReturnValue(false);
+    await act(async () => { hookA.result.current.emitPanelOpen({ area_key: 'udupi-town' }); });
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledTimes(1); // second emit did NOT fetch
+    hookA.unmount();
+
+    // Hook B: mounted denied, then granted with NO rerender.
+    fetchMock.mockClear();
+    mockIsConsented.mockReturnValue(false);
+    const hookB = renderHook(() => useDiscoverTelemetry());
+    await act(async () => { hookB.result.current.emitLeadIntent(); });
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+
+    mockIsConsented.mockReturnValue(true);
+    await act(async () => { hookB.result.current.emitLeadIntent(); });
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledTimes(1); // re-grant resumes emission
+    hookB.unmount();
+  });
+});

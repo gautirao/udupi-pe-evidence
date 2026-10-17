@@ -13,9 +13,14 @@
  * removed. If dropping `onClearArea` reddened them too, this file would be asserting "the chip row
  * works" rather than "the area chip is wired", and would not localise the defect.
  */
-import { describe, it, expect, vi } from 'vitest';
-import { render, renderHook, screen, within } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { cleanup, render, renderHook, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
+import { projectUrlFilters } from '@/features/discover/selectors/urlFiltersProjection';
 import { useDiscoverFilterChromeController } from '../useDiscoverFilterChromeController';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import type { DiscoverNavContextValue } from '@/features/discover/context/types';
@@ -209,5 +214,134 @@ describe('useDiscoverFilterChromeController — board/category chips (G2-N6)', (
     await userEvent.setup().click(screen.getByTestId('active-chip-board-cbse-dismiss'));
     expect(boardActions.setBoardFilters).toHaveBeenCalledTimes(1);
     expect(boardActions.setBoardFilters).toHaveBeenCalledWith(['ICSE']);
+  });
+});
+
+// ─── #2750 PR-5 B1 T2 — discover-filter-chips: cold-load URL -> projected filters -> chips, and dismiss wiring ───
+// Rows FC-1 (cold-load projection, real URL facade), FC-2 (seller), FC-3 (date range), FC-4 (boolean chips).
+// FOUR chips are active at once (seller, date, new-to-market, RERA) = ActiveContextChips' MAX_VISIBLE_FILTER_CHIPS,
+// so none collapses into the Radix "+N" overflow popover (D13: no popover is opened here) and every x is reachable.
+const SELLER_DATE_BOOL_FILTERS: PropertyFilters = {
+  sellerTypes: ['owner'],
+  dateFrom: new Date('2025-01-15'),
+  dateTo: new Date('2025-02-01'),
+  newToMarket: true,
+  reraRegistered: true,
+};
+
+describe('useDiscoverFilterChromeController — cold-load URL becomes the four projected filters the chips render (FC-1)', () => {
+  beforeEach(() => {
+    // No journey/scope in the URL -> the area domain fires a default-journey probe; keep it offline.
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('offline (test)'));
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // #2750 PR-5 FC-1
+  it('seller, date range, new-to-market and RERA from a cold-load URL are projected and mounted as four chips', () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const Wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter
+          initialEntries={['/discover?city=udupi&seller=owner&from=2025-01-15&to=2025-02-01&ntm=1&rera=1']}
+        >
+          {children}
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    const { result } = renderHook(
+      () => {
+        const [urlState, urlActions] = useDiscoverUrlState();
+        const projected = projectUrlFilters(urlState.filters);
+        const chrome = useDiscoverFilterChromeController({
+          nav: { q: '', filters: urlState.filters } as unknown as DiscoverNavContextValue,
+          actions: urlActions,
+          filters: projected,
+          setFilters: vi.fn(),
+          handleFiltersChange: vi.fn(),
+          selectedSchool: null,
+          onSchoolSelect: vi.fn(),
+          schoolBoardFilter: [],
+          onSchoolBoardFilterChange: vi.fn(),
+          city: 'udupi',
+          effectiveSelectedArea: null,
+          trendsAreaKeys: undefined,
+          isFetching: false,
+        });
+        return { projected, chips: chrome.activeContextChips };
+      },
+      { wrapper: Wrapper },
+    );
+
+    // The projected PropertyFilters (the object the page seeds its `filters` from).
+    expect(result.current.projected.sellerTypes).toEqual(['owner']);
+    expect(result.current.projected.newToMarket).toBe(true);
+    expect(result.current.projected.reraRegistered).toBe(true);
+    expect(result.current.projected.dateFrom).toBeInstanceOf(Date);
+    expect((result.current.projected.dateFrom as Date).getTime()).toBe(new Date('2025-01-15').getTime());
+    expect(result.current.projected.dateTo).toBeInstanceOf(Date);
+    expect((result.current.projected.dateTo as Date).getTime()).toBe(new Date('2025-02-01').getTime());
+
+    // And the chips the controller hands to the right panel render all four.
+    render(result.current.chips);
+    expect(screen.getByTestId('chip-seller')).toHaveTextContent(/Seller: /);
+    // A BOTH-dates label ("Listed: <from> – <to>"), not "from"/"until" (timezone-independent shape check).
+    expect(screen.getByTestId('chip-date')).toHaveTextContent(/Listed: .+ – .+$/);
+    expect(screen.getByTestId('chip-bool-ntm')).toBeInTheDocument();
+    expect(screen.getByTestId('chip-bool-rera')).toBeInTheDocument();
+  });
+});
+
+describe('useDiscoverFilterChromeController — seller / date / boolean chip dismiss wiring (FC-2..FC-4)', () => {
+  // #2750 PR-5 FC-2
+  it('dismissing the seller chip clears sellerTypes only', async () => {
+    const { handleFiltersChange } = setup(SELLER_DATE_BOOL_FILTERS);
+    await clearChip('chip-seller');
+
+    const next = nextFilters(handleFiltersChange);
+    // PRESENT-and-undefined so the URL writer drops it (absent would leave the old value standing).
+    expect('sellerTypes' in next).toBe(true);
+    expect(next.sellerTypes).toBeUndefined();
+    expect(next.dateFrom).toEqual(new Date('2025-01-15'));
+    expect(next.dateTo).toEqual(new Date('2025-02-01'));
+    expect(next.newToMarket).toBe(true);
+    expect(next.reraRegistered).toBe(true);
+  });
+
+  // #2750 PR-5 FC-3
+  it('dismissing the date chip clears BOTH dateFrom and dateTo, leaving seller and booleans', async () => {
+    const { handleFiltersChange } = setup(SELLER_DATE_BOOL_FILTERS);
+    await clearChip('chip-date');
+
+    const next = nextFilters(handleFiltersChange);
+    expect('dateFrom' in next).toBe(true);
+    expect('dateTo' in next).toBe(true);
+    expect(next.dateFrom).toBeUndefined();
+    expect(next.dateTo).toBeUndefined();
+    expect(next.sellerTypes).toEqual(['owner']);
+    expect(next.newToMarket).toBe(true);
+    expect(next.reraRegistered).toBe(true);
+  });
+
+  // #2750 PR-5 FC-4
+  it('dismissing the new-to-market chip clears newToMarket and keeps reraRegistered (and the RERA chip clears only RERA)', async () => {
+    const ntm = setup(SELLER_DATE_BOOL_FILTERS);
+    await clearChip('chip-bool-ntm');
+    const afterNtm = nextFilters(ntm.handleFiltersChange);
+    expect('newToMarket' in afterNtm).toBe(true);
+    expect(afterNtm.newToMarket).toBeUndefined();
+    expect(afterNtm.reraRegistered).toBe(true);
+    expect(afterNtm.sellerTypes).toEqual(['owner']);
+
+    // Symmetric arm on a fresh render: dismissing RERA clears RERA and keeps new-to-market.
+    cleanup();
+    const rera = setup(SELLER_DATE_BOOL_FILTERS);
+    await clearChip('chip-bool-rera');
+    const afterRera = nextFilters(rera.handleFiltersChange);
+    expect('reraRegistered' in afterRera).toBe(true);
+    expect(afterRera.reraRegistered).toBeUndefined();
+    expect(afterRera.newToMarket).toBe(true);
   });
 });

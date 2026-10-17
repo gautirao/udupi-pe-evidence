@@ -125,6 +125,23 @@ describe('AppLayout — nav links by role', () => {
     expect(screen.queryByRole('link', { name: /broker dashboard/i })).not.toBeInTheDocument();
   });
 
+  // #2750 PR-5 area-overview-N1
+  it('user role: Trends link points at /trends and there is no Insights link', () => {
+    mockAuth = baseAuth({
+      user: { email: 'user@test.com' },
+      userRole: 'user',
+    });
+    renderLayout();
+
+    const trendsLinks = screen.getAllByRole('link', { name: /^trends$/i });
+    expect(trendsLinks.length).toBeGreaterThan(0);
+    for (const link of trendsLinks) {
+      expect(link.getAttribute('href')).toMatch(/^\/trends\?city=/);
+    }
+    // The retired /insights entry must not come back as a nav item.
+    expect(screen.queryByRole('link', { name: /^insights$/i })).not.toBeInTheDocument();
+  });
+
   it('dealer role: shows Broker dashboard, New listing, and Broker workspace menu — no user/admin links', async () => {
     mockAuth = baseAuth({
       user: { email: 'dealer@test.com' },
