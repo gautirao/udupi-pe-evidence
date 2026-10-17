@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
 
 test.describe('Issue 2759: Consent banner clickable at narrow desktop', () => {
   // Clear consent before tests
@@ -31,13 +31,15 @@ test.describe('Issue 2759: Consent banner clickable at narrow desktop', () => {
       const centerX = box!.x + box!.width / 2;
       const centerY = box!.y + box!.height / 2;
 
-      // Ensure the button itself or its child is the element from point
-      const topElementInfo = await page.evaluate(({ x, y }) => {
-        const el = document.elementFromPoint(x, y);
-        return el ? { tag: el.tagName, className: el.className, text: el.textContent?.trim().slice(0, 30) } : null;
-      }, { x: centerX, y: centerY });
-      
-      console.log(`[${width}px] Top element:`, topElementInfo);
+      // The topmost element at the button centre must be the Decline button or a descendant of it.
+      const topmostIsDecline = await declineBtn.evaluate(
+        (btn, { x, y }) => {
+          const el = document.elementFromPoint(x, y);
+          return el !== null && btn.contains(el);
+        },
+        { x: centerX, y: centerY },
+      );
+      expect(topmostIsDecline, `[${width}px] topmost element at the Decline centre is not the Decline button or a descendant`).toBe(true);
 
       // Perform a real click and expect the banner to be dismissed
       await declineBtn.click();

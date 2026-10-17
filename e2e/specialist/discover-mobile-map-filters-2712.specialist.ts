@@ -35,7 +35,8 @@
  *    (vaul's default `bg-black/80` backdrop), which only happens if the overlay is actually
  *    painted on top of the map content at that point — DOM/event semantics cannot fake this.
  */
-import { test, expect, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
 import { inflateSync } from 'node:zlib';
 import { assertReachable } from '../support/reachability';
 

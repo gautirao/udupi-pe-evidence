@@ -128,6 +128,8 @@ def snapshot(ref):
     parity = [f for f in ref.files if f.startswith("e2e-parity/") and MATCHABLE.search(f)]
     canon = [f for f in ref.files if f.startswith("e2e/canonical/") and f.endswith(".canonical.ts")
              and "/support/" not in f]
+    specialist = [f for f in ref.files if f.startswith("e2e/specialist/") and f.endswith(".specialist.ts")
+                  and "/support/" not in f]
     legacy_rows = {f: analyse(ref, f) for f in legacy}
     canon_tests, canon_ids = 0, []
     for f in canon:
@@ -163,6 +165,7 @@ def snapshot(ref):
         "canonical_static_tests": canon_tests,
         "canonical_ids_in_titles": sorted(set(canon_ids), key=lambda s: (re.sub(r"\d+.*", "", s), int(re.search(r"\d+", s).group()), s)),
         "parity_spec_files": len(parity),
+        "specialist_spec_files": len(specialist),
         "playwright_configs": sorted(f for f in ref.files if re.search(r"(^|/)playwright[^/]*config[^/]*\.ts$", f)),
         "package_scripts_mentioning_e2e": scripts,
         "ci_jobs_invoking_playwright": sorted(ci_jobs),
@@ -179,7 +182,7 @@ def section(title, label, snap):
 def build(before_ref, after_ref):
     before, after = snapshot(Ref(before_ref)), snapshot(Ref(after_ref))
     delta = []
-    for k in ("legacy_spec_files", "legacy_static_test_callsites", "canonical_spec_files", "canonical_static_tests", "parity_spec_files"):
+    for k in ("legacy_spec_files", "legacy_static_test_callsites", "canonical_spec_files", "canonical_static_tests", "parity_spec_files", "specialist_spec_files"):
         delta.append(f"| {k} | {before[k]} | {after[k]} | {after[k] - before[k]:+d} |")
     head = [
         "# E2E inventory (generated)",

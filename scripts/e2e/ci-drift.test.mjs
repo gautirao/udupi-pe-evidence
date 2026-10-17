@@ -258,3 +258,104 @@ test('hook, scripts and package.json still point at the same guards', () => {
   assert.ok(!/docker run[^\n]*\s-e\s/.test(up) && !/^\s*-e\s/m.test(up), 'stack-up.sh must not pass secrets with -e');
   assert.equal((up.match(/--env-file "\$AUTH_WORKDIR\//g) ?? []).length, 2, 'GoTrue and PostgREST both use --env-file');
 });
+
+// ---- #2750 S0: the specialist suite must stay OUT of CI, the pre-push hook, and the gate's verdict path --------------------
+// PRE_PUSH_PATH=<file> / GATE_PATH=<file> point the same assertions at a mutated copy (used to prove the tests go red).
+const PRE_PUSH_TEXT = fs.readFileSync(process.env.PRE_PUSH_PATH ?? path.join(ROOT, '.githooks', 'pre-push'), 'utf8');
+const GATE_TEXT = fs.readFileSync(process.env.GATE_PATH ?? path.join(ROOT, 'scripts', 'run-e2e-gate.sh'), 'utf8');
+
+/** CD1: ci.yml (the WHOLE file, any job) never mentions the specialist suite or its config. Comments count too (fail closed). */
+export function ciSpecialistErrors(text) {
+  const errors = [];
+  if (/specialist/i.test(text)) errors.push('ci.yml mentions "specialist"; the specialist suite is opt-in and local-only and must never be wired into CI');
+  if (/playwright\.specialist\.config/.test(text)) errors.push('ci.yml mentions playwright.specialist.config');
+  return errors;
+}
+
+/** CD2: the pre-push hook never mentions the specialist suite or the --suite option. */
+export function prePushSpecialistErrors(text) {
+  const errors = [];
+  if (/specialist/i.test(text)) errors.push('.githooks/pre-push mentions "specialist"; the hook must run only the static guards');
+  if (/--suite/.test(text)) errors.push('.githooks/pre-push mentions --suite; the hook must call the gate/guards with no suite option');
+  return errors;
+}
+
+/** CD4: the SUITE default is canonical and the specialist branch exits BEFORE the final FC-28 check, the canonical verdict and the sentinel. */
+export function gateSuiteErrors(gate) {
+  const errors = [];
+  if (!/^SUITE=canonical$/m.test(gate)) errors.push('run-e2e-gate.sh no longer defaults SUITE to canonical');
+  const assigns = gate.split('\n').filter((l) => /^\s*SUITE=/.test(l));
+  if (assigns.length !== 2 || !assigns.some((l) => l.trim() === 'SUITE=canonical') || !assigns.some((l) => l.includes('SUITE="${arg#--suite=}"'))) {
+    errors.push(`run-e2e-gate.sh assigns SUITE in an unexpected way (${assigns.length} assignment(s)); only the canonical default and the --suite= parser may set it`);
+  }
+  const pass = gate.indexOf('SPECIALIST SUITE: PASS');
+  const exit = pass < 0 ? -1 : gate.indexOf('exit 0', pass);
+  const markers = {
+    'the final FC-28 bundle check': gate.indexOf('fc28-bundle-final.log'),
+    'the CANONICAL E2E GATE: PASS verdict': gate.indexOf('echo "CANONICAL E2E GATE: PASS @'),
+    'the .e2e-passed write': gate.indexOf('> "$ROOT/.e2e-passed"'),
+    'the E2E_CANONICAL_GATE export': gate.indexOf('export E2E_CANONICAL_GATE=1'),
+  };
+  if (pass < 0 || exit < 0) errors.push('the specialist branch no longer prints "SPECIALIST SUITE: PASS" followed by exit 0');
+  else {
+    for (const [name, at] of Object.entries(markers)) {
+      if (at < 0) errors.push(`run-e2e-gate.sh lost ${name} (the canonical path changed)`);
+      else if (exit > at) errors.push(`the specialist branch's exit comes AFTER ${name}; it must exit before it`);
+    }
+    const start = gate.indexOf('# ---- #2750 S0 specialist branch');
+    const block = start >= 0 && start < exit ? gate.slice(start, exit) : '';
+    if (!block) errors.push('the specialist run branch marker is missing or after its exit');
+    for (const forbidden of ['CANONICAL E2E GATE: PASS', '> "$ROOT/.e2e-passed"', 'printf x > "$ROOT/.e2e-passed"', 'export E2E_CANONICAL_GATE=1', 'ENVIRONMENT_GATED']) {
+      if (block.includes(forbidden)) errors.push(`the specialist branch contains "${forbidden}"`);
+    }
+    if (gate.indexOf('SPECIALIST SUITE: PASS', pass + 1) >= 0) errors.push('"SPECIALIST SUITE: PASS" is printed from more than one place');
+  }
+  return errors;
+}
+
+test('CD1: the real ci.yml never mentions the specialist suite (any job, comments included)', () => {
+  assert.deepEqual(ciSpecialistErrors(CI_TEXT), []);
+});
+
+test('CD1 mutation: "specialist" or the specialist config injected anywhere in ci.yml is detected', () => {
+  assert.ok(ciSpecialistErrors(mutate('run: bash scripts/run-e2e-gate.sh\n', 'run: bash scripts/run-e2e-gate.sh --suite=specialist\n')).some((e) => e.includes('specialist')));
+  assert.ok(ciSpecialistErrors(mutate('jobs:\n', '# playwright.specialist.config.ts\njobs:\n')).some((e) => e.includes('playwright.specialist.config')));
+  assert.ok(ciSpecialistErrors(mutate('run: npm run test:e2e:guard', 'run: npm run test:e2e:specialist')).length > 0);
+});
+
+test('CD2: the pre-push hook never mentions the specialist suite or --suite; a mutated copy is detected', () => {
+  assert.deepEqual(prePushSpecialistErrors(PRE_PUSH_TEXT), []);
+  assert.ok(prePushSpecialistErrors(`${PRE_PUSH_TEXT}\nnpm run test:e2e:specialist\n`).some((e) => e.includes('specialist')));
+  assert.ok(prePushSpecialistErrors(`${PRE_PUSH_TEXT}\nbash scripts/run-e2e-gate.sh --suite=canonical\n`).some((e) => e.includes('--suite')));
+});
+
+test('CD3: package.json test:e2e:gate is exactly the bare gate and test:e2e:specialist is exactly the --suite=specialist call', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).scripts;
+  assert.equal(pkg['test:e2e:gate'], 'bash scripts/run-e2e-gate.sh');
+  assert.equal(pkg['test:e2e:specialist'], 'bash scripts/run-e2e-gate.sh --suite=specialist');
+  // CI runs the guard and the unit tests, never the specialist script
+  assert.doesNotMatch(pkg['test:e2e:guard'], /specialist/);
+  assert.doesNotMatch(pkg['test:e2e:guard:unit'], /specialist/);
+});
+
+test('CD4: SUITE defaults to canonical and the specialist branch exits before the FC-28 final check, the canonical verdict and the sentinel write', () => {
+  assert.deepEqual(gateSuiteErrors(GATE_TEXT), []);
+  const at = (s) => GATE_TEXT.indexOf(s);
+  assert.ok(at('SPECIALIST SUITE: PASS') > 0 && at('SPECIALIST SUITE: PASS') < at('fc28-bundle-final.log'));
+  assert.ok(at('SPECIALIST SUITE: PASS') < at('echo "CANONICAL E2E GATE: PASS @'));
+  assert.ok(at('SPECIALIST SUITE: PASS') < at('> "$ROOT/.e2e-passed"'));
+});
+
+test('CD4 mutation: moving the specialist exit below the sentinel write, flipping the default, or leaking the canonical verdict/sentinel is detected', () => {
+  const exitBlock = '  echo "SPECIALIST SUITE: PASS @ $HEAD_SHA (NOT the E2E gate; .e2e-passed untouched)"\n  exit 0\nfi\n';
+  assert.ok(GATE_TEXT.includes(exitBlock), 'mutation anchor');
+  const moved = GATE_TEXT.replace(exitBlock, 'fi\n') + exitBlock;
+  assert.ok(gateSuiteErrors(moved).some((e) => e.includes('AFTER')), gateSuiteErrors(moved).join('|'));
+  assert.ok(gateSuiteErrors(GATE_TEXT.replace(/^SUITE=canonical$/m, 'SUITE=specialist')).some((e) => e.includes('default')));
+  const leak = GATE_TEXT.replace(exitBlock, '  echo "CANONICAL E2E GATE: PASS"\n' + exitBlock);
+  assert.ok(gateSuiteErrors(leak).some((e) => e.includes('contains "CANONICAL E2E GATE: PASS"')), gateSuiteErrors(leak).join('|'));
+  const sentinel = GATE_TEXT.replace(exitBlock, '  printf x > "$ROOT/.e2e-passed"\n' + exitBlock);
+  assert.ok(gateSuiteErrors(sentinel).some((e) => e.includes('.e2e-passed')), gateSuiteErrors(sentinel).join('|'));
+  const second = GATE_TEXT.replace(exitBlock, '  echo "SPECIALIST SUITE: PASS twice"\n' + exitBlock);
+  assert.ok(gateSuiteErrors(second).length > 0);
+});

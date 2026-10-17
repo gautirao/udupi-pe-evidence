@@ -7,11 +7,12 @@ static source counts (`test(...)` call sites); the number Playwright COLLECTS is
 
 | metric | before | after | delta |
 |---|---:|---:|---:|
-| legacy_spec_files | 215 | 147 | -68 |
-| legacy_static_test_callsites | 1043 | 763 | -280 |
+| legacy_spec_files | 215 | 142 | -73 |
+| legacy_static_test_callsites | 1043 | 738 | -305 |
 | canonical_spec_files | 12 | 17 | +5 |
-| canonical_static_tests | 34 | 45 | +11 |
+| canonical_static_tests | 34 | 49 | +15 |
 | parity_spec_files | 2 | 2 | +0 |
+| specialist_spec_files | 0 | 5 | +5 |
 
 ## BEFORE (retirement series base)
 
@@ -92,7 +93,8 @@ Ref: `092914d6e9c418590ab73ca1f3a65099b50da1d2`
     "playwright.canonical.config.ts",
     "playwright.config.ts",
     "playwright.parity.config.ts"
-  ]
+  ],
+  "specialist_spec_files": 0
 }
 ```
 
@@ -115,6 +117,7 @@ Ref: `HEAD`
     "RQ1",
     "RQ2",
     "T1",
+    "T1c",
     "T2",
     "T2b",
     "T3",
@@ -123,6 +126,7 @@ Ref: `HEAD`
     "T6",
     "T7",
     "T8",
+    "T8b",
     "T9",
     "T10",
     "T11",
@@ -139,10 +143,11 @@ Ref: `HEAD`
     "T20",
     "T21",
     "T22",
-    "T23"
+    "T23",
+    "T24"
   ],
   "canonical_spec_files": 17,
-  "canonical_static_tests": 45,
+  "canonical_static_tests": 49,
   "ci_jobs_invoking_playwright": [
     "ci.yml:backend-integration",
     "ci.yml:e2e-canonical",
@@ -151,20 +156,20 @@ Ref: `HEAD`
   ],
   "journey_matrix_present": true,
   "legacy_by_bucket": {
-    "discover_subdir": 47,
+    "discover_subdir": 44,
     "journey": 10,
-    "top_level": 90
+    "top_level": 88
   },
-  "legacy_files_with_loop_generated_tests": 15,
-  "legacy_files_with_network_mocks": 72,
+  "legacy_files_with_loop_generated_tests": 13,
+  "legacy_files_with_network_mocks": 70,
   "legacy_files_with_skip_or_fixme": 51,
   "legacy_project_membership": {
-    "full": 147,
+    "full": 142,
     "integration-ui": 3,
     "journey": 10
   },
-  "legacy_spec_files": 147,
-  "legacy_static_test_callsites": 763,
+  "legacy_spec_files": 142,
+  "legacy_static_test_callsites": 738,
   "manifest_present": true,
   "package_scripts_mentioning_e2e": {
     "prepare": "chmod +x scripts/run-e2e-local.sh scripts/run-e2e-gate.sh .githooks/pre-push && git config core.hooksPath .githooks",
@@ -178,6 +183,7 @@ Ref: `HEAD`
     "test:e2e:headed": "bash scripts/run-e2e-local.sh --headed --workers=1",
     "test:e2e:journey": "playwright test --project=journey",
     "test:e2e:local": "bash scripts/run-e2e-local.sh",
+    "test:e2e:specialist": "bash scripts/run-e2e-gate.sh --suite=specialist",
     "test:e2e:watch": "bash scripts/e2e-watch.sh",
     "test:e2e:watch:slow": "bash scripts/e2e-watch.sh --slow"
   },
@@ -187,7 +193,9 @@ Ref: `HEAD`
     "playwright.canonical.config.ts",
     "playwright.config.ts",
     "playwright.deployed.config.ts",
-    "playwright.parity.config.ts"
-  ]
+    "playwright.parity.config.ts",
+    "playwright.specialist.config.ts"
+  ],
+  "specialist_spec_files": 5
 }
 ```

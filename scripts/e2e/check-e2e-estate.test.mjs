@@ -312,6 +312,223 @@ test('CLI: exits 0 on the real repo and 1 with FAIL lines on a broken root', () 
   } finally { clean(root); }
 });
 
+// ---- #2750 S0: specialist suite rules SP1-SP9 + CFG (tag FAIL[FC-19/SPn]) ---------------------------------------
+const SPEC = 'e2e/specialist/x.specialist.ts';
+const GOOD_SPEC = [
+  "import { test, expect } from './support/specialist-test';",
+  "import { type Page } from '@playwright/test';",
+  "test('x', async ({ page }) => { await page.goto('/'); await expect(page).toHaveURL(/./); });",
+].join('\n');
+const BASE_ROWS = [
+  ['e2e/a.spec.ts', 'top-level', 'DELETE_DUP', 'T1', 'covered by T1', 'PR-3', String(ISSUE_2751_TOTAL), 'SCHEDULED(PR-3)'],
+  ['e2e/b.spec.ts', 'top-level', 'MOVE_DOWN', 'apps/web/src/b.test.ts', 'component rule', 'PR-3', '0', 'SCHEDULED(PR-3)'],
+];
+const specRow = (file = SPEC, rationale = '[HIT_TEST] Decline is the topmost element at its centre at five viewport widths') =>
+  [file, 'specialist', 'RETAIN_SPECIALIST', 'e2e/specialist/ (outside the gate)', rationale, 'S0', '0', 'RETAIN_SPECIALIST'];
+/** A consistent estate with one admitted specialist spec. */
+function sworld({ spec = GOOD_SPEC, files = {}, rows = [specRow()] } = {}) {
+  return world({ files: { [SPEC]: spec, ...files }, rows: [...BASE_ROWS, ...rows] });
+}
+const sp = (n) => `FAIL[FC-19/SP${n}]`;
+const hasSp = (res, n, needle = '') => res.errors.some((e) => e.includes(sp(n)) && e.includes(needle));
+/** Run the guard on a world and return the result; the world is removed. */
+function inWorld(w, fn) {
+  const root = w;
+  try { return fn(checkEstate({ root, trackedFiles: [] }), root); } finally { clean(root); }
+}
+
+test('SP baseline: a consistent estate with one admitted specialist spec raises no SP error', () => {
+  inWorld(sworld(), (res) => assert.deepEqual(nonFc24(res).errors, []));
+});
+
+test('CFG: playwright.specialist.config.ts is an expected config; removing it, or adding another, fails', () => {
+  assert.ok(EXPECTED_CONFIGS.includes('playwright.specialist.config.ts'));
+  inWorld(world({ files: { 'playwright.specialist.config.ts': null } }), (res) => assert.ok(has(res, 'FC-19', 'missing [playwright.specialist.config.ts]')));
+  inWorld(world({ files: { 'playwright.specialist2.config.ts': 'x' } }), (res) => assert.ok(has(res, 'FC-19', 'playwright.specialist2.config.ts')));
+});
+
+test('SP1: a *.spec.ts under e2e/specialist, a *.specialist.ts elsewhere, and a stray file type all fail', () => {
+  inWorld(sworld({ files: { 'e2e/specialist/zz.spec.ts': '' } }), (res) => assert.ok(hasSp(res, 1, 'e2e/specialist/zz.spec.ts')));
+  inWorld(sworld({ files: { 'e2e/specialist/support/h.test.ts': '' } }), (res) => assert.ok(hasSp(res, 1, 'h.test.ts')));
+  inWorld(sworld({ files: { 'e2e/stray.specialist.ts': GOOD_SPEC } }), (res) => assert.ok(hasSp(res, 1, 'e2e/stray.specialist.ts')));
+  inWorld(sworld({ files: { 'apps/web/src/o.specialist.ts': GOOD_SPEC } }), (res) => assert.ok(hasSp(res, 1, 'apps/web/src/o.specialist.ts')));
+  inWorld(sworld({ files: { 'e2e/specialist/data.json': '{}' } }), (res) => assert.ok(hasSp(res, 1, 'data.json')));
+  // control: README.md and support/*.ts are allowed
+  inWorld(sworld({ files: { 'e2e/specialist/README.md': '# x', 'e2e/specialist/support/specialist-test.ts': 'export const t = 1;' } }), (res) => assert.deepEqual(nonFc24(res).errors, []));
+});
+
+test('SP2: a specialist spec needs exactly one RETAIN_SPECIALIST row; a RETAIN_SPECIALIST row must name a specialist or e2e-parity file', () => {
+  inWorld(sworld({ rows: [] }), (res) => assert.ok(hasSp(res, 2, 'has no RETAIN_SPECIALIST row')));
+  inWorld(sworld({ rows: [['e2e/specialist/x.specialist.ts', 'specialist', 'DELETE_DUP', 'T1', 'x', 'S0', '0', 'SCHEDULED(PR-3)']] }), (res) => assert.ok(hasSp(res, 2, 'decision AND status')));
+  inWorld(sworld({ rows: [specRow(), specRow('e2e/a.spec.ts')] }), (res) => assert.ok(hasSp(res, 2, 'e2e/a.spec.ts')));
+  // control: an e2e-parity RETAIN_SPECIALIST row is grandfathered
+  const parity = ['e2e-parity/p.spec.ts', 'parity', 'RETAIN_SPECIALIST', 'x', 'parity harness kept as a specialist suite', 'PR-7', '0', 'RETAIN_SPECIALIST'];
+  inWorld(sworld({ files: { 'e2e-parity/p.spec.ts': '' }, rows: [specRow(), parity] }), (res) => assert.ok(!hasSp(res, 2), res.errors.join('\n')));
+});
+
+test('SP3: the rationale needs a known [CODE] and a specific row after it', () => {
+  inWorld(sworld({ rows: [specRow(SPEC, 'Decline is the topmost element at its centre at five viewport widths')] }), (res) => assert.ok(hasSp(res, 3, 'must start with a [CODE]')));
+  inWorld(sworld({ rows: [specRow(SPEC, '[HARD_TO_REPLACE] Decline is the topmost element at its centre at five widths')] }), (res) => assert.ok(hasSp(res, 3, 'unknown reason code [HARD_TO_REPLACE]')));
+  inWorld(sworld({ rows: [specRow(SPEC, '[HIT_TEST] too short')] }), (res) => assert.ok(hasSp(res, 3, '>= 20 characters')));
+  // control: two known codes
+  inWorld(sworld({ rows: [specRow(SPEC, '[LEAFLET_REAL][POINTER_REAL] real markercluster spiderfy and touch tap at 390x844')] }), (res) => assert.ok(!hasSp(res, 3)));
+});
+
+test('SP4: each deny-listed host and any non-loopback literal fails; loopback, OSM tiles and reserved TLDs pass; comments are NOT exempt', () => {
+  const bad = [
+    "const a = 'https://app.propertysignal.in/x';",
+    "const a = 'https://udupi-x.pages.dev';",
+    "const a = 'https://udupi-x.onrender.com/api';",
+    "const a = 'https://abcd.supabase.co/rest/v1';",
+    "const a = 'https://example.com/x';",
+    "const a = 'http://localhost@evil.com/';",
+    "const a = 'http://localhost.evil.com:5380';",
+    "// see https://example.com/docs\nconst a = 1;",
+    "const a = 'wss://not-loopback.dev'; const b = 'https://evil.dev';",
+  ];
+  for (const body of bad) {
+    inWorld(sworld({ spec: `${GOOD_SPEC}\n${body}` }), (res) => assert.ok(hasSp(res, 4, SPEC), body));
+  }
+  const good = [
+    "const a = 'http://localhost:5380/x'; const b = 'http://127.0.0.1:8380'; const c = 'http://[::1]:5380';",
+    "const a = 'https://a.tile.openstreetmap.org/1/2/3.png';",
+    "const a = 'https://mock.test/api'; const b = 'https://x.invalid/'; const c = 'https://y.example/';",
+    'const a = `http://localhost:${port}/x`; const b = `https://${host}/y`;',
+  ];
+  for (const body of good) {
+    inWorld(sworld({ spec: `${GOOD_SPEC}\n${body}` }), (res) => assert.ok(!hasSp(res, 4), `${body}\n${res.errors.join('\n')}`));
+  }
+  // README.md is excepted; a support file is not
+  inWorld(sworld({ files: { 'e2e/specialist/README.md': 'never run against https://example.com or foo.pages.dev' } }), (res) => assert.ok(!hasSp(res, 4)));
+  inWorld(sworld({ files: { 'e2e/specialist/support/s.ts': "export const u = 'https://example.com';" } }), (res) => assert.ok(hasSp(res, 4, 'support/s.ts')));
+});
+
+test('SP5: skip/fixme/only/fail (and describe.*) fail in e2e/specialist/**; a commented skip passes', () => {
+  for (const body of ["test.skip(true, 'x');", "test.describe.fixme('d', () => {});", "test.only('t', () => {});", "test.fail(true);", "describe.skip('d', () => {});", "it.skip('t', () => {});"]) {
+    inWorld(sworld({ spec: `${GOOD_SPEC}\n${body}` }), (res) => assert.ok(hasSp(res, 5, SPEC), body));
+  }
+  inWorld(sworld({ files: { 'e2e/specialist/support/s.ts': 'test.skip(true);' } }), (res) => assert.ok(hasSp(res, 5, 'support/s.ts')));
+  inWorld(sworld({ spec: `${GOOD_SPEC}\n// never test.skip here\n/* test.fixme(...) */` }), (res) => assert.ok(!hasSp(res, 5)));
+});
+
+test('SP5/SP8/SP9: banned constructs placed BETWEEN route globs are still found (the "**/api/**" glob must not swallow code)', () => {
+  const between = (banned) => `${GOOD_SPEC}\nawait page.route('**/api/**', (r) => r.fulfill({ status: 200 }));\n${banned}\nawait page.route('**/x', (r) => r.fulfill({ status: 200 }));`;
+  inWorld(sworld({ spec: between("test.skip(true, 'x');") }), (res) => assert.ok(hasSp(res, 5, SPEC)));
+  inWorld(sworld({ spec: between("await page.route('**/*', (route) => route.continue());") }), (res) => assert.ok(hasSp(res, 8, SPEC)));
+  inWorld(sworld({ spec: between("await page.request.get('/x');") }), (res) => assert.ok(hasSp(res, 9, SPEC)));
+});
+
+test('SP6: a legacy hosted-auth state path fails; storageState: undefined passes', () => {
+  inWorld(sworld({ spec: `${GOOD_SPEC}\ntest.use({ storageState: 'e2e/fixtures/user-auth.json' });` }), (res) => assert.ok(hasSp(res, 6, SPEC)));
+  inWorld(sworld({ spec: `${GOOD_SPEC}\ntest.use({ storageState: undefined });` }), (res) => assert.ok(!hasSp(res, 6)));
+});
+
+test('SP7: `test` must come from ./support/specialist-test; a multi-specifier @playwright/test import WITHOUT test passes', () => {
+  const noGuard = "import { test, expect } from '@playwright/test';\ntest('x', async () => {});";
+  inWorld(sworld({ spec: noGuard }), (res) => { assert.ok(hasSp(res, 7, "imports `test` from '@playwright/test'")); assert.ok(hasSp(res, 7, 'must import `test`')); });
+  inWorld(sworld({ spec: "import { test as t, expect } from '@playwright/test';\nimport { test } from './support/specialist-test';" }), (res) => assert.ok(hasSp(res, 7, "imports `test` from '@playwright/test'")));
+  inWorld(sworld({ spec: "import * as pw from '@playwright/test';\nimport { test } from './support/specialist-test';" }), (res) => assert.ok(hasSp(res, 7, 'namespace/default import')));
+  inWorld(sworld({ spec: "import { expect } from './support/specialist-test';\ntest('x', () => {});" }), (res) => assert.ok(hasSp(res, 7, 'must import `test`')));
+  // controls
+  const multi = "import { expect, type Page, type Locator } from '@playwright/test';\nimport { test } from './support/specialist-test';\ntest('x', async () => {});";
+  inWorld(sworld({ spec: multi }), (res) => assert.ok(!hasSp(res, 7), res.errors.join('\n')));
+  const multiline = "import {\n  expect,\n  type Page,\n} from '@playwright/test';\nimport { test, backendGet } from './support/specialist-test';";
+  inWorld(sworld({ spec: multiline }), (res) => assert.ok(!hasSp(res, 7), res.errors.join('\n')));
+});
+
+test('SP8: a route continue call fails; fallback()/fulfill() pass; a commented continue passes', () => {
+  for (const body of ["await page.route('**/api/**', (route) => route.continue());", "await page.route('**/*', (r) => { r.continue(); });"]) {
+    inWorld(sworld({ spec: `${GOOD_SPEC}\n${body}` }), (res) => assert.ok(hasSp(res, 8, SPEC), body));
+  }
+  inWorld(sworld({ spec: `${GOOD_SPEC}\nawait page.route('**/*', (route) => route.fallback());\nawait page.route('**/a', (route) => route.fulfill({ status: 200 }));\n// route.continue() is banned\nfor (const i of [1]) { if (i) continue; }` }), (res) => assert.ok(!hasSp(res, 8), res.errors.join('\n')));
+});
+
+test('SP9: direct APIRequestContext / fetch fails; backendGet() passes', () => {
+  for (const body of [
+    "await page.request.get('/x');",
+    "await context.request.get('/x');",
+    "const c = await request.newContext();",
+    "const r = await fetch('/x');",
+    "test('t', async ({ page, request }) => {});",
+    "test('t', async ({ request: api }) => {});",
+    "await page.route('**/*', async (route) => { await route.fetch(); });",
+  ]) {
+    inWorld(sworld({ spec: `${GOOD_SPEC}\n${body}` }), (res) => assert.ok(hasSp(res, 9, SPEC), body));
+  }
+  inWorld(sworld({ spec: `${GOOD_SPEC}\nconst r = await backendGet(page, '/api/x');\nconst p = prefetch('a');\nconst d = refetch(1);\n// await fetch('/x')\ntest('t2', async ({ page, browserName }) => {});` }), (res) => assert.ok(!hasSp(res, 9), res.errors.join('\n')));
+});
+
+test('SP9 (CX6): property-qualified and bracket fetch forms fail; prefetch / fetchData / commented fetch pass', () => {
+  for (const body of [
+    "const r = await globalThis.fetch('/x');",
+    "const r = await window.fetch('/x');",
+    "const r = await self.fetch('/x');",
+    "const r = await globalThis . fetch ('/x');",
+    "const r = await globalThis?.fetch('/x');",
+    "const r = await window.fetch?.('/x');",
+    "const r = await fetch?.('/x');",
+    "const r = await globalThis['fetch']('/x');",
+    'const r = await window["fetch"]("/x");',
+    "const r = await self [ 'fetch' ] ('/x');",
+    "const r = await globalThis?.['fetch']('/x');",
+    "await page.evaluate(() => window.fetch('/x'));",
+  ]) {
+    inWorld(sworld({ spec: `${GOOD_SPEC}\n${body}` }), (res) => assert.ok(hasSp(res, 9, SPEC), body));
+  }
+  for (const body of [
+    'const a = obj.prefetch("x");',
+    'const b = foo.fetchData(1);',
+    'const c = window.prefetch(1);',
+    "const d = globalThis['fetcher']('x');",
+    '// await globalThis.fetch("/x")',
+    '/* window["fetch"]("/x") */',
+  ]) {
+    inWorld(sworld({ spec: `${GOOD_SPEC}\n${body}` }), (res) => assert.ok(!hasSp(res, 9), `${body}: ${res.errors.join('\n')}`));
+  }
+});
+
+test('SP9 (browser): a `browser` fixture parameter and newContext/launch/launchPersistentContext/connectOverCDP fail; page/context fixtures pass', () => {
+  for (const body of [
+    "test('t', async ({ browser }) => {});",
+    "test('t', async ({ page, browser: b }) => {});",
+    "const c = await browser.newContext();",
+    "const b = await chromium.launch();",
+    "const c = await chromium.launchPersistentContext('/tmp/x');",
+    "const b = await chromium.connectOverCDP('http://localhost:9222');",
+  ]) {
+    inWorld(sworld({ spec: `${GOOD_SPEC}\n${body}` }), (res) => assert.ok(hasSp(res, 9, SPEC), body));
+  }
+  // control: page/context fixtures, browserName and a commented launch are fine
+  inWorld(sworld({ spec: `${GOOD_SPEC}\n// await chromium.launch()\ntest('t2', async ({ page, context, browserName }) => { await context.addCookies([]); });` }), (res) => assert.ok(!hasSp(res, 9), res.errors.join('\n')));
+});
+
+test('SP7 (launchers): named chromium/firefox/webkit/request/devices/_electron/_android imports fail; type-only and expect/Page pass', () => {
+  const sp = "import { test } from './support/specialist-test';";
+  for (const [name, src] of [['chromium', '@playwright/test'], ['firefox', '@playwright/test'], ['webkit', 'playwright'], ['request', '@playwright/test'], ['devices', 'playwright-core'], ['_electron', 'playwright'], ['_android', 'playwright-core']]) {
+    inWorld(sworld({ spec: `import { expect, ${name} } from '${src}';\n${sp}` }), (res) => assert.ok(hasSp(res, 7, name), `${name} from ${src}`));
+  }
+  inWorld(sworld({ spec: `import { expect, chromium as c } from '@playwright/test';\n${sp}` }), (res) => assert.ok(hasSp(res, 7, 'chromium'), 'aliased import'));
+  // control: type-only launcher names and ordinary names pass
+  inWorld(sworld({ spec: `import { expect, type Page, type Browser } from '@playwright/test';\nimport type { devices } from '@playwright/test';\n${sp}` }), (res) => assert.ok(!hasSp(res, 7), res.errors.join('\n')));
+});
+
+test('CLI: an SP violation exits 1 with the FAIL[FC-19/SPn] tag', () => {
+  const root = sworld({ files: { 'e2e/specialist/zz.spec.ts': '' } });
+  try {
+    const bad = spawnSync('node', [SCRIPT, '--root', root], { encoding: 'utf8' });
+    assert.equal(bad.status, 1);
+    assert.match(bad.stderr, /FAIL\[FC-19\/SP1\].*zz\.spec\.ts/);
+  } finally { clean(root); }
+});
+
+test('real repo: 2 grandfathered e2e-parity RETAIN_SPECIALIST rows exist today and every other RETAIN_SPECIALIST row sits under e2e/specialist/', () => {
+  const rows = parseCsv(fs.readFileSync(path.join(DEFAULT_ROOT, MANIFEST_REL), 'utf8')).slice(1).filter((r) => r.length > 1);
+  const retain = rows.filter((r) => r[2] === 'RETAIN_SPECIALIST');
+  assert.ok(retain.length >= 2);
+  for (const r of retain) assert.ok(r[0].startsWith('e2e-parity/') || r[0].startsWith('e2e/specialist/'), r[0]);
+  assert.equal(rows.length, 217);
+});
+
 test('cycle 2 LOW: knownCanonicalIds accepts only id-shaped title tokens (a prose title is not a canonical id)', () => {
   const rows = (id) => [
     ['e2e/a.spec.ts', 'top-level', 'DELETE_DUP', id, 'covered', 'PR-3', String(ISSUE_2751_TOTAL), 'RETIRED'],

@@ -49,6 +49,26 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT" || exit 99
 
+# #2750 S0 - suite selection. ARGV ONLY (never an env var: an ambient variable could silently turn a pre-push or CI gate
+# invocation into a non-gate run). Default = canonical, i.e. THE gate. `--suite=specialist` (npm run test:e2e:specialist) selects
+# the opt-in, local-only specialist suite, which is NOT the E2E gate: it never prints the canonical verdict or writes .e2e-passed.
+# Only the exact forms --suite=canonical|--suite=specialist are accepted; any other --suite* token or a repeat exits 2.
+# Every other argument is ignored, exactly as before this option existed.
+SUITE=canonical
+suite_args=0
+for arg in "$@"; do
+  case "$arg" in
+    --suite=canonical|--suite=specialist)
+      suite_args=$((suite_args + 1))
+      [ "$suite_args" -eq 1 ] || { echo "NOT A GATE RUN: --suite was given more than once" >&2; exit 2; }
+      SUITE="${arg#--suite=}" ;;
+    --suite*) echo "NOT A GATE RUN: unsupported ${arg%%=*} argument (use --suite=canonical or --suite=specialist)" >&2; exit 2 ;;
+  esac
+done
+if [ "$SUITE" = specialist ]; then
+  echo "SPECIALIST suite: NOT the E2E gate. Results are never E2E evidence."
+fi
+
 # shellcheck source=dev/lib/port-ownership.sh
 source "$SCRIPT_DIR/dev/lib/port-ownership.sh"
 # shellcheck source=dev/lib/e2e-identity-seed.sh
@@ -98,6 +118,14 @@ fi
 
 if [ -n "${E2E_GATE_EVIDENCE_DIR:-}" ] && { [ -n "${CI:-}" ] || [ -n "${GITHUB_ACTIONS:-}" ]; }; then
   not_a_gate_run "E2E_GATE_EVIDENCE_DIR is a local-evidence aid and is refused in CI"
+fi
+
+if [ "$SUITE" = specialist ]; then
+  # The specialist suite is local-only and opt-in: never in CI, never against hosted Supabase Auth (402), and it carries none of the gate's override aids.
+  if [ -n "${CI:-}" ] || [ -n "${GITHUB_ACTIONS:-}" ]; then not_a_gate_run "the specialist suite is local-only and opt-in; it is refused in CI"; fi
+  [ "$AUTH_MODE" = "local" ] || not_a_gate_run "the specialist suite requires E2E_AUTH_MODE=local (hosted Supabase Auth is forbidden here)"
+  [ -z "${E2E_GATE_EVIDENCE_DIR:-}" ] || not_a_gate_run "E2E_GATE_EVIDENCE_DIR is not supported by the specialist suite (unset it)"
+  [ -z "${E2E_GATE_ALLOW_OPEN_GAPS:-}" ] || not_a_gate_run "E2E_GATE_ALLOW_OPEN_GAPS is not supported by the specialist suite (unset it)"
 fi
 
 # K7: anything inherited that could repoint the backend away from the disposable localhost fixture is refused,
@@ -241,6 +269,7 @@ AI_API_KEY="${AI_API_KEY:-ci-placeholder}"   # the backend only needs a non-empt
 if [ "${E2E_GATE_PREFLIGHT_ONLY:-}" = "1" ]; then
   # Test hook (scripts/e2e/run-e2e-gate.preflight.test.mjs): report how credentials were resolved, start nothing.
   echo "[gate] preflight: auth_mode=$AUTH_MODE env_file_reads=$(wc -c < "$ENV_READS_FILE" | tr -d ' ')" >&2
+  echo "[gate] preflight: suite=$SUITE" >&2
   not_a_gate_run "preflight only (E2E_GATE_PREFLIGHT_ONLY=1); nothing was started"
 fi
 
@@ -276,6 +305,9 @@ gaps_only() {
 }
 
 fail() { echo "CANONICAL E2E GATE: FAIL $*" >&2; exit 1; }
+if [ "$SUITE" = specialist ]; then
+  fail() { echo "SPECIALIST SUITE: FAIL $* (NOT the E2E gate)" >&2; exit 1; }
+fi
 
 # ---------------------------------------------------------------------------------------------
 # 1. Static guards (no stack)
@@ -380,8 +412,19 @@ if [ "$AUTH_MODE" = "local" ]; then
   rm -f "$ROOT/e2e/canonical/fixtures/admin-auth.json" "$ROOT/e2e/canonical/fixtures/broker-auth.json" "$ROOT/e2e/canonical/fixtures/user-auth.json"
 fi
 
+if [ "$SUITE" = specialist ]; then
+  # ---- #2750 S0 specialist collection: no other config may collect e2e/specialist, and the collected set must equal the manifest's. ----
+  echo "[gate] specialist: isolation check (no other config collects e2e/specialist)"
+  node "$SCRIPT_DIR/e2e/specialist-suite.mjs" --phase=isolation > "$OUT/specialist-isolation.out" 2> "$OUT/specialist-isolation.err" \
+    || { cat "$OUT/specialist-isolation.out" "$OUT/specialist-isolation.err" >&2; fail "(specialist isolation)"; }
+  echo "[gate] collecting (playwright --list, specialist config)"
+  env -u PLAYWRIGHT_JSON_OUTPUT_FILE -u PLAYWRIGHT_JSON_OUTPUT_DIR -u PLAYWRIGHT_JSON_OUTPUT_NAME npx --no-install playwright test --config=playwright.specialist.config.ts --list --reporter=list > "$OUT/specialist-list.stdout.log" 2> "$OUT/specialist-list.stderr.log"
+  [ $? -eq 0 ] || fail "(specialist playwright --list failed; see test-results/gate/specialist-list.stderr.log)"
+  node "$SCRIPT_DIR/e2e/specialist-suite.mjs" --phase=list --list "$OUT/specialist-list.stdout.log" || fail "(specialist list vs manifest)"
+fi
 # ---- Collection (--list) against the real config: roster + every matrix id in its project. Needs the role credentials
 # (generated above in local mode), because the config adds a role's projects only when its credentials are present. ----
+if [ "$SUITE" != specialist ]; then
 echo "[gate] collecting (playwright --list)"
 # PLAYWRIGHT_JSON_OUTPUT_NAME is exported for the real run below; when it is set the json reporter
 # writes THERE and prints the text listing on stdout instead. Pin it to the list file for this call so
@@ -401,6 +444,7 @@ if [ "$LIST_PHASE_RC" -ne 0 ]; then
     cat "$OUT/list-phase.err" >&2
     fail "(journey list)"
   fi
+fi
 fi
 
 echo "[gate] starting backend on $BE_PORT"
@@ -485,6 +529,43 @@ fi
 # ---------------------------------------------------------------------------------------------
 # 3. Run + verify
 # ---------------------------------------------------------------------------------------------
+if [ "$SUITE" = specialist ]; then
+  # ---- #2750 S0 specialist branch: self-contained and it EXITS HERE, textually before the final FC-28 check, the canonical
+  # verdict line and the .e2e-passed write, so none of them is reachable in specialist mode. It never exports E2E_CANONICAL_GATE. ----
+  rm -rf "$ROOT/test-results/specialist"   # the canonical `rm -f "$RESULTS"` below clears only the canonical path
+  RUN_START_EPOCH="$(date +%s)"
+  echo "[gate] running specialist suite (workers=1, retries=0)"
+  env -u PLAYWRIGHT_JSON_OUTPUT_FILE -u PLAYWRIGHT_JSON_OUTPUT_DIR -u PLAYWRIGHT_JSON_OUTPUT_NAME npx --no-install playwright test --config=playwright.specialist.config.ts --workers=1 > "$OUT/specialist-run.log" 2>&1
+  SRUN_RC=$?
+  # K3: same secret-name set, scan paths and --purge as the canonical scan below; the secrets are exported only now, after the suite started.
+  E2E_PHONE_ENCRYPTION_KEY="$PHONE_KEY"; export E2E_PHONE_ENCRYPTION_KEY
+  E2E_AUTH_AUTHENTICATOR_PASSWORD="$(< "$AUTH_WORKDIR/authenticator.pw")"; export E2E_AUTH_AUTHENTICATOR_PASSWORD
+  E2E_AUTH_GOTRUE_JWT_SECRET="$(< "$AUTH_WORKDIR/gotrue-hs.secret")"; export E2E_AUTH_GOTRUE_JWT_SECRET
+  E2E_AUTH_SERVICE_ROLE_KEY="$(< "$AUTH_WORKDIR/service_role.jwt")"; export E2E_AUTH_SERVICE_ROLE_KEY
+  SSCAN_OUT="$(mktemp)"
+  node "$SCRIPT_DIR/e2e/check-canonical-journeys.mjs" --phase=scan --purge \
+    --scan-path "$ROOT/test-results" --scan-path "$ROOT/playwright-report" --scan-path "$OUT/backend.log" > "$SSCAN_OUT" 2>&1
+  SSCAN_RC=$?
+  if [ "$SSCAN_RC" -ne 0 ]; then
+    cat "$SSCAN_OUT" >&2; rm -f "$SSCAN_OUT"
+    echo "SPECIALIST SUITE: FAIL @ $HEAD_SHA (credential scan exit $SSCAN_RC; artefacts purged; NOT the E2E gate)" >&2
+    exit 1
+  fi
+  rm -f "$SSCAN_OUT"
+  tail -n 25 "$OUT/specialist-run.log"
+  echo "[gate] specialist playwright exit code: $SRUN_RC"
+  node "$SCRIPT_DIR/e2e/specialist-suite.mjs" --phase=results --results "$ROOT/test-results/specialist/results.json" --since "$RUN_START_EPOCH" \
+    > "$OUT/specialist-results.out" 2> "$OUT/specialist-results.err"
+  SRES_RC=$?
+  cat "$OUT/specialist-results.out"
+  [ "$SRES_RC" -eq 0 ] || cat "$OUT/specialist-results.err" >&2
+  if [ "$SRUN_RC" -ne 0 ] || [ "$SRES_RC" -ne 0 ]; then
+    echo "SPECIALIST SUITE: FAIL @ $HEAD_SHA (playwright exit $SRUN_RC, results phase exit $SRES_RC; NOT the E2E gate)" >&2
+    exit 1
+  fi
+  echo "SPECIALIST SUITE: PASS @ $HEAD_SHA (NOT the E2E gate; .e2e-passed untouched)"
+  exit 0
+fi
 rm -f "$RESULTS"
 # Q0: no HTML report in a gate run (it records the sign-in fill() values verbatim). playwright.canonical.config.ts turns the
 # html reporter off when E2E_CANONICAL_GATE=1; a stale report from an earlier local run is removed so none is scanned or shown.

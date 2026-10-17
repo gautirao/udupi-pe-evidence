@@ -15,9 +15,9 @@ const GATE = path.join(ROOT, 'scripts', 'run-e2e-gate.sh');
 const PLANTED = 'PLANTED-envfile-value-9f3a';
 
 // A clean env: only what bash/node/git need, so no SPRING_ or JAVA_ variable leaks in from the runner.
-function run(extra = {}, { gate = GATE } = {}) {
+function run(extra = {}, { gate = GATE, args = [] } = {}) {
   const env = { PATH: process.env.PATH, HOME: process.env.HOME ?? os.homedir(), E2E_GATE_PREFLIGHT_ONLY: '1', ...extra };
-  const r = spawnSync('bash', [gate], { encoding: 'utf8', env });
+  const r = spawnSync('bash', [gate, ...args], { encoding: 'utf8', env });
   return { status: r.status, out: `${r.stdout}${r.stderr}` };
 }
 
@@ -152,6 +152,77 @@ test('LOW-E: an inherited PRIVACY_SNAPSHOT_SQL is refused by name (never by valu
     assert.doesNotMatch(r.out, /preflight: auth_mode/, 'refused before the preflight');
   }
   assert.match(run().out, /preflight: auth_mode=local/, 'control: without it the preflight is reached');
+});
+
+// ---- #2750 S0: --suite=specialist (argv only; the default stays canonical = THE gate) ---------------------------------
+const SPECIALIST_BANNER = 'SPECIALIST suite: NOT the E2E gate. Results are never E2E evidence.';
+
+test('suite (a): no argument -> suite=canonical, the existing preflight line is unchanged, and there is no specialist banner (set -u safe)', () => {
+  const r = run();
+  assert.equal(r.status, 3, r.out);
+  assert.match(r.out, /preflight: auth_mode=local env_file_reads=0/);
+  assert.match(r.out, /preflight: suite=canonical/);
+  assert.doesNotMatch(r.out, /SPECIALIST/);
+  assert.doesNotMatch(r.out, /unbound variable/);
+});
+
+test('suite (b): --suite=specialist is refused in CI (CI and GITHUB_ACTIONS), banner first; control: refused ONLY there', () => {
+  for (const ci of [{ CI: '1' }, { GITHUB_ACTIONS: 'true' }]) {
+    const r = run(ci, { args: ['--suite=specialist'] });
+    assert.equal(r.status, 3, r.out);
+    assert.match(r.out, /NOT A GATE RUN: the specialist suite is local-only and opt-in; it is refused in CI/);
+    assert.ok(r.out.startsWith(SPECIALIST_BANNER), 'the NOT-the-gate banner is the first line');
+    assert.doesNotMatch(r.out, /preflight: auth_mode/, 'refused before the preflight');
+  }
+  const ok = run({}, { args: ['--suite=specialist'] });
+  assert.equal(ok.status, 3, ok.out);
+  assert.match(ok.out, /preflight: auth_mode=local env_file_reads=0/);
+  assert.match(ok.out, /preflight: suite=specialist/);
+  assert.ok(ok.out.startsWith(SPECIALIST_BANNER));
+  assert.doesNotMatch(ok.out, /CANONICAL E2E GATE: PASS/);
+});
+
+test('suite (c): --suite=specialist is refused under E2E_AUTH_MODE=hosted; the gate override aids are refused too; control: canonical hosted still reaches ENVIRONMENT_GATED', () => {
+  const f = envFile(ALL(PLANTED));
+  try {
+    const r = run({ E2E_AUTH_MODE: 'hosted', E2E_ENV_FILE: f.file }, { args: ['--suite=specialist'] });
+    assert.equal(r.status, 3, r.out);
+    assert.match(r.out, /requires E2E_AUTH_MODE=local \(hosted Supabase Auth is forbidden here\)/);
+    assert.doesNotMatch(r.out, /preflight: auth_mode/);
+    assert.doesNotMatch(r.out, new RegExp(PLANTED));
+    const control = run({ E2E_AUTH_MODE: 'hosted', E2E_ENV_FILE: f.file });
+    assert.match(control.out, /preflight: auth_mode=hosted/);
+    assert.match(control.out, /ENVIRONMENT_GATED/);
+  } finally { fs.rmSync(f.dir, { recursive: true, force: true }); }
+  for (const [env, re] of [[{ E2E_GATE_EVIDENCE_DIR: '/tmp/x' }, /E2E_GATE_EVIDENCE_DIR is not supported by the specialist suite/], [{ E2E_GATE_ALLOW_OPEN_GAPS: '1' }, /E2E_GATE_ALLOW_OPEN_GAPS is not supported by the specialist suite/]]) {
+    const r = run(env, { args: ['--suite=specialist'] });
+    assert.equal(r.status, 3, r.out);
+    assert.match(r.out, re);
+    assert.match(run(env).out, /preflight: auth_mode=local/, 'control: the canonical gate still accepts it locally');
+  }
+});
+
+test('suite (d): a bogus value, the space form, a bare --suite, an empty value, a --suite* prefix and any repeat all exit 2', () => {
+  for (const args of [['--suite=bogus'], ['--suite', 'specialist'], ['--suite'], ['--suite='], ['--suitefoo'], ['--suite=Specialist'],
+    ['--suite=specialist', '--suite=specialist'], ['--suite=canonical', '--suite=specialist'], ['--suite=canonical', '--suite=canonical'], ['--foo', '--suite=specialist', '--suite=bogus']]) {
+    const r = run({}, { args });
+    assert.equal(r.status, 2, `${args.join(' ')}: ${r.out}`);
+    assert.match(r.out, /NOT A GATE RUN: /);
+    assert.doesNotMatch(r.out, /preflight:/, `${args.join(' ')} must stop before anything runs`);
+  }
+});
+
+test('suite (e): unrelated arguments are IGNORED exactly as before (suite stays canonical); --suite=canonical is an accepted no-op; env vars never select a suite', () => {
+  for (const args of [['--foo'], ['--workers=1', 'x'], ['--suite=canonical'], ['--foo', '--suite=canonical', 'bar']]) {
+    const r = run({}, { args });
+    assert.equal(r.status, 3, `${args.join(' ')}: ${r.out}`);
+    assert.match(r.out, /preflight: auth_mode=local env_file_reads=0/);
+    assert.match(r.out, /preflight: suite=canonical/);
+    assert.doesNotMatch(r.out, /SPECIALIST/);
+  }
+  for (const env of [{ SUITE: 'specialist' }, { E2E_SUITE: 'specialist' }, { E2E_GATE_SUITE: 'specialist' }]) {
+    assert.match(run(env).out, /preflight: suite=canonical/, JSON.stringify(env));
+  }
 });
 
 test('the provenance opt-out is still refused', () => {

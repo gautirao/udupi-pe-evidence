@@ -34,10 +34,12 @@
  * so no storageState/login flow is needed to reach the trigger.
  *
  * Run locally:
- *   bash scripts/run-e2e-local.sh --project=full e2e/discover-2717-school-filters-touch-target.spec.ts
+ *   npm run test:e2e:specialist
+ * (the opt-in, local-only specialist suite; playwright.specialist.config.ts collects this file, not the legacy config)
  */
 
-import { test, expect, type Page, type Route } from '@playwright/test';
+import type { Page, Route } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
 
 test.use({ storageState: undefined });
 
@@ -206,18 +208,18 @@ test.describe('@integration-ui School results Filters trigger touch target (#271
       // below the title by design — unrelated to this fix). The enlarged
       // hit area must not push Start over onto a second line.
       const startOver = page.getByTestId('start-over-button');
-      if ((await startOver.count()) > 0) {
-        const [filtersRow, startOverRow] = await Promise.all([
-          trigger.boundingBox(),
-          startOver.first().boundingBox(),
-        ]);
-        expect(filtersRow).not.toBeNull();
-        expect(startOverRow).not.toBeNull();
-        // Same toolbar row => vertical centers within a few px of each other.
-        const centers = [filtersRow, startOverRow].map((r) => r!.y + r!.height / 2);
-        const spread = Math.max(...centers) - Math.min(...centers);
-        expect(spread).toBeLessThan(8);
-      }
+      // Hard precondition (a precondition is an expect, never an if()).
+      await expect(startOver.first()).toBeVisible();
+      const [filtersRow, startOverRow] = await Promise.all([
+        trigger.boundingBox(),
+        startOver.first().boundingBox(),
+      ]);
+      expect(filtersRow).not.toBeNull();
+      expect(startOverRow).not.toBeNull();
+      // Same toolbar row => vertical centers within a few px of each other.
+      const centers = [filtersRow, startOverRow].map((r) => r!.y + r!.height / 2);
+      const spread = Math.max(...centers) - Math.min(...centers);
+      expect(spread).toBeLessThan(8);
     });
   }
 

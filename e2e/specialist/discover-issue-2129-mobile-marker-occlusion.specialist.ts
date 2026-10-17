@@ -124,10 +124,11 @@
  * inside the sheet's occluded footprint at the moment it was tapped.
  *
  * Run:
- *   PLAYWRIGHT_BASE_URL=http://localhost:<port> npx playwright test \
- *     e2e/discover/issue-2129-mobile-marker-occlusion.spec.ts --project=full
+ *   npm run test:e2e:specialist
+ * (the opt-in, local-only specialist suite; playwright.specialist.config.ts collects this file, not the legacy config)
  */
-import { test, expect, type Page, type Locator } from '@playwright/test';
+import type { Page, Locator } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
 import { assertReachable } from '../support/reachability';
 
 const CITY = 'bangalore';

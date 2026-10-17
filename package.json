@@ -27,6 +27,7 @@
     "test:e2e:watch:slow": "bash scripts/e2e-watch.sh --slow",
     "test:e2e:canonical": "VITE_BUILD_SHA=$(git rev-parse HEAD) npm run build --workspace=apps/web && playwright test --config=playwright.canonical.config.ts",
     "test:e2e:gate": "bash scripts/run-e2e-gate.sh",
+    "test:e2e:specialist": "bash scripts/run-e2e-gate.sh --suite=specialist",
     "test:e2e:deployed": "playwright test --config=playwright.deployed.config.ts",
     "test:e2e:guard": "node scripts/e2e/check-e2e-estate.mjs && node scripts/e2e/check-canonical-journeys.mjs --phase=static",
     "test:e2e:guard:unit": "node --test scripts/e2e/*.test.mjs",

@@ -48,7 +48,10 @@ This repo has three layers of Playwright coverage. Only one of them is the
 |---|---|---|---|---|
 | **Canonical** (`e2e/canonical/`) | `playwright.canonical.config.ts` | A real, locally-built frontend + real locally-run backend + real local Postgres/PostGIS fixture, started IN the CI job itself | `e2e-canonical` in `.github/workflows/ci.yml` | **YES — this is the merge gate.** |
 | **Deployed reachability** (secondary — not the E2E gate) | `playwright.deployed.config.ts` (`e2e/deployed/`) | The already-deployed production site (https://propertysignal.in, overridable via repo variable `DEPLOYED_BASE_URL`) + Render backend (repo variable `DEPLOYED_BACKEND_URL`), whatever build is currently live. The defaults live only in the workflow; the config requires explicit URLs. No auth, no writes | `.github/workflows/e2e-post-deploy.yml` (post-merge, not a PR check) | No — secondary reachability check only. Does not exercise the PR's own backend. |
+| **Specialist** (`e2e/specialist/`, opt-in, local-only, NOT the gate) | `playwright.specialist.config.ts` | The gate's per-worktree local stack (loopback only), started by `npm run test:e2e:specialist` | None (refused in CI; never in pre-push) | No — browser-only behaviour kept on purpose; never E2E evidence. See [`e2e/specialist/README.md`](specialist/README.md) |
 | **Historical/specialist** (~150 remaining `*.spec.ts` files under `e2e/`, including `journey/` and `integration-ui/`) | `playwright.config.ts`, `journey`/`integration-ui`/`full` projects | A locally-started dev backend+frontend (via `scripts/e2e-watch.sh` or `scripts/run-e2e-local.sh`) | Not run in CI at all | No — developer-invoked only (`npm run test:e2e:watch`, `bash scripts/e2e-watch.sh --project=journey`, etc.) |
+
+Specialist suite (opt-in, local-only, never E2E evidence): see [`e2e/specialist/README.md`](specialist/README.md).
 
 **Why canonical is authoritative:** it is the only suite that builds and
 exercises the PR's own frontend AND backend code together against a real

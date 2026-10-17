@@ -1,4 +1,5 @@
-import { test, expect, type Page, type Route } from '@playwright/test';
+import type { Page, Route } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
 
 /**
  * PR #2150 review finding A — owner-reported regression: "a listing cluster

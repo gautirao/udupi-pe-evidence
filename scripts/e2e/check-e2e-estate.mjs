@@ -18,12 +18,29 @@
 //        test.only in e2e/canonical/**; the playwright*.config.ts set equals the fixed current list.
 //  K4    no tracked file under e2e/canonical/.auth/ or playwright-report*/.
 //  FC-24 sum(issue_2751_titles) over all rows == 66 and every #2751 file has a row.
+//
+// Specialist suite (#2750 S0; tag FAIL[FC-19/SPn]; e2e/specialist/ + playwright.specialist.config.ts, opt-in, local-only,
+// NOT the gate; host tables come from scripts/e2e/specialist-suite.mjs):
+//  SP1   isolation: *.specialist.ts only under e2e/specialist/; that directory holds only *.specialist.ts, support/**
+//        (*.ts without a spec/test infix) and README.md, so the legacy config can never collect anything there.
+//  SP2   bidirectional manifest link: every e2e/specialist/**/*.specialist.ts has exactly one RETAIN_SPECIALIST row (decision
+//        AND status); every RETAIN_SPECIALIST row's file is under e2e/specialist/ or e2e-parity/ (grandfathered).
+//  SP3   an e2e/specialist RETAIN_SPECIALIST rationale starts with [CODE] token(s) from the 6-code list + >= 20 characters.
+//  SP4   no production/shared/external host literal in e2e/specialist/** (README.md excepted; comments NOT exempt).
+//  SP5   no test.skip/fixme/only/fail (or describe.*) in e2e/specialist/** (comments stripped).
+//  SP6   no legacy hosted-auth state (fixtures/*-auth.json) in e2e/specialist/**.
+//  SP7   every *.specialist.ts imports `test` from './support/specialist-test', never from '@playwright/test'.
+//  SP8   no route continue call in *.specialist.ts (comments stripped): use fallback() or fulfill().
+//  SP9   no direct APIRequestContext / global fetch (bare, globalThis/window/self-qualified, bracket form) in *.specialist.ts (comments stripped; in-page fetch inside page.evaluate is flagged too): use backendGet().
+//        SP4 allows reserved-TLD (.test/.invalid/.example) literals statically (fulfil-mocks use them); the runtime guard blocks UNMOCKED ones.
+//  CFG   the playwright*.config.ts set (EXPECTED_CONFIGS) includes playwright.specialist.config.ts.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { collectCanonicalTitles, loadMatrix, requiredEntries } from './check-canonical-journeys.mjs';
+import { findForbiddenHostLiterals, stripCommentsStrict } from './specialist-suite.mjs';
 
 const SELF_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_ROOT = path.resolve(SELF_DIR, '..', '..');
@@ -59,7 +76,9 @@ export const EXPECTED_CONFIGS = [
   'playwright.config.ts',
   'playwright.deployed.config.ts',
   'playwright.parity.config.ts',
+  'playwright.specialist.config.ts',
 ];
+export const SPECIALIST_REASON_CODES = ['HIT_TEST', 'PAINT_GEOMETRY', 'LAYOUT_OVERFLOW', 'LEAFLET_REAL', 'RADIX_REAL', 'POINTER_REAL'];
 export const NEW_SPEC_RULE =
   'Per #2750, new permanent Playwright coverage must extend the canonical suite (e2e/canonical/, journey-matrix.json) for a documented journey gap, or carry an explicit specialist reason as a RETAIN_SPECIALIST row in docs/testing/e2e-retirement-manifest.csv.';
 
@@ -100,6 +119,119 @@ function* walk(dir, rootDir) {
 
 function stripComments(src) {
   return src.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map((l) => (/^\s*\/\//.test(l) ? '' : l)).join('\n');
+}
+
+const SPECIALIST_DIR = 'e2e/specialist/';
+
+/** Names imported from one `import ... from '<source>'` clause; `namespace`/`default` flag the forms that hide `test`. */
+function importClauses(code) {
+  const out = [];
+  for (const m of code.matchAll(/\bimport\s+(type\s+)?([^;'"]*?)\s*from\s*['"]([^'"]+)['"]/g)) {
+    const clause = m[2].trim();
+    const braces = clause.match(/\{([^}]*)\}/);
+    const named = braces
+      ? braces[1].split(',').map((s) => s.trim()).filter(Boolean).map((s) => ({ typeOnly: Boolean(m[1]) || /^type\s/.test(s), name: s.replace(/^type\s+/, '').split(/\s+as\s+/)[0].trim() }))
+      : [];
+    out.push({ source: m[3], named, namespace: /\*\s*as\s/.test(clause), hasDefault: clause.replace(/\{[^}]*\}/, '').replace(/\*\s*as\s+\w+/, '').replace(/,/g, '').trim() !== '' });
+  }
+  return out;
+}
+
+/** SP1-SP9 (see the header). Appends to `errors`. */
+function checkSpecialistRules({ root, rows, byFile, allFiles, errors }) {
+  const tag = (n) => `FAIL[FC-19/SP${n}]`;
+  const underSpec = allFiles.filter((r) => r.startsWith(SPECIALIST_DIR) && !r.endsWith('/.DS_Store'));
+  const specs = underSpec.filter((r) => r.endsWith('.specialist.ts'));
+
+  // SP1
+  for (const rel of allFiles) {
+    if (rel.endsWith('.specialist.ts') && !rel.startsWith(SPECIALIST_DIR)) {
+      errors.push(`${tag(1)} ${rel}: *.specialist.ts files may exist only under e2e/specialist/ (the isolation from the legacy and canonical configs depends on it)`);
+    }
+  }
+  for (const rel of underSpec) {
+    const ok = rel.endsWith('.specialist.ts')
+      || rel === `${SPECIALIST_DIR}README.md`
+      || (rel.startsWith(`${SPECIALIST_DIR}support/`) && /\.ts$/.test(rel) && !MATCHABLE.test(rel));
+    if (MATCHABLE.test(rel)) errors.push(`${tag(1)} ${rel}: a *.spec.*/*.test.* file under e2e/specialist/ would be collected by the legacy playwright.config.ts; name specialist specs *.specialist.ts`);
+    else if (!ok) errors.push(`${tag(1)} ${rel}: e2e/specialist/ holds only *.specialist.ts, support/**/*.ts and README.md`);
+  }
+
+  // SP2
+  for (const rel of specs) {
+    const row = byFile.get(rel);
+    if (!row) errors.push(`${tag(2)} ${rel} has no RETAIN_SPECIALIST row in ${MANIFEST_REL}`);
+    else if (row.f.decision !== 'RETAIN_SPECIALIST' || row.f.status !== 'RETAIN_SPECIALIST') {
+      errors.push(`${tag(2)} manifest line ${row.line} (${rel}): a specialist file's row must have decision AND status RETAIN_SPECIALIST (found ${row.f.decision} / ${row.f.status})`);
+    }
+  }
+  for (const { line, f } of rows) {
+    if (f.decision !== 'RETAIN_SPECIALIST' && f.status !== 'RETAIN_SPECIALIST') continue;
+    const home = (f.file.startsWith(SPECIALIST_DIR) && f.file.endsWith('.specialist.ts')) || f.file.startsWith('e2e-parity/');
+    if (!home) errors.push(`${tag(2)} manifest line ${line} (${f.file}): a RETAIN_SPECIALIST row must name a file under e2e/specialist/ (*.specialist.ts) or e2e-parity/ (grandfathered)`);
+  }
+
+  // SP3
+  for (const { line, f } of rows) {
+    if (f.decision !== 'RETAIN_SPECIALIST' || !f.file.startsWith(SPECIALIST_DIR)) continue;
+    const m = f.rationale.match(/^\s*((?:\[[A-Z_]+\])+)\s*([\s\S]*)$/);
+    const where = `manifest line ${line} (${f.file})`;
+    if (!m) { errors.push(`${tag(3)} ${where}: the rationale must start with a [CODE] token from ${SPECIALIST_REASON_CODES.join('|')}`); continue; }
+    const codes = m[1].slice(1, -1).split('][');
+    const bad = codes.filter((c) => !SPECIALIST_REASON_CODES.includes(c));
+    if (bad.length > 0) errors.push(`${tag(3)} ${where}: unknown reason code [${bad.join('][')}]; allowed: ${SPECIALIST_REASON_CODES.join('|')}`);
+    if (m[2].trim().length < 20) errors.push(`${tag(3)} ${where}: after the [CODE] the rationale must name the specific browser-only row (>= 20 characters)`);
+  }
+
+  // SP4 (raw text: comments are NOT exempt), SP5, SP6 over every e2e/specialist file; SP7-SP9 over the specs.
+  const text = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
+  for (const rel of underSpec) {
+    if (rel === `${SPECIALIST_DIR}README.md` || !/\.(ts|tsx|js|mjs|cjs|json)$/.test(rel)) continue;
+    const raw = text(rel);
+    for (const h of findForbiddenHostLiterals(raw)) {
+      errors.push(`${tag(4)} ${rel}: host literal "${h.literal}" (${h.reason}); e2e/specialist/** may name no production/shared/external host (comments are not exempt)`);
+    }
+    if (/fixtures\/[^'"]*-auth\.json/.test(raw)) errors.push(`${tag(6)} ${rel}: references a legacy hosted-auth state file (fixtures/*-auth.json); specialist specs never use hosted-auth storageState`);
+    // String-aware stripper (not stripComments above): a glob like '**/api/**' contains "/*" and would otherwise hide real code.
+    const code = stripCommentsStrict(raw);
+    const sk = code.match(/\b(?:(?:test|it)(?:\.describe)?|describe)\.(skip|fixme|only|fail)\b/);
+    if (sk) errors.push(`${tag(5)} ${rel}: literal ${sk[0]} is banned in e2e/specialist/** (fail closed instead of skipping or parking)`);
+  }
+  for (const rel of specs) {
+    const code = stripCommentsStrict(text(rel));
+    const imports = importClauses(code);
+    for (const im of imports.filter((i) => i.source === '@playwright/test')) {
+      if (im.named.some((n) => n.name === 'test' && !n.typeOnly)) errors.push(`${tag(7)} ${rel}: imports \`test\` from '@playwright/test'; import it from './support/specialist-test' (the runtime request guard lives there)`);
+      if (im.namespace || im.hasDefault) errors.push(`${tag(7)} ${rel}: namespace/default import of '@playwright/test' can hide \`test\`; use named imports`);
+    }
+    const LAUNCHERS = ['chromium', 'firefox', 'webkit', 'request', 'devices', '_electron', '_android'];
+    for (const im of imports.filter((i) => ['@playwright/test', 'playwright', 'playwright-core'].includes(i.source))) {
+      const bad = im.named.filter((n) => LAUNCHERS.includes(n.name) && !n.typeOnly).map((n) => n.name);
+      if (bad.length > 0) errors.push(`${tag(7)} ${rel}: imports browser launcher/request API (${bad.join(', ')}) from '${im.source}'; specs may not open their own browser or request context`);
+    }
+    if (!imports.some((i) => i.source === './support/specialist-test' && i.named.some((n) => n.name === 'test' && !n.typeOnly))) {
+      errors.push(`${tag(7)} ${rel}: must import \`test\` from './support/specialist-test'`);
+    }
+    if (/\.continue\s*\(/.test(code)) errors.push(`${tag(8)} ${rel}: a route continue call is banned in specialist specs (use fallback() or fulfill() so the runtime block layer cannot be bypassed)`);
+    const direct = [];
+    if (/\b(?:page|context|browserContext|playwright)\.request\b/.test(code)) direct.push('page.request');
+    if (/\brequest\.newContext\b/.test(code)) direct.push('request.newContext');
+    // SP9 is textual and comment-stripped: an in-page fetch inside page.evaluate() is flagged exactly like a Node-side one
+    // (consistent with the bare-fetch rule; a spec that needs the backend uses backendGet()). Forms covered: bare
+    // fetch( / fetch?.(, property-qualified globalThis|window|self|top|parent|frames .fetch( (optional whitespace and
+    // optional chaining), and the bracket forms globalThis['fetch']( / window["fetch"]( . NOT flagged: prefetch(, foo.fetchData(.
+    if (/(?<![\w.$])fetch\s*(?:\?\.\s*)?\(/.test(code)) direct.push('fetch(');
+    if (/(?<![\w$])(?:globalThis|window|self|top|parent|frames)\s*(?:\?\.|\.)\s*fetch\s*(?:\?\.\s*)?\(/.test(code)) direct.push('globalThis/window/self.fetch(');
+    if (/(?<![\w$])(?:globalThis|window|self|top|parent|frames)\s*(?:\?\.\s*)?\[\s*['"`]fetch['"`]\s*\]\s*(?:\?\.\s*)?\(/.test(code)) direct.push("globalThis['fetch'](");
+    if (/\broute\.fetch\s*\(/.test(code)) direct.push('route.fetch(');
+    for (const m of code.matchAll(/\(\s*\{([^{}]*)\}\s*(?:,[^()]*)?\)\s*(?:=>|\{)/g)) {
+      const names = m[1].split(',').map((s) => s.split(':')[0].replace(/=.*/, '').trim());
+      if (names.includes('request')) direct.push('`request` fixture parameter');
+      if (names.includes('browser')) direct.push('`browser` fixture parameter');
+    }
+    if (/\.newContext\s*\(|\.launch(?:PersistentContext)?\s*\(|connectOverCDP/.test(code)) direct.push('browser/context launch (newContext/launch/launchPersistentContext/connectOverCDP)');
+    if (direct.length > 0) errors.push(`${tag(9)} ${rel}: direct APIRequestContext/fetch/browser-launch use (${[...new Set(direct)].join(', ')}) is banned; use backendGet()/backendBaseUrl() from './support/specialist-test' and the provided page/context fixtures`);
+  }
 }
 
 export function gitTrackedFiles(root) {
@@ -238,6 +370,9 @@ export function checkEstate({ root = DEFAULT_ROOT, manifestPath, matrixPath, tra
     const m = code.match(/\b(?:test|it)(?:\.describe)?\.(skip|fixme|only|fail)\b/);
     if (m) errors.push(`FAIL[FC-04] ${rel}: literal test.${m[1]} is banned in e2e/canonical/** (gate by project selection or the documented *_ENABLED flag, never skip)`);
   }
+
+  // specialist suite (SP1-SP9)
+  checkSpecialistRules({ root, rows, byFile, allFiles, errors });
 
   // config set
   const configs = allFiles.filter((r) => /(^|\/)playwright[^/]*config[^/]*\.ts$/.test(r)).sort();
