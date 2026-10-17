@@ -23,6 +23,12 @@
       "match": "canonical harness smoke",
       "project": "canonical-anon",
       "notes": "Build-sha provenance + real fixture content probe; fails the whole run if the served build is stale."
+    },
+    {
+      "id": "harness-console-guard",
+      "match": "canonical harness console guard",
+      "project": "canonical-anon",
+      "notes": "Positive control for the console + pageerror guard: declares and provokes one expected pageerror and one expected console.error; fails if either listener is unwired."
     }
   ],
   "rows": [
@@ -47,9 +53,13 @@
         {
           "id": "T18",
           "project": "canonical-user"
+        },
+        {
+          "id": "T24",
+          "project": "canonical-user"
         }
       ],
-      "notes": "City root settles area-first, Direction writes node=, bounded browse excludes other Directions, exactly one shell mounts."
+      "notes": "City root settles area-first, Direction writes node=, bounded browse excludes other Directions, exactly one shell mounts; T24 proves Back from a Rent listing detail restores the rendered Rent leaf (cards, pressed control, summary, breadcrumb)."
     },
     {
       "id": "J02",
@@ -79,11 +89,15 @@
           "project": "canonical-user"
         },
         {
+          "id": "T8b",
+          "project": "canonical-user"
+        },
+        {
           "id": "T9",
           "project": "canonical-user"
         }
       ],
-      "notes": "region + maxKm renders real agri destination data; legacy group=DIR:BAND rewrites to the same result set."
+      "notes": "region + maxKm renders real agri destination data; T8b walks corridor card, distance chip 25->50, town drill-in, the listing peek and Back from the listing detail restoring the peek on the far fixture town; legacy group=DIR:BAND rewrites to the same result set."
     },
     {
       "id": "J04",
@@ -214,9 +228,14 @@
         {
           "id": "T2b",
           "project": "canonical-user"
+        },
+        {
+          "id": "T1c",
+          "project": "canonical-user",
+          "localAuthOnly": true
         }
       ],
-      "notes": "T1/T2/T3 prove per-role sign-in, a Discover returnTo round trip and the typed-create route; T2b proves return-to onto a gated NON-Discover route (/my-bookings -> /auth -> back, unlocked)."
+      "notes": "T1/T2/T3 prove per-role sign-in, a Discover returnTo round trip and the typed-create route; T2b proves return-to onto a gated NON-Discover route (/my-bookings -> /auth -> back, unlocked); T1c proves sign-out ends the session across reloads on a dedicated local-only identity (localAuthOnly: required in the local gate, absent by design from the ENVIRONMENT_GATED hosted collection, where the checker is told the run is hosted via E2E_AUTH_MODE=hosted)."
     },
     {
       "id": "J09",

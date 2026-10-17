@@ -88,6 +88,8 @@ import {
   assertBackendTrafficWasReal,
 } from '../../../e2e-parity/support/determinism';
 import { grantDiscoverConsent } from '../../helpers';
+// @ts-expect-error -- plain .mjs module (JSDoc types only): shared with scripts/e2e/console-guard.test.mjs, which node --test cannot load from a .ts file.
+import { appOriginsFromEnv, classifyConsoleEntry, isLoopbackOriginMismatch } from './console-guard.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -132,6 +134,37 @@ interface CanonicalFixtures {
    * endpoint was reached, not just any backend endpoint").
    */
   backendTraffic: { interceptedBackendRequests: string[] };
+  /**
+   * Console + uncaught-pageerror guard (issue #2750 CANON (a)). Auto fixture: every canonical
+   * test fails if an app-owned `console.error` or an uncaught page error fires (see
+   * support/console-guard.mjs for the classification rule and the documented ignore list).
+   * The only per-test exemption is a DECLARED, CONSUMED `expectError`.
+   */
+  consoleGuard: ConsoleGuard;
+}
+
+export type ConsoleGuardKind = 'pageerror' | 'console';
+
+export interface ConsoleGuardEntry {
+  kind: ConsoleGuardKind;
+  type: string;
+  text: string;
+  locationUrl: string;
+  line: number;
+  stackTop: string;
+  verdict: 'FAIL' | 'IGNORE';
+  rule: string;
+  expected: boolean;
+}
+
+export interface ConsoleGuard {
+  /**
+   * Declare ONE expected entry. `match` is tested against the entry text (pageerror message or
+   * console text). An expectation that no entry consumes throws in teardown.
+   */
+  expectError(match: RegExp, kind: ConsoleGuardKind): void;
+  /** Diagnostics: every entry captured so far (including ignored ones and the rule that ignored them). */
+  entries(): readonly ConsoleGuardEntry[];
 }
 
 function requireBackendBaseUrl(): string {
@@ -173,6 +206,172 @@ export const test = base.extend<CanonicalFixtures>({
       await use(guard);
 
       assertBackendTrafficWasReal(guard.interceptedBackendRequests);
+    },
+    { auto: true },
+  ],
+
+  // Second, INDEPENDENT auto fixture: a console-guard teardown failure never masks (or is masked
+  // by) the backendTraffic assertion — Playwright reports each fixture's teardown error.
+  // Listeners are installed BEFORE `use` (before any navigation) on the page and on every page
+  // the context opens later (popups / new tabs). No env knob, no report-only mode.
+  consoleGuard: [
+    async ({ page }, use, testInfo) => {
+      // Fail closed: throws if an origin env var is missing/unparsable (never defaulted).
+      const { origins, sources, frontendOrigin, backendOrigin, gatewayOrigin } = appOriginsFromEnv(process.env) as {
+        origins: string[];
+        sources: Record<string, string>;
+        frontendOrigin: string;
+        backendOrigin: string;
+        gatewayOrigin: string;
+      };
+
+      const entries: ConsoleGuardEntry[] = [];
+      const expectations: { match: RegExp; kind: ConsoleGuardKind; consumed: boolean }[] = [];
+      const pages: Page[] = [];
+      const seen = new WeakSet<Page>();
+      let ignoredNonErrorConsole = 0;
+
+      const record = (raw: {
+        kind: ConsoleGuardKind;
+        type: string;
+        text: string;
+        locationUrl: string;
+        line: number;
+        stackTop: string;
+      }): void => {
+        const { verdict, rule } = classifyConsoleEntry(raw, {
+          appOrigins: origins,
+          frontendOrigin,
+          backendOrigin,
+          gatewayOrigin,
+        }) as {
+          verdict: 'FAIL' | 'IGNORE';
+          rule: string;
+        };
+        let expected = false;
+        if (verdict === 'FAIL') {
+          const exp = expectations.find(
+            (e) => !e.consumed && e.kind === raw.kind && e.match.test(raw.text),
+          );
+          if (exp) {
+            exp.consumed = true;
+            expected = true;
+          }
+        }
+        entries.push({ ...raw, verdict, rule, expected });
+      };
+
+      const attach = (p: Page): void => {
+        if (seen.has(p)) return;
+        seen.add(p);
+        pages.push(p);
+        p.on('pageerror', (err) => {
+          const stack = typeof err.stack === 'string' ? err.stack.split('\n') : [];
+          record({
+            kind: 'pageerror',
+            type: 'pageerror',
+            text: err.message ?? String(err),
+            locationUrl: '',
+            line: 0,
+            stackTop: (stack[1] ?? stack[0] ?? '').trim(),
+          });
+        });
+        p.on('console', (msg) => {
+          if (msg.type() !== 'error') {
+            // I4: other console types are out of scope; counted, not stored (bounded attachment).
+            ignoredNonErrorConsole += 1;
+            return;
+          }
+          const loc = msg.location();
+          record({
+            kind: 'console',
+            type: msg.type(),
+            text: msg.text(),
+            locationUrl: loc.url ?? '',
+            line: loc.lineNumber ?? 0,
+            stackTop: '',
+          });
+        });
+      };
+
+      const onNewPage = (p: Page): void => attach(p);
+      attach(page);
+      page.context().on('page', onNewPage);
+
+      const guard: ConsoleGuard = {
+        expectError(match, kind) {
+          expectations.push({ match, kind, consumed: false });
+        },
+        entries: () => entries,
+      };
+
+      await use(guard);
+
+      page.context().off('page', onNewPage);
+
+      // Hazard guard: a loopback page origin that is NOT an app origin (e.g. 127.0.0.1 while the
+      // gate configured localhost) would make every app error look third-party. Fail closed.
+      for (const p of pages) {
+        const url = p.url();
+        if (isLoopbackOriginMismatch(url, origins)) {
+          entries.push({
+            kind: 'console',
+            type: 'origin-mismatch',
+            text: `page origin is a loopback origin that is not an app origin (page url ${url})`,
+            locationUrl: url,
+            line: 0,
+            stackTop: '',
+            verdict: 'FAIL',
+            rule: 'R-ORIGIN',
+            expected: false,
+          });
+        }
+      }
+
+      // Attachment ALWAYS (even on pass): console text + URLs only; no bodies, no storage.
+      await testInfo.attach('console-guard.json', {
+        contentType: 'application/json',
+        body: JSON.stringify(
+          {
+            test: testInfo.titlePath.slice(1).join(' > '),
+            appOrigins: origins,
+            originSources: sources,
+            ignoredNonErrorConsole,
+            expectations: expectations.map((e) => ({
+              kind: e.kind,
+              match: String(e.match),
+              consumed: e.consumed,
+            })),
+            entries,
+          },
+          null,
+          2,
+        ),
+      });
+
+      const unexpected = entries.filter((e) => e.verdict === 'FAIL' && !e.expected);
+      const unconsumed = expectations.filter((e) => !e.consumed);
+      if (unexpected.length === 0 && unconsumed.length === 0) return;
+
+      const title = testInfo.titlePath.slice(1).join(' > ');
+      const lines: string[] = [];
+      if (unexpected.length > 0) {
+        lines.push(`[console-guard] ${title}: ${unexpected.length} unexpected app-owned error(s)`);
+        for (const e of unexpected) {
+          lines.push(
+            e.kind === 'pageerror'
+              ? `  [pageerror] ${e.text} | ${e.stackTop}`
+              : `  [console.error] ${e.text} @ ${e.locationUrl}:${e.line} (rule ${e.rule})`,
+          );
+        }
+      }
+      for (const e of unconsumed) {
+        lines.push(
+          `[console-guard] ${title}: expectError not consumed: ${e.kind} ${String(e.match)} ` +
+            '(listener unwired or the error never fired)',
+        );
+      }
+      throw new Error(lines.join('\n'));
     },
     { auto: true },
   ],

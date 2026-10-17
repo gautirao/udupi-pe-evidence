@@ -41,6 +41,49 @@ lists T15 under J06, so the static phase fails until the same change removes tha
 `scripts/e2e/check-e2e-estate.mjs`, fails on them), `*.canonical.ts` files anywhere else, tracked
 `.auth/` storageState files and tracked Playwright reports.
 
+### Console + uncaught page-error guard (#2750)
+
+`support/canonical-test.ts` installs a second auto fixture, `consoleGuard`, in every canonical test (independent
+of `backendTraffic`). Listeners are attached before any navigation, to the page and to every page its context
+opens later. Rules (the classifier is the pure module `support/console-guard.mjs`; unit-tested by
+`scripts/e2e/console-guard.test.mjs`):
+
+- **R-PE** every `pageerror` (uncaught exception / unhandled rejection) fails. There is no ignore list for it.
+- **R-CE** a console `error` on an app origin, or with an empty location, fails.
+- **R-5XX** `Failed to load resource ... 5xx` from an app origin fails.
+- **R-4XX** `Failed to load resource ... 4xx` from an app origin fails UNLESS it is one of the four enumerated negative
+  paths I2a-I2d below. A missing chunk or stylesheet, a renamed or deleted API route, or a 4xx with the wrong status
+  therefore fails the test that triggered it (there is no blanket "app-origin 4xx is expected" rule).
+- Fail-closed extras: an app-origin resource line that is not a parseable 4xx fails (**R-RES**); a non-resource
+  console `error` from a non-app origin fails (**R-CE-X**); a loopback page origin that is not an app origin
+  fails (**R-ORIGIN**).
+- App origins are the exact URL origins of `PLAYWRIGHT_BASE_URL`, `BACKEND_BASE_URL` and `VITE_SUPABASE_URL` (the
+  local auth gateway). A missing or unparsable value throws; nothing is defaulted. Origins are read from the
+  console message's location URL, never from its text.
+- Every test attaches `console-guard.json` (all error entries, ignored ones with the rule that ignored them, the
+  count of non-error console messages) and then throws on unexpected entries. Console text and URLs only.
+- No environment knob, report-only mode or global disable exists. The only per-test exemption is
+  `consoleGuard.expectError(/regex/, 'pageerror' | 'console')`, which must be consumed: an unconsumed
+  expectation throws in teardown. The positive control is the test `canonical harness console guard`
+  (matrix entry `harness-console-guard`).
+- `support/auth-setup.canonical.ts` imports plain `@playwright/test` and is not covered (known boundary).
+
+**Documented ignore list.** `IGNORE_RULES` in `support/console-guard.mjs` is the single source; this list mirrors
+it:
+
+| Rule | Ignored | Why |
+| --- | --- | --- |
+| I1 | `Failed to load resource` from an EXACT allowlisted third-party origin (`https://tile.openstreetmap.org`, `https://a.tile.openstreetmap.org`, `https://b.tile.openstreetmap.org`, `https://c.tile.openstreetmap.org`, `https://fonts.googleapis.com`, `https://fonts.gstatic.com`) | Third-party network the gate does not control (Leaflet `{s}` tile hosts a/b/c). Any other non-app origin FAILS as `R-RES-X`. |
+| I2a | 404 on the **backend** origin for `^/api/dev/local-storage/public/listing-images/(e2e-fixtures/<uuid>\|listings/<uuid>/<uuid>)/photo-N.jpg$` (no query) | The gate's local-dev storage stub does not hold the fixture listing photos (52 such entries, all 404, in the final-gate-3 evidence). The same path on the frontend or gateway origin FAILS. |
+| I2b | 401 on the **backend** origin for `/api/broker/listing-quality` (no query) | Documented pre-session 401 that `useBrokerListingQuality` retries once while Supabase restores the session. |
+| I2c | 401 on the **backend** origin for `/api/discover/markers` and `/api/discover/listings`, matched on the URL **pathname** with query and hash stripped (the real requests always carry one, e.g. `?nodeKey=...`, `?polygon=...`; the path itself stays exact) | The two authenticated discover GETs (deliberately not `permitAll`, `JwtConfig.java:109-114`) fetched anonymously before the session is restored. |
+| I2d | 400 on the **auth gateway** origin (`VITE_SUPABASE_URL`) for `/auth/v1/token` | Bad-password sign-in negative path (GoTrue answers 400). |
+| I3 | location scheme `chrome-extension:` / `devtools:` | Browser noise (defensive). |
+| I4 | console types other than `error` | Out of scope by owner condition. |
+
+A new entry may only be an exact origin or an anchored regex, with a one-line reason and reviewer approval. Never
+a broad text pattern.
+
 **Results file:** the config now also writes a JSON report (`test-results/canonical/results.json`,
 overridable with `PLAYWRIGHT_JSON_OUTPUT_NAME`) for the checker.
 
@@ -147,6 +190,7 @@ loud-failure probes before any test starts:
    | `PLAYWRIGHT_BASE_URL` | yes | `http://localhost:5251` — the frontend preview URL. Must be a LOOPBACK-ONLY URL — hostname `localhost`, `127.0.0.0/8`, or `[::1]`. This is a **positive allow-list**, not a deny-list: the config throws for ANY non-local host (a hosted deployment, a staging domain, a raw production IP, `0.0.0.0`), not just known-bad domains like `pages.dev`/`supabase.co` (those are checked too, redundantly, purely for a sharper error message). |
    | `BACKEND_BASE_URL` | yes | `http://localhost:8251` — the local backend URL. Same loopback-only allow-list applies. |
    | `VITE_API_BASE_URL` | **yes, at `npm run build` time** | `http://localhost:8251` — MUST match `BACKEND_BASE_URL`. `src/lib/api.ts:3` captures this at **module load** (`import.meta.env.VITE_API_BASE_URL \|\| 'http://localhost:8085'`) — a build produced without it baked in silently talks to the dead default port `:8085` at runtime. The app still renders (no visible error), but every `api.*()` call fails, `assertBackendTrafficWasReal` sees zero real backend requests, and the whole run is a false green/red pair depending on which assertions happen to tolerate an empty response. This was root-caused live (fix-cycle-2, #1713 PR-1): `test:e2e:canonical`'s `vite build` step will NOT set this for you — export it yourself before running the script. |
+   | `VITE_SUPABASE_URL` | **yes, in the Playwright shell** (and at `npm run build` time) | The auth origin the frontend was built against and signs in through: the local auth gateway, e.g. `http://localhost:<gateway port>` (loopback is enforced by `playwright.canonical.config.ts`; a hosted project URL is only accepted with the separate ENVIRONMENT_GATED `E2E_AUTH_MODE=hosted`). The console guard (`support/console-guard.mjs`) treats this origin as app-owned and binds the `I2d` bad-password 400 to it. It is never defaulted or guessed from another variable: unset, the first test fails closed with a message naming it. `scripts/run-e2e-gate.sh` exports it for you. |
    | `CORS_ALLOWED_ORIGINS` | yes (on the **backend** process) | Must include `http://localhost:5251` — set before starting `local-fixture-backend.sh` (see step 1). Without it, `canonical-global-setup.ts`'s CORS probe fails loudly, by design. |
    | `SUPABASE_PROJECT_REF` | yes (on the **backend** process) | Required by `local-fixture-backend.sh` / `backend/run-local.sh` for hosted JWT validation — this harness's anonymous PR-1 smoke spec does not use auth itself, but the backend process still validates JWTs for any authenticated request path it serves. |
    | `PG_TEST_PORT` | optional | Host port for the local Postgres/PostGIS fixture container (default `5434`). |
@@ -193,6 +237,7 @@ not silent.
 
    ```bash
    export VITE_API_BASE_URL=http://localhost:8251
+   export VITE_SUPABASE_URL=<auth origin the frontend signs in through, e.g. http://localhost:<gateway port>>
    PLAYWRIGHT_BASE_URL=http://localhost:5251 \
    BACKEND_BASE_URL=http://localhost:8251 \
      npm run test:e2e:canonical

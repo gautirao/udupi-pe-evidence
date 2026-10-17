@@ -168,3 +168,87 @@ test('[role:user] T6 — bounded node browse shows the node\'s own listing and e
   // NEGATIVE: a real, differently-scoped fixture listing must not leak into this node's browse.
   await expect(page.getByRole('heading', { name: negativeTitleFromOtherDirection, exact: true })).toHaveCount(0);
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// T24 — Back from listing detail restores the area-first leaf (issue #2750 CANON b).
+// ─────────────────────────────────────────────────────────────────────────
+
+test('[role:user] T24 — Back from a listing detail restores the area-first leaf: Rent cards, pressed Rent control, summary and breadcrumb', async ({ page }) => {
+  assertNoCredentialsGuard('T24');
+
+  // RR Nagar leaf carries BOTH sale and rent inventory (same fixture as T6/T23).
+  const rrNagarNodeKey = 'a:IN|KA|Bengaluru|RR Nagar';
+  const buyOnlyTitle = '[E2E] RR Nagar Fixture Apartment';
+  const rentTitles = ['[E2E] RR Nagar Fixture Rent Apartment A', '[E2E] RR Nagar Fixture Rent House B'];
+  const cardTitles = () =>
+    page.getByTestId('listing-card').locator('h3').allInnerTexts().then((ts) => ts.map((t) => t.trim()).sort());
+  const rentButton = page.getByTestId('control-bar-intent-selector').getByTestId('intent-selector-rent');
+  const summary = page.getByTestId('area-result-summary-text');
+  const breadcrumbRrNagar = page.locator('[data-testid^="breadcrumb-seg-"]').filter({ hasText: 'RR Nagar' });
+  const cardFor = (title: string) => page.getByTestId('listing-card').filter({ hasText: title });
+
+  // 1. Buy leaf (default).
+  await page.goto('/discover?city=bangalore&node=' + encodeURIComponent(rrNagarNodeKey) + '&nodeListings=1');
+  await expect(summary).toContainText('RR Nagar', { timeout: 15_000 });
+  await expect(cardFor(buyOnlyTitle).first(), 'POSITIVE CONTROL: the Buy-only listing is shown under Buy').toBeVisible({ timeout: 15_000 });
+  const titleSetBuy = await cardTitles();
+  expect(titleSetBuy.length, 'Buy leaf must render cards').toBeGreaterThan(0);
+  expect(titleSetBuy).toContain(buyOnlyTitle);
+
+  // 2. Rent (non-default leaving state); assert the state really changed.
+  await rentButton.click();
+  await expect.poll(() => new URL(page.url()).searchParams.get('intent'), { timeout: 10_000 }).toBe('rent');
+  await expect(rentButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(summary).toContainText(/rent/i, { timeout: 15_000 });
+  for (const t of rentTitles) await expect(cardFor(t).first(), `Rent renders ${t}`).toBeVisible({ timeout: 15_000 });
+  await expect(cardFor(buyOnlyTitle), 'the Buy-only listing must be gone under Rent').toHaveCount(0);
+  const titleSetRent = await cardTitles();
+  expect(titleSetRent, 'the Rent title set must differ from the Buy title set').not.toEqual(titleSetBuy);
+  const before = new URL(page.url()).searchParams;
+  const beforeParams = { city: before.get('city'), node: before.get('node'), intent: before.get('intent') };
+  expect(beforeParams).toEqual({ city: 'bangalore', node: rrNagarNodeKey, intent: 'rent' });
+
+  // 3. Open a Rent card -> listing detail (PUSH navigation).
+  await cardFor(rentTitles[0]).first().click();
+  await page.waitForURL(/\/listing\/[0-9a-f-]{36}$/, { timeout: 15_000 });
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(rentTitles[0], { timeout: 15_000 });
+  const clickedListingId = new URL(page.url()).pathname.split('/').pop() ?? '';
+  expect(clickedListingId, 'the opened listing id is read from the detail URL').toMatch(/^[0-9a-f-]{36}$/);
+
+  // 4. Back.
+  await page.goBack();
+  await page.waitForURL(/\/discover\?/, { timeout: 15_000 });
+
+  // 4b. The Back TARGET is the Discover history entry the card click left behind (#2750 B1
+  // diagnosis, evidence/b1-diagnosis.txt): a card click first PUSHES a selection entry
+  // (`&listing=<id>`) and then the detail route. If the Discover -> /listing navigation REPLACED
+  // that entry (navigate(..., { replace: true })), Back would land one entry earlier, on a URL
+  // WITHOUT the selection. Rent, node and the rendered cards survive that (they are re-derived
+  // from the URL either way), so only the selection on the Back target discriminates.
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get('listing'), {
+      timeout: 15_000,
+      message: 'Back must land on the Discover entry that carries the clicked card selection (listing=<id>)',
+    })
+    .toBe(clickedListingId);
+  await expect(
+    cardFor(rentTitles[0]).first(),
+    'the clicked card is rendered as the selected card after Back',
+  ).toHaveAttribute('data-selected', 'true', { timeout: 15_000 });
+
+  // 5. The RENDERED leaf is restored, not just the URL.
+  await expect(summary).toContainText('RR Nagar', { timeout: 15_000 });
+  await expect(summary).toContainText(/rent/i);
+  await expect(rentButton, 'the Rent control must still be pressed after Back').toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
+  for (const t of rentTitles) await expect(cardFor(t).first(), `after Back ${t} is rendered`).toBeVisible({ timeout: 15_000 });
+  await expect(cardFor(buyOnlyTitle), 'the Buy-only listing must NOT reappear after Back').toHaveCount(0);
+  await expect
+    .poll(cardTitles, { timeout: 15_000, message: 'rendered card h3 set after Back must equal the pre-navigation Rent set' })
+    .toEqual(titleSetRent);
+  await expect(breadcrumbRrNagar.first(), 'breadcrumb shows RR Nagar after Back').toBeVisible({ timeout: 10_000 });
+  const after = new URL(page.url()).searchParams;
+  expect(
+    { city: after.get('city'), node: after.get('node'), intent: after.get('intent') },
+    'journey-defining params are unchanged (param-wise, never byte-wise)',
+  ).toEqual(beforeParams);
+});

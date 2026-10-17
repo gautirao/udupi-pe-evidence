@@ -250,6 +250,51 @@ JOIN public.cities c ON c.slug = 'bangalore'
 JOIN public.areas a ON a.area_key = v.area_key AND a.city_id = c.id
 ON CONFLICT (city_id, alias_normalised) DO NOTHING;
 
+-- (f) #2750 CANON (c): a synthetic far-corridor agri destination so the canonical T8 can PROVE a distance-chip
+-- switch (maxKm 25 -> 50) changes the rendered result set, and drill into a town that only exists at 50 km.
+-- No real Bangalore area sits in the SW sector [202.5,247.5) at 25<km<=50 (V71 + V106 scanned: nearest SW
+-- areas are all <=19.9 km), so this is a fixture-only areas row, outside every navigation_nodes polygon and
+-- area_group, so no nav/area-first count can see it. Name 'Fixtureville' is deliberately not a real locality.
+-- Coordinates (12.781, 77.399) chosen ~30 km @ ~225 deg from the Bangalore origin; distance/bearing are COMPUTED
+-- with the same method as the header above (haversine, R=6371.0 km, initial bearing), reproducing the RR Nagar
+-- row (8.384 km / 237.85 deg) to 3 dp before use:
+--   Fixtureville (12.781, 77.399) -> bearing=225.03 deg -> SW sector [202.5,247.5) -> distance=29.979 km -> band 25_50
+-- Effect on existing readers: SW maxKm=25 (T8/T9/AG3) is UNCHANGED (29.979 > 25); the 2 new parcels appear
+-- only at maxKm=50/100.
+INSERT INTO public.areas (area_key, city_id, name, district, geo_center_lat, geo_center_lon,
+                          min_lat, min_lon, max_lat, max_lon)
+SELECT 'IN|KA|Bengaluru|Fixtureville', c.id, 'Fixtureville', 'Bengaluru',
+       12.781, 77.399, 12.776, 77.394, 12.786, 77.404
+FROM public.cities c WHERE c.slug = 'bangalore'
+ON CONFLICT (area_key) DO NOTHING;
+
+INSERT INTO public.agri_destination_classification
+  (city_id, area_key, origin_lat, origin_lon, distance_km, bearing_deg, direction_key,
+   distance_band_key, generator_version, generated_at)
+SELECT c.id, 'IN|KA|Bengaluru|Fixtureville', 12.9716, 77.5946, 29.979::double precision,
+       225.03::double precision, 'SW', '25_50', 'e2e-1713-pr3-fixture-seed-v1', NOW()
+FROM public.cities c
+WHERE c.slug = 'bangalore'
+ON CONFLICT (city_id, area_key) DO NOTHING;
+
+INSERT INTO public.property_listings
+  (id, property_type, title, locality, price, latitude, longitude,
+   status, created_by, price_paise, area_key, is_valid, address_confirmed, listing_purpose,
+   created_at, updated_at)
+VALUES
+  ('f1713004-0000-0000-0000-000000000003',
+   'agricultural_land', '[E2E] Fixtureville Fixture Agri Parcel One', 'Fixtureville',
+   0, 12.7811000, 77.3991000,
+   'LIVE', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+   28000000, 'IN|KA|Bengaluru|Fixtureville', true, true, 'sale', NOW(), NOW()),
+
+  ('f1713004-0000-0000-0000-000000000004',
+   'agricultural_land', '[E2E] Fixtureville Fixture Agri Parcel Two', 'Fixtureville',
+   0, 12.7809000, 77.3989000,
+   'LIVE', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+   31000000, 'IN|KA|Bengaluru|Fixtureville', true, true, 'sale', NOW(), NOW())
+ON CONFLICT (id) DO NOTHING;
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Validation assertions — sanity-check THIS seed's own rows only.
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -278,6 +323,25 @@ BEGIN
   IF v_rr_nagar_agri_count < 2 THEN
     RAISE EXCEPTION 'Seed assertion failed: expected >= 2 LIVE agricultural_land listings for RR '
       'Nagar, got %', v_rr_nagar_agri_count;
+  END IF;
+
+  -- #2750 CANON (c): Fixtureville must be a SW / 25_50 destination (outside the 25 km tier) backed by exactly 2
+  -- LIVE agri parcels that kept the area_key we gave them, and must NOT leak into RR Nagar.
+  IF (SELECT COUNT(*) FROM public.agri_destination_classification
+        WHERE city_id = v_city_id AND area_key = 'IN|KA|Bengaluru|Fixtureville'
+          AND direction_key = 'SW' AND distance_band_key = '25_50'
+          AND distance_km > 25 AND distance_km <= 50) IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'Seed assertion failed: expected exactly 1 SW/25_50 (25<km<=50) agri_destination_classification '
+      'row for Fixtureville';
+  END IF;
+
+  IF (SELECT COUNT(*) FROM public.property_listings
+        WHERE id IN ('f1713004-0000-0000-0000-000000000003', 'f1713004-0000-0000-0000-000000000004')
+          AND status = 'LIVE' AND property_type = 'agricultural_land' AND is_duplicate = false
+          AND archived_at IS NULL AND area_resolution_status = 'RESOLVED'
+          AND area_key = 'IN|KA|Bengaluru|Fixtureville') IS DISTINCT FROM 2 THEN
+    RAISE EXCEPTION 'Seed assertion failed: expected the 2 Fixtureville agri parcels to be LIVE and keep '
+      'area_key=''IN|KA|Bengaluru|Fixtureville''';
   END IF;
 
   RAISE NOTICE 'navigation-hierarchy-schools-agri-fixture-seed assertions passed: % agri_destination_'

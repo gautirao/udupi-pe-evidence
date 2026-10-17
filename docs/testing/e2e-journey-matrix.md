@@ -18,14 +18,14 @@ are or will be asserted (planned destinations are in the manifest).
 
 | Id | Journey | Family | Canonical proof today (project) | Lower-layer coverage | Gap | Closing test / PR |
 |---|---|---|---|---|---|---|
-| J01 | Area-first Discover | discover | T4, T5, T6, T18 (user) | selectors, URL-state, areas-journey component tests (manifest MOVE_DOWN rows) | none | - |
+| J01 | Area-first Discover | discover | T4, T5, T6, T18, T24 (user) | selectors, URL-state, areas-journey component tests (manifest MOVE_DOWN rows) | none | - |
 | J02 | School-first Discover | discover | T7, T18 (user) | school panel/filter component tests | none | - |
-| J03 | Agricultural Discover | agri | T8, T9 (user) | agri map/price-gate component tests | none | - |
+| J03 | Agricultural Discover | agri | T8, T8b, T9 (user) | agri map/price-gate component tests | none | - |
 | J04 | Residential buyer discovery | discover | T5, T6 (user), T10, T11 (anon), T12 (user) | card/presentation tests | none | - |
 | J05 | Commercial buyer discovery | commercial | CC4 (broker) | commercial card summary test | none | - |
 | J06 | Residential create -> submit -> approve -> LIVE -> buyer Discover membership | lifecycle | T13, T14, T15, T15b (broker) | listing validation tests | none | T15b closed it (PR-1 C2) |
 | J07 | Commercial lifecycle | commercial | CC1, CC1b, CC1c, CC2, CC3, CC4 (broker) | subtype/narrowing tests | none | - |
-| J08 | Auth sign-in + return-to | auth | T1 (user, broker, admin), T2, T2b, T3 (user) | `getSafeReturnTo` unit test (R4, mutation-proven, PR-6) | none | T2b closed it (PR-1 C2) |
+| J08 | Auth sign-in + return-to | auth | T1 (user, broker, admin), T2, T2b, T3 (user), T1c (user; sign-out, `localAuthOnly`: required in the local gate, absent from the ENVIRONMENT_GATED hosted collection) | `getSafeReturnTo` unit test (R4, mutation-proven, PR-6) | none | T2b closed it (PR-1 C2) |
 | J09 | Listing detail gating -> unlock | gating | T11 (anon), T12 (user) | gallery/price gate component tests | none | - |
 | J10 | Booking buyer -> My Bookings -> Broker Bookings | booking | T16 (anon), T17, T17b (user) | duplicate-booking rule at API IT level | none | T17b closed it (PR-1 C2) |
 | J11 | Map marker interaction | map | T19, T20 (anon) | cluster/camera unit tests | none | - |

@@ -210,6 +210,9 @@ const brokerEmail = process.env.BROKER_EMAIL || process.env.DEALER_EMAIL || '';
 const brokerPassword = process.env.BROKER_PASSWORD || process.env.DEALER_PASSWORD || '';
 const adminEmail = process.env.ADMIN_EMAIL ?? '';
 const adminPassword = process.env.ADMIN_PASSWORD ?? '';
+// Hosted (ENVIRONMENT_GATED) mode never creates the local-only sign-out identity: anything other than an explicit 'hosted'
+// is the local gate mode, so the sign-out test is registered by default and absence needs the explicit opt-out.
+const LOCAL_AUTH_MODE = process.env.E2E_AUTH_MODE !== 'hosted';
 
 // ─────────────────────────────────────────────────────────────────────────
 // T1 — role-aware landing + authed-only header control, one test per role.
@@ -422,6 +425,77 @@ test.describe('T1 — sign-in: role-aware landing + authed-only header control',
     await backendResponsePromise;
   });
 });
+
+// #2750 CANON (d) — sign-out ends the session, and it stays ended across reloads.
+//
+// DEDICATED LOCAL-ONLY IDENTITY: signing out revokes the session server-side, so this test must never sign out as SMOKE_USER /
+// BROKER / ADMIN (their storageState files are minted once and shared by later tests). E2E_SIGNOUT_USER_* is created per run by
+// scripts/e2e/auth-stack/create-users.sh in LOCAL mode only; hosted mode never creates or reads it.
+//
+// HOSTED COLLECTION (Codex round 1, finding a): in the ENVIRONMENT_GATED hosted mode (E2E_AUTH_MODE=hosted) the test is NOT
+// REGISTERED AT ALL (conditional registration, the same sanctioned shape as listing-lifecycle's T15_ENABLED; never
+// test.skip/fixme, which are banned and counted as skips), so the documented hosted exit-6 path can be reached instead of
+// tripping the credentials throw below. Local mode (the gate, and the default when E2E_AUTH_MODE is unset) ALWAYS registers it,
+// and the journey checker REQUIRES it there (matrix id T1c, `localAuthOnly`). run-e2e-gate.sh exports E2E_AUTH_MODE so the
+// Playwright process, the checker and this file agree on the mode. Fresh context: the file-level empty storageState applies.
+//
+// The persisted-session probe is the supabase-js localStorage key `sb-<ref>-auth-token`, matched by regex so no project ref is
+// hard-coded. FALSIFIABLE: a sign-out that cleared only React state (token left in storage) fails step 5's reload (user-menu
+// returns / key present); a sign-out that did not leave the protected route fails step 4's /discover assertion.
+if (LOCAL_AUTH_MODE) {
+  test('[role:user] T1c — sign-out ends the session across reloads (dedicated local-only identity)', async ({ page }) => {
+    const signoutEmail = process.env.E2E_SIGNOUT_USER_EMAIL ?? '';
+    const signoutPassword = process.env.E2E_SIGNOUT_USER_PASSWORD ?? '';
+    if (!hasRealCredentials(signoutEmail, signoutPassword)) {
+      throw new Error('[T1:signout] E2E_SIGNOUT_USER_EMAIL/PASSWORD absent — the local auth gate creates this identity; this test should not have run.');
+    }
+
+    const userMenu = page.getByTestId('user-menu');
+    const signInLink = page.getByRole('link', { name: 'Sign in', exact: true });
+    const authTokenKeys = () => page.evaluate(() => Object.keys(window.localStorage).filter((k) => /^sb-.+-auth-token$/.test(k)));
+
+    // 1) Signed in (real UI sign-in): user-menu visible and a persisted supabase session key exists.
+    await loginAsUser(page, signoutEmail, signoutPassword);
+    await expect(userMenu).toBeVisible({ timeout: 15_000 });
+    expect((await authTokenKeys()).length, 'a persisted supabase auth-token key exists after sign-in').toBeGreaterThan(0);
+
+    // 2) A5: the session survives a reload.
+    await page.reload();
+    await expect(userMenu).toBeVisible({ timeout: 15_000 });
+    expect((await authTokenKeys()).length, 'the auth-token key survives a reload while signed in').toBeGreaterThan(0);
+
+    // 3) A protected route renders signed in (its own heading, not just the URL).
+    await page.goto('/my-bookings');
+    await expect(page.getByRole('heading', { name: 'My Bookings', exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page).toHaveURL(/\/my-bookings$/);
+
+    // 4) Sign out from the protected route: toast + redirected to /discover (AppLayout.handleSignOut replaces the entry).
+    await userMenu.click();
+    const signOutItem = page.getByRole('menuitem', { name: 'Sign out', exact: true });
+    await expect(signOutItem).toBeVisible({ timeout: 10_000 });
+    await signOutItem.click();
+    await expect(page.getByText('You have been signed out.', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page).toHaveURL(/\/discover(\?|$)/, { timeout: 15_000 });
+    expect(new URL(page.url()).pathname).toBe('/discover');
+    await expect(userMenu).toHaveCount(0, { timeout: 15_000 });
+
+    // 5) Two reloads: still signed out each time (no user-menu, Sign in link shown, no token key).
+    for (const n of [1, 2]) {
+      await page.reload();
+      await expect(signInLink, `reload ${n}: Sign in link is shown`).toBeVisible({ timeout: 15_000 });
+      await expect(userMenu, `reload ${n}: no user-menu`).toHaveCount(0);
+      expect(await authTokenKeys(), `reload ${n}: no persisted auth-token key`).toEqual([]);
+    }
+
+    // 6) The protected route now bounces to /auth carrying its return path (same shape as T2b).
+    await page.goto('/my-bookings');
+    await expect(page).toHaveURL(/\/auth\?/, { timeout: 15_000 });
+    const authUrl = new URL(page.url());
+    expect(authUrl.pathname).toBe('/auth');
+    // ProtectedRoute.tsx:28 writes `/auth?redirect=<encoded path>` (not returnTo).
+    expect(authUrl.searchParams.get('redirect')).toBe('/my-bookings');
+  });
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 // T2 — returnTo round-trip from a deep Discover URL, including node=.

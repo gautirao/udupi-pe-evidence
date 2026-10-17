@@ -200,3 +200,47 @@ test.describe('canonical harness smoke', () => {
     }
   });
 });
+
+// Top-level (NOT inside the 'canonical harness smoke' describe): the journey-matrix harness
+// entries match a title SEGMENT by leading token, so this test must carry its own title segment
+// ('canonical harness console guard') that the 'canonical harness smoke' entry cannot capture.
+//
+// POSITIVE CONTROL for the console + pageerror guard (issue #2750 CANON (a), PC-1). test.fail /
+// skip / fixme are banned in e2e/canonical, so this is a PASSING test that proves capture: it
+// DECLARES two expected entries and then provokes them. If the pageerror/console listeners are
+// unwired (or the classifier stops flagging), an expectation stays unconsumed and the
+// consoleGuard fixture teardown throws -> this test goes RED.
+test('canonical harness console guard', async ({ page, consoleGuard }) => {
+  const listingResponse = page.waitForResponse(
+    (response) => response.url().includes(`/api/public/listings/${FIXTURE_LISTING_ID}`),
+    { timeout: 15_000 },
+  );
+  await page.goto(`/listing/${FIXTURE_LISTING_ID}`);
+  await listingResponse; // real backend call so assertBackendTrafficWasReal holds
+  await expect(
+    page.getByRole('heading', { level: 1, name: FIXTURE_TITLE }),
+  ).toBeVisible({ timeout: 15_000 });
+
+  consoleGuard.expectError(/CANONICAL_GUARD_PROBE_PE/, 'pageerror');
+  consoleGuard.expectError(/CANONICAL_GUARD_PROBE_CE/, 'console');
+
+  await page.evaluate(() => {
+    setTimeout(() => {
+      throw new Error('CANONICAL_GUARD_PROBE_PE');
+    }, 0);
+  });
+  await page.evaluate(() => {
+    console.error('CANONICAL_GUARD_PROBE_CE');
+  });
+
+  // Both probes must be CAPTURED (and classified FAIL, hence consumed) before the test ends.
+  await expect
+    .poll(
+      () => ({
+        pe: consoleGuard.entries().some((e) => e.kind === 'pageerror' && e.expected),
+        ce: consoleGuard.entries().some((e) => e.kind === 'console' && e.expected),
+      }),
+      { timeout: 10_000 },
+    )
+    .toEqual({ pe: true, ce: true });
+});

@@ -60,6 +60,8 @@ AUTH_STACK="$SCRIPT_DIR/e2e/auth-stack"
 SHARED_FIXTURE_CONTAINER="pg-test-fixture"
 CRED_NAMES=(ADMIN_EMAIL ADMIN_PASSWORD BROKER_EMAIL BROKER_PASSWORD DEALER_EMAIL DEALER_PASSWORD SMOKE_USER_EMAIL SMOKE_USER_PASSWORD)
 # Hosted mode ONLY: the whitelist read (never sourced) from the process env / env files.
+# Local-only identity for the T1 sign-out test (#2750 CANON (d)): deliberately NOT in CRED_NAMES, so hosted mode never reads it.
+LOCAL_ONLY_CRED_NAMES=(E2E_SIGNOUT_USER_EMAIL E2E_SIGNOUT_USER_PASSWORD)
 HOSTED_ENV_WHITELIST=("${CRED_NAMES[@]}" VITE_SUPABASE_URL VITE_SUPABASE_PUBLISHABLE_KEY)
 # Every read_env_var call appends one byte here. A FILE, not a variable: read_env_var runs inside command-substitution
 # subshells, where a counter would silently stay 0 (the preflight test's hosted control arm caught exactly that).
@@ -80,6 +82,11 @@ case "$AUTH_MODE" in
   local|hosted) ;;
   *) not_a_gate_run "E2E_AUTH_MODE must be 'local' (default) or 'hosted' (ENVIRONMENT_GATED), got an unsupported value" ;;
 esac
+
+# Explicit, validated mode for every child process (Playwright config + specs, the journey checker). The sign-out test
+# (T1c) is registered/required unless this is exactly 'hosted' (#2750 Codex round 1 a/b); exporting the validated value
+# means a local run always says "local" rather than relying on the variable being unset.
+export E2E_AUTH_MODE="$AUTH_MODE"
 
 if [ -n "${CANONICAL_SKIP_SHA_PROVENANCE:-}" ]; then
   not_a_gate_run "CANONICAL_SKIP_SHA_PROVENANCE is set; it disables the build-sha provenance assertion (unset it)"
@@ -121,8 +128,10 @@ if [ "$AUTH_MODE" = "local" ]; then
   fc25_out="$(node "$SCRIPT_DIR/e2e/check-local-auth.mjs" --phase=env 2>&1)"; fc25_rc=$?
   if [ "$fc25_rc" -ne 0 ]; then printf '%s\n' "$fc25_out" >&2; exit 3; fi
   # Local mode never trusts a role credential or Supabase endpoint from the caller: they are regenerated per run.
-  for n in "${CRED_NAMES[@]}" VITE_SUPABASE_URL VITE_SUPABASE_PUBLISHABLE_KEY E2E_AUTH_ISSUER_URI; do unset "$n"; done
+  for n in "${CRED_NAMES[@]}" "${LOCAL_ONLY_CRED_NAMES[@]}" VITE_SUPABASE_URL VITE_SUPABASE_PUBLISHABLE_KEY E2E_AUTH_ISSUER_URI; do unset "$n"; done
 else
+  # Local-only credentials (e.g. E2E_SIGNOUT_USER_*) are never created, read from env files, or inherited in hosted mode.
+  for n in "${LOCAL_ONLY_CRED_NAMES[@]}"; do unset "$n"; done
   echo "[gate] ENVIRONMENT_GATED: E2E_AUTH_MODE=hosted - hosted Supabase auth. This is NOT the canonical local-auth gate: no sentinel is written, no gate PASS is printed, exit is never 0." >&2
 fi
 
@@ -428,7 +437,7 @@ PHONE_KEY="$(openssl rand -base64 32)"
   # so a newly named variable is covered too). The variables this script exports on purpose (SUPABASE_DB_*, SUPABASE_PROJECT_REF,
   # LOCAL_DEV_STORAGE_*) match none of these patterns.
   scrub=(ADMIN_EMAIL ADMIN_PASSWORD BROKER_EMAIL BROKER_PASSWORD DEALER_EMAIL DEALER_PASSWORD SMOKE_USER_EMAIL SMOKE_USER_PASSWORD
-    VITE_SUPABASE_URL VITE_SUPABASE_PUBLISHABLE_KEY SUPABASE_SERVICE_ROLE_KEY SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_JWT_SECRET)
+    "${LOCAL_ONLY_CRED_NAMES[@]}" VITE_SUPABASE_URL VITE_SUPABASE_PUBLISHABLE_KEY SUPABASE_SERVICE_ROLE_KEY SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_JWT_SECRET)
   for n in $(compgen -e); do
     case "$n" in R2_*|STORAGE_*|SUPABASE_SERVICE*) scrub+=("$n") ;; esac
   done

@@ -37,6 +37,9 @@ mk ADMIN e2e-admin admin
 mk BROKER e2e-broker broker
 BROKER_UUID="$E2E_SEED_LAST_UUID"   # set by e2e_seed_identity inside mk (same shell); captured before the next mk overwrites it
 mk SMOKE_USER e2e-smoke-user user
+# Local-only dedicated identity for the T1 sign-out test (#2750 CANON (d)): signing out revokes the session, so it must never share
+# an account with the shared storageState users. Created in local mode only; hosted mode never creates or reads it.
+mk E2E_SIGNOUT_USER e2e-signout-user user
 rm -f "$HDR"
 
 # Canonical ownership seed for J10 / T17b (broker sees the T17 booking on /broker/bookings).
@@ -54,4 +57,4 @@ SQL
 )" || { echo "create-users: booking-owner seed failed"; exit 1; }
 [ "$(printf '%s\n' "$owned" | head -n 1)" = "$BOOKED_FIXTURE_LISTING" ] || { echo "create-users: booking-owner seed matched no row (fixture listing missing?)"; exit 1; }
 echo "create-users: fixture listing for the booking journey now owned by the run's broker"
-echo "create-users: credential env NAMES written: ADMIN_EMAIL ADMIN_PASSWORD BROKER_EMAIL BROKER_PASSWORD SMOKE_USER_EMAIL SMOKE_USER_PASSWORD"
+echo "create-users: credential env NAMES written: ADMIN_EMAIL ADMIN_PASSWORD BROKER_EMAIL BROKER_PASSWORD SMOKE_USER_EMAIL SMOKE_USER_PASSWORD E2E_SIGNOUT_USER_EMAIL E2E_SIGNOUT_USER_PASSWORD"

@@ -48,6 +48,8 @@ export const CREDENTIAL_ENV_NAMES = [
   'E2E_AUTH_AUTHENTICATOR_PASSWORD', 'E2E_AUTH_GOTRUE_JWT_SECRET', 'E2E_AUTH_SERVICE_ROLE_KEY',
   // The per-run phone-encryption key the gate generates for the Request-a-property test stack (#1793, RQ1/RQ2).
   'E2E_PHONE_ENCRYPTION_KEY',
+  // Local-only dedicated identity for the T1 sign-out test (#2750 CANON (d)); generated per run, never read from a file.
+  'E2E_SIGNOUT_USER_PASSWORD', 'E2E_SIGNOUT_USER_EMAIL',
 ];
 const CREDENTIAL_MIN_LEN = 6;
 
@@ -63,6 +65,16 @@ export const GAP_STATUS = 'GAP_CLOSING_IN_C2';
 // Only these journeys may be descoped (DESCOPED_DARK): they sit behind a flag that is dark in production. Pinned
 // HERE so a matrix edit cannot silently turn any other GAP row into a "descoped" one (review cycle 2).
 export const DESCOPABLE_IDS = ['J12', 'J13', 'J15'];
+// Only these ids may carry `localAuthOnly: true` (pinned HERE, like DESCOPABLE_IDS, so a matrix edit cannot exempt any other
+// journey from the hosted collection). T1c (sign-out) needs the dedicated E2E_SIGNOUT_USER_* identity, which only the LOCAL auth
+// stack creates; in the ENVIRONMENT_GATED hosted mode (E2E_AUTH_MODE=hosted) the spec does not register it. The exemption is
+// honoured ONLY when the checker is told the run is hosted (isHostedRun); in the local gate the id is required like any other.
+export const LOCAL_AUTH_ONLY_IDS = ['T1c'];
+
+/** True only for the explicit ENVIRONMENT_GATED hosted mode. Anything else (unset, 'local', any other string) is the local gate. */
+export function isHostedRun(env = process.env) {
+  return env?.E2E_AUTH_MODE === 'hosted';
+}
 
 /** Rows whose journey still has an open C2 gap. The static phase WARNs; list/results FAIL. */
 export function gapRows(matrix) {
@@ -104,10 +116,16 @@ export function requiredEntries(matrix) {
   }
   for (const row of matrix.rows ?? []) {
     for (const c of row.canonical_ids ?? []) {
-      out.push({ id: c.id, match: c.match ?? c.id, project: c.project, journey: row.id });
+      out.push({ id: c.id, match: c.match ?? c.id, project: c.project, journey: row.id, localAuthOnly: c.localAuthOnly === true });
     }
   }
   return out;
+}
+
+/** What a RUN (list/results phase) must see: the full set, minus localAuthOnly ids when (and only when) the run is hosted. */
+export function requiredEntriesForRun(matrix, env = process.env) {
+  const all = requiredEntries(matrix);
+  return isHostedRun(env) ? all.filter((e) => !e.localAuthOnly) : all;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -153,6 +171,9 @@ export function loadMatrix(matrixPath) {
     for (const c of row.canonical_ids ?? []) {
       if (!/^[A-Za-z0-9]+$/.test(c.id ?? '')) errors.push(`FAIL[FC-MATRIX] ${row.id}: id "${c.id}" must be alphanumeric`);
       if (!REQUIRED_PROJECTS.includes(c.project)) errors.push(`FAIL[FC-MATRIX] ${row.id}: ${c.id} names project "${c.project}" which is not in required_projects`);
+      if (c.localAuthOnly !== undefined && (c.localAuthOnly !== true || !LOCAL_AUTH_ONLY_IDS.includes(c.id))) {
+        errors.push(`FAIL[FC-MATRIX] ${row.id}: ${c.id} sets localAuthOnly=${JSON.stringify(c.localAuthOnly)}, but only true on ${LOCAL_AUTH_ONLY_IDS.join(', ')} is allowed (pinned in the checker)`);
+      }
     }
   }
   return { matrix, errors };
@@ -434,7 +455,11 @@ export function listPhase({ matrix, listPath, env = process.env }) {
     }
   }
 
-  for (const e of requiredEntries(matrix)) {
+  if (isHostedRun(env)) {
+    const exempt = requiredEntries(matrix).filter((e) => e.localAuthOnly).map((e) => e.id);
+    info.push(`list: hosted run (E2E_AUTH_MODE=hosted): localAuthOnly id(s) not required: ${exempt.join(',') || 'none'}`);
+  }
+  for (const e of requiredEntriesForRun(matrix, env)) {
     const inProject = tests.filter((t) => t.project === e.project && chainMatches(t.titlePath, e.match));
     if (inProject.length > 0) continue;
     const elsewhere = tests.filter((t) => chainMatches(t.titlePath, e.match)).map((t) => t.project);
@@ -632,7 +657,7 @@ export function resultsPhase({ matrix, resultsPath, listPath, reportDir, tracesD
     for (const t of tests) {
       if (t.results.includes('interrupted')) errors.push(`FAIL[FC-06] interrupted result: [${t.project}] ${t.titlePath.join(' > ').slice(0, 100)}`);
     }
-    for (const e of requiredEntries(matrix)) {
+    for (const e of requiredEntriesForRun(matrix, env)) {
       const found = tests.filter((t) => t.project === e.project && chainMatches(t.titlePath, e.match));
       if (found.length === 0) {
         errors.push(`FAIL[FC-10] matrix id ${e.id} (${e.journey}) has no executed test in project ${e.project}`);

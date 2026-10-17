@@ -94,6 +94,93 @@ test('[role:user] T8 — region + maxKm renders real agri destination data on th
   expect(parsedCount, 'agri-group-listing-count must be > 0 for a genuinely non-inert journey').toBeGreaterThan(0);
 });
 
+// #2750 CANON (c) — fixture town that exists ONLY at 25 < km <= 50 (seed part (f): 'Fixtureville', SW, 29.979 km,
+// 2 LIVE agri parcels). It proves a distance-chip switch changes the rendered result set, and gives the drill-in /
+// peek / Back legs a destination that is NOT visible at the landing tier.
+const FAR_TOWN_NAME = 'Fixtureville';
+const FAR_PARCEL_ONE = '[E2E] Fixtureville Fixture Agri Parcel One';
+const FAR_PARCEL_TWO = '[E2E] Fixtureville Fixture Agri Parcel Two';
+const FAR_PARCEL_ONE_ID = 'f1713004-0000-0000-0000-000000000003';
+
+test('[role:user] T8b — corridor card, distance-chip 25->50, town drill-in, listing peek, Back from the listing detail restores the peek, then peek-close on the far fixture town', async ({ page }) => {
+  if (!hasRealCredentials(userEmail, userPassword)) {
+    throw new Error('[T8b] SMOKE_USER_EMAIL/PASSWORD absent — this test should not have run.');
+  }
+
+  const localityBtns = page.getByTestId('agri-group-locality-btn');
+
+  // 1. Corridor landing (no region): the SW card is the one-click entry to region=SW&maxKm=25.
+  const landingPromise = waitForAgriDestinations(page);
+  await page.goto('/discover?city=bangalore&journey=agri-first');
+  expect((await landingPromise).ok(), 'landing agri-destinations must respond 2xx').toBe(true);
+  await expect(page.getByTestId('corridor-landing-list')).toBeVisible({ timeout: 10_000 });
+  // The SW card is identified by its RR Nagar town chip (the W card carries Vijayanagar instead).
+  const swCard = page.getByTestId('corridor-card').filter({ hasText: DESTINATION_TOWN_NAME });
+  await expect(swCard).toHaveCount(1);
+  await swCard.click();
+  await expect(page).toHaveURL((u) => u.searchParams.get('region') === DIRECTION && u.searchParams.get('maxKm') === String(MAX_KM), { timeout: 10_000 });
+  await expect(page.getByTestId('distance-chip-25')).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
+
+  // 2. S1 (25 km tier): RR Nagar present, the far town ABSENT (paired with S2 below).
+  await expect(localityBtns.filter({ hasText: DESTINATION_TOWN_NAME })).toBeVisible({ timeout: 10_000 });
+  await expect(localityBtns.filter({ hasText: FAR_TOWN_NAME })).toHaveCount(0);
+  const countAt25 = await readAgriParcelCount(page);
+
+  // 3. Switch the distance chip to 50: URL, pressed state AND result set must all change.
+  const at50Promise = waitForAgriDestinations(page);
+  await page.getByTestId('distance-chip-50').click();
+  expect((await at50Promise).ok(), 'maxKm=50 agri-destinations must respond 2xx').toBe(true);
+  await expect(page).toHaveURL((u) => u.searchParams.get('maxKm') === '50', { timeout: 10_000 });
+  await expect(page.getByTestId('distance-chip-50')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('distance-chip-25')).toHaveAttribute('aria-pressed', 'false');
+  await expect(localityBtns.filter({ hasText: FAR_TOWN_NAME })).toBeVisible({ timeout: 10_000 });
+  await expect(localityBtns.filter({ hasText: DESTINATION_TOWN_NAME })).toBeVisible();
+  const countAt50 = await readAgriParcelCount(page);
+  expect(countAt50, 'widening 25->50 must add the far town\'s 2 seeded parcels to the total').toBeGreaterThanOrEqual(countAt25 + 2);
+
+  // 4. Drill into the far town: destKey (not locality) in the URL, locality panel with both seeded rows.
+  await localityBtns.filter({ hasText: FAR_TOWN_NAME }).click();
+  await expect(page).toHaveURL((u) => (u.searchParams.get('destKey') ?? '') !== '' && !u.searchParams.has('locality'), { timeout: 10_000 });
+  await expect(page.getByTestId('agri-group-locality-panel')).toBeVisible({ timeout: 10_000 });
+  const rows = page.getByTestId('agri-locality-listing-row');
+  await expect(rows.filter({ hasText: FAR_PARCEL_ONE })).toHaveCount(1, { timeout: 10_000 });
+  await expect(rows.filter({ hasText: FAR_PARCEL_TWO })).toHaveCount(1);
+
+  // 5. Row click opens the in-panel peek WITHOUT leaving /discover.
+  await rows.filter({ hasText: FAR_PARCEL_ONE }).click();
+  await expect(page.getByTestId('agri-listing-peek')).toBeVisible({ timeout: 10_000 });
+  expect(new URL(page.url()).pathname, 'peek must not navigate away from /discover').toBe('/discover');
+  // The peek is URL state (listing=<id>) and REPLACES the locality list in the panel while open, so it is the
+  // state Back has to restore.
+  await expect(page).toHaveURL((u) => u.searchParams.get('listing') === FAR_PARCEL_ONE_ID, { timeout: 10_000 });
+
+  // 6. Peek -> detail is a PUSH navigation (rightPanelContract.ts viewDetails -> routing.navigate('/listing/:id')),
+  // so browser Back must restore the whole agri drill-in: URL params AND rendered state.
+  await page.getByTestId('agri-listing-peek-view-details').click();
+  await expect(page).toHaveURL(new RegExp(`/listing/${FAR_PARCEL_ONE_ID}$`), { timeout: 10_000 });
+  await page.goBack();
+  await expect(page).toHaveURL(
+    (u) =>
+      u.pathname === '/discover' &&
+      u.searchParams.get('journey') === 'agri-first' &&
+      u.searchParams.get('region') === DIRECTION &&
+      u.searchParams.get('maxKm') === '50' &&
+      (u.searchParams.get('destKey') ?? '') !== '' &&
+      u.searchParams.get('listing') === FAR_PARCEL_ONE_ID,
+    { timeout: 10_000 },
+  );
+  // RENDERED state, not just the URL: the peek for the same parcel is back ...
+  await expect(page.getByTestId('agri-listing-peek')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('agri-listing-peek-title')).toHaveText(FAR_PARCEL_ONE);
+  // ... and closing it reveals the restored drill-in list with both far-town rows (paired with step 4).
+  await page.getByTestId('agri-listing-peek-close').click();
+  await expect(page.getByTestId('agri-listing-peek')).toHaveCount(0);
+  await expect(page.getByTestId('agri-group-locality-panel')).toBeVisible({ timeout: 10_000 });
+  await expect(rows.filter({ hasText: FAR_PARCEL_ONE })).toHaveCount(1, { timeout: 10_000 });
+  await expect(rows.filter({ hasText: FAR_PARCEL_TWO })).toHaveCount(1);
+  expect(new URL(page.url()).searchParams.get('maxKm'), 'maxKm=50 survives the round trip').toBe('50');
+});
+
 // DEFAULT_MAX_KM — the product constant agricultural.ts's cold-load canonicalisation backfills
 // maxKm to when a URL carries region= without an explicit maxKm= (src/features/discover/state/
 // url/agricultural.ts, `export const DEFAULT_MAX_KM = 25`). This is deliberately a PINNED literal

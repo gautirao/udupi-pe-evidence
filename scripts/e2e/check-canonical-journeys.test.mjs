@@ -754,6 +754,24 @@ test('K3 cycle 2: the generated role passwords and the per-run stack secrets are
   } finally { cleanup(d); }
 });
 
+test('K3 #2750 CANON (d): the local-only sign-out identity is on the scan list; a planted value is caught by NAME only, a clean dir passes', () => {
+  for (const n of ['E2E_SIGNOUT_USER_PASSWORD', 'E2E_SIGNOUT_USER_EMAIL']) assert.ok(CREDENTIAL_ENV_NAMES.includes(n), n);
+  const d = tmpDir();
+  try {
+    const planted = 'Signout-pass-0123456789';
+    fs.mkdirSync(path.join(d, 'dirty'), { recursive: true });
+    fs.mkdirSync(path.join(d, 'clean'), { recursive: true });
+    fs.writeFileSync(path.join(d, 'dirty', 'trace.txt'), `typed ${planted} here`);
+    fs.writeFileSync(path.join(d, 'clean', 'trace.txt'), 'nothing sensitive');
+    const env = { E2E_SIGNOUT_USER_PASSWORD: planted };
+    const errs = scanForCredentialValues({ paths: [path.join(d, 'dirty')], env });
+    assert.equal(errs.length, 1);
+    assert.match(errs[0], /E2E_SIGNOUT_USER_PASSWORD/);
+    assert.ok(!errs[0].includes(planted), 'the value must never appear in the failure text');
+    assert.deepEqual(scanForCredentialValues({ paths: [path.join(d, 'clean')], env }), []);
+  } finally { cleanup(d); }
+});
+
 test('cycle 2: only J12/J13/J15 may be DESCOPED_DARK; any other row flipped to it is a matrix error', () => {
   const load = (mut) => {
     const m = makeMatrix({ j01Ids: [{ id: 'T4', project: 'canonical-user' }] });
@@ -787,4 +805,167 @@ test('CLI: exit codes 0 / 1 / 2 and one FAIL line per problem on stderr', () => 
     assert.equal(usage.status, 2);
     assert.equal(main(['--phase=nope']), 2);
   } finally { cleanup(root); cleanup(f.dir); }
+});
+
+// ---- localAuthOnly / hosted collection (#2750 Codex round 1, findings a + b) -----------------------------------------------
+// T1c (sign-out) is registered only outside the ENVIRONMENT_GATED hosted mode. The checker requires it in the local gate and
+// honours the matrix flag `localAuthOnly` ONLY when told the run is hosted (E2E_AUTH_MODE=hosted).
+const T1C_ENTRY = { id: 'T1c', project: 'canonical-user', localAuthOnly: true };
+const T1C_MATRIX = makeMatrix({
+  j01Ids: [{ id: 'T4', project: 'canonical-user' }, { id: 'T10', project: 'canonical-anon' }, T1C_ENTRY],
+  harness: [{ id: 'harness-smoke', match: 'canonical harness smoke', project: 'canonical-anon' }],
+});
+const T1C_TITLE = '[role:user] T1c - sign-out ends the session across reloads';
+const withT1c = () => [...baseTests(), { project: 'canonical-user', title: T1C_TITLE }];
+const T1C_HOSTED = { E2E_AUTH_MODE: 'hosted' };
+
+test('T1c list: LOCAL + id present -> PASS (control)', () => {
+  const f = io({ list: listJson(withT1c()) });
+  try {
+    assert.deepEqual(listPhase({ matrix: T1C_MATRIX, listPath: f.list, env: {} }).errors, []);
+    assert.deepEqual(listPhase({ matrix: T1C_MATRIX, listPath: f.list, env: { E2E_AUTH_MODE: 'local' } }).errors, []);
+  } finally { cleanup(f.dir); }
+});
+
+test('T1c list: LOCAL + id missing -> FAIL[FC-08] naming T1c (unset and explicit local)', () => {
+  const f = io({ list: listJson() });
+  try {
+    for (const env of [{}, { E2E_AUTH_MODE: 'local' }]) {
+      const res = listPhase({ matrix: T1C_MATRIX, listPath: f.list, env });
+      assert.ok(res.errors.some((e) => e.includes('FAIL[FC-08]') && e.includes('T1c')), JSON.stringify(env));
+    }
+  } finally { cleanup(f.dir); }
+});
+
+test('T1c list: HOSTED + id missing -> no FC-08, no T1c complaint; the run says so', () => {
+  const f = io({ list: listJson() });
+  try {
+    const res = listPhase({ matrix: T1C_MATRIX, listPath: f.list, env: T1C_HOSTED });
+    assert.deepEqual(res.errors, []);
+    assert.ok(res.info.some((l) => /hosted run.*not required: T1c/.test(l)));
+  } finally { cleanup(f.dir); }
+});
+
+test('T1c list: the exemption is not a blanket - HOSTED + a NON-flagged id missing still FAILS FC-08', () => {
+  const tests = baseTests().map((t) => (t.title.startsWith('T10') ? { ...t, title: 'T10x - renamed' } : t));
+  const f = io({ list: listJson(tests) });
+  try {
+    const res = listPhase({ matrix: T1C_MATRIX, listPath: f.list, env: T1C_HOSTED });
+    assert.ok(res.errors.some((e) => e.includes('FAIL[FC-08]') && e.includes('T10')));
+  } finally { cleanup(f.dir); }
+});
+
+test('T1c list: only the exact value "hosted" exempts (case, whitespace, other modes, empty all stay local = required)', () => {
+  const f = io({ list: listJson() });
+  try {
+    for (const mode of ['HOSTED', 'Hosted', ' hosted', 'hosted ', 'local', 'true', '1', '']) {
+      const res = listPhase({ matrix: T1C_MATRIX, listPath: f.list, env: { E2E_AUTH_MODE: mode } });
+      assert.ok(hasFail(res, 'FC-08'), `mode ${JSON.stringify(mode)} must NOT exempt T1c`);
+    }
+  } finally { cleanup(f.dir); }
+});
+
+test('T1c list: a T1c title in the wrong project is FC-09 locally, and not reported when hosted', () => {
+  const tests = [...baseTests(), { project: 'canonical-anon', title: T1C_TITLE }];
+  const f = io({ list: listJson(tests) });
+  try {
+    assert.ok(hasFail(listPhase({ matrix: T1C_MATRIX, listPath: f.list, env: {} }), 'FC-09'));
+    assert.deepEqual(listPhase({ matrix: T1C_MATRIX, listPath: f.list, env: T1C_HOSTED }).errors, []);
+  } finally { cleanup(f.dir); }
+});
+
+test('T1c results: LOCAL + not executed -> FC-10; LOCAL + failed -> FC-10; HOSTED + absent -> clean; LOCAL + passed -> clean', () => {
+  const absent = io({ list: listJson(), res: runJson() });
+  const present = io({ list: listJson(withT1c()), res: runJson(withT1c()) });
+  const failedTests = withT1c().map((t) => (t.title === T1C_TITLE ? { ...t, status: 'unexpected', results: ['failed'] } : t));
+  const failed = io({ list: listJson(withT1c()), res: runJson(failedTests, { expected: 8, unexpected: 1, flaky: 0, skipped: 0 }) });
+  const run = (f, env) => resultsPhase({ matrix: T1C_MATRIX, resultsPath: f.res, listPath: f.list, env });
+  try {
+    assert.ok(run(absent, {}).errors.some((e) => e.includes('FAIL[FC-10]') && e.includes('T1c')));
+    assert.ok(run(failed, {}).errors.some((e) => e.includes('FAIL[FC-10]') && e.includes('T1c')));
+    assert.deepEqual(run(absent, T1C_HOSTED).errors, []);
+    assert.deepEqual(run(present, {}).errors, []);
+    // Hosted does not hide a T1c that IS collected but failed: a failure is still FC-03 (and the id is simply not asserted).
+    assert.ok(hasFail(run(failed, T1C_HOSTED), 'FC-03'));
+  } finally { cleanup(absent.dir); cleanup(present.dir); cleanup(failed.dir); }
+});
+
+test('T1c via the CLI entrypoint: the env main() is given decides (hosted exempts, local requires)', () => {
+  const f = io({ list: listJson() });
+  const root = makeRoot({ matrix: T1C_MATRIX });
+  const matrixPath = path.join(root, 'e2e/canonical/journey-matrix.json');
+  const argv = ['--phase=list', '--list', f.list, '--matrix', matrixPath, '--root', root];
+  const silence = (fn) => {
+    const w = process.stderr.write; const o = process.stdout.write;
+    process.stderr.write = () => true; process.stdout.write = () => true;
+    try { return fn(); } finally { process.stderr.write = w; process.stdout.write = o; }
+  };
+  try {
+    assert.equal(silence(() => main(argv, {})), 1);
+    assert.equal(silence(() => main(argv, T1C_HOSTED)), 0);
+  } finally { cleanup(f.dir); cleanup(root); }
+});
+
+test('T1c matrix shape: localAuthOnly cannot be abused (other id, non-true value, harness-style typos are FC-MATRIX)', () => {
+  const bad = {
+    'on a non-pinned id': { id: 'T4', project: 'canonical-user', localAuthOnly: true },
+    'false value': { ...T1C_ENTRY, localAuthOnly: false },
+    'string value': { ...T1C_ENTRY, localAuthOnly: 'true' },
+    'null value': { ...T1C_ENTRY, localAuthOnly: null },
+  };
+  for (const [name, entry] of Object.entries(bad)) {
+    const m = makeMatrix({ j01Ids: [entry] });
+    const root = makeRoot({ matrix: m });
+    try {
+      const { errors } = loadMatrix(path.join(root, 'e2e/canonical/journey-matrix.json'));
+      assert.ok(errors.some((e) => e.includes('FAIL[FC-MATRIX]') && e.includes('localAuthOnly')), name);
+    } finally { cleanup(root); }
+  }
+  const ok = makeMatrix({ j01Ids: [T1C_ENTRY] });
+  const root = makeRoot({ matrix: ok });
+  try { assert.deepEqual(loadMatrix(path.join(root, 'e2e/canonical/journey-matrix.json')).errors, []); } finally { cleanup(root); }
+});
+
+test('T1c matrix shape: an abusive localAuthOnly matrix is rejected in the list phase through main() even when hosted', () => {
+  const m = makeMatrix({ j01Ids: [{ id: 'T4', project: 'canonical-user', localAuthOnly: true }, { id: 'T10', project: 'canonical-anon' }] });
+  const root = makeRoot({ matrix: m });
+  const f = io({ list: listJson() });
+  const matrixPath = path.join(root, 'e2e/canonical/journey-matrix.json');
+  const argv = ['--phase=list', '--list', f.list, '--matrix', matrixPath, '--root', root];
+  const w = process.stderr.write; const o = process.stdout.write;
+  process.stderr.write = () => true; process.stdout.write = () => true;
+  try { assert.equal(main(argv, T1C_HOSTED), 1); } finally { process.stderr.write = w; process.stdout.write = o; cleanup(root); cleanup(f.dir); }
+});
+
+test('T1c id matching: T1c is its own leading token - it neither satisfies T1 nor is satisfied by a T1 describe chain', () => {
+  assert.equal(segmentMatches('[role:user] T1c - sign-out', 'T1c'), true);
+  assert.equal(segmentMatches('[role:user] T1c - sign-out', 'T1'), false);
+  assert.equal(segmentMatches('T1 - sign-in: role-aware landing', 'T1c'), false);
+  assert.equal(chainMatches(['T1 - sign-in: role-aware landing', '[role:user] plain user signs in'], 'T1c'), false);
+  assert.equal(chainMatches(['[role:user] T1c - sign-out'], 'T1'), false);
+  for (const other of ['T10', 'T11', 'T12', 'T13', 'T14', 'T15', 'T15b', 'T16', 'T17', 'T17b', 'T18', 'T19']) {
+    assert.equal(segmentMatches(`[role:user] ${other} - x`, 'T1c'), false, other);
+    assert.equal(segmentMatches('[role:user] T1c - sign-out', other), false, other);
+  }
+  // Deleting every real T1 leg is NOT masked by T1c: the T1 requirement for canonical-user stays unsatisfied.
+  const m = makeMatrix({ j01Ids: [{ id: 'T1', project: 'canonical-user' }, T1C_ENTRY] });
+  const tests = [...baseTests().filter((t) => !/\bT1 /.test(t.title)), { project: 'canonical-user', title: T1C_TITLE }];
+  const f = io({ list: listJson(tests) });
+  try {
+    const res = listPhase({ matrix: m, listPath: f.list, env: {} });
+    assert.ok(res.errors.some((e) => e.includes('FAIL[FC-08]') && /matrix id T1 /.test(e)), JSON.stringify(res.errors));
+    assert.ok(!res.errors.some((e) => /matrix id T1c /.test(e)));
+  } finally { cleanup(f.dir); }
+});
+
+test('real repo: the committed matrix lists T1c under J08 as localAuthOnly and the real spec registers it conditionally, outside the T1 describe', () => {
+  const matrix = JSON.parse(fs.readFileSync(path.join(DEFAULT_ROOT, 'e2e/canonical/journey-matrix.json'), 'utf8'));
+  const j08 = matrix.rows.find((r) => r.id === 'J08');
+  assert.deepEqual(j08.canonical_ids.filter((c) => c.id === 'T1c'), [{ id: 'T1c', project: 'canonical-user', localAuthOnly: true }]);
+  assert.deepEqual(j08.canonical_ids.filter((c) => c.id === 'T1').map((c) => c.project).sort(), ['canonical-admin', 'canonical-broker', 'canonical-user']);
+  assert.ok(!matrix.rows.some((r) => r.canonical_ids.some((c) => c.localAuthOnly && c.id !== 'T1c')));
+  const src = fs.readFileSync(path.join(DEFAULT_ROOT, 'e2e/canonical/auth-session.canonical.ts'), 'utf8');
+  assert.match(src, /const LOCAL_AUTH_MODE = process\.env\.E2E_AUTH_MODE !== 'hosted';/);
+  assert.match(src, /^if \(LOCAL_AUTH_MODE\) \{\n  test\('\[role:user\] T1c — /m);
+  assert.doesNotMatch(src, /^\s*test\.(skip|fixme)\b/m, 'conditional registration, never test.skip/fixme');
 });
