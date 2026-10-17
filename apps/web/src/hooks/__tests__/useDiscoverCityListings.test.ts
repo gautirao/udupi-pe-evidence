@@ -21,6 +21,7 @@ vi.mock('@/lib/api', () => ({
 
 // ─── Import hook AFTER mocks ───────────────────────────────────
 import { useDiscoverCityListings } from '../useDiscoverCityListings';
+import { DEFAULT_RESIDENTIAL_PROPERTY_TYPES } from '@/features/discover/selectors/effectiveDiscoverContext';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -110,7 +111,8 @@ describe('useDiscoverCityListings', () => {
     expect(params.has('minPrice')).toBe(false);
     expect(params.has('maxPrice')).toBe(false);
     expect(params.has('bedrooms')).toBe(false);
-    expect(params.has('propertyType')).toBe(false);
+    // #2622/#2827: family-silent queries default to Residential.
+    expect(params.getAll('propertyType')).toEqual([...DEFAULT_RESIDENTIAL_PROPERTY_TYPES]);
   });
 
   it('appends minPrice when provided', async () => {
@@ -433,7 +435,7 @@ describe('useDiscoverCityListings', () => {
     expect(withBedrooms).toBeDefined();
   });
 
-  it('does not append params when filter values are undefined/empty string', async () => {
+  it('does not append params when filter values are undefined/empty string (family-silent propertyType defaults to Residential, #2622)', async () => {
     mockGet.mockResolvedValue(BASE_RESPONSE);
 
     const { result } = renderHook(
@@ -456,7 +458,8 @@ describe('useDiscoverCityListings', () => {
     expect(params.has('minPrice')).toBe(false);
     expect(params.has('maxPrice')).toBe(false);
     expect(params.has('bedrooms')).toBe(false);
-    expect(params.has('propertyType')).toBe(false);
+    // #2622/#2827: family-silent (empty propertyType) queries default to Residential.
+    expect(params.getAll('propertyType')).toEqual([...DEFAULT_RESIDENTIAL_PROPERTY_TYPES]);
   });
 
   // ─── q (keyword search) ───────────────────────────────────────
