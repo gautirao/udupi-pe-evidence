@@ -844,12 +844,16 @@ function MapLifecycleGuard({ onTeardown }: { onTeardown: () => void }) {
  * running its compass recompute where it previously did not — assessed
  * idempotent, not suppressed here.
  */
-function MapContainerResizeSync() {
+export function MapContainerResizeSync() {
   const map = useMap();
   useEffect(() => {
     if (typeof ResizeObserver === 'undefined') return;
     const container = map.getContainer();
+    // #2824: MapLifecycleGuard removes the map in a layout cleanup, before this
+    // passive disconnect runs; getPane('mapPane') is undefined iff the map is
+    // removed, so skip invalidateSize then.
     const ro = new ResizeObserver(() => {
+      if (!map.getPane('mapPane')) return;
       map.invalidateSize({ animate: false, pan: true, debounceMoveend: true });
     });
     ro.observe(container);
