@@ -3,6 +3,7 @@ import {
   filteredMarkerToPropertyListing,
   cityListingToPropertyListing,
   discoverListingToPropertyListing,
+  discoverListingToCityListing,
 } from '../discoverMappers';
 import { DiscoverFilteredMarker } from '@/hooks/useDiscoverFilteredMarkers';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
@@ -228,5 +229,102 @@ describe('discoverListingToPropertyListing — trustBadge pass-through (Issue #1
       expect(allowed.has(result.trustBadge ?? null)).toBe(true);
       expect(['A', 'B', 'C', 'D']).not.toContain(result.trustBadge);
     }
+  });
+});
+
+// Issue #2836 (batch B of #2750) — the discoverMappers.ts:188-195 seam. The viewport feed
+// (/api/discover/listings -> DiscoverListingItem) is re-shaped into the city-listing card shape by
+// `discoverListingToCityListing`; the commercial subtype and the allowlisted fact columns must
+// survive that spread by EXACT value. The legacy e2e oracle for this (discover-commercial-card-summary)
+// passed on an area-only fact, and the PropertyCard tests start AFTER this mapper, so neither could
+// notice the mapper dropping or blanking the facts.
+describe('discoverListingToCityListing — commercial passthrough (#2836 A2-3)', () => {
+  const now = '2026-07-23T00:00:00.000Z';
+
+  function makeItem(overrides: Partial<DiscoverListingItem> = {}): DiscoverListingItem {
+    return {
+      id: 'listing-c1',
+      listingNumber: null,
+      propertyType: 'commercial',
+      title: 'Shop on Main Road',
+      locality: 'Manipal',
+      areaKey: 'IN|KA|Udupi|Manipal',
+      pricePaise: null,
+      landArea: null,
+      landAreaUnit: null,
+      builtArea: 450,
+      builtAreaUnit: 'sq ft',
+      bedrooms: null,
+      latitude: 13.34,
+      longitude: 74.74,
+      heroImageUrl: 'https://img.example/hero.jpg',
+      createdAt: now,
+      updatedAt: null,
+      firstPublishedAt: null,
+      lastUpdatedAt: null,
+      daysOnMarket: 0,
+      backOnMarket: false,
+      reraNumber: null,
+      reraValid: false,
+      possessionStatus: null,
+      sellerType: null,
+      listingPurpose: 'sale',
+      status: 'LIVE',
+      ...overrides,
+    };
+  }
+
+  const FACTS = {
+    floorChoice: 'GROUND',
+    floorMode: 'SINGLE',
+    floorNumber: 0,
+    totalFloors: 3,
+    hubType: 'HIGH_STREET',
+    officeSeats: 12,
+    occupancyStatus: 'VACANT',
+    warehouseClearHeightFt: 18,
+    warehouseLoadingBays: 2,
+    roadFrontageFt: 30,
+  };
+
+  it('carries commercialSubtype and the EXACT commercialFacts object through the spread', () => {
+    const result = discoverListingToCityListing(
+      makeItem({ commercialSubtype: 'SHOP', commercialFacts: FACTS }),
+    );
+
+    expect(result.commercialSubtype).toBe('SHOP');
+    expect(result.commercialFacts).toEqual(FACTS);
+    // Every individual fact survives by value, so a partial drop or a per-key blanking is caught too.
+    for (const [key, value] of Object.entries(FACTS)) {
+      expect((result.commercialFacts as Record<string, unknown>)[key]).toBe(value);
+    }
+  });
+
+  it('keeps a zero-valued fact as 0 (honest value), not null or absent', () => {
+    const result = discoverListingToCityListing(
+      makeItem({ commercialSubtype: 'OFFICE', commercialFacts: { floorNumber: 0, officeSeats: 0 } }),
+    );
+
+    expect(result.commercialFacts).toEqual({ floorNumber: 0, officeSeats: 0 });
+    expect(result.commercialFacts?.officeSeats).toBe(0);
+  });
+
+  it('control: an item with null facts maps to null facts (nothing is fabricated)', () => {
+    const result = discoverListingToCityListing(
+      makeItem({ commercialSubtype: 'SHOP', commercialFacts: null }),
+    );
+
+    expect(result.commercialSubtype).toBe('SHOP');
+    expect(result.commercialFacts).toBeNull();
+  });
+
+  it('residential item without commercial fields: neither field is invented, and the card-shape remap still applies', () => {
+    const result = discoverListingToCityListing(makeItem({ propertyType: 'apartment' }));
+
+    expect(result.commercialSubtype).toBeUndefined();
+    expect(result.commercialFacts).toBeUndefined();
+    expect(result.primaryImageUrl).toBe('https://img.example/hero.jpg');
+    expect(result.lat).toBe(13.34);
+    expect(result.lon).toBe(74.74);
   });
 });

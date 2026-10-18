@@ -491,4 +491,148 @@ class CityAreaListingsServiceTest {
         org.mockito.Mockito.verify(jdbc).query(sqlCaptor.capture(), any(RowCallbackHandler.class), any(Object[].class));
         assertThat(sqlCaptor.getValue()).containsIgnoringCase("agricultural_land");
     }
+
+    // ── #2836: listingPurpose reaches SQL as a BOUND parameter on both query paths ──────────────
+    // Replaces the legacy issue-1956-pr4-price-auth-contract.spec.ts purpose-filter row (S2-9).
+    // Before this, no test captured the SQL for a non-null purpose: deleting either
+    // `pl.listing_purpose = ?` clause (CityAreaListingsService area path and bbox-only path)
+    // left the whole suite green. Each path is a separate hand-built SQL shape, so each has its own arm.
+
+    private static final String PURPOSE_CLAUSE = "AND pl.listing_purpose = ?";
+
+    private record CapturedQuery(String sql, Object[] params) { }
+
+    /** Drives one single-row query on the requested path and captures the SQL + bound params. */
+    private CapturedQuery captureQuery(boolean bboxPath, String listingPurpose) throws Exception {
+        stubSingleRow("IN|KA|Udupi|Malpe", "Malpe", UUID.randomUUID(), 13.34091, 74.74215);
+        if (bboxPath) {
+            DiscoverListingPredicateBuilder.Bbox bbox =
+                    new DiscoverListingPredicateBuilder.Bbox(13.30, 74.70, 13.40, 74.80);
+            service.getAreaListings(
+                    "udupi", null, null, null, null, null, null, null, listingPurpose, null, bbox, false);
+        } else {
+            service.getAreaListings(
+                    "udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null,
+                    listingPurpose, null, null, false);
+        }
+        org.mockito.ArgumentCaptor<String> sqlCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.ArgumentCaptor<Object[]> paramsCaptor = org.mockito.ArgumentCaptor.forClass(Object[].class);
+        org.mockito.Mockito.verify(jdbc)
+                .query(sqlCaptor.capture(), any(RowCallbackHandler.class), paramsCaptor.capture());
+        return new CapturedQuery(sqlCaptor.getValue(), paramsCaptor.getValue());
+    }
+
+    /**
+     * The COMPLETE expected positional bind sequence for {@link #captureQuery}'s fixed request
+     * (city "udupi", one areaKey / the Malpe bbox, no other filters). JDBC binds {@code ?}
+     * left-to-right, so slot order IS the contract, and the two paths differ:
+     * <ul>
+     *   <li>area path: filters live in the LEFT JOIN ON clause and bind FIRST, then city, areaKey, rn limit
+     *       (DEFAULT_LIMIT = 5): {@code [purpose?, city, areaKey, 5]}</li>
+     *   <li>bbox-only path: city leads the WHERE clause, then the filters, then the global cap (20):
+     *       {@code [city, west, south, east, north, purpose?, 20]}</li>
+     * </ul>
+     * Written out literally (not derived from the service) so it is an independent oracle.
+     */
+    private static Object[] expectedParams(boolean bboxPath, String boundPurpose) {
+        List<Object> p = new java.util.ArrayList<>();
+        if (bboxPath) {
+            p.add("udupi");
+            p.add(74.70);
+            p.add(13.30);
+            p.add(74.80);
+            p.add(13.40);
+            if (boundPurpose != null) {
+                p.add(boundPurpose);
+            }
+            p.add(20);
+        } else {
+            if (boundPurpose != null) {
+                p.add(boundPurpose);
+            }
+            p.add("udupi");
+            p.add("IN|KA|Udupi|Malpe");
+            p.add(5);
+        }
+        return p.toArray();
+    }
+
+    private static long countPlaceholders(String sql) {
+        return sql.chars().filter(c -> c == '?').count();
+    }
+
+    /** Asserts the complete bind sequence, and that every {@code ?} has exactly one bind. */
+    private static void assertBindSequence(CapturedQuery q, boolean bboxPath, String boundPurpose) {
+        assertThat(q.params()).containsExactly(expectedParams(bboxPath, boundPurpose));
+        assertThat(countPlaceholders(q.sql())).isEqualTo(q.params().length);
+    }
+
+    /** Asserts the purpose value sits at the slot of the purpose placeholder itself. */
+    private static void assertPurposeBoundAtItsPlaceholder(CapturedQuery q, String boundPurpose) {
+        int clauseAt = q.sql().indexOf(PURPOSE_CLAUSE);
+        assertThat(clauseAt).isGreaterThanOrEqualTo(0);
+        // the '?' belonging to the clause is the last char of PURPOSE_CLAUSE
+        int placeholderIndex = (int) countPlaceholders(q.sql().substring(0, clauseAt + PURPOSE_CLAUSE.length())) - 1;
+        assertThat(q.params()[placeholderIndex]).isEqualTo(boundPurpose);
+    }
+
+    @ParameterizedTest(name = "[{index}] bboxPath={0}")
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    @org.junit.jupiter.api.DisplayName("#2836 S2-9: listingPurpose='rent' adds the purpose clause and BINDS 'rent' at the purpose "
+            + "placeholder's own slot (complete positional sequence pinned)")
+    void getAreaListings_rentPurpose_addsClauseAndBindsValue(boolean bboxPath) throws Exception {
+        CapturedQuery q = captureQuery(bboxPath, "rent");
+
+        assertThat(q.sql()).contains(PURPOSE_CLAUSE);
+        // The value is a bound parameter, not spliced into the statement text.
+        assertThat(q.sql()).doesNotContain("'rent'");
+        assertBindSequence(q, bboxPath, "rent");
+        assertPurposeBoundAtItsPlaceholder(q, "rent");
+    }
+
+    @ParameterizedTest(name = "[{index}] bboxPath={0}")
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    @org.junit.jupiter.api.DisplayName("#2836 S2-9: the bound value follows the request ('sale' binds 'sale', not a fixed 'rent')")
+    void getAreaListings_salePurpose_bindsSaleNotRent(boolean bboxPath) throws Exception {
+        CapturedQuery q = captureQuery(bboxPath, "sale");
+
+        assertThat(q.sql()).contains(PURPOSE_CLAUSE);
+        assertThat(q.params()).doesNotContain("rent");
+        assertBindSequence(q, bboxPath, "sale");
+        assertPurposeBoundAtItsPlaceholder(q, "sale");
+    }
+
+    @ParameterizedTest(name = "[{index}] bboxPath={0}")
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    @org.junit.jupiter.api.DisplayName("#2836 S2-9: a padded purpose is trimmed before binding")
+    void getAreaListings_paddedPurpose_boundTrimmed(boolean bboxPath) throws Exception {
+        CapturedQuery q = captureQuery(bboxPath, "  rent  ");
+
+        assertThat(q.sql()).contains(PURPOSE_CLAUSE);
+        assertThat(q.params()).doesNotContain("  rent  ");
+        assertBindSequence(q, bboxPath, "rent");
+        assertPurposeBoundAtItsPlaceholder(q, "rent");
+    }
+
+    @ParameterizedTest(name = "[{index}] bboxPath={0}")
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    @org.junit.jupiter.api.DisplayName("#2836 S2-9: null purpose adds no purpose clause and binds no purpose value")
+    void getAreaListings_nullPurpose_noClauseNoBind(boolean bboxPath) throws Exception {
+        CapturedQuery q = captureQuery(bboxPath, null);
+
+        assertThat(q.sql()).doesNotContain(PURPOSE_CLAUSE);
+        assertThat(q.params()).doesNotContain("rent", "sale");
+        assertBindSequence(q, bboxPath, null);
+    }
+
+    @ParameterizedTest(name = "[{index}] bboxPath={0}")
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    @org.junit.jupiter.api.DisplayName("#2836 S2-9: blank purpose is treated as absent (no clause, nothing bound)")
+    void getAreaListings_blankPurpose_noClauseNoBind(boolean bboxPath) throws Exception {
+        CapturedQuery q = captureQuery(bboxPath, "   ");
+
+        assertThat(q.sql()).doesNotContain(PURPOSE_CLAUSE);
+        assertThat(q.params()).doesNotContain("rent", "sale", "   ", "");
+        assertBindSequence(q, bboxPath, null);
+    }
 }

@@ -139,7 +139,7 @@ visual glitches, or learning a journey step by step.
 npm run test:e2e:watch:slow
 
 # One journey file slowly
-bash scripts/e2e-watch.sh --slow e2e/journey/anon-teaser.spec.ts
+bash scripts/e2e-watch.sh --slow e2e/journey/listing-lifecycle.spec.ts
 
 # All journeys slowly
 bash scripts/e2e-watch.sh --slow --project=journey
@@ -176,14 +176,14 @@ bash scripts/e2e-watch.sh --debug e2e/journey/listing-lifecycle.spec.ts
 bash scripts/e2e-watch.sh --slow --debug e2e/journey/admin-duplicates.spec.ts
 
 # Debug one test by name
-bash scripts/e2e-watch.sh --debug -g "AT3"
+bash scripts/e2e-watch.sh --debug -g "L2"
 ```
 
 You can also set `PWDEBUG=1` to open the Inspector from the start of every test
 (not just on failure):
 
 ```bash
-PWDEBUG=1 bash scripts/e2e-watch.sh e2e/journey/anon-teaser.spec.ts
+PWDEBUG=1 bash scripts/e2e-watch.sh e2e/journey/listing-lifecycle.spec.ts
 ```
 
 ---
@@ -199,7 +199,6 @@ Best for watching complete product flows start-to-finish.
 | File | Flow |
 |---|---|
 | `broker-listing-creation.spec.ts` | DL1 — Full 4-step broker listing wizard (create, upload images, confirm address, submit) |
-| `anon-teaser.spec.ts` | AT1-AT4 — Anonymous discovery, login gate, returnTo redirect, full unlock |
 | `listing-lifecycle.spec.ts` | L1/L2/L3/L5 + LC1 — Listing visibility checks + LIVE to ARCHIVED to DRAFT lifecycle |
 | `admin-duplicates.spec.ts` | AD1-AD5 — Admin duplicate review: Confirm, Undo, Dismiss (serial, stateful) |
 | `admin-moderation.spec.ts` | AM1-AM3 — Admin approve/reject + broker sees rejection reason |
@@ -259,12 +258,11 @@ bash scripts/e2e-watch.sh --project=full             # everything
 
 ## Recommended first run
 
-To see the slow-watch experience for the first time, try the anonymous teaser
-journey — it's short (4 tests), visually interesting, and doesn't require
-broker/admin credentials:
+To see the slow-watch experience for the first time, try the listing lifecycle
+journey (it needs the broker/user/admin smoke credentials; its tests skip without them):
 
 ```bash
-bash scripts/e2e-watch.sh --slow e2e/journey/anon-teaser.spec.ts
+bash scripts/e2e-watch.sh --slow e2e/journey/listing-lifecycle.spec.ts
 ```
 
 For the most complete journey, try the broker listing creation wizard:

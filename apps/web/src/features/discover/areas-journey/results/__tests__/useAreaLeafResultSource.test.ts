@@ -84,3 +84,71 @@ describe('useAreaLeafResultSource — H1 memo identity across freshly-built sour
     expect(mockUseDiscoverCityListings).toHaveBeenLastCalledWith(expect.objectContaining({ areaKeys: [] }));
   });
 });
+
+/**
+ * #2836 (N5) — the POSITIVE arm the test above never had. When the map supplies no
+ * area base for this leaf (standalone caller, or a base keyed to a DIFFERENT leaf) and the
+ * committed scope is AREA, this hook's own query MUST name exactly this leaf — one areaKeys
+ * value, never widened — and thread the intent + auth state through. Replaces the producer
+ * half of the "exactly one areaKeys" row of the legacy issue-1956-pr4-price-auth-contract spec.
+ *
+ * Scope, stated honestly: this pins ONE of the producers of that request. On the legacy spec's
+ * URL (journey=area-first&node=a:...) the map-supplied base normally matches, so the request that
+ * actually fires there comes from useDiscoverMapData's activeAreaListingKeys (page composition) and
+ * is NOT pinned by this file.
+ */
+describe('useAreaLeafResultSource — own fallback query names exactly this leaf (#2836 N5)', () => {
+  const OTHER_LEAF = 'IN|KA|Bangalore|Whitefield';
+
+  function standalone(overrides: Partial<UseAreaLeafResultSourceParams> = {}): UseAreaLeafResultSourceParams {
+    return {
+      city: 'bangalore',
+      areaKey: LEAF,
+      effectiveFilters: FILTERS,
+      debouncedSearch: undefined,
+      listingPurpose: 'sale',
+      isAuthenticated: false,
+      source: { scope: { kind: 'area' } },
+      ...overrides,
+    };
+  }
+
+  it('no area base, AREA scope: areaKeys is exactly [leaf], with intent and anon state forwarded', () => {
+    renderHook(() => useAreaLeafResultSource(standalone({ listingPurpose: 'rent', isAuthenticated: false })));
+    expect(mockUseDiscoverCityListings).toHaveBeenLastCalledWith(
+      expect.objectContaining({ city: 'bangalore', areaKeys: [LEAF], listingPurpose: 'rent', isAuthenticated: false }),
+    );
+  });
+
+  it('no area base, AREA scope, signed in: the same single areaKeys, isAuthenticated=true', () => {
+    renderHook(() => useAreaLeafResultSource(standalone({ listingPurpose: 'sale', isAuthenticated: true })));
+    expect(mockUseDiscoverCityListings).toHaveBeenLastCalledWith(
+      expect.objectContaining({ areaKeys: [LEAF], listingPurpose: 'sale', isAuthenticated: true }),
+    );
+  });
+
+  it('an area base keyed to a DIFFERENT leaf does not suppress the own query', () => {
+    renderHook(() =>
+      useAreaLeafResultSource(
+        standalone({
+          source: {
+            areaBase: { listings: MAP_LISTINGS, areaKey: OTHER_LEAF, loading: false, fetching: false, error: false, retry: refetch },
+            scope: { kind: 'area' },
+          },
+        }),
+      ),
+    );
+    expect(mockUseDiscoverCityListings).toHaveBeenLastCalledWith(expect.objectContaining({ areaKeys: [LEAF] }));
+  });
+
+  it('control: the same unmatched base under a VIEWPORT scope issues no own areaKeys', () => {
+    renderHook(() =>
+      useAreaLeafResultSource(
+        standalone({
+          source: { scope: { kind: 'viewport', audience: 'anon', listings: VIEWPORT_LISTINGS, loading: false } },
+        }),
+      ),
+    );
+    expect(mockUseDiscoverCityListings).toHaveBeenLastCalledWith(expect.objectContaining({ areaKeys: [] }));
+  });
+});

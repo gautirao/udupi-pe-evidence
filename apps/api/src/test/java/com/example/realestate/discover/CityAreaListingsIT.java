@@ -96,7 +96,11 @@ class CityAreaListingsIT {
 
     /**
      * Satisfies Spring Security's oauth2ResourceServer JWT wiring without a real issuer URI.
-     * The decoder is never invoked for anonymous or {@code @WithMockUser} requests.
+     * The decoder is never invoked for anonymous or {@code @WithMockUser} requests. It IS invoked,
+     * with a STUBBED result, by the #2836 bearer-header arms below: those prove the filter wiring
+     * (Authorization header -> BearerTokenAuthenticationFilter -> DbRoleJwtAuthenticationConverter
+     * -> SecurityContext -> {@code isAuthenticated} mapping -> no-store). They do NOT prove JWT
+     * signature validation, because {@code decode} is a mock.
      */
     @MockitoBean
     private JwtDecoder jwtDecoder;
@@ -455,5 +459,81 @@ class CityAreaListingsIT {
         // isAuthenticated=true must be passed — @WithMockUser is not AnonymousAuthenticationToken
         verify(cityAreaListingsService).getAreaListings(
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), isNull(), isNull(), eq(true));
+    }
+
+    // ── #2836 S2-13: a real Authorization: Bearer header through the PRODUCTION JwtConfig chain ──
+    //
+    // Scope, stated precisely: the JwtDecoder is a MockitoBean, so these arms prove FILTER WIRING and
+    // the isAuthenticated mapping (header -> BearerTokenAuthenticationFilter ->
+    // DbRoleJwtAuthenticationConverter -> SecurityContext -> controller guard -> no-store). They do
+    // NOT prove signature validation. Dummy token only.
+
+    private static final String BEARER_TOKEN = "test-token";
+
+    private static org.springframework.security.oauth2.jwt.Jwt stubJwt() {
+        java.time.Instant now = java.time.Instant.now();
+        return org.springframework.security.oauth2.jwt.Jwt.withTokenValue(BEARER_TOKEN)
+                .header("alg", "none")
+                .subject(UUID.randomUUID().toString())
+                .issuedAt(now)
+                .expiresAt(now.plusSeconds(3600))
+                .build();
+    }
+
+    @Test
+    @DisplayName("#2836 bearer: a decoded Authorization: Bearer token reaches the service as isAuthenticated=true with Cache-Control no-store")
+    void bearerHeader_decodedToken_serviceCalledAuthenticated_noStore() throws Exception {
+        when(jwtDecoder.decode(BEARER_TOKEN)).thenReturn(stubJwt());
+        when(cityAreaListingsService.getAreaListings(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), isNull(), isNull(), anyBoolean()))
+                .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
+
+        mockMvc.perform(get(LISTINGS_URL)
+                        .header("Authorization", "Bearer " + BEARER_TOKEN)
+                        .param("areaKeys", AREA_KEY))
+                .andExpect(status().isOk())
+                // EXACT header value (controller: CacheControl.noStore()), not "contains no-store".
+                .andExpect(header().string("Cache-Control", is("no-store")));
+
+        // The real filter chain handed the header's token to the decoder...
+        verify(jwtDecoder).decode(BEARER_TOKEN);
+        // ...and the controller derived isAuthenticated=true from the resulting SecurityContext.
+        verify(cityAreaListingsService).getAreaListings(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), isNull(), isNull(), eq(true));
+        verify(cityAreaListingsService, never()).getAreaListings(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), isNull(), isNull(), eq(false));
+    }
+
+    @Test
+    @DisplayName("#2836 bearer control: the same request WITHOUT an Authorization header is anonymous (isAuthenticated=false, public cache)")
+    void noBearerHeader_serviceCalledAnonymous_publicCache() throws Exception {
+        when(cityAreaListingsService.getAreaListings(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), isNull(), isNull(), anyBoolean()))
+                .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
+
+        mockMvc.perform(get(LISTINGS_URL)
+                        .param("areaKeys", AREA_KEY))
+                .andExpect(status().isOk())
+                // EXACT header value (controller: CacheControl.maxAge(60s).cachePublic()).
+                .andExpect(header().string("Cache-Control", is("max-age=60, public")));
+
+        verifyNoInteractions(jwtDecoder);
+        verify(cityAreaListingsService).getAreaListings(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), isNull(), isNull(), eq(false));
+    }
+
+    @Test
+    @DisplayName("#2836 bearer negative: a token the decoder rejects is refused with 401 and never reaches the service")
+    void bearerHeader_rejectedToken_unauthorized_serviceNeverCalled() throws Exception {
+        when(jwtDecoder.decode(BEARER_TOKEN))
+                .thenThrow(new org.springframework.security.oauth2.jwt.BadJwtException("rejected (test stub)"));
+
+        mockMvc.perform(get(LISTINGS_URL)
+                        .header("Authorization", "Bearer " + BEARER_TOKEN)
+                        .param("areaKeys", AREA_KEY))
+                .andExpect(status().isUnauthorized());
+
+        verify(jwtDecoder).decode(BEARER_TOKEN);
+        verifyNoInteractions(cityAreaListingsService);
     }
 }
