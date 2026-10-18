@@ -216,3 +216,98 @@ describe('post-sign-in intent restore', () => {
     expect(screen.getByTestId('request-viewing-btn')).toBeEnabled();
   });
 });
+
+// ── #2837 (PR-6 batch C, B1) — replacements for e2e/journey/booking-journey.spec.ts UB1 ──
+// Module-wide useBookings mock is fine here (payload-SHAPE its). The HTTP-boundary its
+// (real useCreateBooking) live in ViewingRequestPanel.httpBoundary.test.tsx.
+import { afterEach } from 'vitest';
+
+/** Quick-pick pill testid: `viewing-date-pill-<yyyy-MM-dd>` and nothing else. */
+const ISO_PILL_RE = /^viewing-date-pill-\d{4}-\d{2}-\d{2}$/;
+
+/** Local yyyy-MM-dd from LOCAL getters (never toISOString: that is UTC and can be a day off). */
+function localIso(y: number, monthIndex: number, day: number): string {
+  const d = new Date(y, monthIndex, day);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+describe('UB1 replacements (#2837)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('ISO_PILL_RE self-test: accepts an ISO pill testid, rejects non-ISO / malformed ones', () => {
+    expect(ISO_PILL_RE.test('viewing-date-pill-2026-10-18')).toBe(true);
+    for (const bad of [
+      'viewing-date-pill-Sun Oct 18 2026',
+      'viewing-date-pill-2026-10-18T00:00:00.000Z',
+      'viewing-date-pill-18-10-2026',
+      'viewing-date-pill-',
+      'viewing-time-slot-09:00-10:00',
+    ]) {
+      expect(ISO_PILL_RE.test(bad)).toBe(false);
+    }
+  });
+
+  it.each([
+    ['00:30', 0, 30],
+    ['23:30', 23, 30],
+  ])(
+    'UB1-iso: every quick-pick pill testid is viewing-date-pill-<yyyy-MM-dd> in LOCAL time; the first is tomorrow (clock frozen at 2026-10-17 %s)',
+    (_label, hour, minute) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(2026, 9, 17, hour, minute, 0));
+
+      render(<ViewingRequestPanel listingId={LISTING_ID} user={MOCK_USER} />);
+
+      const ids = screen.getAllByTestId(/^viewing-date-pill-/).map((el) => el.getAttribute('data-testid') as string);
+      expect(ids).toHaveLength(5);
+      for (const id of ids) expect(id).toMatch(ISO_PILL_RE);
+      // Expected values are DERIVED from local getters for Oct 18..22 (not typed, not UTC).
+      expect(ids).toEqual([18, 19, 20, 21, 22].map((day) => `viewing-date-pill-${localIso(2026, 9, day)}`));
+      expect(ids[0]).toBe('viewing-date-pill-2026-10-18');
+    },
+  );
+
+  it('UB1-message: the typed requester message is sent EXACTLY in the booking payload (with the picked date + slot)', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 17, 12, 0, 0));
+    render(<ViewingRequestPanel listingId={LISTING_ID} user={MOCK_USER} />);
+
+    pickFirstQuickDateAndTime();
+    const note = 'Can we meet at the gate? I will bring my architect.';
+    fireEvent.change(screen.getByTestId('viewing-message-input'), { target: { value: note } });
+    fireEvent.click(screen.getByTestId('request-viewing-btn'));
+
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    const [payload] = mockMutate.mock.calls[0];
+    expect(payload).toEqual({
+      listingId: LISTING_ID,
+      requestedDate: '2026-10-18',
+      requestedTimeSlot: '09:00-10:00',
+      requesterMessage: note,
+    });
+  });
+
+  it('UB1-message (blank): a whitespace-only message is sent as undefined, not as spaces', () => {
+    render(<ViewingRequestPanel listingId={LISTING_ID} user={MOCK_USER} />);
+    pickFirstQuickDateAndTime();
+    fireEvent.change(screen.getByTestId('viewing-message-input'), { target: { value: '   ' } });
+    fireEvent.click(screen.getByTestId('request-viewing-btn'));
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    expect(mockMutate.mock.calls[0][0].requesterMessage).toBeUndefined();
+  });
+
+  it('UB1-c: submit stays disabled with a date but NO time slot, and enables once a slot is picked', () => {
+    render(<ViewingRequestPanel listingId={LISTING_ID} user={MOCK_USER} />);
+    const [firstPill] = screen.getAllByTestId(/^viewing-date-pill-/);
+    fireEvent.click(firstPill);
+    // Positive control: the date took effect (slots are now offered).
+    expect(screen.getByTestId('viewing-time-slot-09:00-10:00')).toBeInTheDocument();
+    expect(screen.getByTestId('request-viewing-btn')).toBeDisabled();
+
+    fireEvent.click(screen.getByTestId('viewing-time-slot-09:00-10:00'));
+    expect(screen.getByTestId('request-viewing-btn')).toBeEnabled();
+  });
+});
