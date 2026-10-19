@@ -56,6 +56,7 @@ import { execFileSync } from 'child_process';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { hasRealCredentials } from '../helpers';
+import { runLegacySeedMvn } from '../../scripts/e2e/legacy-seed-mvn-env.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, '..', '..');
@@ -145,12 +146,7 @@ test.describe('@journey Area Trends confidence — Discover to Trends (#2581)', 
     // Seeds real LIVE listings + runs the real AreaIntelligenceSnapshotRollupJob.run() entry
     // point against THIS run's local Postgres fixture. See AreaIntelligenceSnapshotRollupJobE2ESeedIT
     // for the full rationale (no HTTP-reachable trigger exists; @Scheduled is suppressed in E2E).
-    execFileSync('mvn', ['-f', 'apps/api/pom.xml', 'test', '-Dtest=AreaIntelligenceSnapshotRollupJobE2ESeedIT'], {
-      cwd: REPO_ROOT,
-      env: process.env,
-      stdio: 'inherit',
-      timeout: 180_000,
-    });
+    runLegacySeedMvn({ parentEnv: process.env, exec: execFileSync, cwd: REPO_ROOT });
   });
 
   // ── Arms 1-3: the three confidence bands, real buyer journey, anonymous ──
@@ -262,12 +258,7 @@ test.describe('@journey Area Trends — admin/buyer confidence agreement (#2581)
     // Seed step already ran in the describe block above within this same worker/file run;
     // Maven's own idempotent DELETE-then-seed (see AreaIntelligenceSnapshotRollupJobE2ESeedIT)
     // makes re-invoking it here safe if Playwright ever runs this describe in isolation.
-    execFileSync('mvn', ['-f', 'apps/api/pom.xml', 'test', '-Dtest=AreaIntelligenceSnapshotRollupJobE2ESeedIT'], {
-      cwd: REPO_ROOT,
-      env: process.env,
-      stdio: 'inherit',
-      timeout: 180_000,
-    });
+    runLegacySeedMvn({ parentEnv: process.env, exec: execFileSync, cwd: REPO_ROOT });
   });
 
   test.use({ storageState: 'e2e/fixtures/admin-auth.json' });
