@@ -106,6 +106,12 @@ test('[role:user] T18 — bare city URL (area-first) mounts exactly the areas sh
   await assertExactlyOnePrimarySurface(page, 'discover-areas-journey-panel-shell');
   // Data-bearing (N1): real fixture Direction label.
   await expect(page.getByText('South-East Bangalore', { exact: true })).toBeVisible({ timeout: 10_000 });
+  // #2860 (legacy 1468 AC8, rows 1468-52..54): no agri sub-panel leaks into area-first. Negative assertions,
+  // discriminated by the pair rule: the same three testids are asserted PRESENT in T8b
+  // (discover-agri-first.canonical.ts), and the Direction label above proves the panel is not blank.
+  await expect(page.getByTestId('agri-group-locality-panel')).toHaveCount(0);
+  await expect(page.getByTestId('agri-listing-peek')).toHaveCount(0);
+  await expect(page.getByTestId('agri-group-selected-panel')).toHaveCount(0);
 });
 
 test('[role:user] T18 — a Direction node (area-first) mounts exactly the areas shell, with real children', async ({ page }) => {

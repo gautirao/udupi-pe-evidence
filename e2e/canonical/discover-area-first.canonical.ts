@@ -252,3 +252,81 @@ test('[role:user] T24 — Back from a listing detail restores the area-first lea
     'journey-defining params are unchanged (param-wise, never byte-wise)',
   ).toEqual(beforeParams);
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// T25 — #2860: a legacy area-first areaKey= deep link (Udupi / Manipal) — legacy e2e/issue-1065-final.spec.ts
+// test 1. Fixture: discover-smoke-seed.sql's 4 LIVE [E2E] Manipal sale listings (area_key 'IN|KA|Udupi|Manipal')
+// + the promoted Udupi revision (area-trends-2581-udupi-navigation-seed.sql).
+//
+// OBSERVED ON THE #2860 DEV RUN (37a019cf, screenshot + aria snapshot in the handoff evidence): the panel mounts the
+// canonical areas shell at the Udupi CITY ROOT ("Where do you want to explore?", Direction cards), while the map is
+// in the area-first selected-area state for Manipal (status pill "4 verified properties in Manipal"); the map draws
+// the Direction area markers, and NO listing markers (property-marker) and NO listing cards render. The legacy
+// oracles "listing cards > 0" and "listing markers > 0" are therefore NOT asserted here: they are recorded as
+// RETAIN (product question, decision D8) in docs/testing/e2e-retirement-map-2860.md rather than weakened or
+// re-pointed.
+//
+// MARKERS ARE NOT ASSERTED (fix cycle 2, row 1065-03 RETAIN under decision D9): the /api/discover/markers fetch is
+// gated on the LIVE map zoom (> 12, useDiscoverMapDataController markersEnabled), and this zoom=14 deep link does not
+// hold that zoom deterministically - on DEV RUN 2 and mutation run M5 the camera settled at the Udupi overview and
+// the markers request was never sent. Neither the markers response nor the .leaflet-marker-icon count is asserted.
+// This test asserts only: one areas shell, and the Manipal area listings resolved for the areaKey (status-pill
+// count >= 4); the auto console guard covers 1065-04.
+// ─────────────────────────────────────────────────────────────────────────
+
+const T25_SURFACE_TESTIDS = [
+  'area-group-focus-panel',
+  'discover-areas-journey-panel-shell',
+  'discover-schools-journey-panel-shell',
+  'discover-right-panel',
+] as const;
+
+test('[role:user] T25 — legacy area-first areaKey= deep link (Udupi Manipal) mounts one areas shell and shows the Manipal status-pill count (cards and markers not asserted)', async ({ page }) => {
+  assertNoCredentialsGuard('T25');
+
+  const params = new URLSearchParams({ city: 'udupi', journey: 'area-first', zoom: '14', areaKey: 'IN|KA|Udupi|Manipal' });
+  await page.goto(`/discover?${params.toString()}`);
+
+  // 1065-01: exactly one primary surface, and it is the canonical areas shell (explicit journey=area-first).
+  await expect
+    .poll(
+      () => Promise.all(T25_SURFACE_TESTIDS.map((id) => page.getByTestId(id).count())).then((cs) => cs.reduce((a, b) => a + b, 0)),
+      { timeout: 15_000, message: 'exactly one primary right-panel surface must mount' },
+    )
+    .toBe(1);
+  await expect(page.getByTestId('discover-areas-journey-panel-shell')).toBeVisible({ timeout: 10_000 });
+
+  // 1065-02 (listing source): the areaKey resolves Manipal's own listings — the selected-area status pill renders the
+  // same areaResultSummaryText the area panel would ("N verified properties in Manipal"), backed by the 4 seeded
+  // LIVE Manipal sale listings (>= 4: sibling lifecycle tests may only add listings, never remove these).
+  const manipalSummary = page.getByRole('status').filter({ hasText: /verified propert(?:y|ies) in Manipal/ }).first();
+  await expect(manipalSummary, 'the Manipal area listings resolve for the areaKey= deep link').toBeVisible({ timeout: 15_000 });
+  const summaryText = (await manipalSummary.innerText()).trim();
+  const summaryMatch = summaryText.match(/(\d+)\s+verified propert(?:y|ies) in Manipal/);
+  expect(summaryMatch, `summary must carry a parseable count, got "${summaryText}"`).not.toBeNull();
+  expect(parseInt(summaryMatch![1], 10), 'Manipal resolves at least its 4 seeded LIVE sale listings').toBeGreaterThanOrEqual(4);
+
+  // 1065-01 exclusivity, re-proven AFTER the content settled: re-count all four surfaces and require the total to be
+  // exactly 1 on 5 CONSECUTIVE samples 500 ms apart (a >= 2 s window); any sample != 1 resets the run, so a second
+  // surface mounting after the content fails here. The first-match poll above stops at its first sample == 1.
+  let consecutiveOnes = 0;
+  let lastTotal = -1;
+  await expect
+    .poll(
+      async () => {
+        lastTotal = await Promise.all(T25_SURFACE_TESTIDS.map((id) => page.getByTestId(id).count())).then((cs) =>
+          cs.reduce((a, b) => a + b, 0),
+        );
+        consecutiveOnes = lastTotal === 1 ? consecutiveOnes + 1 : 0;
+        return consecutiveOnes;
+      },
+      {
+        timeout: 10_000,
+        intervals: [500],
+        message: 'after content settled, exactly one primary surface must STAY mounted (5 consecutive samples == 1)',
+      },
+    )
+    .toBeGreaterThanOrEqual(5);
+  expect(lastTotal, 'settled primary-surface total').toBe(1);
+  await expect(page.getByTestId('discover-areas-journey-panel-shell')).toBeVisible();
+});

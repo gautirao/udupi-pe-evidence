@@ -18,9 +18,9 @@ are or will be asserted (planned destinations are in the manifest).
 
 | Id | Journey | Family | Canonical proof today (project) | Lower-layer coverage | Gap | Closing test / PR |
 |---|---|---|---|---|---|---|
-| J01 | Area-first Discover | discover | T4, T5, T6, T18, T24 (user) | selectors, URL-state, areas-journey component tests (manifest MOVE_DOWN rows) | none | - |
-| J02 | School-first Discover | discover | T7, T18 (user) | school panel/filter component tests | none | - |
-| J03 | Agricultural Discover | agri | T8, T8b, T9 (user) | agri map/price-gate component tests | none | - |
+| J01 | Area-first Discover | discover | T4, T5, T6, T18, T24, T25 (user), T10b (anon) | selectors, URL-state, areas-journey component tests (manifest MOVE_DOWN rows) | none | T10b, T25 (#2860: legacy deep links, partial coverage: T25 cards and markers RETAIN under D8/D9; see e2e-retirement-map-2860.md) |
+| J02 | School-first Discover | discover | T7, T18, T7b (user) | school panel/filter component tests | none | T7b (#2860: stale groupId dropped on select in one atomic write (URL never holds schoolId with groupId), not resurrected on clear, all mutation-proven; marker scope is a conditional guard only, with no pre-select traffic and no mutation credit) |
+| J03 | Agricultural Discover | agri | T8, T8b, T9 (user), T8c (anon) | agri map/price-gate component tests | none | T8c + T8b/T9 extensions (#2860: destKey identity, cold load, close, legacy locality=, anon price gate) |
 | J04 | Residential buyer discovery | discover | T5, T6 (user), T10, T11 (anon), T12 (user) | card/presentation tests | none | - |
 | J05 | Commercial buyer discovery | commercial | CC4 (broker) | commercial card summary test | none | - |
 | J06 | Residential create -> submit -> approve -> LIVE -> buyer Discover membership | lifecycle | T13, T14, T15, T15b (broker) | listing validation tests | none | T15b closed it (PR-1 C2) |

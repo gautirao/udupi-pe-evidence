@@ -1,5 +1,9 @@
 /**
- * Discover agri-first canonical specs — T8, T9 (issue #1713, PR-3).
+ * Discover agri-first canonical specs — T8, T9 (issue #1713, PR-3), T8b (#2750 CANON), T8c (#2860).
+ *
+ * #2860: T8b/T9 were extended and T8c [canonical-anon] added to carry the per-assertion coverage of the legacy
+ * e2e/discover-agri-locality-marker-1468.spec.ts (map: docs/testing/e2e-retirement-map-2860.md). Canonical
+ * equivalents: Shirva -> Fixtureville (far town), Padubidri -> RR Nagar.
  *
  * Fixture dependency: the area-first fixture chain PLUS
  * scripts/db/fixtures/navigation-hierarchy-schools-agri-fixture-seed.sql parts (c)/(d) — 2 LIVE
@@ -101,8 +105,10 @@ const FAR_TOWN_NAME = 'Fixtureville';
 const FAR_PARCEL_ONE = '[E2E] Fixtureville Fixture Agri Parcel One';
 const FAR_PARCEL_TWO = '[E2E] Fixtureville Fixture Agri Parcel Two';
 const FAR_PARCEL_ONE_ID = 'f1713004-0000-0000-0000-000000000003';
+// #2860 — the far town's raw area_key (seed part (f)); the ONLY value destKey / the Level-3 areaKey may carry.
+const FAR_TOWN_AREA_KEY = 'IN|KA|Bengaluru|Fixtureville';
 
-test('[role:user] T8b — corridor card, distance-chip 25->50, town drill-in, listing peek, Back from the listing detail restores the peek, then peek-close on the far fixture town', async ({ page }) => {
+test('[role:user] T8b — corridor card, distance-chip 25->50, town drill-in, listing peek, Back from the listing detail restores the peek, then peek-close on the far fixture town, a cold destKey load and the locality close', async ({ page }) => {
   if (!hasRealCredentials(userEmail, userPassword)) {
     throw new Error('[T8b] SMOKE_USER_EMAIL/PASSWORD absent — this test should not have run.');
   }
@@ -133,18 +139,60 @@ test('[role:user] T8b — corridor card, distance-chip 25->50, town drill-in, li
   await expect(page).toHaveURL((u) => u.searchParams.get('maxKm') === '50', { timeout: 10_000 });
   await expect(page.getByTestId('distance-chip-50')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('distance-chip-25')).toHaveAttribute('aria-pressed', 'false');
+  // #2860 (1468-01): the selected-group panel is the surface that hosts the town rows at region+maxKm.
+  const selectedPanel = page.getByTestId('agri-group-selected-panel');
+  await expect(selectedPanel).toBeVisible({ timeout: 10_000 });
+  // #2860 (1468-03): the near AND the far town rows are both listed at 50 km.
+  await expect
+    .poll(() => localityBtns.count(), { timeout: 10_000, message: 'at maxKm=50 the SW panel lists at least RR Nagar + Fixtureville' })
+    .toBeGreaterThanOrEqual(2);
+  // #2860 (1468-04, then 1468-05) — MASKING ORDER: asserted BEFORE the named-town checks below. A town row must
+  // render the display name, never the raw area_key: a row rendering 'IN|KA|Bengaluru|Fixtureville' would still
+  // satisfy the hasText:'Fixtureville' filters (substring match), so only this check discriminates.
+  const townRowTexts = await localityBtns.allTextContents();
+  for (const t of townRowTexts) {
+    expect(t, `town row "${t}" must render a display name, not a raw area_key (no '|')`).not.toContain('|');
+  }
+  for (const t of townRowTexts) {
+    expect(t, `town row "${t}" must not render the 'IN|KA' area_key prefix`).not.toContain('IN|KA');
+  }
+  // #2860 (1468-08): the pre-#1480 flat listing rows are gone from the selected panel (negative guard).
+  await expect(page.getByTestId('agri-group-listing-row')).toHaveCount(0);
   await expect(localityBtns.filter({ hasText: FAR_TOWN_NAME })).toBeVisible({ timeout: 10_000 });
   await expect(localityBtns.filter({ hasText: DESTINATION_TOWN_NAME })).toBeVisible();
   const countAt50 = await readAgriParcelCount(page);
   expect(countAt50, 'widening 25->50 must add the far town\'s 2 seeded parcels to the total').toBeGreaterThanOrEqual(countAt25 + 2);
 
   // 4. Drill into the far town: destKey (not locality) in the URL, locality panel with both seeded rows.
+  // #2860 (1468-16/17): the Level-3 listings request waiter is ARMED BEFORE the click and awaited after it.
+  const level3Promise = page.waitForRequest(
+    (req) => req.method() === 'GET' && new URL(req.url()).pathname.endsWith('/api/discover/agri-map-listings'),
+    { timeout: 15_000 },
+  );
   await localityBtns.filter({ hasText: FAR_TOWN_NAME }).click();
   await expect(page).toHaveURL((u) => (u.searchParams.get('destKey') ?? '') !== '' && !u.searchParams.has('locality'), { timeout: 10_000 });
+  // #2860 (1468-10): the EXACT raw area_key, not merely non-empty (a display-name write would pass the line above).
+  const drilledParams = new URL(page.url()).searchParams;
+  expect(drilledParams.get('destKey'), 'destKey must be the far town\'s raw area_key').toBe(FAR_TOWN_AREA_KEY);
+  // #2860 (1468-12, 1468-13): the drill-in preserves region and maxKm.
+  expect(drilledParams.get('region'), 'region survives the town drill-in').toBe(DIRECTION);
+  expect(drilledParams.get('maxKm'), 'maxKm=50 survives the town drill-in').toBe('50');
   await expect(page.getByTestId('agri-group-locality-panel')).toBeVisible({ timeout: 10_000 });
+  // #2860 (1468-15): the locality panel REPLACES the selected-group panel.
+  await expect(selectedPanel).toHaveCount(0);
+  // #2860 (1468-16, 1468-17): Level-3 fetch carries the singular areaKey = the raw key, never the plural areaKeys.
+  const level3Url = new URL((await level3Promise).url());
+  expect(level3Url.searchParams.get('areaKey'), 'agri-map-listings must be requested for the far town\'s raw area_key').toBe(FAR_TOWN_AREA_KEY);
+  expect(level3Url.searchParams.has('areaKeys'), 'agri-map-listings must not carry a plural areaKeys param').toBe(false);
+  // #2860 (1468-19, then 1468-20): the header renders the display name, never the key.
+  const localityName = page.getByTestId('agri-locality-name');
+  await expect(localityName).toHaveText(FAR_TOWN_NAME, { timeout: 10_000 });
+  expect(await localityName.innerText(), 'locality header must not render a raw area_key').not.toContain('|');
   const rows = page.getByTestId('agri-locality-listing-row');
   await expect(rows.filter({ hasText: FAR_PARCEL_ONE })).toHaveCount(1, { timeout: 10_000 });
   await expect(rows.filter({ hasText: FAR_PARCEL_TWO })).toHaveCount(1);
+  // #2860 (1468-22): exactly the 2 seeded Fixtureville parcels.
+  await expect(rows).toHaveCount(2);
 
   // 5. Row click opens the in-panel peek WITHOUT leaving /discover.
   await rows.filter({ hasText: FAR_PARCEL_ONE }).click();
@@ -179,6 +227,66 @@ test('[role:user] T8b — corridor card, distance-chip 25->50, town drill-in, li
   await expect(rows.filter({ hasText: FAR_PARCEL_ONE })).toHaveCount(1, { timeout: 10_000 });
   await expect(rows.filter({ hasText: FAR_PARCEL_TWO })).toHaveCount(1);
   expect(new URL(page.url()).searchParams.get('maxKm'), 'maxKm=50 survives the round trip').toBe('50');
+  // #2860 (1468-45): peek close removes listing= ...
+  await expect(page).toHaveURL((u) => !u.searchParams.has('listing'), { timeout: 10_000 });
+  const afterPeekClose = new URL(page.url()).searchParams;
+  // #2860 (1468-46): ... and keeps the drill-in identity (destKey) ...
+  expect(afterPeekClose.get('destKey'), 'peek close must keep destKey').toBe(FAR_TOWN_AREA_KEY);
+  // #2860 (1468-47): ... and the region.
+  expect(afterPeekClose.get('region'), 'peek close must keep region').toBe(DIRECTION);
+
+  // 8. #2860 (1468-18, 1468-30..32): a COLD load of the destKey deep link mounts the locality panel directly,
+  // without any town click.
+  const coldParams = new URLSearchParams({
+    city: 'bangalore',
+    journey: 'agri-first',
+    region: DIRECTION,
+    maxKm: '50',
+    destKey: FAR_TOWN_AREA_KEY,
+  });
+  await page.goto(`/discover?${coldParams.toString()}`);
+  await expect(page.getByTestId('agri-group-locality-panel'), 'cold destKey deep link mounts the locality panel').toBeVisible({ timeout: 15_000 });
+  await expect(rows.filter({ hasText: FAR_PARCEL_ONE })).toHaveCount(1, { timeout: 10_000 });
+  await expect(rows.filter({ hasText: FAR_PARCEL_TWO })).toHaveCount(1);
+  await expect(selectedPanel).toHaveCount(0);
+
+  // 9. #2860 (1468-23..29): closing the locality panel drops destKey, never resurrects locality=, keeps
+  // region+maxKm, and returns to the selected-group panel.
+  const closeBtn = page.getByTestId('agri-locality-close-btn');
+  await expect(closeBtn).toBeVisible({ timeout: 10_000 });
+  await closeBtn.click();
+  await expect(page).toHaveURL((u) => !u.searchParams.has('destKey'), { timeout: 10_000 });
+  const afterClose = new URL(page.url()).searchParams;
+  expect(afterClose.has('locality'), 'locality close must not resurrect a legacy locality= param').toBe(false);
+  expect(afterClose.get('region'), 'region survives the locality close').toBe(DIRECTION);
+  expect(afterClose.get('maxKm'), 'maxKm survives the locality close').toBe('50');
+  await expect(page.getByTestId('agri-group-locality-panel')).toHaveCount(0);
+  await expect(selectedPanel).toBeVisible({ timeout: 10_000 });
+});
+
+// #2860 — T8c [canonical-anon]: the anonymous agri peek withholds the price and offers a sign-in instead
+// (legacy e2e/discover-agri-locality-marker-1468.spec.ts AC7). Same far fixture town as T8b, cold destKey link.
+test('T8c — anon agri listing peek withholds the price and shows the sign-in affordance instead', async ({ page }) => {
+  const anonParams = new URLSearchParams({
+    city: 'bangalore',
+    journey: 'agri-first',
+    region: DIRECTION,
+    maxKm: '50',
+    destKey: FAR_TOWN_AREA_KEY,
+  });
+  await page.goto(`/discover?${anonParams.toString()}`);
+  await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });
+  // Genuinely anonymous: the header's anon-only Sign in link (same proof as T10).
+  await expect(page.getByRole('link', { name: 'Sign in', exact: true })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('agri-group-locality-panel')).toBeVisible({ timeout: 15_000 });
+  const row = page.getByTestId('agri-locality-listing-row').filter({ hasText: FAR_PARCEL_ONE });
+  await expect(row).toHaveCount(1, { timeout: 10_000 });
+  await row.click();
+  await expect(page.getByTestId('agri-listing-peek')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('agri-listing-peek-title')).toHaveText(FAR_PARCEL_ONE, { timeout: 10_000 });
+  // MASKING ORDER: 1468-51 (no price string for anon) BEFORE 1468-50 (sign-in affordance).
+  await expect(page.getByTestId('agri-listing-peek-price'), 'anon peek must not render a price').toHaveCount(0);
+  await expect(page.getByTestId('agri-listing-peek-price-signin'), 'anon peek shows the sign-in-for-price affordance').toBeVisible();
 });
 
 // DEFAULT_MAX_KM — the product constant agricultural.ts's cold-load canonicalisation backfills
@@ -198,7 +306,7 @@ async function readAgriParcelCount(page: import('./support/canonical-test').Page
   return parsed;
 }
 
-test('[role:user] T9 — legacy group=DIR:BAND rewrites to canonical region=/maxKm= and lands on the same result set as T8', async ({ page }) => {
+test('[role:user] T9 — legacy group=DIR:BAND rewrites to canonical region=/maxKm= and lands on the same result set as T8, and legacy locality= migrates to destKey=', async ({ page }) => {
   if (!hasRealCredentials(userEmail, userPassword)) {
     throw new Error('[T9] SMOKE_USER_EMAIL/PASSWORD absent — this test should not have run.');
   }
@@ -257,4 +365,37 @@ test('[role:user] T9 — legacy group=DIR:BAND rewrites to canonical region=/max
   const legacyCount = await readAgriParcelCount(page);
   expect(legacyCount, 'legacy-URL parcel count must be > 0').toBeGreaterThan(0);
   expect(legacyCount, 'legacy-URL and canonical-URL parcel counts must be EQUAL — this is the actual equivalence proof').toBe(canonicalCount);
+
+  // STEP 3 — #2860 (1468-33..39): a legacy locality=<area_key> link is migrated to destKey=<area_key>
+  // (agricultural.ts locality migration), mounts the locality panel, and neither close nor re-drill resurrects it.
+  const legacyLocalityParams = new URLSearchParams({
+    city: 'bangalore',
+    journey: 'agri-first',
+    region: DIRECTION,
+    maxKm: '50',
+    locality: FAR_TOWN_AREA_KEY,
+  });
+  await page.goto(`/discover?${legacyLocalityParams.toString()}`);
+  // 1468-33: promoted to the exact canonical destKey.
+  await expect(page, 'legacy locality=<area_key> must migrate to destKey=<area_key>').toHaveURL(
+    (u) => u.searchParams.get('destKey') === FAR_TOWN_AREA_KEY,
+    { timeout: 10_000 },
+  );
+  const migrated = new URL(page.url()).searchParams;
+  expect(migrated.has('locality'), 'legacy locality= must be removed by the migration').toBe(false);
+  expect(migrated.has('town'), 'legacy town= must not appear after the migration').toBe(false);
+  await expect(page.getByTestId('agri-group-locality-panel')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('agri-locality-name')).toHaveText(FAR_TOWN_NAME, { timeout: 10_000 });
+  // 1468-38: closing does not resurrect locality=.
+  await page.getByTestId('agri-locality-close-btn').click();
+  await expect(page, 'locality close must drop destKey and never write locality= back').toHaveURL(
+    (u) => !u.searchParams.has('destKey') && !u.searchParams.has('locality'),
+    { timeout: 10_000 },
+  );
+  // 1468-39: a re-drill writes destKey again, still no locality=.
+  await page.getByTestId('agri-group-locality-btn').filter({ hasText: FAR_TOWN_NAME }).click();
+  await expect(page).toHaveURL(
+    (u) => u.searchParams.get('destKey') === FAR_TOWN_AREA_KEY && !u.searchParams.has('locality'),
+    { timeout: 10_000 },
+  );
 });

@@ -57,9 +57,17 @@
         {
           "id": "T24",
           "project": "canonical-user"
+        },
+        {
+          "id": "T10b",
+          "project": "canonical-anon"
+        },
+        {
+          "id": "T25",
+          "project": "canonical-user"
         }
       ],
-      "notes": "City root settles area-first, Direction writes node=, bounded browse excludes other Directions, exactly one shell mounts; T24 proves Back from a Rent listing detail restores the rendered Rent leaf (cards, pressed control, summary, breadcrumb)."
+      "notes": "City root settles area-first, Direction writes node=, bounded browse excludes other Directions, exactly one shell mounts; T24 proves Back from a Rent listing detail restores the rendered Rent leaf (cards, pressed control, summary, breadcrumb). #2860: T10b loads the anon legacy deep links (unknown groupId, explicit area-first root, Udupi areaKey=) and asserts one non-blank, ungated, guard-clean surface (arms A/B/C mutation-proven; the surface-identity rows replace stale legacy oracles pending owner decisions D2/D4); T25 asserts that a legacy area-first areaKey= deep link (Udupi Manipal) mounts exactly one areas shell (mutation NOT_PROVEN; D4 pending) and shows a Manipal status-pill count >= 4 (mutation-proven), guard-clean; markers RETAIN under D9 (markers fetch depends on live map zoom), listing cards RETAIN under D8."
     },
     {
       "id": "J02",
@@ -74,9 +82,13 @@
         {
           "id": "T18",
           "project": "canonical-user"
+        },
+        {
+          "id": "T7b",
+          "project": "canonical-user"
         }
       ],
-      "notes": "Canonical node= renders the real school shell with a real count and seeded school names."
+      "notes": "Canonical node= renders the real school shell with a real count and seeded school names. #2860: T7b proves a stale school-first groupId is dropped on school select in one atomic write (the URL never holds schoolId with groupId) and never resurrected by Change school (all mutation-proven). Its marker-scope checks are a conditional guard only: no pre-select markers traffic was observed, so they carry no mutation credit (2205-16r NOT_PROVEN)."
     },
     {
       "id": "J03",
@@ -95,9 +107,13 @@
         {
           "id": "T9",
           "project": "canonical-user"
+        },
+        {
+          "id": "T8c",
+          "project": "canonical-anon"
         }
       ],
-      "notes": "region + maxKm renders real agri destination data; T8b walks corridor card, distance chip 25->50, town drill-in, the listing peek and Back from the listing detail restoring the peek on the far fixture town; legacy group=DIR:BAND rewrites to the same result set."
+      "notes": "region + maxKm renders real agri destination data; T8b walks corridor card, distance chip 25->50, town drill-in, the listing peek and Back from the listing detail restoring the peek on the far fixture town; legacy group=DIR:BAND rewrites to the same result set. #2860: T8b adds the exact destKey/Level-3 areaKey, display-name header, cold destKey load and locality close; T9 adds the legacy locality=<area_key> migration; T8c proves the anon peek withholds the price behind a sign-in affordance."
     },
     {
       "id": "J04",

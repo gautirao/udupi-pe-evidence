@@ -10,7 +10,7 @@ static source counts (`test(...)` call sites); the number Playwright COLLECTS is
 | legacy_spec_files | 215 | 133 | -82 |
 | legacy_static_test_callsites | 1043 | 685 | -358 |
 | canonical_spec_files | 12 | 17 | +5 |
-| canonical_static_tests | 34 | 49 | +15 |
+| canonical_static_tests | 34 | 55 | +21 |
 | parity_spec_files | 2 | 2 | +0 |
 | specialist_spec_files | 0 | 5 | +5 |
 
@@ -125,10 +125,13 @@ Ref: `HEAD`
     "T5",
     "T6",
     "T7",
+    "T7b",
     "T8",
     "T8b",
+    "T8c",
     "T9",
     "T10",
+    "T10b",
     "T11",
     "T12",
     "T13",
@@ -144,10 +147,11 @@ Ref: `HEAD`
     "T21",
     "T22",
     "T23",
-    "T24"
+    "T24",
+    "T25"
   ],
   "canonical_spec_files": 17,
-  "canonical_static_tests": 49,
+  "canonical_static_tests": 55,
   "ci_jobs_invoking_playwright": [
     "ci.yml:backend-integration",
     "ci.yml:e2e-canonical",
