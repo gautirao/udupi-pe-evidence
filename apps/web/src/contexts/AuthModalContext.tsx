@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { AuthForms } from '@/components/auth/AuthForms';
+import { getSafeReturnTo } from '@/lib/authUtils';
 
 export interface AuthModalOptions {
   returnTo?: string;
@@ -35,11 +36,15 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   const handleSuccess = useCallback(() => {
     setIsOpen(false);
     const currentPath = `${location.pathname}${location.search}`;
-    const target = options.redirect || options.returnTo;
+    // Sanitise the selected value; a rejected value never falls through to the other key.
+    const target = getSafeReturnTo(options.redirect || options.returnTo);
     if (target && target !== currentPath) {
       navigate(target);
     }
   }, [location.pathname, location.search, options.redirect, options.returnTo, navigate]);
+
+  const currentPath = `${location.pathname}${location.search}`;
+  const safeSelected = getSafeReturnTo(options.redirect || options.returnTo);
 
   return (
     <AuthModalContext.Provider value={{ isOpen, openAuthModal, closeAuthModal }}>
@@ -49,7 +54,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
           <DialogTitle className="sr-only">Authentication</DialogTitle>
           <DialogDescription className="sr-only">Sign in or sign up to continue</DialogDescription>
           <AuthForms
-            returnTo={options.redirect || options.returnTo || `${location.pathname}${location.search}`}
+            returnTo={safeSelected ?? getSafeReturnTo(currentPath) ?? null}
             onSuccess={handleSuccess}
             initialTab={options.initialTab}
           />
