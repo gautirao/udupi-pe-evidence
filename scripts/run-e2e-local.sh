@@ -9,11 +9,27 @@ echo "[e2e] LEGACY Playwright suite - NOT the authoritative E2E gate. Run: npm r
 
 # #2750 PR-2: the `smoke` project is retired, so there is no default project. Refuse BEFORE anything
 # is started (no env load, no container, no backend/frontend) rather than silently widening to `full`.
-if ! printf '%s\n' "$@" | grep -q '^--project'; then
+# Shell builtins only (for/case/[ ]): NO external command (grep, printf-pipe, sed, ...) may run before the exit 3 below, so a
+# missing or PATH-overridden binary cannot change the outcome (#2850 Codex r1 F1).
+has_project=0
+for arg in "$@"; do
+  case "$arg" in
+    --project*) has_project=1; break ;;
+  esac
+done
+if [ "$has_project" -eq 0 ]; then
   echo "ERROR: the smoke project was retired (#2750 PR-2); there is no default project." >&2
   echo "Pass --project=full|journey|integration-ui explicitly. The authoritative gate is: npm run test:e2e:gate" >&2
   exit 2
 fi
+
+# #2850 PR-7 FAIL-CLOSED: this wrapper is DISABLED, unconditionally. Its backend (apps/api/run-local.sh) needs hosted Supabase JWT
+# validation via SUPABASE_PROJECT_REF (read from apps/api/.env and exported below), and the kept legacy runners are loopback-only,
+# so the wrapper has no permitted route. It refuses HERE - after the --project check and BEFORE any source, env-file read, or
+# external command (shell builtins only) - and there is no env var, flag or file that re-enables it. Re-enabling needs a
+# local-auth route and its own reviewed plan (#2854). The body below is intentionally unreachable (dead code until then).
+echo "ERROR: scripts/run-e2e-local.sh is DISABLED (fail-closed, #2850 PR-7): its backend requires hosted Supabase JWT validation (SUPABASE_PROJECT_REF), and the kept legacy runners are loopback-only. Use: npm run test:e2e:gate. Re-enabling needs a local-auth route: see #2854." >&2
+exit 3
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORKTREE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"

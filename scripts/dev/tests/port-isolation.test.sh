@@ -289,15 +289,38 @@ EOF
 sleep 5
 EOF
   chmod +x "$sb/apps/api/run-local.sh"
+  # #2850 PR-7: per-sandbox lsof RECORDING shim (prepended ahead of MOCKBIN in run_e2e; MOCKBIN is untouched). The wrapper is
+  # now disabled, so the converted tests assert that lsof was never called ($sb/lsof.calls stays empty/absent).
+  mkdir -p "$sb/shimbin"
+  cat > "$sb/shimbin/lsof" <<EOF
+#!/usr/bin/env bash
+echo "LSOF_CALLED \$*" >> "$sb/lsof.calls"
+exit 0
+EOF
+  chmod +x "$sb/shimbin/lsof"
   echo "$sb"
 }
 
 run_e2e() {
-  # $1=sandbox; remaining = NAME=VALUE env assignments for the child
+  # $1=sandbox; remaining = NAME=VALUE env assignments for the child (the script argument --project=full is passed
+  # explicitly, #2850 PR-7: since #2750 PR-2 the wrapper refuses a missing --project with exit 2, which would hide the
+  # fail-closed refusal (exit 3) these tests now assert).
   local sandbox="$1"
   shift
-  env -i PATH="$MOCKBIN:$ORIG_PATH" HOME="${HOME:-/tmp}" TMPDIR="$sandbox" "$@" \
-    bash "$sandbox/scripts/run-e2e-local.sh" > "$sandbox/run.log" 2>&1
+  env -i PATH="$sandbox/shimbin:$MOCKBIN:$ORIG_PATH" HOME="${HOME:-/tmp}" TMPDIR="$sandbox" "$@" \
+    bash "$sandbox/scripts/run-e2e-local.sh" --project=full > "$sandbox/run.log" 2>&1
+}
+
+# assert_wrapper_refused <label> <exit code> <sandbox> <backend capture file>
+# The disabled wrapper (#2850 PR-7, follow-up #2854) must: exit EXACTLY 3 (never just non-zero, so the --project exit 2
+# cannot satisfy it), print the refusal, never write BACKEND_CAPTURE (mktemp pre-creates it, so `! -s`), and never call lsof.
+assert_wrapper_refused() {
+  local label="$1" rc="$2" sb="$3" cap="$4" log
+  log="$(cat "$sb/run.log" 2>/dev/null || true)"
+  if [[ "$rc" -eq 3 ]]; then ok "$label: exits exactly 3 (fail-closed refusal)"; else not_ok "$label: exits exactly 3 (got $rc)"; fi
+  assert_contains "$label: prints the DISABLED refusal message" "$log" "DISABLED (fail-closed, #2850 PR-7)"
+  if [[ ! -s "$cap" ]]; then ok "$label: BACKEND_CAPTURE never written (no backend started)"; else not_ok "$label: BACKEND_CAPTURE never written (no backend started)"; fi
+  if [[ ! -s "$sb/lsof.calls" ]]; then ok "$label: lsof was never called"; else not_ok "$label: lsof was never called"; fi
 }
 
 # --- T3: .env.e2e.local (worktree override) wins over .env.e2e, and its
@@ -312,15 +335,11 @@ EOF
 BACKEND_CAP3="$(mktemp)"
 run_e2e "$SB3" BACKEND_CAPTURE="$BACKEND_CAP3"
 RC3=$?
-LOG3="$(cat "$SB3/run.log" 2>/dev/null || true)"
-CAP3="$(cat "$BACKEND_CAP3" 2>/dev/null || true)"
 
-assert_true "T3: run-e2e-local.sh completes (override present, ports free) exits 0" "$RC3"
-assert_contains "T3: .env.e2e.local is preferred over .env.e2e" "$LOG3" "Using this worktree's port override"
-assert_contains "T3: resolved target reflects the override, not .env.e2e's default" "$LOG3" "e2e target: http://localhost:9410"
-assert_not_contains "T3: .env.e2e's default port is NOT what actually gets used" "$LOG3" "e2e target: http://localhost:8080"
-assert_contains "T3: BACKEND_BASE_URL's port propagates into SERVER_PORT for the backend actually started" "$CAP3" "SERVER_PORT=9411"
-assert_contains "T3: the override file's CORS_ALLOWED_ORIGINS reaches the backend process" "$CAP3" "CORS_ALLOWED_ORIGINS=http://localhost:9410,http://127.0.0.1:9410"
+# #2850 PR-7: scripts/run-e2e-local.sh is DISABLED (fail-closed): it has no non-hosted route, so it refuses unconditionally
+# (exit 3) before reading any env file. The .env.e2e.local override precedence + SERVER_PORT propagation this case used to
+# cover is DISPLACED to follow-up #2854 (restored together with a local-auth route); here we assert the refusal instead.
+assert_wrapper_refused "T3 (converted, #2850): a worktree port override cannot re-enable the disabled wrapper" "$RC3" "$SB3" "$BACKEND_CAP3"
 
 # --- T4: port held by a FOREIGN worktree -> refuse, never start anything ---
 
@@ -333,16 +352,9 @@ run_e2e "$SB4" \
   MOCK_LSOF_CWD="$FOREIGN_CWD" \
   BACKEND_CAPTURE="$BACKEND_CAP4"
 RC4=$?
-LOG4="$(cat "$SB4/run.log" 2>/dev/null || true)"
 
-if [[ $RC4 -ne 0 ]]; then ok "T4: a foreign-owned port aborts the script (non-zero exit)"; else not_ok "T4: a foreign-owned port aborts the script (non-zero exit)"; fi
-assert_contains "T4: refusal names the PID and explains it is not this worktree's" "$LOG4" "does not belong to this worktree"
-assert_contains "T4: refusal instructs the operator instead of acting for them" "$LOG4" "Refusing to stop another run's process"
-if [[ ! -s "$BACKEND_CAP4" ]]; then
-  ok "T4: the foreign process is never touched — this worktree's backend is never even started"
-else
-  not_ok "T4: the foreign process is never touched — this worktree's backend is never even started"
-fi
+# #2850 PR-7 (converted): the foreign-worktree port-ownership refusal is DISPLACED to #2854 (dead code behind the disabled wrapper).
+assert_wrapper_refused "T4 (converted, #2850): a foreign-held port never reaches the port-ownership logic" "$RC4" "$SB4" "$BACKEND_CAP4"
 
 # --- T5: port held by THIS worktree's own leftover process, and the port
 #     ACTUALLY CLEARS after kill within the timeout -> restart, still succeed ---
@@ -363,14 +375,9 @@ run_e2e "$SB5" \
   MOCK_LSOF_CALL_COUNT_FILE="$LSOF_COUNT5" \
   BACKEND_CAPTURE="$BACKEND_CAP5"
 RC5=$?
-LOG5="$(cat "$SB5/run.log" 2>/dev/null || true)"
-CAP5="$(cat "$BACKEND_CAP5" 2>/dev/null || true)"
 
-assert_true "T5: this worktree's own leftover process clears after kill -> restart succeeds (exit 0)" "$RC5"
-assert_contains "T5: log explains the restart-not-refuse decision" "$LOG5" "held by this worktree's own process"
-assert_not_contains "T5: never emits the cross-worktree refusal for an owned port" "$LOG5" "does not belong to this worktree"
-assert_contains "T5: the script confirms the port actually cleared before proceeding" "$LOG5" "confirmed free"
-assert_contains "T5: the backend still actually starts, on the assigned port, after the restart" "$CAP5" "SERVER_PORT=8085"
+# #2850 PR-7 (converted): the own-process restart path is DISPLACED to #2854; the disabled wrapper never starts anything.
+assert_wrapper_refused "T5 (converted, #2850): an own-worktree leftover process is never killed or restarted" "$RC5" "$SB5" "$BACKEND_CAP5"
 
 # --- T6: port held by THIS worktree's own process, but it NEVER clears after
 #     kill (e.g. mvn's spawned java child ignoring the wrapper script's
@@ -385,17 +392,9 @@ run_e2e "$SB6" \
   E2E_PORT_CLEAR_TIMEOUT_FRONTEND_SECONDS=1 \
   BACKEND_CAPTURE="$BACKEND_CAP6"
 RC6=$?
-LOG6="$(cat "$SB6/run.log" 2>/dev/null || true)"
 
-if [[ $RC6 -ne 0 ]]; then ok "T6: a port that never clears after kill aborts the script (non-zero exit)"; else not_ok "T6: a port that never clears after kill aborts the script (non-zero exit)"; fi
-assert_contains "T6: failure explains the port never cleared, naming the timeout" "$LOG6" "did not exit"
-assert_contains "T6: failure explains WHY refusing to proceed (stale-code validation risk)" "$LOG6" "validate STALE code"
-assert_not_contains "T6: never falsely claims the port is confirmed free" "$LOG6" "confirmed free"
-if [[ ! -s "$BACKEND_CAP6" ]]; then
-  ok "T6: no replacement backend is started while the old one might still be serving"
-else
-  not_ok "T6: no replacement backend is started while the old one might still be serving"
-fi
+# #2850 PR-7 (converted): the "port never clears after kill" fail-closed path is DISPLACED to #2854.
+assert_wrapper_refused "T6 (converted, #2850): a never-clearing port never reaches the kill/poll logic" "$RC6" "$SB6" "$BACKEND_CAP6"
 
 # ===========================================================================
 # T7 — kill_process_tree & terminate_service process cleanup primitives (#2525)
@@ -463,16 +462,13 @@ fi
 # ===========================================================================
 
 SB9="$(new_e2e_sandbox 8080 8085)"
-run_e2e "$SB9" MOCK_LSOF_PID=9999 MOCK_LSOF_CWD="/other/path"
+BACKEND_CAP9="$(mktemp)"
+run_e2e "$SB9" MOCK_LSOF_PID=9999 MOCK_LSOF_CWD="/other/path" BACKEND_CAPTURE="$BACKEND_CAP9"
 RC9=$?
-LOG9="$(cat "$SB9/run.log" 2>/dev/null || true)"
 
-if [[ $RC9 -ne 0 ]]; then
-  ok "T9: pre-flight port guard rejects startup when port is held (non-zero exit)"
-else
-  not_ok "T9: pre-flight port guard rejects startup when port is held (non-zero exit)"
-fi
-assert_contains "T9: pre-flight log identifies process ownership failure" "$LOG9" "does not belong to this worktree"
+# #2850 PR-7 (converted): the pre-flight port guard is DISPLACED to #2854. At base this test was already red for the same
+# cause as T3-T6 (no --project -> exit 2 'smoke project was retired', evidence/t9-base-cause.txt).
+assert_wrapper_refused "T9 (converted, #2850): the pre-flight port guard is unreachable behind the disabled wrapper" "$RC9" "$SB9" "$BACKEND_CAP9"
 
 # ===========================================================================
 # Summary

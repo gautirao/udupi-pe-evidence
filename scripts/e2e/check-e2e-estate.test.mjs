@@ -521,11 +521,19 @@ test('CLI: an SP violation exits 1 with the FAIL[FC-19/SPn] tag', () => {
   } finally { clean(root); }
 });
 
-test('real repo: 2 grandfathered e2e-parity RETAIN_SPECIALIST rows exist today and every other RETAIN_SPECIALIST row sits under e2e/specialist/', () => {
+// #2850 amendment 2 (reviewed edit of ONE existing case): the home rule is keyed on STATUS (terminal RETAIN_SPECIALIST), and a
+// companion rule covers the newly-legal tracked state: decision RETAIN_SPECIALIST outside the homes must be SCHEDULED(#NNNN) with slice == that #NNNN.
+test('real repo: every status-RETAIN_SPECIALIST row (>= 2 grandfathered e2e-parity) sits under e2e-parity/ or e2e/specialist/; every other decision-RETAIN_SPECIALIST row is SCHEDULED(#NNNN) with a matching slice', () => {
   const rows = parseCsv(fs.readFileSync(path.join(DEFAULT_ROOT, MANIFEST_REL), 'utf8')).slice(1).filter((r) => r.length > 1);
-  const retain = rows.filter((r) => r[2] === 'RETAIN_SPECIALIST');
-  assert.ok(retain.length >= 2);
-  for (const r of retain) assert.ok(r[0].startsWith('e2e-parity/') || r[0].startsWith('e2e/specialist/'), r[0]);
+  const inHome = (r) => r[0].startsWith('e2e-parity/') || r[0].startsWith('e2e/specialist/');
+  const terminal = rows.filter((r) => r[7] === 'RETAIN_SPECIALIST');
+  assert.ok(terminal.filter((r) => r[0].startsWith('e2e-parity/')).length >= 2);
+  for (const r of terminal) assert.ok(inHome(r), `status RETAIN_SPECIALIST outside the homes: ${r[0]}`);
+  for (const r of rows.filter((x) => x[2] === 'RETAIN_SPECIALIST' && !inHome(x))) {
+    const m = r[7].match(/^SCHEDULED\((#[1-9][0-9]{2,4})\)$/);
+    assert.ok(m, `companion: decision RETAIN_SPECIALIST outside the homes needs status SCHEDULED(#NNNN), found ${r[7]}: ${r[0]}`);
+    assert.equal(r[5], m[1], `companion: slice must equal ${m[1]} for ${r[0]}`);
+  }
   assert.equal(rows.length, 217);
 });
 
@@ -546,4 +554,110 @@ test('cycle 2 LOW: knownCanonicalIds accepts only id-shaped title tokens (a pros
   assert.doesNotMatch('Smoke', CANONICAL_ID_SHAPE);
   assert.doesNotMatch('T1_x', CANONICAL_ID_SHAPE);
   assert.doesNotMatch('harness', CANONICAL_ID_SHAPE);
+});
+
+// ---- #2850 PR-7: status SCHEDULED(#NNNN) grammar + decision RETAIN_SPECIALIST pairing (fail-closed) -------------------------
+const PR7_B = ['e2e/b.spec.ts', 'top-level', 'MOVE_DOWN', 'apps/web/src/b.test.ts', 'component rule', 'PR-3', '0', 'SCHEDULED(PR-3)'];
+const PR7_REASON = '[HIT_TEST] elementFromPoint at the control centre at 390x844'; // > 20 chars
+const pr7A = (decision, status, slice, { dest = '#2851: lower-level destination', rationale = PR7_REASON } = {}) =>
+  ['e2e/a.spec.ts', 'top-level', decision, dest, rationale, slice, String(ISSUE_2751_TOTAL), status];
+const pr7Errors = (row, files = {}) => inWorld(world({ rows: [row, PR7_B], files }), (res) => nonFc24(res).errors);
+const pr7Has = (errs, needle) => errs.some((e) => e.includes(needle));
+
+test('PR-7 grammar REJECT: SCHEDULED(#) / (#12) / (#0123) / (#123456) / (#abc) / (2851) / ( #2851) / (PR-10)', () => {
+  for (const status of ['SCHEDULED(#)', 'SCHEDULED(#12)', 'SCHEDULED(#0123)', 'SCHEDULED(#123456)', 'SCHEDULED(#abc)', 'SCHEDULED(2851)', 'SCHEDULED( #2851)', 'SCHEDULED(PR-10)']) {
+    const errs = pr7Errors(pr7A('MOVE_DOWN', status, '#2851'));
+    assert.ok(pr7Has(errs, `status "${status}" must be SCHEDULED(PR-n)`), `${status}: ${errs.join(' | ')}`);
+  }
+});
+
+test('PR-7 grammar REJECT: SCHEDULED(#2851) with slice #2852, PR-7 or empty', () => {
+  for (const slice of ['#2852', 'PR-7', '']) {
+    const errs = pr7Errors(pr7A('MOVE_DOWN', 'SCHEDULED(#2851)', slice));
+    assert.ok(pr7Has(errs, 'disagrees with status SCHEDULED(#2851)'), `slice "${slice}": ${errs.join(' | ')}`);
+  }
+});
+
+test('PR-7 grammar ACCEPT: MOVE_DOWN + SCHEDULED(#2851) + slice #2851 (3-, 4- and 5-digit issue numbers)', () => {
+  assert.deepEqual(pr7Errors(pr7A('MOVE_DOWN', 'SCHEDULED(#2851)', '#2851')), []);
+  assert.deepEqual(pr7Errors(pr7A('MOVE_DOWN', 'SCHEDULED(#123)', '#123')), []);
+  assert.deepEqual(pr7Errors(pr7A('MOVE_DOWN', 'SCHEDULED(#12345)', '#12345')), []);
+});
+
+test('PR-7 pairing REJECT: decision RETAIN_SPECIALIST + SCHEDULED(PR-1..PR-9) stays rejected', () => {
+  for (let n = 1; n <= 9; n += 1) {
+    const errs = pr7Errors(pr7A('RETAIN_SPECIALIST', `SCHEDULED(PR-${n})`, `PR-${n}`));
+    assert.ok(pr7Has(errs, 'must carry status RETAIN_SPECIALIST'), `PR-${n}: ${errs.join(' | ')}`);
+  }
+});
+
+test('PR-7 pairing REJECT: decision RETAIN_SPECIALIST + SCHEDULED(#2851) with a missing, empty or 19-char reason', () => {
+  for (const rationale of [undefined, '', 'x'.repeat(19)]) {
+    const row = pr7A('RETAIN_SPECIALIST', 'SCHEDULED(#2851)', '#2851', rationale === undefined ? {} : { rationale });
+    if (rationale === undefined) row[4] = ''; // "missing" = the cell is absent/blank
+    const errs = pr7Errors(row);
+    assert.ok(pr7Has(errs, 'needs a written reason'), `${JSON.stringify(rationale)}: ${errs.join(' | ')}`);
+  }
+});
+
+test('PR-7 pairing REJECT: decision RETAIN_SPECIALIST + SCHEDULED(#2851) for a file that does not exist; + RETIRED', () => {
+  const gone = pr7Errors(pr7A('RETAIN_SPECIALIST', 'SCHEDULED(#2851)', '#2851'), { 'e2e/a.spec.ts': null });
+  assert.ok(pr7Has(gone, 'does not exist'), gone.join(' | '));
+  assert.ok(pr7Has(gone, 'existing legacy file only'), gone.join(' | '));
+  const retired = pr7Errors(pr7A('RETAIN_SPECIALIST', 'RETIRED', 'PR-7'), { 'e2e/a.spec.ts': null });
+  assert.ok(pr7Has(retired, 'must carry status RETAIN_SPECIALIST'), retired.join(' | '));
+});
+
+test('PR-7 pairing REJECT: decision RETAIN_SPECIALIST + SCHEDULED(#2851) under e2e/specialist/ (admitted rows carry status RETAIN_SPECIALIST)', () => {
+  const row = [SPEC, 'specialist', 'RETAIN_SPECIALIST', 'e2e/specialist/ (outside the gate)', PR7_REASON, '#2851', '0', 'SCHEDULED(#2851)'];
+  inWorld(sworld({ rows: [row] }), (res) => {
+    assert.ok(has(res, 'FC-19', 'existing legacy file only'), res.errors.join(' | '));
+    assert.ok(hasSp(res, 2, 'decision AND status'), res.errors.join(' | '));
+  });
+});
+
+test('PR-7 SP2 stays status-bound: status RETAIN_SPECIALIST for a legacy file still fails; e2e/specialist and e2e-parity rows still pass', () => {
+  inWorld(sworld({ rows: [specRow(), specRow('e2e/a.spec.ts')] }), (res) => assert.ok(hasSp(res, 2, 'e2e/a.spec.ts')));
+  const parity = ['e2e-parity/p.spec.ts', 'parity', 'RETAIN_SPECIALIST', 'x', 'parity harness kept as a specialist suite', 'PR-7', '0', 'RETAIN_SPECIALIST'];
+  inWorld(sworld({ files: { 'e2e-parity/p.spec.ts': '' }, rows: [specRow(), parity] }), (res) => assert.deepEqual(nonFc24(res).errors, []));
+});
+
+test('PR-7 pairing ACCEPT: decision RETAIN_SPECIALIST + SCHEDULED(#2851) + slice #2851 + exactly-20-char reason + existing legacy file', () => {
+  assert.deepEqual(pr7Errors(pr7A('RETAIN_SPECIALIST', 'SCHEDULED(#2851)', '#2851', { rationale: 'y'.repeat(20) })), []);
+  assert.deepEqual(pr7Errors(pr7A('RETAIN_SPECIALIST', 'SCHEDULED(#2851)', '#2851')), []);
+});
+
+// ---- #2850 PR-7 Codex r1 F4: a tracked RETAIN_SPECIALIST row must name a REAL legacy Playwright spec file (NEW cases only) --------
+const F4_MSG = 'must name a regular legacy Playwright spec file under e2e/';
+const f4Row = (file) => { const r = pr7A('RETAIN_SPECIALIST', 'SCHEDULED(#2851)', '#2851'); r[0] = file; return r; };
+
+test('Codex r1 F4 REJECT: decision RETAIN_SPECIALIST + SCHEDULED(#2851) naming package.json (exists, is not a spec)', () => {
+  const errs = pr7Errors(f4Row('package.json'), { 'package.json': '{}' });
+  assert.ok(pr7Has(errs, F4_MSG), errs.join(' | '));
+  assert.ok(!pr7Has(errs, 'does not exist'), 'the file does exist, so only the new shape check can catch it: ' + errs.join(' | '));
+});
+
+test('Codex r1 F4 REJECT: decision RETAIN_SPECIALIST + SCHEDULED(#2851) naming a docs .md file', () => {
+  const errs = pr7Errors(f4Row('docs/testing/e2e-retirement-map-pr7.md'), { 'docs/testing/e2e-retirement-map-pr7.md': '# map' });
+  assert.ok(pr7Has(errs, F4_MSG), errs.join(' | '));
+});
+
+test('Codex r1 F4 REJECT: decision RETAIN_SPECIALIST + SCHEDULED(#2851) naming a DIRECTORY (even one named *.spec.ts)', () => {
+  const dirSpec = pr7Errors(f4Row('e2e/dir.spec.ts'), { 'e2e/dir.spec.ts/inner.txt': 'x' });
+  assert.ok(pr7Has(dirSpec, F4_MSG), dirSpec.join(' | '));
+  const plainDir = pr7Errors(f4Row('docs'), { 'docs/readme.txt': 'x' });
+  assert.ok(pr7Has(plainDir, F4_MSG), plainDir.join(' | '));
+});
+
+test('Codex r1 F4 REJECT: a non-spec file under e2e/ (helpers.ts) and a spec outside e2e/ (e2e-parity/) are not legacy spec files', () => {
+  const helper = pr7Errors(f4Row('e2e/helpers.ts'), { 'e2e/helpers.ts': 'export const h = 1;' });
+  assert.ok(pr7Has(helper, F4_MSG), helper.join(' | '));
+  const parity = pr7Errors(f4Row('e2e-parity/p.spec.ts'), { 'e2e-parity/p.spec.ts': '' });
+  assert.ok(pr7Has(parity, F4_MSG), parity.join(' | '));
+});
+
+test('Codex r1 F4 ACCEPT: a real legacy spec (e2e/a.spec.ts, discovered on disk) still passes the pairing with no F4 error', () => {
+  const errs = pr7Errors(pr7A('RETAIN_SPECIALIST', 'SCHEDULED(#2851)', '#2851'));
+  assert.deepEqual(errs, []);
+  assert.ok(!pr7Has(errs, F4_MSG));
 });

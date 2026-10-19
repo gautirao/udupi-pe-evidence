@@ -28,6 +28,14 @@ set -m
 # #2750: this runs the LEGACY Playwright estate (playwright.config.ts projects), which is being retired.
 echo "[e2e-watch] LEGACY Playwright suite - NOT the authoritative E2E gate. Run: npm run test:e2e:gate" >&2
 
+# #2850 PR-7 FAIL-CLOSED: this watch wrapper is DISABLED, unconditionally. The backend it starts (apps/api/run-local.sh) needs hosted
+# Supabase JWT validation (SUPABASE_PROJECT_REF), and the kept legacy runners are loopback-only, so it has no permitted route. It
+# refuses HERE - immediately after the banner and BEFORE any source, env-file read or external command (shell builtins only) -
+# and no env var, flag or file re-enables it. Re-enabling needs a local-auth route and its own reviewed plan (#2854). The body
+# below is intentionally unreachable (dead code until then).
+echo "ERROR: scripts/e2e-watch.sh is DISABLED (fail-closed, #2850 PR-7): the backend it starts requires hosted Supabase JWT validation (SUPABASE_PROJECT_REF), and the kept legacy runners are loopback-only. Use: npm run test:e2e:gate. Re-enabling needs a local-auth route: see #2854." >&2
+exit 3
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR/.."
 ENV_FILE="$PROJECT_ROOT/.env.e2e"

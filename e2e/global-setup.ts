@@ -24,14 +24,24 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { chromium } from '@playwright/test';
+import { isLoopbackHostname } from '../scripts/e2e/specialist-suite.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const BACKEND =
-  process.env.BACKEND_BASE_URL ?? 'https://udupi-property-explorer.onrender.com';
-const FRONTEND =
-  process.env.PLAYWRIGHT_BASE_URL ?? 'https://udupi-property-explorer.pages.dev';
+// LEGACY runner, LOOPBACK-ONLY (#2850 PR-7): there is no hosted/production fallback. playwright.config.ts refuses to load
+// unless both URLs are set and loopback; this file re-checks so it can never be reached with a hosted target.
+const BACKEND = process.env.BACKEND_BASE_URL ?? '';
+const FRONTEND = process.env.PLAYWRIGHT_BASE_URL ?? '';
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? '';
+
+function isLoopbackUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    return /^https?:$/.test(u.protocol) && isLoopbackHostname(u.hostname);
+  } catch {
+    return false;
+  }
+}
 const SUPABASE_KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '';
 
 const ID_FILE = path.join(__dirname, '.test-listing-id');
@@ -44,6 +54,11 @@ const FIXTURES_DIR = path.join(__dirname, 'fixtures');
 async function getToken(email: string, password: string): Promise<string | null> {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     console.log('[global-setup] VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY not set — cannot obtain token.');
+    return null;
+  }
+  // Supabase password-grant fence (#2850): the legacy runner never authenticates against a non-loopback auth URL.
+  if (!isLoopbackUrl(SUPABASE_URL)) {
+    console.log('[global-setup] REFUSED: VITE_SUPABASE_URL is not a loopback URL; the legacy runner is loopback-only, so no password grant is attempted.');
     return null;
   }
 
@@ -146,6 +161,10 @@ async function registerImage(
 }
 
 export default async function globalSetup(): Promise<void> {
+  // Loopback-only guard (#2850): refuse BEFORE any storage-state login, token grant or backend call.
+  if (!isLoopbackUrl(BACKEND) || !isLoopbackUrl(FRONTEND)) {
+    throw new Error('[global-setup] REFUSED: PLAYWRIGHT_BASE_URL and BACKEND_BASE_URL must both be set to loopback URLs (the legacy runner is loopback-only, #2850).');
+  }
   // ------------------------------------------------------------------
   // Step 5 (hoisted): Save storageState for each role.
   // Must run unconditionally — spec files always reference the fixture

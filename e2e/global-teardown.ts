@@ -17,12 +17,22 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import { isLoopbackHostname } from '../scripts/e2e/specialist-suite.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const BACKEND =
-  process.env.BACKEND_BASE_URL ?? 'https://udupi-property-explorer.onrender.com';
+// LEGACY runner, LOOPBACK-ONLY (#2850 PR-7): no hosted/production fallback.
+const BACKEND = process.env.BACKEND_BASE_URL ?? '';
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? '';
+
+function isLoopbackUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    return /^https?:$/.test(u.protocol) && isLoopbackHostname(u.hostname);
+  } catch {
+    return false;
+  }
+}
 const SUPABASE_KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '';
 
 const ID_FILE = path.join(__dirname, '.test-listing-id');
@@ -56,6 +66,11 @@ async function getToken(email: string, password: string): Promise<string | null>
 }
 
 export default async function globalTeardown(): Promise<void> {
+  // Loopback-only guard (#2850): never call a non-loopback backend or auth URL from teardown (best-effort, must not throw).
+  if (!isLoopbackUrl(BACKEND) || (SUPABASE_URL !== '' && !isLoopbackUrl(SUPABASE_URL))) {
+    console.log('[global-teardown] REFUSED: BACKEND_BASE_URL / VITE_SUPABASE_URL is missing or not loopback; the legacy runner is loopback-only (#2850). Nothing cleaned up.');
+    return;
+  }
   // ------------------------------------------------------------------
   // Step 1: Read the ID file
   // ------------------------------------------------------------------

@@ -11,7 +11,9 @@
 // Rules (FC ids refer to the #2750 fail-closed table):
 //  FC-17 every Playwright-matchable file (*.{spec,test}.{ts,js,mjs,cjs,tsx,jsx}) under e2e/ and
 //        e2e-parity/ has EXACTLY one manifest row (a new unlisted spec fails with the #2750 rule).
-//  FC-18 status RETIRED => file absent; status SCHEDULED(PR-n) / RETAIN_SPECIALIST => file present.
+//  FC-18 status RETIRED => file absent; status SCHEDULED(PR-n) / SCHEDULED(#NNNN) / RETAIN_SPECIALIST => file present.
+//        (#2850 PR-7: SCHEDULED(#NNNN) = tracked by issue NNNN, slice must be exactly '#NNNN'. Decision RETAIN_SPECIALIST may
+//        carry it ONLY for an existing legacy file outside e2e/specialist/ (>= 20-char reason); SP2 stays bound to status.)
 //  FC-19 decisions are final (no PENDING / NEEDS_REVIEW); DELETE_DUP names a canonical id; MOVE_DOWN
 //        names a destination, which must exist once the row is RETIRED; RETAIN_SPECIALIST has a
 //        written reason; *.canonical.ts only under e2e/canonical/; no literal test.skip / test.fixme /
@@ -166,7 +168,8 @@ function checkSpecialistRules({ root, rows, byFile, allFiles, errors }) {
     }
   }
   for (const { line, f } of rows) {
-    if (f.decision !== 'RETAIN_SPECIALIST' && f.status !== 'RETAIN_SPECIALIST') continue;
+    // #2850 PR-7: bound to STATUS only (a tracked decision-RETAIN + SCHEDULED(#NNNN) legacy row is legal; see the FC-19 pairing check).
+    if (f.status !== 'RETAIN_SPECIALIST') continue;
     const home = (f.file.startsWith(SPECIALIST_DIR) && f.file.endsWith('.specialist.ts')) || f.file.startsWith('e2e-parity/');
     if (!home) errors.push(`${tag(2)} manifest line ${line} (${f.file}): a RETAIN_SPECIALIST row must name a file under e2e/specialist/ (*.specialist.ts) or e2e-parity/ (grandfathered)`);
   }
@@ -267,6 +270,13 @@ function knownCanonicalIds(root, matrixPath) {
   return ids;
 }
 
+/** A tracked (SCHEDULED(#NNNN)) RETAIN_SPECIALIST row's file: in the discovered on-disk set, under e2e/, *.spec.ts|*.spec.mjs, a regular file. */
+function isLegacySpecFile(root, rel, onDisk) {
+  if (!onDisk.has(rel) || !rel.startsWith('e2e/') || !/\.spec\.(ts|mjs)$/.test(rel)) return false;
+  const st = fs.statSync(path.join(root, rel), { throwIfNoEntry: false });
+  return st !== undefined && st.isFile();
+}
+
 export function checkEstate({ root = DEFAULT_ROOT, manifestPath, matrixPath, trackedFiles } = {}) {
   const errors = [];
   const info = [];
@@ -312,8 +322,8 @@ export function checkEstate({ root = DEFAULT_ROOT, manifestPath, matrixPath, tra
     for (const col of ['decision', 'status', 'canonical_equivalent_or_destination', 'rationale']) {
       if (todoToken.test(f[col])) errors.push(`FAIL[FC-19] ${where}: column ${col} holds an undecided marker ("${f[col].slice(0, 40)}"); decisions must be FINAL`);
     }
-    if (!/^(SCHEDULED\(PR-[1-9]\)|RETIRED|RETAIN_SPECIALIST)$/.test(f.status)) {
-      errors.push(`FAIL[FC-19] ${where}: status "${f.status}" must be SCHEDULED(PR-n), RETIRED or RETAIN_SPECIALIST`);
+    if (!/^(SCHEDULED\(PR-[1-9]\)|SCHEDULED\(#[1-9][0-9]{2,4}\)|RETIRED|RETAIN_SPECIALIST)$/.test(f.status)) {
+      errors.push(`FAIL[FC-19] ${where}: status "${f.status}" must be SCHEDULED(PR-n), SCHEDULED(#NNNN), RETIRED or RETAIN_SPECIALIST`);
     }
     if (f.status === 'RETIRED' && exists) errors.push(`FAIL[FC-18] ${where}: status RETIRED but the file still exists on disk`);
     if ((f.status.startsWith('SCHEDULED') || f.status === 'RETAIN_SPECIALIST') && !exists) {
@@ -321,6 +331,9 @@ export function checkEstate({ root = DEFAULT_ROOT, manifestPath, matrixPath, tra
     }
     const sm = f.status.match(/^SCHEDULED\((PR-\d)\)$/);
     if (sm && f.slice !== sm[1]) errors.push(`FAIL[FC-19] ${where}: slice ${f.slice} disagrees with status ${f.status}`);
+    // #2850 PR-7: SCHEDULED(#NNNN) = tracked by an issue; the slice column carries exactly '#NNNN'.
+    const im = f.status.match(/^SCHEDULED\((#[1-9][0-9]{2,4})\)$/);
+    if (im && f.slice !== im[1]) errors.push(`FAIL[FC-19] ${where}: slice ${f.slice} disagrees with status ${f.status}`);
     if ((f.decision === 'DELETE_DUP' || f.decision === 'CANONICAL_GAP_CLOSED') && !f.canonical_equivalent_or_destination.trim()) {
       errors.push(`FAIL[FC-19] ${where}: ${f.decision} must name the canonical id that proves the journey`);
     } else if (f.decision === 'DELETE_DUP' || f.decision === 'CANONICAL_GAP_CLOSED') {
@@ -344,7 +357,18 @@ export function checkEstate({ root = DEFAULT_ROOT, manifestPath, matrixPath, tra
     }
     if (f.decision === 'RETAIN_SPECIALIST') {
       if (f.rationale.trim().length < 20) errors.push(`FAIL[FC-19] ${where}: RETAIN_SPECIALIST needs a written reason`);
-      if (f.status !== 'RETAIN_SPECIALIST') errors.push(`FAIL[FC-19] ${where}: decision RETAIN_SPECIALIST must carry status RETAIN_SPECIALIST`);
+      // #2850 PR-7: a tracked (not yet admitted) candidate may carry SCHEDULED(#NNNN); SCHEDULED(PR-n), RETIRED etc. stay rejected.
+      const tracked = im !== null;
+      if (f.status !== 'RETAIN_SPECIALIST' && !tracked) {
+        errors.push(`FAIL[FC-19] ${where}: decision RETAIN_SPECIALIST must carry status RETAIN_SPECIALIST (or SCHEDULED(#NNNN) for a tracked, not-yet-admitted legacy candidate)`);
+      }
+      if (tracked && (f.file.startsWith(SPECIALIST_DIR) || !exists)) {
+        errors.push(`FAIL[FC-19] ${where}: decision RETAIN_SPECIALIST with SCHEDULED(#NNNN) is for an existing legacy file only (not under ${SPECIALIST_DIR}); admitted specialist rows carry status RETAIN_SPECIALIST`);
+      } else if (tracked && !isLegacySpecFile(root, f.file, onDisk)) {
+        // Codex r1 F4: "exists on disk" is not enough (package.json, a docs .md or a directory all exist). The pending row must name a
+        // REGULAR FILE that is a member of the guard's discovered on-disk Playwright set, under e2e/, shaped *.spec.ts or *.spec.mjs.
+        errors.push(`FAIL[FC-19] ${where}: decision RETAIN_SPECIALIST with SCHEDULED(#NNNN) must name a regular legacy Playwright spec file under e2e/ (*.spec.ts or *.spec.mjs, discovered on disk); "${f.file}" is not one`);
+      }
     }
     const n = Number(f.issue_2751_titles);
     if (!Number.isInteger(n) || n < 0) errors.push(`FAIL[FC-24] ${where}: issue_2751_titles "${f.issue_2751_titles}" is not a non-negative integer`);

@@ -33,8 +33,19 @@ unexecuted journey, and on any role credential value found in the run artefacts.
   open gaps exit 5 and a hosted-auth run exits 6 (ENVIRONMENT_GATED) - neither is a PASS. The pre-push
   hook runs static guards only and neither reads nor writes the sentinel.
 - Everything else below (`test:e2e:local`, `e2e-watch.sh`, the `journey`/`full`/`integration-ui` projects)
-  is the LEGACY estate: NOT the gate, scheduled for retirement per the manifest. The legacy `smoke`
+  is the LEGACY estate: NOT the gate, tracked for retirement per the manifest. The legacy `smoke`
   project, the `playwright-pr` CI job and the `udupi-canonical` fixture profile are retired.
+- **LEGACY runners (#2850 PR-7).** `playwright.config.ts` has no default target: it throws at load
+  unless `PLAYWRIGHT_BASE_URL` and `BACKEND_BASE_URL` are both set and loopback, and `VITE_SUPABASE_URL`, `FRONTEND_BASE_URL`,
+  `VITE_API_BASE_URL`, `OPENSEARCH_URL` and `SUPABASE_DB_HOST` are loopback whenever they are set in the Playwright process env
+  (the target env vars the kept legacy specs read; enumerated in the PR-7 evidence). `scripts/run-e2e-local.sh` (so `npm run test:e2e:local` and `npm run test:e2e:headed`) and
+  `scripts/e2e-watch.sh` (so `npm run test:e2e:watch` and `test:e2e:watch:slow`) are **DISABLED**: each refuses unconditionally
+  with exit 3 and a pointer to `npm run test:e2e:gate` (follow-up #2854). The `journey`/`full`/`integration-ui` projects are only
+  fenced at config load. **Known limitation (#2854):** a browser login still authenticates against the Supabase the frontend
+  was BUILT with (build-time `VITE_SUPABASE_URL`), which the config fence cannot see. The fence is a config-load check on env vars
+  only, NOT a runtime request guard: hard-coded hosts inside the (non-editable) legacy specs (for example the unreachable onrender
+  `BACKEND_BASE_URL` defaults and a hosted Supabase origin used as a `page.route` mock target) and DB settings a spec reads from a
+  file are not enforced. Those gaps are tracked in #2854. No hosted or production route is documented or supported for the legacy runners.
 - Post-deploy: `.github/workflows/e2e-post-deploy.yml` runs `playwright.deployed.config.ts`
   (`e2e/deployed/`), a write-free, credential-free reachability check of the deployed site. It is
   **secondary - not the E2E gate**.
@@ -49,7 +60,7 @@ This repo has three layers of Playwright coverage. Only one of them is the
 | **Canonical** (`e2e/canonical/`) | `playwright.canonical.config.ts` | A real, locally-built frontend + real locally-run backend + real local Postgres/PostGIS fixture, started IN the CI job itself | `e2e-canonical` in `.github/workflows/ci.yml` | **YES — this is the merge gate.** |
 | **Deployed reachability** (secondary — not the E2E gate) | `playwright.deployed.config.ts` (`e2e/deployed/`) | The already-deployed production site (https://propertysignal.in, overridable via repo variable `DEPLOYED_BASE_URL`) + Render backend (repo variable `DEPLOYED_BACKEND_URL`), whatever build is currently live. The defaults live only in the workflow; the config requires explicit URLs. No auth, no writes | `.github/workflows/e2e-post-deploy.yml` (post-merge, not a PR check) | No — secondary reachability check only. Does not exercise the PR's own backend. |
 | **Specialist** (`e2e/specialist/`, opt-in, local-only, NOT the gate) | `playwright.specialist.config.ts` | The gate's per-worktree local stack (loopback only), started by `npm run test:e2e:specialist` | None (refused in CI; never in pre-push) | No — browser-only behaviour kept on purpose; never E2E evidence. See [`e2e/specialist/README.md`](specialist/README.md) |
-| **Historical/specialist** (~150 remaining `*.spec.ts` files under `e2e/`, including `journey/` and `integration-ui/`) | `playwright.config.ts`, `journey`/`integration-ui`/`full` projects | A locally-started dev backend+frontend (via `scripts/e2e-watch.sh` or `scripts/run-e2e-local.sh`) | Not run in CI at all | No — developer-invoked only (`npm run test:e2e:watch`, `bash scripts/e2e-watch.sh --project=journey`, etc.) |
+| **LEGACY** (the remaining `*.spec.ts` files under `e2e/`, including `journey/` and `integration-ui/`; each has a manifest row, most tracked by a follow-up issue) | `playwright.config.ts`, `journey`/`integration-ui`/`full` projects | Config-load fence: the config refuses to load unless both base URLs are explicit loopback URLs (a frontend built against hosted Supabase is NOT covered, #2854). `scripts/run-e2e-local.sh` and `scripts/e2e-watch.sh` are DISABLED (#2854) | Not run in CI at all | No — developer-invoked only, never E2E evidence (`npm run test:e2e:watch`, `bash scripts/e2e-watch.sh --project=journey`, etc.) |
 
 Specialist suite (opt-in, local-only, never E2E evidence): see [`e2e/specialist/README.md`](specialist/README.md).
 
@@ -99,9 +110,31 @@ once per role project, so static call sites and executed tests differ by design.
 | `npm run test:e2e:watch:slow` | Headed browser, 1 worker, 800ms between actions |
 | `bash scripts/e2e-watch.sh --slow --project=journey` | Watch all journeys slowly |
 | `bash scripts/e2e-watch.sh --debug` | Open Playwright Inspector on failure |
-| `npm run test:e2e:local` | LEGACY runner (requires an explicit `--project`) - NOT the authoritative gate; prints a banner saying so. Use `npm run test:e2e:gate`. |
+| `npm run test:e2e:local`, `npm run test:e2e:headed` | **DISABLED (fail-closed, exit 3)**: `scripts/run-e2e-local.sh` refuses unconditionally (without `--project` it still exits 2 first). Use `npm run test:e2e:gate`. Follow-up: #2854. |
 
 ---
+
+## Legacy runners and configs: what is KEPT, why, and the loopback-only rule (#2850 PR-7)
+
+> LEGACY. None of these is the E2E gate and none produces E2E evidence.
+
+| Item | Status | Why it is kept | Target rule |
+|---|---|---|---|
+| `playwright.config.ts` (projects `journey`, `integration-ui`, `full`) | KEPT, LEGACY | Sole collector of the legacy specs that are still on disk (`SCHEDULED(#n)` manifest rows); `integration-ui` is also asserted by the guard tests | LOOPBACK-ONLY at config load: throws unless `PLAYWRIGHT_BASE_URL` and `BACKEND_BASE_URL` are set and loopback, and `VITE_SUPABASE_URL`, `FRONTEND_BASE_URL`, `VITE_API_BASE_URL`, `OPENSEARCH_URL`, `SUPABASE_DB_HOST` are loopback when set. Env-var check only, not a runtime request guard (#2854) |
+| `e2e/global-setup.ts`, `e2e/global-teardown.ts` | KEPT, LEGACY | Referenced by the legacy config | LOOPBACK-ONLY: no hosted fallback; the Supabase password grant refuses a non-loopback auth URL |
+| `scripts/run-e2e-local.sh`, `npm run test:e2e:local`, `npm run test:e2e:headed` | KEPT as a refusal, DISABLED | File kept because removing it costs >= 8 edits (package.json `prepare` chmod, guard FC-34 and its tests, port-isolation and remote-db-safety tests, docs); its backend has no non-hosted route | Refuses unconditionally (exit 3); re-enabling needs a local-auth route (#2854) |
+| `scripts/e2e-watch.sh`, `npm run test:e2e:watch`, `test:e2e:watch:slow` | KEPT as a refusal, **DISABLED** | File kept (package scripts and docs reference it); the backend it starts needs hosted Supabase JWT validation, which is not permitted | Refuses unconditionally (exit 3) right after its LEGACY banner; re-enabling needs a local-auth route (#2854) |
+| `npm run test:e2e:journey`, `test:e2e:full`, bare `npm run test:e2e` | KEPT, LEGACY | Still referenced (README.md, docs/LOCAL_BACKEND_DEV.md, spec headers); removal needs a zero-reference search that fails today | FENCED AT CONFIG LOAD only: `playwright.config.ts` throws unless the frontend and backend base URLs are loopback. **Limitation:** a browser login still authenticates against the Supabase the frontend was BUILT with (build-time `VITE_SUPABASE_URL`); the config only checks the listed env vars when they are set in the Playwright process env, and hard-coded hosts in spec files are not covered. Tracked in #2854 |
+| `playwright.deployed.config.ts` (`e2e/deployed/`) | UNCHANGED, secondary reachability check | Post-deploy check, outside this fence by design; **hosted-capable** (it targets the deployed site) | Not covered by the legacy loopback fence |
+
+Specs whose retained tests need an authenticated session are NOT RUNNABLE LOCALLY (the legacy hosted password grant is banned
+for the kept runners); they are tracked in #2856.
+
+---
+
+> **DISABLED (#2850 PR-7, #2854):** `scripts/e2e-watch.sh` (and `npm run test:e2e:watch`, `test:e2e:watch:slow`) now refuses
+> with exit 3 before starting anything. The watch/slow/debug commands in sections 1-3 and the quick-reference rows above are kept
+> as documentation of the legacy workflow and do not run until a local-auth route is added (#2854).
 
 ## 1. Normal watch mode
 
@@ -257,6 +290,8 @@ bash scripts/e2e-watch.sh --project=full             # everything
 ---
 
 ## Recommended first run
+
+> **DISABLED (#2850 PR-7, tracked in #2854):** `scripts/e2e-watch.sh` refuses every run (exit 3). The commands below are kept as historical legacy documentation only. Use `npm run test:e2e:gate`.
 
 To see the slow-watch experience for the first time, try the listing lifecycle
 journey (it needs the broker/user/admin smoke credentials; its tests skip without them):
