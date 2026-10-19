@@ -7,8 +7,8 @@ static source counts (`test(...)` call sites); the number Playwright COLLECTS is
 
 | metric | before | after | delta |
 |---|---:|---:|---:|
-| legacy_spec_files | 215 | 136 | -79 |
-| legacy_static_test_callsites | 1043 | 711 | -332 |
+| legacy_spec_files | 215 | 133 | -82 |
+| legacy_static_test_callsites | 1043 | 685 | -358 |
 | canonical_spec_files | 12 | 17 | +5 |
 | canonical_static_tests | 34 | 49 | +15 |
 | parity_spec_files | 2 | 2 | +0 |
@@ -158,18 +158,18 @@ Ref: `HEAD`
   "legacy_by_bucket": {
     "discover_subdir": 44,
     "journey": 9,
-    "top_level": 83
+    "top_level": 80
   },
   "legacy_files_with_loop_generated_tests": 12,
-  "legacy_files_with_network_mocks": 70,
-  "legacy_files_with_skip_or_fixme": 45,
+  "legacy_files_with_network_mocks": 68,
+  "legacy_files_with_skip_or_fixme": 43,
   "legacy_project_membership": {
-    "full": 136,
+    "full": 133,
     "integration-ui": 3,
     "journey": 9
   },
-  "legacy_spec_files": 136,
-  "legacy_static_test_callsites": 711,
+  "legacy_spec_files": 133,
+  "legacy_static_test_callsites": 685,
   "manifest_present": true,
   "package_scripts_mentioning_e2e": {
     "prepare": "chmod +x scripts/run-e2e-local.sh scripts/run-e2e-gate.sh .githooks/pre-push && git config core.hooksPath .githooks",
