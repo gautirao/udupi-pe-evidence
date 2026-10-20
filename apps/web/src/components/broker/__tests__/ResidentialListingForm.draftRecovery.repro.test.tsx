@@ -500,7 +500,7 @@ describe('ResidentialListingForm — draft-save-failure state recovery (Issue #2
     await waitFor(() => expect(screen.getByLabelText('Listing title *')).toHaveValue('Recovered Draft Title'));
   });
 
-  it('PRE-EXISTING GAP (not caused by #2039, not fixed by this PR — flagged for the record): PriceField never hydrates from a persisted draft because ResidentialListingForm.tsx L987 hardcodes `initialRupees={null}` regardless of the hydrated `priceRupees` state', async () => {
+  it('#2843 — PriceField hydrates the saved price from a persisted draft', async () => {
     mockApiGet.mockImplementation((url: string) => {
       if (url.includes('/images')) return Promise.resolve([]);
       return Promise.resolve({
@@ -517,10 +517,7 @@ describe('ResidentialListingForm — draft-save-failure state recovery (Issue #2
     renderWithDraftId('listing-123');
 
     await waitFor(() => expect(screen.getByLabelText('Listing title *')).toHaveValue('Recovered Draft Title'));
-    // This assertion documents CURRENT (buggy) behaviour, not desired behaviour.
-    // If PriceField is ever wired to priceRupees, this test should be updated to
-    // expect '42 lakh' and this comment block removed.
-    expect(screen.getByLabelText('Price (INR) *')).toHaveValue('');
+    await waitFor(() => expect(screen.getByLabelText('Price (INR) *')).toHaveValue('42 lakh'));
   });
 
   it('AC3 — one-shot + URL-seeded only: a LATER query settle does not clobber edits made after THIS session\'s own create success', async () => {

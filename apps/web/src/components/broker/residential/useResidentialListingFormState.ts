@@ -86,6 +86,17 @@ export function useResidentialListingFormState({ initialPropertyType, initialLis
 
   // Section 4 — Sale / Rent terms
   const [priceRupees, setPriceRupees] = useState<number | null>(null);
+  // #2843 — PriceField is uncontrolled: it seeds its text from `initialRupees`
+  // and re-syncs whenever that prop changes, so wiring the live `priceRupees`
+  // would reformat the text on every keystroke. This seed is set ONLY by the
+  // one-shot draft hydrate below (mirrors useCommercialListingFormState #2348)
+  // and is cleared on the user's first price edit, so a later PriceField
+  // remount (purpose toggle, back from review) never re-shows a stale price.
+  const [priceHydrationSeed, setPriceHydrationSeed] = useState<number | null>(null);
+  const handlePriceInput = (value: number | null) => {
+    setPriceRupees(value);
+    setPriceHydrationSeed(null);
+  };
   const [priceNegotiable, setPriceNegotiable] = useState<boolean | null>(null);
   const [maintenancePaise, setMaintenancePaise] = useState('');
   const [possessionStatus, setPossessionStatus] = useState('');
@@ -187,6 +198,7 @@ export function useResidentialListingFormState({ initialPropertyType, initialLis
     setHasDrainage(draftListing.hasDrainage ?? null);
 
     setPriceRupees(draftListing.price ?? null);
+    setPriceHydrationSeed(draftListing.price ?? null);
     setPriceNegotiable(draftListing.priceNegotiable ?? null);
     setMaintenancePaise(numToStr(draftListing.maintenancePaise));
     setPossessionStatus(draftListing.possessionStatus ?? '');
@@ -250,6 +262,7 @@ export function useResidentialListingFormState({ initialPropertyType, initialLis
     hasElectricityConnection, setHasElectricityConnection,
     hasDrainage, setHasDrainage,
     priceRupees, setPriceRupees,
+    priceHydrationSeed, handlePriceInput,
     priceNegotiable, setPriceNegotiable,
     maintenancePaise, setMaintenancePaise,
     possessionStatus, setPossessionStatus,

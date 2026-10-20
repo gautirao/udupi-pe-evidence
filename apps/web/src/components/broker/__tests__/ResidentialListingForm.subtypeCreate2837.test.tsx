@@ -23,11 +23,9 @@
  * `onConfirm` -> confirmPin path). `@/hooks/use-toast` and the Supabase storage
  * client are inert stubs. No auth context is needed or mocked.
  *
- * NOT covered here (honest gap, see docs/testing/e2e-retirement-map-pr6c.md DL1-7):
- * the legacy spec asserted that #price is restored after reloading ?draftId=<id>.
- * The product does NOT restore price (ResidentialTermsSection passes
- * initialRupees={null}); the existing draftRecovery.repro test documents that. A
- * green "price restored" test cannot be written without a production change.
+ * NOT covered here (DL1-7, docs/testing/e2e-retirement-map-pr6c.md): the legacy
+ * spec asserted that #price is restored after reloading ?draftId=<id>. Fixed by
+ * #2843 and covered in ResidentialListingForm.draftPriceRestore2843.test.tsx.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, within, act, fireEvent } from '@testing-library/react';

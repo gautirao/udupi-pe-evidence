@@ -17,6 +17,8 @@ interface ResidentialTermsSectionProps {
   hasAttempted: boolean;
 
   priceRupees: number | null;
+  /** #2843 — one-shot draft-hydration seed for the uncontrolled PriceField; never the live price. */
+  priceHydrationSeed: number | null;
   onPriceChange: (value: number | null) => void;
   priceNegotiable: boolean | null;
   onPriceNegotiableChange: (value: boolean) => void;
@@ -52,7 +54,7 @@ export function ResidentialTermsSection(props: ResidentialTermsSectionProps) {
     <Section number={4} title={isRent ? 'Rent terms' : 'Sale terms'}>
       {!isRent && fieldVisible('price') && (
         <div>
-          <PriceField id="price" initialRupees={null} onChange={props.onPriceChange} required />
+          <PriceField id="price" initialRupees={props.priceHydrationSeed} onChange={props.onPriceChange} required />
           {hasAttempted && (props.priceRupees == null || props.priceRupees <= 0) && (
             <p className="mt-1 text-sm text-destructive">A valid price greater than 0 is required.</p>
           )}

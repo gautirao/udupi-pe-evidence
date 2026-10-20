@@ -561,7 +561,8 @@ export function ResidentialListingForm({ initialPropertyType, initialListingPurp
             fieldVisible={fieldVisible}
             hasAttempted={hasAttempted}
             priceRupees={form.priceRupees}
-            onPriceChange={form.setPriceRupees}
+            priceHydrationSeed={form.priceHydrationSeed}
+            onPriceChange={form.handlePriceInput}
             priceNegotiable={form.priceNegotiable}
             onPriceNegotiableChange={form.setPriceNegotiable}
             maintenancePaise={form.maintenancePaise}
