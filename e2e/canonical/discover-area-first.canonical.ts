@@ -330,3 +330,236 @@ test('[role:user] T25 — legacy area-first areaKey= deep link (Udupi Manipal) m
   expect(lastTotal, 'settled primary-surface total').toBe(1);
   await expect(page.getByTestId('discover-areas-journey-panel-shell')).toBeVisible();
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// T26 — #2829: a MOUNTED Discover Back drops the stale Apartments narrowing on the re-entered leaf.
+//
+// PATH READ: the STALE copy `useDiscoverPageState.filters` (useDiscoverPageState.ts: the useEffect([urlFiltersKey])
+// that merges the URL-owned axes back into local state). The AREA leaf reads it through
+// resolveEffectiveAreaLeafFilters(committedFilters, ...): O1 = the leaf's quick-chip-apartment aria-pressed (inside the
+// compact-toolbar Radix popover opened by filter-pill-type at the canonical 1366 px width; the pill label is a second
+// reader), O2 = the leaf listings query's rendered card title set. The URL (`type=`) and the navigation counts are the
+// LIVE path and are NOT the oracle; `type=` is only the U1 control.
+//
+// WHY T24 CANNOT: T24 goes Discover -> /listing/:id -> Back. /listing unmounts Discover, so the Back re-mounts it and
+// the mount-time seed re-reads the URL: T24 stays green with the stale-copy sync mutated out (MUT-B2@4d5e916b). T26
+// keeps Discover MOUNTED (in-app PUSHes only; quick chips are a 300 ms debounced REPLACE that adds no history entry), so
+// only the URL->local sync can clear the narrowing. The mounted witness (a nonce on the Discover-owned
+// mobile-map-surface-wrapper node, DiscoverPageShell.tsx) proves no remount happened; the window stamp proves no
+// document reload; the final reload shows the witness CAN fail.
+//
+// ALSO GUARDS the #2829 F2 re-entry bounce: after the mounted Back, clicking the RR Nagar card must open the leaf
+// (node= stays the leaf key) instead of the leaf area-scope commit rewriting the URL back to the direction.
+//
+// Fixture: RR Nagar (d:southeast leaf) is the only seeded leaf with BOTH an apartment and a non-apartment LIVE sale
+// listing (navigation-hierarchy-fixture-listings-seed.sql); the split is re-derived from the real /api/discover/listings
+// response at run time, never typed.
+// ─────────────────────────────────────────────────────────────────────────
+
+test('[role:user] T26 — mounted Discover Back to the direction list drops the stale Apartments narrowing on the re-entered RR Nagar leaf', async ({ page }) => {
+  assertNoCredentialsGuard('T26');
+  // A mutated run must reach the soft oracles and report NAMED failures, not a test timeout.
+  test.setTimeout(90_000);
+
+  const southeastKey = 'd:southeast';
+  const rrNagarKey = 'a:IN|KA|Bengaluru|RR Nagar';
+  const apartmentTitle = '[E2E] RR Nagar Fixture Apartment';
+  const nonApartmentTitle = '[E2E] RR Nagar Fixture House Two';
+  const NONCE = 'T26-mounted-discover';
+
+  const southeastCard = page.getByTestId(`navigation-child-card-${southeastKey}`);
+  const rrNagarCard = page.getByTestId(`navigation-child-card-${rrNagarKey}`);
+  const childList = page.getByTestId('navigation-child-list');
+  const leafPanel = page.getByTestId('areas-journey-panel-listings');
+  const typePill = page.getByTestId('filter-pill-type');
+  const apartmentChip = page.getByTestId('quick-chip-apartment');
+  const wrapper = page.getByTestId('mobile-map-surface-wrapper');
+  const param = (name: string) => new URL(page.url()).searchParams.get(name);
+  const cardTitles = () =>
+    leafPanel.getByTestId('listing-card').locator('h3').allInnerTexts().then((ts) => ts.map((t) => t.trim()).sort());
+
+  // In-flight /api/ requests: settle before every traversal so a Back/reload never aborts a fetch (net::ERR_ABORTED
+  // would trip the console guard).
+  let pendingApi = 0;
+  const isApi = (url: string) => new URL(url).pathname.startsWith('/api/');
+  page.on('request', (r) => { if (isApi(r.url())) pendingApi += 1; });
+  page.on('requestfinished', (r) => { if (isApi(r.url())) pendingApi -= 1; });
+  page.on('requestfailed', (r) => { if (isApi(r.url())) pendingApi -= 1; });
+  const settleApi = async (label: string) => {
+    let quiet = 0;
+    await expect
+      .poll(() => { quiet = pendingApi === 0 ? quiet + 1 : 0; return quiet; }, {
+        timeout: 15_000, intervals: [250], message: `${label}: /api/ requests must settle (3 quiet samples)`,
+      })
+      .toBeGreaterThanOrEqual(3);
+  };
+
+  // Real API rows for the fixture split (title + propertyType). Field names are the same in both Discover listings DTOs:
+  //  - GET /api/discover/listings -> DiscoverListingsPage.content[] (apps/api/.../discover/DiscoverListingsPage.java:8)
+  //    of DiscoverListingResponse{propertyType, title} (DiscoverListingResponse.java:10-11; client useDiscoverListings.ts:43-44).
+  //  - GET /api/discover/cities/{city}/listings (useDiscoverCityListings.ts:411) -> DiscoverCityListingsResponse.areas[]
+  //    (:135-139) whose rows carry propertyType / title (:50, :55).
+  // The authoring run captured only the first (a 2dp-bbox query) and none of its rows matched the rendered leaf titles,
+  // so the leaf cards are not served by it alone: capture both endpoints and walk each body for objects with a string
+  // `title` AND a string `propertyType`.
+  type ApiRow = { title: string; propertyType: string };
+  const isListingsPath = (p: string) => p === '/api/discover/listings' || /^\/api\/discover\/cities\/[^/]+\/listings$/.test(p);
+  const collectRows = (node: unknown, out: ApiRow[]): void => {
+    if (Array.isArray(node)) { for (const n of node) collectRows(n, out); return; }
+    if (node === null || typeof node !== 'object') return;
+    const o = node as Record<string, unknown>;
+    if (typeof o.title === 'string' && typeof o.propertyType === 'string') out.push({ title: o.title.trim(), propertyType: o.propertyType });
+    for (const v of Object.values(o)) if (v !== null && typeof v === 'object') collectRows(v, out);
+  };
+  const listingBodies: { url: string; items: ApiRow[] }[] = [];
+  page.on('response', (resp) => {
+    if (!isListingsPath(new URL(resp.url()).pathname) || resp.request().method() !== 'GET' || !resp.ok()) return;
+    void resp
+      .json()
+      .then((body: unknown) => {
+        const items: ApiRow[] = [];
+        collectRows(body, items);
+        listingBodies.push({ url: resp.url(), items });
+      })
+      .catch(() => undefined);
+  });
+
+  // Witnesses: window stamp = no document reload; nonce on the Discover-owned wrapper node = no Discover remount.
+  const checkWitness = async (step: string) => {
+    const stamp = await page.evaluate(() => (window as unknown as Record<string, unknown>).__t26Stamp);
+    expect(stamp, `${step}: the document reloaded, so every later assertion would be vacuous`).toBe('alive');
+    expect(await mountHandle.evaluate((el) => el.isConnected), `${step}: the tagged Discover wrapper node was detached (Discover remounted)`).toBe(true);
+    expect(await mountHandle.evaluate((el) => (el as unknown as Record<string, unknown>).__t26Mount), `${step}: the tagged node lost its nonce`).toBe(NONCE);
+    await expect(wrapper, `${step}: exactly one Discover wrapper`).toHaveCount(1);
+    expect(
+      await wrapper.evaluate((el) => (el as unknown as Record<string, unknown>).__t26Mount),
+      `${step}: getByTestId('mobile-map-surface-wrapper') must resolve to the SAME tagged node (a remount yields an untagged one)`,
+    ).toBe(NONCE);
+  };
+
+  // 1. Area-first city root; stamp the window and tag the mounted wrapper.
+  await page.goto('/discover?city=bangalore&journey=area-first');
+  await expect(southeastCard).toBeVisible({ timeout: 25_000 });
+  await expect(wrapper).toHaveCount(1, { timeout: 10_000 });
+  await page.evaluate(() => { (window as unknown as Record<string, unknown>).__t26Stamp = 'alive'; });
+  const mountHandle = await wrapper.elementHandle();
+  if (!mountHandle) throw new Error('[T26] mobile-map-surface-wrapper has no element handle');
+  await mountHandle.evaluate((el, n) => { (el as unknown as Record<string, unknown>).__t26Mount = n; }, NONCE);
+  await checkWitness('city root (tagging)');
+  expect(param('type'), 'the journey starts with no type filter').toBeNull();
+  await settleApi('city root');
+
+  // 2a. PUSH into the South-East direction.
+  await southeastCard.click();
+  await expect(childList).toBeVisible({ timeout: 20_000 });
+  await expect.poll(() => param('node'), { timeout: 10_000 }).toBe(southeastKey);
+  await expect(rrNagarCard).toBeVisible({ timeout: 15_000 });
+  await checkWitness('PUSH into d:southeast');
+  await settleApi('direction list');
+
+  // 2b. PUSH into the RR Nagar leaf; capture the unfiltered set and the API split.
+  await rrNagarCard.click();
+  await expect(leafPanel).toBeVisible({ timeout: 25_000 });
+  await expect.poll(() => param('node'), { timeout: 10_000 }).toBe(rrNagarKey);
+  await checkWitness('PUSH into the RR Nagar leaf');
+  await expect
+    .poll(cardTitles, { timeout: 20_000, message: 'the unfiltered RR Nagar leaf renders both fixture titles' })
+    .toEqual(expect.arrayContaining([apartmentTitle, nonApartmentTitle]));
+  await settleApi('RR Nagar leaf (unfiltered)');
+  const unfilteredTitles = await cardTitles();
+
+  const apiRows = new Map<string, string>();
+  for (const b of listingBodies) for (const r of b.items) if (unfilteredTitles.includes(r.title)) apiRows.set(r.title, r.propertyType);
+  const split = unfilteredTitles.map((t) => ({ title: t, propertyType: apiRows.get(t) ?? null }));
+  // Diagnostics: every captured request with its row count and first titles, so a mismatch is attributable.
+  const requests = listingBodies.map((b) => ({ url: b.url, rows: b.items.length, titles: b.items.map((r) => r.title).slice(0, 20) }));
+  console.log(`T26_FIXTURE_SPLIT ${JSON.stringify({ requests, split })}`);
+  await test.info().attach('t26-fixture-split.json', { body: JSON.stringify({ requests, split }, null, 2), contentType: 'application/json' });
+  expect(split.every((s) => s.propertyType !== null), 'every rendered RR Nagar title is backed by a real Discover listings API row').toBe(true);
+  const apartmentTitles = split.filter((s) => s.propertyType === 'apartment').map((s) => s.title).sort();
+  const nonApartment = split.filter((s) => s.propertyType !== 'apartment').map((s) => s.title);
+  expect(apartmentTitles, 'API split: RR Nagar has an apartment sale listing').toContain(apartmentTitle);
+  expect(nonApartment, 'API split: RR Nagar has a NON-apartment sale listing (else O2 cannot discriminate)').toContain(nonApartmentTitle);
+
+  // 2c. Narrow to Apartments via the compact-toolbar popover.
+  await expect(typePill).toContainText('All types');
+  await typePill.click();
+  await expect(apartmentChip, 'the type popover opened').toBeVisible({ timeout: 10_000 });
+  await expect(apartmentChip).toHaveAttribute('aria-pressed', 'false');
+  await apartmentChip.click();
+  await expect(apartmentChip).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
+  await expect(typePill).toContainText('Apartments', { timeout: 10_000 });
+  await expect.poll(() => param('type'), { timeout: 15_000, message: 'the 300 ms debounced REPLACE landed' }).toBe('apartment');
+  await expect
+    .poll(cardTitles, { timeout: 20_000, message: 'the leaf card set narrowed to the API apartment rows only' })
+    .toEqual(apartmentTitles);
+  await page.keyboard.press('Escape');
+  await expect(apartmentChip, 'the type popover closed').toHaveCount(0, { timeout: 10_000 });
+  await settleApi('RR Nagar leaf (apartment-narrowed)');
+  await checkWitness('apartment narrowing');
+
+  // 3. Back to the type-less direction entry (the leaf entry carried type= only via REPLACE).
+  await page.goBack();
+  await expect(childList).toBeVisible({ timeout: 20_000 });
+  await expect.poll(() => param('node'), { timeout: 10_000 }).toBe(southeastKey);
+  await checkWitness('Back to d:southeast');
+  expect(param('type'), 'the Back target carries no type filter').toBeNull();
+  await expect(rrNagarCard).toBeVisible({ timeout: 15_000 });
+  await settleApi('direction list after Back');
+
+  // 4. Re-enter RR Nagar by click (a NEW push; nothing on this path carries type=). #2829 F2: before the fix the leaf
+  // area-scope commit rebuilt the URL from a stale pre-Back snapshot and bounced this push back to d:southeast, so the
+  // leaf must open AND hold node=<RR Nagar>.
+  await expect(rrNagarCard, 'the RR Nagar card is not already selected before re-entry').toHaveAttribute('aria-pressed', 'false');
+  await rrNagarCard.click();
+  await expect(leafPanel, 'F2: the RR Nagar leaf opens after Back (no re-entry bounce)').toBeVisible({ timeout: 25_000 });
+  await expect.poll(() => param('node'), { timeout: 10_000 }).toBe(rrNagarKey);
+  await checkWitness('re-entry into the RR Nagar leaf');
+  await expect.poll(async () => (await cardTitles()).length, { timeout: 20_000, message: 're-entered leaf renders cards' }).toBeGreaterThan(0);
+  await settleApi('re-entered RR Nagar leaf');
+
+  // 5. URL-only control: green under the stale-copy mutation too, so it can never be the oracle.
+  await test.step('U1 URL-only control', async () => {
+    expect(param('type'), 'U1: the re-entered leaf URL carries no type= (LIVE path)').toBeNull();
+  });
+
+  // 6. The STALE-path oracle.
+  await test.step('O1/O2 stale-path oracle', async () => {
+    await typePill.click();
+    await expect(apartmentChip, 'the type popover opened on the re-entered leaf').toBeVisible({ timeout: 10_000 });
+    await expect
+      .soft(apartmentChip, 'O1: quick-chip-apartment must be UNPRESSED on the re-entered leaf (stale useDiscoverPageState.filters)')
+      .toHaveAttribute('aria-pressed', 'false', { timeout: 5_000 });
+    await expect
+      .soft(typePill, 'O1 (corroborating): the type pill must read "All types" on the re-entered leaf')
+      .toContainText('All types', { timeout: 5_000 });
+    await page.keyboard.press('Escape');
+    await expect(apartmentChip, 'the type popover closed').toHaveCount(0, { timeout: 10_000 });
+
+    await expect
+      .soft
+      .poll(cardTitles, { timeout: 5_000, message: 'O2: the re-entered leaf card set must equal the unfiltered pre-chip set' })
+      .toEqual(unfilteredTitles);
+    await expect
+      .soft
+      .poll(cardTitles, { timeout: 5_000, message: `O2: the non-apartment title "${nonApartmentTitle}" must be rendered again` })
+      .toContain(nonApartmentTitle);
+  });
+  // A Forward leg is deliberately omitted: local state already equals the Forward target, so it could not discriminate
+  // the stale-copy defect and would not be credited.
+
+  // 7. Witness self-check: a real reload yields a fresh, untagged wrapper (the witness CAN fail).
+  await settleApi('before reload');
+  await page.reload();
+  await expect(leafPanel).toBeVisible({ timeout: 25_000 });
+  await expect(wrapper).toHaveCount(1, { timeout: 10_000 });
+  expect(
+    await wrapper.evaluate((el) => (el as unknown as Record<string, unknown>).__t26Mount),
+    'reload control: the fresh wrapper must carry NO nonce',
+  ).toBeUndefined();
+  expect(
+    await page.evaluate(() => (window as unknown as Record<string, unknown>).__t26Stamp),
+    'reload control: the window stamp must be gone after a document reload',
+  ).toBeUndefined();
+  await settleApi('after reload');
+});

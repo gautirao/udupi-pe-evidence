@@ -70,7 +70,7 @@
  * each domain module's header comment for what it owns.
  */
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigationType, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import type { UrlDebounceTimers, UrlDomainCtx } from '@/features/discover/state/url/_shared';
@@ -321,6 +321,18 @@ export interface DiscoverUrlState {
    * `{ active: null, previous: null }`.
    */
   resultScope?: CommittedResultScope;
+  /**
+   * Issue #2829 F1 (D9) — the RAW `zoom` param, parsed with the same rule as
+   * `viewport.zoom` but independently of `lat`/`lon`. `viewport` stays
+   * all-or-nothing (a zoom without a centre is not a camera), yet an explicit
+   * `zoom=` is still the user's zoom band: legacy deep links carry
+   * `zoom=14&areaKey=…` with no `lat`/`lon`, and dropping it would gate the
+   * initial zoom (and so listing markers) back to the city default.
+   * Null when `zoom=` is absent or not an integer.
+   * Optional, like the other late-added fields, so partial state literals in
+   * existing tests and callers keep compiling.
+   */
+  rawZoom?: number | null;
 }
 
 export interface DiscoverUrlActions {
@@ -771,6 +783,12 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
   // ctx.reads.city.
   const city = urlParams.get('city') ?? '';
 
+  // Issue #2829 F1 (D9) — see DiscoverUrlState.rawZoom's doc. Same parse rule
+  // as viewport.ts's `zoom`, which stays all-or-nothing and is not touched.
+  const rawZoomParam = urlParams.get('zoom');
+  const parsedRawZoom = rawZoomParam ? parseInt(rawZoomParam, 10) : NaN;
+  const rawZoom = Number.isNaN(parsedRawZoom) ? null : parsedRawZoom;
+
   const ctx: UrlDomainCtx = {
     urlParams,
     setUrlParams,
@@ -779,6 +797,31 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     reads: { city },
     liveUrlParamsRef,
   };
+
+  // Issue #2829 F2 — the result-scope domain's functional updaters are resolved
+  // against the LIVE params (liveUrlParamsRef, written during render above), not
+  // react-router's render-closed `prev`. DiscoverProvider's stable actions
+  // delegate through a ref the provider refreshes in its own passive effect,
+  // which React runs AFTER its descendants' effects; so a descendant effect
+  // reacting to a fresh URL in the same commit (the leaf AREA_SET auto-commit in
+  // useDiscoverNavigationController) reaches the PREVIOUS render's
+  // commitResultScope. Its `prev` was the pre-navigation URL, and the REPLACE
+  // rewrote node= back to the entry just left (re-entry after a mounted Back,
+  // where the leaf node is already cached and resolves in the PUSH commit).
+  // When `prev` is not stale the two are identical, so this is a no-op for
+  // every other call. Same mechanism as viewport.ts's #2083 RC_A part 2 read.
+  const setUrlParamsFromLiveUrl = useCallback<typeof setUrlParams>(
+    (nextInit, navigateOpts) => {
+      setUrlParams(
+        typeof nextInit === 'function'
+          ? nextInit(new URLSearchParams(liveUrlParamsRef.current))
+          : nextInit,
+        navigateOpts,
+      );
+    },
+    [setUrlParams],
+  );
+  const resultScopeCtx: UrlDomainCtx = { ...ctx, setUrlParams: setUrlParamsFromLiveUrl };
 
   // Issue #2083 RC_A part 1 — UNIVERSAL cancellation of any pending viewport
   // debounce commit, keyed on a HISTORY TRANSITION (`location.key`), which
@@ -822,7 +865,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
   const navigationDomain = useNavigationUrlDomain(ctx);
   // Issue #2016 — appended last, same rationale: never disturb the existing
   // eight-domain call order.
-  const resultScopeDomain = useResultScopeUrlDomain(ctx);
+  const resultScopeDomain = useResultScopeUrlDomain(resultScopeCtx);
 
   // Explicit literal in the ORIGINAL 18-key order (qa-fast R3) — guards any
   // Object.keys/snapshot assertion a caller may add later.
@@ -856,6 +899,8 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     historyAction,
     // Issue #2016 — appended last, same rationale.
     resultScope: resultScopeDomain.state.resultScope,
+    // Issue #2829 F1 (D9) — appended last, same rationale.
+    rawZoom,
   };
 
   // Spread merge is safe under this explicit `DiscoverUrlActions` annotation —

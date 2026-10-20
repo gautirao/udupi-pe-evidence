@@ -65,9 +65,13 @@
         {
           "id": "T25",
           "project": "canonical-user"
+        },
+        {
+          "id": "T26",
+          "project": "canonical-user"
         }
       ],
-      "notes": "City root settles area-first, Direction writes node=, bounded browse excludes other Directions, exactly one shell mounts; T24 proves Back from a Rent listing detail restores the rendered Rent leaf (cards, pressed control, summary, breadcrumb). #2860: T10b loads the anon legacy deep links (unknown groupId, explicit area-first root, Udupi areaKey=) and asserts one non-blank, ungated, guard-clean surface (arms A/B/C mutation-proven; the surface-identity rows replace stale legacy oracles pending owner decisions D2/D4); T25 asserts that a legacy area-first areaKey= deep link (Udupi Manipal) mounts exactly one areas shell (mutation NOT_PROVEN; D4 pending) and shows a Manipal status-pill count >= 4 (mutation-proven), guard-clean; markers RETAIN under D9 (markers fetch depends on live map zoom), listing cards RETAIN under D8."
+      "notes": "City root settles area-first, Direction writes node=, bounded browse excludes other Directions, exactly one shell mounts; T24 proves Back from a Rent listing detail restores the rendered Rent leaf (cards, pressed control, summary, breadcrumb). #2860: T10b loads the anon legacy deep links (unknown groupId, explicit area-first root, Udupi areaKey=) and asserts one non-blank, ungated, guard-clean surface (arms A/B/C mutation-proven; the surface-identity rows replace stale legacy oracles pending owner decisions D2/D4); T25 asserts that a legacy area-first areaKey= deep link (Udupi Manipal) mounts exactly one areas shell (mutation NOT_PROVEN; D4 pending) and shows a Manipal status-pill count >= 4 (mutation-proven), guard-clean; markers RETAIN under D9 (markers fetch depends on live map zoom), listing cards RETAIN under D8. #2829: T26 keeps Discover mounted (in-app PUSHes; window stamp + a nonce on the Discover-owned wrapper, shown to fail after reload) across direction -> RR Nagar leaf -> Apartments chip -> Back -> leaf re-entry, and asserts the stale-copy readers (useDiscoverPageState.filters: the leaf's Apartments chip unpressed, and the unfiltered card title set incl. the non-apartment fixture title) with a URL-only type= control (U1), and guards the F2 re-entry bounce (the leaf must open after Back); T24 cannot cover this because /listing unmounts Discover."
     },
     {
       "id": "J02",

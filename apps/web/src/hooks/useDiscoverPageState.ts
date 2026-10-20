@@ -215,8 +215,14 @@ export function useDiscoverPageState({
   // Initialize mapZoom from URL viewport when present so the correct zoom band
   // (area markers vs listing markers) is applied from the very first render.
   // Issue #2353 — the fallback rule lives in resolveEffectiveCity, not inlined here.
+  // Issue #2829 F1 (D9) — an explicit `zoom=` without `lat`/`lon` (legacy
+  // `zoom=14&areaKey=…` deep links) still seeds mapZoom via `rawZoom`;
+  // `viewport` is all-or-nothing and is null for that shape.
   const [mapZoom, setMapZoom] = useState<number>(
-    urlState.viewport?.zoom ?? CITY_CONFIG[resolveEffectiveCity(urlState.city)]?.zoom ?? 11,
+    urlState.viewport?.zoom ??
+      urlState.rawZoom ??
+      CITY_CONFIG[resolveEffectiveCity(urlState.city)]?.zoom ??
+      11,
   );
 
   // Map readiness: set to true once Leaflet's MapContainer has initialised.
@@ -330,7 +336,9 @@ export function useDiscoverPageState({
   //
   // Trigger key: [urlZoom] — zoom-only by design; pan/lat/lon are deliberately NOT tracked
   // here (they don't drive mapZoom).
-  const urlZoom = urlState.viewport?.zoom;
+  // Issue #2829 F1 (D9) — falls back to the raw `zoom=` so an explicit zoom
+  // without `lat`/`lon` is honoured here too (see the seed above).
+  const urlZoom = urlState.viewport?.zoom ?? urlState.rawZoom;
   useEffect(() => {
     if (urlZoom != null) {
       setMapZoom(urlZoom);
