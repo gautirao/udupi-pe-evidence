@@ -442,8 +442,13 @@ test.describe('T1 — sign-in: role-aware landing + authed-only header control',
 // The persisted-session probe is the supabase-js localStorage key `sb-<ref>-auth-token`, matched by regex so no project ref is
 // hard-coded. FALSIFIABLE: a sign-out that cleared only React state (token left in storage) fails step 5's reload (user-menu
 // returns / key present); a sign-out that did not leave the protected route fails step 4's /discover assertion.
+//
+// #2860 HOMEPAGE LEG (steps 7-9, appended; steps 1-6 unchanged): the same dedicated identity signs in again via
+// /auth?returnTo=%2F and must land exactly on '/', signed in; sign-out from that PUBLIC page must stay on '/' and show the
+// anonymous header, and a reload must stay signed out with no auth-token key. Covers the auth-journey-1509 homepage rows
+// (map: docs/testing/e2e-retirement-map-2860-t1c.md).
 if (LOCAL_AUTH_MODE) {
-  test('[role:user] T1c — sign-out ends the session across reloads (dedicated local-only identity)', async ({ page }) => {
+  test('[role:user] T1c — sign-out ends the session across reloads, from a protected route and from the public homepage (dedicated local-only identity)', async ({ page }) => {
     const signoutEmail = process.env.E2E_SIGNOUT_USER_EMAIL ?? '';
     const signoutPassword = process.env.E2E_SIGNOUT_USER_PASSWORD ?? '';
     if (!hasRealCredentials(signoutEmail, signoutPassword)) {
@@ -494,6 +499,50 @@ if (LOCAL_AUTH_MODE) {
     expect(authUrl.pathname).toBe('/auth');
     // ProtectedRoute.tsx:28 writes `/auth?redirect=<encoded path>` (not returnTo).
     expect(authUrl.searchParams.get('redirect')).toBe('/my-bookings');
+
+    // 7) #2860 homepage leg — sign in again (a NEW session for the same dedicated identity) via /auth?returnTo=%2F and land on '/'
+    // exactly [legacy auth-journey-1509 A3-1/A5-1/A11-1], signed-in header on '/' [A4-1/A6-1, A4-2]. Inline form fill (T2 pattern),
+    // NOT loginAsUser: its bare goto('/auth') would drop returnTo. The bell's unread-count request is armed before submit and
+    // awaited before step 8, so no notifications request is in flight when sign-out revokes the token.
+    await page.goto('/auth?returnTo=%2F');
+    await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
+    await page.locator('#signin-email').fill(signoutEmail);
+    await page.locator('#signin-password').fill(signoutPassword);
+    const homeUnreadCount = page.waitForResponse(
+      (resp) => resp.url().includes('/api/notifications/unread-count') && resp.request().method() === 'GET',
+      { timeout: 20_000 },
+    );
+    // Codex C1: the bell's list query (useNotifications, GET /api/notifications, no abort signal) is a SECOND request that could
+    // still be in flight at sign-out and 401; arm it too (pathname exact, so unread-count is excluded) and await it before step 8.
+    // Map note (Codex C2-C4): the A3-1/A5-1/A11-1 labels above and A12-1 in step 8 are historical; those rows are RETAIN in the map.
+    const homeNotificationsList = page.waitForResponse(
+      (resp) => new URL(resp.url()).pathname === '/api/notifications' && !resp.url().includes('unread-count') && resp.request().method() === 'GET',
+      { timeout: 20_000 },
+    );
+    await page.locator('button[type="submit"]').filter({ hasText: /sign in/i }).first().click();
+    await expect(page).not.toHaveURL(/\/auth/, { timeout: 15_000 });
+    await expect.poll(() => new URL(page.url()).pathname, { message: 'returnTo=/ lands exactly on the homepage', timeout: 15_000 }).toBe('/');
+    await expect(userMenu, 'signed-in homepage shows the user-menu').toBeVisible({ timeout: 15_000 });
+    await expect(signInLink, 'signed-in homepage shows no Sign in link').toHaveCount(0);
+    expect((await homeUnreadCount).ok(), 'signed-in homepage unread-count responds 2xx').toBe(true);
+    await homeNotificationsList;
+
+    // 8) Sign out from the PUBLIC homepage [A6-2, A6-4/A12-1, A6-3]: the header flips to anonymous, the toast shows, and the page
+    // stays on '/' (AppLayout.handleSignOut navigates only from protected prefixes). Order (b) -> (d) -> (c) is load-bearing.
+    await userMenu.click();
+    const homeSignOutItem = page.getByRole('menuitem', { name: 'Sign out', exact: true });
+    await expect(homeSignOutItem).toBeVisible({ timeout: 10_000 });
+    await homeSignOutItem.click();
+    await expect(signInLink, 'homepage shows Sign in right after sign-out').toBeVisible({ timeout: 15_000 });
+    await expect(userMenu, 'homepage has no user-menu right after sign-out').toHaveCount(0);
+    await expect(page.getByText('You have been signed out.', { exact: true })).toBeVisible({ timeout: 5_000 });
+    expect(new URL(page.url()).pathname, 'sign-out from a public page stays on the homepage').toBe('/');
+
+    // 9) Reload on '/': still signed out [A7-1/A1-1/A2-1, A7-2/A1-2] and no persisted auth-token key (key names only).
+    await page.reload();
+    await expect(signInLink, 'homepage reload: Sign in link is shown').toBeVisible({ timeout: 15_000 });
+    await expect(userMenu, 'homepage reload: no user-menu').toHaveCount(0);
+    expect(await authTokenKeys(), 'homepage reload: no persisted auth-token key').toEqual([]);
   });
 }
 
