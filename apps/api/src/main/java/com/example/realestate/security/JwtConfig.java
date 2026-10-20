@@ -157,6 +157,12 @@ public class JwtConfig {
                         .requestMatchers(HttpMethod.GET, "/api/trends/**").permitAll()
                         // Public discover summary endpoint — no auth required (#1745 P5)
                         .requestMatchers(HttpMethod.GET, "/api/discover/summary").permitAll()
+                        // #2878: defence in depth for identity-evidence approval. Admin-only at the filter chain;
+                        // AdminTrustController#approveIdentityEvidence keeps its own caller.isAdmin() check.
+                        // ROLE_ADMIN is the authority DbRoleJwtAuthenticationConverter derives from user_roles
+                        // ("ROLE_" + role.toUpperCase()), the same literal as @IsAdmin. Scope: this one endpoint only;
+                        // other /api/admin/** endpoints are unchanged pending an audit (see #2878).
+                        .requestMatchers(HttpMethod.POST, "/api/admin/trust/identity/*/approve").hasAuthority("ROLE_ADMIN")
                         .anyRequest().authenticated()
                 )
                 // Wire DbRoleJwtAuthenticationConverter to perform the user_roles DB lookup per
