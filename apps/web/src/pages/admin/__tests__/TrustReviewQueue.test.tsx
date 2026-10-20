@@ -11,7 +11,7 @@
  *  - `data-testid="identity-evidence-*"` present only on identity rows
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
@@ -367,5 +367,53 @@ describe('TrustReviewQueue', () => {
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
       expect(mockToast).not.toHaveBeenCalledWith({ title: 'Identity evidence rejected' });
     });
+  });
+});
+
+// #2859 B1 TIR6-b (e2e/journey/trust-identity-review.spec.ts): the approved row disappears from the identity table.
+// Stateful fake: POST /api/admin/trust/identity/<id>/approve removes that row server-side; the pending GET serves the
+// remainder. The it() shows before (A + B), the action, the follow-up pending GET (count increments) and after
+// (A gone, B still present). Invalidation alone is not the claim.
+describe('#2859 TIR6-b: identity approve -> refetch -> row removal', () => {
+  it('TIR6-b: approving row A POSTs /api/admin/trust/identity/ev-a/approve, the pending list is re-read (1 -> 2), row A is gone and row B stays', async () => {
+    const user = userEvent.setup();
+    let identityRows = [
+      makeIdentityEvidence({ evidenceId: 'ev-a', legalName: 'Synthetic Owner A' }),
+      makeIdentityEvidence({ evidenceId: 'ev-b', legalName: 'Synthetic Owner B' }),
+    ];
+    let identityGets = 0;
+    vi.mocked(api.get).mockImplementation((path: string) => {
+      if (path === '/api/admin/trust/identity/pending?size=50') {
+        identityGets += 1;
+        return Promise.resolve(makeIdentityResponse(identityRows.map((r) => ({ ...r }))));
+      }
+      return Promise.resolve([]);
+    });
+    vi.mocked(api.post).mockImplementation((path: string) => {
+      const m = /^\/api\/admin\/trust\/identity\/([^/]+)\/approve$/.exec(path);
+      if (!m) return Promise.reject(new Error(`fake api: unexpected POST ${path}`));
+      identityRows = identityRows.filter((r) => r.evidenceId !== m[1]);
+      return Promise.resolve({ message: 'ok' });
+    });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Identity Evidence (2)' })).toBeInTheDocument());
+    await user.click(screen.getByRole('tab', { name: 'Identity Evidence (2)' }));
+    // before
+    const rowA = await screen.findByTestId('identity-evidence-ev-a');
+    expect(screen.getByTestId('identity-evidence-ev-b')).toBeInTheDocument();
+    expect(identityGets).toBe(1);
+
+    await user.click(within(rowA).getByRole('button', { name: 'Approve identity evidence' }));
+
+    // request + follow-up read
+    await waitFor(() => expect(vi.mocked(api.post).mock.calls).toEqual([['/api/admin/trust/identity/ev-a/approve']]));
+    await waitFor(() => expect(identityGets).toBe(2));
+    // after
+    await waitFor(() => expect(screen.queryByTestId('identity-evidence-ev-a')).toBeNull());
+    expect(screen.getByTestId('identity-evidence-ev-b')).toBeInTheDocument();
+    expect(screen.getByText('Synthetic Owner B')).toBeInTheDocument();
+    expect(screen.queryByText('Synthetic Owner A')).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Identity Evidence (1)' })).toBeInTheDocument();
   });
 });

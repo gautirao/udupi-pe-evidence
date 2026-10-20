@@ -222,6 +222,28 @@ describe('useAdminListingsPage — server-side pagination (#2370)', () => {
     expect(chain.eq).toHaveBeenCalledWith('status', 'LIVE');
   });
 
+  // #2859 B1 (INV1-d.1, INV4a-c.1): filter subclaims only — the row appearing in the tab after a persisted
+  // write is NOT proven here (RETAIN in docs/testing/e2e-retirement-map-2859-b1.md).
+  it('#2859 INV1-d.1: the "pending" tab applies exactly one filter, eq(status, PENDING_REVIEW)', async () => {
+    const chain = makeRangeChain({ data: [], error: null, count: 0 });
+    mockFrom.mockReturnValue(chain);
+
+    renderHook(() => useAdminListingsPage({ ...BASE_PARAMS, tab: 'pending' }), { wrapper: makeWrapper() });
+
+    await waitFor(() => expect(chain.range).toHaveBeenCalled());
+    expect((chain.eq as ReturnType<typeof vi.fn>).mock.calls).toEqual([['status', 'PENDING_REVIEW']]);
+  });
+
+  it('#2859 INV4a-c.1: the "archived" tab applies exactly one filter, eq(status, ARCHIVED)', async () => {
+    const chain = makeRangeChain({ data: [], error: null, count: 0 });
+    mockFrom.mockReturnValue(chain);
+
+    renderHook(() => useAdminListingsPage({ ...BASE_PARAMS, tab: 'archived' }), { wrapper: makeWrapper() });
+
+    await waitFor(() => expect(chain.range).toHaveBeenCalled());
+    expect((chain.eq as ReturnType<typeof vi.fn>).mock.calls).toEqual([['status', 'ARCHIVED']]);
+  });
+
   it('translates the "needs-attention" tab into the needs-attention or() filter', async () => {
     const chain = makeRangeChain({ data: [], error: null, count: 0 });
     mockFrom.mockReturnValue(chain);

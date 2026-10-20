@@ -12,7 +12,7 @@
  * not changed.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { IdentityReviewTable, type IdentityReviewCommands, type IdentityReviewView } from '../IdentityReviewTable';
 import type { PendingIdentityEvidence, ReviewActionState } from '../trustReviewTypes';
@@ -118,6 +118,23 @@ describe('IdentityReviewTable (standalone, props-only)', () => {
 
     await user.click(screen.getByRole('button', { name: /reject identity evidence/i }));
     expect(commands.review.openReject).toHaveBeenCalledWith(item);
+  });
+
+  // #2859 B1 TIR5: the human document-type label, scoped per row (same-test control: a PAN row lacks it).
+  it('#2859 TIR5: an AADHAAR row shows the exact label "Aadhaar" in its own row; a PAN row in the same table shows "PAN" and no "Aadhaar"', () => {
+    renderTable({
+      items: [
+        makeItem({ evidenceId: 'ev-aadhaar', documentType: 'AADHAAR' }),
+        makeItem({ evidenceId: 'ev-pan', documentType: 'PAN' }),
+      ],
+    });
+
+    const aadhaarRow = screen.getByTestId('identity-evidence-ev-aadhaar');
+    const panRow = screen.getByTestId('identity-evidence-ev-pan');
+    expect(within(aadhaarRow).getByText('Aadhaar')).toBeInTheDocument();
+    expect(within(aadhaarRow).queryByText('AADHAAR')).toBeNull(); // the label, not the raw enum
+    expect(within(panRow).getByText('PAN')).toBeInTheDocument();
+    expect(within(panRow).queryByText('Aadhaar')).toBeNull();
   });
 
   it('shows the approving spinner (not the static check icon) and disables actions while action.approving is true', () => {
