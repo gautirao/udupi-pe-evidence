@@ -278,3 +278,35 @@ describe('ResidentialListingForm — review + submit gating', () => {
     expect(screen.getByText(/pending admin approval/i)).toBeInTheDocument();
   });
 });
+
+// #2859 B3 (csv210 regression R9u + the /published/ negatives R9x / R9ac).
+describe('ResidentialListingForm — #2859 B3 honest preview + review/submit copy', () => {
+  it('R9u the buyer preview marks the location only once the draft carries a confirmed address; review and post-submit never say "published"', async () => {
+    mockCreateSucceedsWithAddressConfirmed();
+    mockImageCount.current = 3;
+    mockSubmitMutate.mockImplementation((_arg: unknown, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+    // the post-draft "Review" save routes to update (listingId set) — let it succeed
+    mockUpdateMutate.mockImplementation((_arg: unknown, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    renderForm();
+
+    await fillCoreFields(user);
+    // control: no confirmed address yet -> no "Pinned" marker
+    expect(screen.queryByTestId('buyer-preview-location-confirmed')).not.toBeInTheDocument();
+    await user.click(within(document.getElementById('bedrooms') as HTMLElement).getByRole('radio', { name: '3 BHK' }));
+    await user.click(screen.getByRole('button', { name: /more details.*ownership/i }));
+    await user.type(document.getElementById('builtArea') as HTMLElement, '1150');
+    await user.click(screen.getAllByRole('button', { name: /save draft/i })[0]);
+    expect(await screen.findByTestId('buyer-preview-location-confirmed')).toHaveTextContent('Pinned');
+
+    await user.click(screen.getByRole('button', { name: /^review$/i }));
+    expect(await screen.findByRole('heading', { name: /review your listing/i })).toBeInTheDocument();
+    expect(document.body.textContent ?? '').not.toMatch(/published/i);
+
+    const submit = await screen.findByRole('button', { name: /submit for review/i });
+    await waitFor(() => expect(submit).toBeEnabled());
+    await user.click(submit);
+    expect(await screen.findByRole('heading', { name: /submitted for review/i })).toBeInTheDocument();
+    expect(document.body.textContent ?? '').not.toMatch(/published/i);
+  });
+});

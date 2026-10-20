@@ -391,6 +391,82 @@ describe('useResidentialLocation — picker Cancel / Adjust pin', () => {
   });
 });
 
+// #2859 B3 (csv210 residential-create-listing-1722). Geocode + geolocation are
+// mocked, so these prove UI behaviour given those responses only (R_injected).
+describe('useResidentialLocation — #2859 B3 AC-4.7 / AC-4.4 / AC-4.5 / AC-4.6 additions', () => {
+  it('R1 AC-4.7: pin CTA disabled with helper before resolve, enabled without helper after Use, disabled again after Change', async () => {
+    mockSearchNominatim.mockResolvedValue([MANIPAL_RESULT]);
+    const user = userEvent.setup();
+    renderHarness();
+    const pin = () => screen.getByTestId('map-pin-open-picker');
+    const helper = /confirm a location above to pin it on the map/i;
+
+    expect(pin()).toBeDisabled();
+    expect(screen.getByText(helper)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/search for a location/i), 'Manipal');
+    await waitFor(() => expect(screen.getByText(/Manipal, Udupi District/i)).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /^use$/i }));
+    expect(pin()).toBeEnabled();
+    expect(screen.queryByText(helper)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^change$/i }));
+    expect(pin()).toBeDisabled();
+    expect(screen.getByText(helper)).toBeInTheDocument();
+  });
+
+  it('R5 AC-4.4: Find disabled while empty, enabled for "ab", and the not-found copy carries the landmark hint', async () => {
+    const user = userEvent.setup();
+    renderHarness();
+    const find = screen.getByRole('button', { name: 'Find location' });
+    expect(find).toBeDisabled();
+    await user.type(screen.getByLabelText(/search for a location/i), 'ab');
+    expect(find).toBeEnabled();
+    await user.click(find);
+    expect(await screen.findByText(/no results for "ab"/i)).toBeInTheDocument();
+    expect(screen.getByText(/try adding a landmark, road name, or pin code/i)).toBeInTheDocument();
+  });
+
+  it('R6c AC-4.5: Allow -> a successful geolocation fix shows "Location confirmed —" (absent before)', async () => {
+    mockReverseGeocode.mockResolvedValue({
+      lat: 13.35,
+      lon: 74.79,
+      display_name: '4th Cross Road, Manipal, Udupi District, Karnataka, 576104, India',
+      address: { road: '4th Cross Road', suburb: 'Manipal', city: 'Udupi' },
+    });
+    const getCurrentPosition = vi.fn((success: (p: { coords: { latitude: number; longitude: number } }) => void) =>
+      success({ coords: { latitude: 13.35, longitude: 74.79 } }),
+    );
+    Object.defineProperty(global.navigator, 'geolocation', { value: { getCurrentPosition }, configurable: true });
+    const user = userEvent.setup();
+    renderHarness();
+
+    await user.click(screen.getByRole('button', { name: /use my current location/i }));
+    expect(screen.queryByText(/location confirmed —/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^allow$/i }));
+    expect(getCurrentPosition).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText(/location confirmed —/i)).toBeInTheDocument();
+  });
+
+  it('R8d AC-4.6: Cancel leaves no "Pin confirmed —" banner; a real confirm then shows it', async () => {
+    mockSearchNominatim.mockResolvedValue([MANIPAL_RESULT]);
+    mockUpdateMutate.mockImplementation((_payload, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    renderHarness();
+
+    await user.type(screen.getByLabelText(/search for a location/i), 'Manipal');
+    await waitFor(() => expect(screen.getByText(/Manipal, Udupi District/i)).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /^use$/i }));
+    await user.click(screen.getByRole('button', { name: /pin location on map/i }));
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+    expect(screen.queryByText(/pin confirmed —/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /pin location on map/i }));
+    await user.click(screen.getByTestId('mock-address-picker-confirm'));
+    expect(screen.getByText(/pin confirmed —/i)).toBeInTheDocument();
+  });
+});
+
 describe('useResidentialLocation — issue #2065: localityResolved reload signal', () => {
   it('a search-only reload (locality persisted, no confirmed pin) seeds localityResolved:true WITHOUT fabricating resolved.center — the #2039 guard', async () => {
     let capturedState: import('../useResidentialLocation').LocationState | null = null;

@@ -7,7 +7,7 @@
  * mechanism the buyer preview's cover thumbnail depends on.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const mockReorderImages = vi.hoisted(() => vi.fn());
@@ -124,6 +124,36 @@ describe('InlinePhotos — AC5: tile grid', () => {
     render(<InlinePhotos listingId="listing-1" />);
     const emptyTile = screen.getByRole('button', { name: /add cover photo/i });
     expect(emptyTile).toBeEnabled();
+  });
+});
+
+// #2859 B3 (csv210 regression R9l-o): tile render + count copy + Cover badge from the
+// hook's image list (props-level; the real upload round trip is RETAIN).
+describe('InlinePhotos — #2859 B3 tile grid copy', () => {
+  it('R9l-n three images render tiles 0..2 and "3/5 photos" with no minimum note; two images show the minimum note', () => {
+    mockImages.current = [img('a', 0), img('b', 1)];
+    const { unmount } = render(<InlinePhotos listingId="listing-1" />);
+    expect(screen.getByText('2/5 photos (minimum 3 required)')).toBeInTheDocument();
+    unmount();
+
+    mockImages.current = [img('a', 0), img('b', 1), img('c', 2)];
+    render(<InlinePhotos listingId="listing-1" />);
+    const grid = screen.getByTestId('photo-tile-grid');
+    for (const i of [0, 1, 2]) {
+      expect(within(grid).getByTestId(`photo-tile-${i}`).querySelector('img')).toHaveAttribute('src', `https://example.com/${['a', 'b', 'c'][i]}.jpg`);
+    }
+    expect(screen.getByText('3/5 photos')).toBeInTheDocument();
+    expect(screen.queryByText(/minimum 3 required/)).not.toBeInTheDocument();
+  });
+
+  it('R9o the Cover badge sits on tile 0 only; the image at index 0 is the cover', () => {
+    mockImages.current = [img('b', 0), img('a', 1), img('c', 2)];
+    render(<InlinePhotos listingId="listing-1" />);
+    const grid = screen.getByTestId('photo-tile-grid');
+    expect(within(within(grid).getByTestId('photo-tile-0')).getByText('Cover')).toBeInTheDocument();
+    expect(within(grid).getByTestId('photo-tile-0').querySelector('img')).toHaveAttribute('src', 'https://example.com/b.jpg');
+    expect(within(within(grid).getByTestId('photo-tile-1')).queryByText('Cover')).not.toBeInTheDocument();
+    expect(within(within(grid).getByTestId('photo-tile-2')).queryByText('Cover')).not.toBeInTheDocument();
   });
 });
 

@@ -6,7 +6,7 @@
  * AC15 — Changing initialLocality prop after mount updates the query state.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
@@ -215,5 +215,74 @@ describe('AddressPicker — AC15: prop reconciliation updates query state', () =
     // Query updated to new locality
     const input = screen.getByPlaceholderText(/search for a location/i);
     await waitFor(() => expect(input).toHaveValue('Bangalore'));
+  });
+});
+
+// #2859 B3 (csv11 broker-address-reconciliation AR1d / AR3 parts). Geocode is mocked,
+// so these prove UI behaviour given a geocode response only (R_injected).
+describe('AddressPicker — #2859 B3 persisted locality + Change + pick result', () => {
+  it('AR1d prefills the search input and status line with the persisted locality when coords are set', async () => {
+    render(
+      <AddressPicker
+        initialLatitude={13.34}
+        initialLongitude={74.74}
+        initialLocality="Manipal"
+        initialConfirmed
+        onConfirm={noop}
+      />,
+    );
+    const input = screen.getByPlaceholderText(/search for a location/i);
+    expect(input).toHaveValue('Manipal');
+    expect(screen.getByText('Location confirmed')).toBeInTheDocument();
+    expect(screen.getByText('Manipal')).toBeInTheDocument(); // status line display name
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mockSearchNominatim).not.toHaveBeenCalled();
+  });
+
+  it('AR1d control: without a persisted locality the input stays empty and the status shows coordinates', () => {
+    render(
+      <AddressPicker initialLatitude={13.34} initialLongitude={74.74} initialLocality={null} initialConfirmed onConfirm={noop} />,
+    );
+    expect(screen.getByPlaceholderText(/search for a location/i)).toHaveValue('');
+    expect(screen.getByText('13.34000, 74.74000')).toBeInTheDocument();
+  });
+
+  it('AR3 Change resets the confirmed pin; picking a search result re-confirms and emits onConfirm + onLocalityConfirmed', async () => {
+    const onConfirm = vi.fn();
+    const onUnconfirm = vi.fn();
+    const onLocalityConfirmed = vi.fn();
+    mockSearchNominatim.mockResolvedValue([MANIPAL_RESULT]);
+    render(
+      <AddressPicker
+        initialLatitude={13.34}
+        initialLongitude={74.74}
+        initialLocality="Manipal"
+        initialConfirmed
+        onConfirm={onConfirm}
+        onUnconfirm={onUnconfirm}
+        onLocalityConfirmed={onLocalityConfirmed}
+      />,
+    );
+    const input = screen.getByPlaceholderText(/search for a location/i);
+    expect(screen.getByText('Location confirmed')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+    expect(onUnconfirm).toHaveBeenCalledTimes(1);
+    expect(input).toHaveValue('');
+    expect(screen.queryByText('Location confirmed')).not.toBeInTheDocument();
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { value: 'Manipal' } });
+    const item = await screen.findByText(MANIPAL_RESULT.display_name, { selector: 'li' }, { timeout: 2000 });
+    expect(mockSearchNominatim).toHaveBeenCalledWith('Manipal');
+    fireEvent.click(item);
+
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({ lat: 13.34, lng: 74.74, address_confirmed: true }),
+    );
+    expect(onLocalityConfirmed).toHaveBeenCalledWith(MANIPAL_RESULT.display_name, 13.34, 74.74);
+    expect(input).toHaveValue(MANIPAL_RESULT.display_name);
+    expect(screen.getByText('Location confirmed')).toBeInTheDocument();
   });
 });

@@ -54,6 +54,24 @@ describe('BuyerPreviewCard — AC6 honesty', () => {
   });
 });
 
+describe('BuyerPreviewCard — rent vs sale price line (#2859 B3 csv33 C4m/C5e)', () => {
+  it('C4m rent: shows the monthly rent with "/mo" and ignores the sale price', () => {
+    render(<BuyerPreviewCard {...baseProps} isRent monthlyRent={45_000} priceRupees={35_000_000} />);
+    expect(screen.getByText('₹45K/mo')).toBeInTheDocument();
+    expect(document.body.textContent ?? '').not.toContain('₹3.50 Cr');
+    // no per-sqft line for a rental
+    expect(document.body.textContent ?? '').not.toContain('/sqft');
+  });
+
+  it('C5e sale: shows the sale price without "/mo" and ignores the monthly rent', () => {
+    render(<BuyerPreviewCard {...baseProps} isRent={false} monthlyRent={45_000} priceRupees={35_000_000} />);
+    expect(screen.getByText('₹3.50 Cr')).toBeInTheDocument();
+    const body = document.body.textContent ?? '';
+    expect(body).not.toContain('/mo');
+    expect(body).not.toContain('₹45K');
+  });
+});
+
 describe('BuyerPreviewCard — issue #1722 correction #4: renders publicLoc only, never the private formatted string', () => {
   // The full Nominatim display_name that useResidentialLocation keeps PRIVATE
   // (map/pin/POI use only) — must never reach this buyer-facing surface.

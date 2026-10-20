@@ -536,6 +536,74 @@ class ListingTransitionPolicyTest {
     }
 
     // -----------------------------------------------------------------------
+    // #2859 B3 (csv16 GF1-GF3): the exact field + message of each completeness
+    // rule, each in isolation (only that one error), with the complete-listing
+    // positive control in the same test.
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("guardCompleteness field-level errors (#2859 GF1-GF3)")
+    class GuardCompletenessFieldErrors2859 {
+
+        private Listing complete() {
+            Listing l = new Listing();
+            l.setId(UUID.randomUUID());
+            l.setPropertyType("house");
+            l.setPrice(new BigDecimal("5000000"));
+            l.setLocality("Manipal");
+            l.setAddressConfirmed(true);
+            return l;
+        }
+
+        private List<Map<String, String>> errorsOf(Listing l) {
+            try {
+                policy.guardCompleteness(l);
+                return List.of();
+            } catch (ListingValidationException ex) {
+                return ex.getErrors();
+            }
+        }
+
+        @Test
+        void gf1_zeroPrice_yieldsOnlyThePriceError_completeListingPasses() {
+            Listing control = complete();
+            when(listingRepository.countImagesByListingId(control.getId())).thenReturn(3L);
+            assertThat(errorsOf(control)).isEmpty();
+
+            Listing l = complete();
+            l.setPrice(BigDecimal.ZERO);
+            when(listingRepository.countImagesByListingId(l.getId())).thenReturn(3L);
+            assertThat(errorsOf(l)).containsExactly(
+                    Map.of("field", "price", "message", "Price must be greater than 0"));
+        }
+
+        @Test
+        void gf2_twoImages_yieldsOnlyTheImagesError_threeImagesPass() {
+            Listing control = complete();
+            when(listingRepository.countImagesByListingId(control.getId())).thenReturn(3L);
+            assertThat(errorsOf(control)).isEmpty();
+
+            Listing l = complete();
+            when(listingRepository.countImagesByListingId(l.getId())).thenReturn(2L);
+            assertThat(errorsOf(l)).containsExactly(
+                    Map.of("field", "images", "message", "At least 3 images required (found 2)"));
+        }
+
+        @Test
+        void gf3_unconfirmedAddress_yieldsOnlyTheAddressError_confirmedPasses() {
+            Listing control = complete();
+            when(listingRepository.countImagesByListingId(control.getId())).thenReturn(3L);
+            assertThat(errorsOf(control)).isEmpty();
+
+            Listing l = complete();
+            l.setAddressConfirmed(false);
+            when(listingRepository.countImagesByListingId(l.getId())).thenReturn(3L);
+            assertThat(errorsOf(l)).containsExactly(
+                    Map.of("field", "address_confirmed", "message", "Address must be confirmed before submission"));
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // Submit-gate fix (#2341): the real Commercial create UI (#1684) persists
     // builtArea/builtAreaUnit + floorChoice (SHOP/OFFICE) or floorMode
     // (BUILDING) — never the pre-#1684 carpetArea/floorNumber/totalFloors/
