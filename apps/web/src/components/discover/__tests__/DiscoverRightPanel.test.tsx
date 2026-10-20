@@ -1218,6 +1218,23 @@ describe('DiscoverRightPanel — anon viewport error + retry (Issue #2015, revie
     expect(screen.queryByTestId('anon-viewport-listing-grid')).not.toBeInTheDocument();
   });
 
+  it("anon viewport genuine zero (200, no listings, no error): shows anon-viewport-empty-state 'No listings found in this map area' and no error/retry", () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...anonViewportBaseProps}
+        anonViewportListings={[]}
+        isErrorAnonViewport={false}
+      />,
+    );
+
+    const emptyState = screen.getByTestId('anon-viewport-empty-state');
+    expect(emptyState).toHaveTextContent('No listings found in this map area');
+    expect(screen.queryByTestId('anon-viewport-error')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('anon-viewport-retry-btn')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('anon-viewport-listing-grid')).not.toBeInTheDocument();
+  });
+
   it('transient failure with retained listings keeps rendering the cards AND shows the retry banner', () => {
     renderPanel(
       <DiscoverRightPanel

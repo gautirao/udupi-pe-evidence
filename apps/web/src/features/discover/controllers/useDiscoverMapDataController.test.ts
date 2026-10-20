@@ -91,6 +91,7 @@ vi.mock('@/features/discover/context/useDiscoverContext', () => ({
 import { useDiscoverMapDataController } from './useDiscoverMapDataController';
 import type { DiscoverNavContextValue } from '@/features/discover/context/types';
 import type { UseAreasNavigationJourneyResult } from '@/features/discover/navigation/useAreasNavigationJourney';
+import { DiscoverDataSourceProvider } from '@/features/discover/state/DiscoverDataSourceContext';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -1696,5 +1697,94 @@ describe('useDiscoverMapDataController — 2017-N11 committed AREA_SET sends eve
     // The committed multi-area set: BOTH keys (the request canonicalises the key order, so compare as a set).
     const both = await panelAreaKeysFor({ active: { kind: 'AREA_SET', areaKeys: [KEY_A, KEY_B] }, previous: null });
     expect([...both].sort()).toEqual([KEY_A, KEY_B].sort());
+  });
+});
+
+// ─── #2858 batch 1 (Lane C of #2750) — preview-source marker scope through the REAL controller ───
+// Lower-level replacement for the retired preview marker-scope E2E (#2205). The controller is mounted inside a
+// preview DiscoverDataSourceProvider, so the REAL resolveDiscoverMarkerScope preview branch and the REAL
+// useDiscoverFilteredMarkers preview path builder run; only api.get (the HTTP boundary) is stubbed.
+describe('useDiscoverMapDataController — preview source marker scope (#2858/#2205)', () => {
+  const PREVIEW_MARKERS_PATH = '/api/admin/city-launch/cities/7/revisions/42/preview/markers';
+  const GROUP_KEYS = ['IN|KA|Udupi|Malpe', 'IN|KA|Udupi|Ullal', 'IN|KA|Udupi|Kaup'];
+
+  function makePreviewControllerWrapper() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return ({ children }: { children: React.ReactNode }) =>
+      React.createElement(
+        QueryClientProvider,
+        { client: qc },
+        React.createElement(DiscoverDataSourceProvider, {
+          value: { mode: 'preview', cityId: 7, revisionId: 42, citySlug: 'udupi' },
+          children,
+        }),
+      );
+  }
+
+  function servePreviewMocks() {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url.includes('/preview/markers')) return Promise.resolve(MARKERS_RESPONSE);
+      if (url.includes('/listings')) return Promise.resolve({ city: 'udupi', limitPerArea: 5, areas: [] });
+      return Promise.resolve(AREAS_RESPONSE);
+    });
+  }
+
+  function findPreviewMarkersCall() {
+    return mockApiGet.mock.calls.find(([url]: [string]) => url.startsWith(PREVIEW_MARKERS_PATH));
+  }
+
+  it('preview source + resolved AREA node: the marker request path is .../preview/markers?node=<key> only — no areaKeys (#2858/#2205)', async () => {
+    servePreviewMocks();
+    renderHook(
+      () =>
+        useDiscoverMapDataController({
+          ...BASE_CONTROLLER_PARAMS,
+          // A legacy group scope is ALSO present, so "no areaKeys" proves node-over-group precedence in preview.
+          groupAreaKeysForMapData: GROUP_KEYS,
+          nav: makeNav({ journey: 'area-first', rawNodeParam: 'n:area-1', node: 'n:area-1' }),
+          effectiveSelectedArea: EFFECTIVE_SELECTED_AREA,
+          areasNavigationJourney: makeAreasNavigationJourney({ node: AREA_LEAF }),
+        }),
+      { wrapper: makePreviewControllerWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(findPreviewMarkersCall()).toBeDefined();
+    });
+
+    const [path] = findPreviewMarkersCall() as [string, unknown];
+    // Preview's /markers contract uses node=, not the live nodeKey=.
+    expect(path).toBe(`${PREVIEW_MARKERS_PATH}?node=n%3Aarea-1`);
+    const params = new URLSearchParams(path.split('?')[1]);
+    expect(params.has('nodeKey')).toBe(false);
+    expect(params.getAll('areaKeys')).toEqual([]);
+    // Never the live endpoint while a preview source is active.
+    expect(mockApiGet.mock.calls.some(([url]: [string]) => url.includes('/api/discover/markers'))).toBe(false);
+  });
+
+  it("preview source + legacy group members and no node: the marker request carries exactly the group's areaKeys and no node= (#2858/#2205)", async () => {
+    servePreviewMocks();
+    renderHook(
+      () =>
+        useDiscoverMapDataController({
+          ...BASE_CONTROLLER_PARAMS,
+          groupAreaKeysForMapData: GROUP_KEYS,
+          nav: makeNav({ journey: 'area-first', rawNodeParam: null, node: null }),
+          effectiveSelectedArea: EFFECTIVE_SELECTED_AREA,
+          areasNavigationJourney: makeAreasNavigationJourney({ node: null }),
+        }),
+      { wrapper: makePreviewControllerWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(findPreviewMarkersCall()).toBeDefined();
+    });
+
+    const [path] = findPreviewMarkersCall() as [string, unknown];
+    const params = new URLSearchParams(path.split('?')[1]);
+    // The request canonicalises (sorts) the key order, so compare as a set — exactly the 3 members, nothing more.
+    expect([...params.getAll('areaKeys')].sort()).toEqual([...GROUP_KEYS].sort());
+    expect(params.has('node')).toBe(false);
+    expect(params.has('nodeKey')).toBe(false);
   });
 });

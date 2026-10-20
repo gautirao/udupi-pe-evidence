@@ -916,6 +916,230 @@ describe('CityLaunchPreview — viewing the current LIVE revision (Issue #2121)'
   });
 });
 
+// ─── #2858 batch 1 (Lane C of #2750) — Hierarchy tree -> Overrides hand-off (#2207) ───
+// Lower-level replacement for the retired hierarchy-override E2E. Drives the REAL CityLaunchPreview Tabs, the REAL
+// NavigationHierarchyTree/SelectionPanel, the REAL NavigationOverridesPanel and the REAL useCityLaunchNavigation
+// hooks (useNavigationTree / useNavigationOverrides / useCreateNavigationOverride, including their zod parsing);
+// only this file's existing '@/lib/api' boundary mock is given a per-describe implementation. Must stay ABOVE the
+// describe below that calls vi.doUnmock/vi.resetModules.
+describe('CityLaunchPreview — Hierarchy tree to Overrides hand-off (#2858/#2207)', () => {
+  const CITY_ID = 7;
+  const REVISION_ID = 42;
+  const REVISION_BASE = `/api/admin/city-launch/cities/${CITY_ID}/revisions/${REVISION_ID}`;
+  const AREA_KEY = 'IN|KA|Udupi|Manipal';
+  const AREA_NODE_KEY = `a:${AREA_KEY}`;
+
+  // Schema-complete navigation tree (copied from NavigationHierarchyTree.test.tsx TREE): a 2-level tree whose
+  // default depth-0 expansion exposes the AREA child row without any interaction.
+  const HANDOFF_TREE = {
+    revisionId: REVISION_ID,
+    validationStatus: 'VALID',
+    validationErrors: [] as string[],
+    nodes: [
+      {
+        nodeKey: 'c:north:manipal',
+        nodeType: 'CLUSTER' as const,
+        parentNodeKey: null,
+        regionKey: 'north',
+        areaKey: null,
+        displayLabel: 'Udupi',
+        depth: 0,
+        ancestorKeys: [] as string[],
+        representativeAreaKeys: [] as string[],
+        displayOrder: 0,
+        descendantAreaCount: 1,
+        bounds: { centreLat: 13.35, centreLon: 74.79, minLat: 13.3, minLon: 74.7, maxLat: 13.4, maxLon: 74.8 },
+      },
+      {
+        nodeKey: AREA_NODE_KEY,
+        nodeType: 'AREA' as const,
+        parentNodeKey: 'c:north:manipal',
+        regionKey: 'north',
+        areaKey: AREA_KEY,
+        displayLabel: 'Manipal',
+        depth: 1,
+        ancestorKeys: ['c:north:manipal'],
+        representativeAreaKeys: [AREA_KEY],
+        displayOrder: 0,
+        descendantAreaCount: 0,
+        bounds: { centreLat: 13.351, centreLon: 74.791, minLat: 13.341, minLon: 74.781, maxLat: 13.361, maxLon: 74.801 },
+      },
+    ],
+  };
+
+  // POST .../navigation/overrides returns the resulting diff (navigationDiffResponseSchema).
+  const EMPTY_DIFF = {
+    revisionId: REVISION_ID,
+    against: 'BASE' as const,
+    overridesFingerprint: null,
+    added: [] as string[],
+    removed: [] as string[],
+    moved: [] as unknown[],
+    relabeled: [] as unknown[],
+    representativeChanges: [] as unknown[],
+  };
+
+  let overridesResponse: unknown[] = [];
+
+  beforeEach(() => {
+    overridesResponse = [];
+    vi.mocked(api.get).mockReset();
+    vi.mocked(api.post).mockReset();
+    vi.mocked(api.get).mockImplementation(async (path: string) => {
+      // PREPARED + editable: overrides are enabled (CityLaunchPreview derives overridesEditable from this).
+      if (path.endsWith('/validation')) return DEFAULT_VALIDATION_STATE_DTO;
+      if (path.endsWith('/preview/identity')) return PREVIEW_IDENTITY_DTO;
+      if (path === `${REVISION_BASE}/navigation/tree`) return HANDOFF_TREE;
+      if (path === `${REVISION_BASE}/navigation/overrides`) return overridesResponse;
+      return DEFAULT_VALIDATION_STATE_DTO;
+    });
+    vi.mocked(api.post).mockResolvedValue(EMPTY_DIFF);
+  });
+
+  async function openHierarchyAndSelectArea(user: ReturnType<typeof userEvent.setup>) {
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+    await screen.findByTestId('map-discovery-stub');
+    await user.click(screen.getByRole('tab', { name: /hierarchy tree/i }));
+    await user.click(await screen.findByTestId(`nav-node-${AREA_NODE_KEY}`));
+  }
+
+  it('Hierarchy tree: selecting an AREA node and clicking Exclude area switches to the Overrides tab with subjectAreaKey prefilled (#2858/#2207)', async () => {
+    const user = userEvent.setup();
+    await openHierarchyAndSelectArea(user);
+
+    const excludeAction = await screen.findByTestId('hierarchy-selection-action-EXCLUDE_AREA');
+    expect(excludeAction).toBeEnabled();
+    await user.click(excludeAction);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /^overrides$/i })).toHaveAttribute('data-state', 'active');
+    });
+    expect(screen.getByRole('tab', { name: /hierarchy tree/i })).toHaveAttribute('data-state', 'inactive');
+    expect(await screen.findByTestId('navigation-overrides-panel')).toBeVisible();
+    // The prefill — the selected AREA's areaKey, not the "a:" node key and not empty.
+    expect(document.querySelector<HTMLInputElement>('#subjectAreaKey')?.value).toBe(AREA_KEY);
+    // The prefilled kind — read from the CLOSED Radix Select trigger (never opened: opening stalls jsdom). Exact text,
+    // so a hand-off that substitutes a sibling Area-subject kind (e.g. 'Reassign area to region') cannot satisfy it.
+    expect(document.querySelector('#override-kind')?.textContent).toBe('Exclude area');
+  });
+
+  it('REASSIGN_AREA_REGION from the Hierarchy tree: Apply posts { kind, subjectAreaKey, targetRegionKey } to /navigation/overrides (#2858/#2207)', async () => {
+    const user = userEvent.setup();
+    await openHierarchyAndSelectArea(user);
+
+    await user.click(await screen.findByTestId('hierarchy-selection-action-REASSIGN_AREA_REGION'));
+    await screen.findByTestId('navigation-overrides-panel');
+    await user.type(screen.getByLabelText('Target region key'), 'south');
+    await user.click(screen.getByRole('button', { name: 'Apply override' }));
+
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledTimes(1);
+    });
+    expect(api.post).toHaveBeenCalledWith(`${REVISION_BASE}/navigation/overrides`, {
+      kind: 'REASSIGN_AREA_REGION',
+      subjectAreaKey: AREA_KEY,
+      targetRegionKey: 'south',
+    });
+  });
+
+  it("an applied REASSIGN_AREA_REGION override is listed as 'Reassign <areaKey> → region <key>' (#2858/#2207)", async () => {
+    overridesResponse = [
+      { id: 11, kind: 'REASSIGN_AREA_REGION', applyOrder: 0, subjectAreaKey: AREA_KEY, targetRegionKey: 'south', reason: null },
+    ];
+    const user = userEvent.setup();
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+    await screen.findByTestId('map-discovery-stub');
+    await user.click(screen.getByRole('tab', { name: /^overrides$/i }));
+
+    const row = await screen.findByTestId('override-11');
+    const expectedLine = `Reassign ${AREA_KEY} → region south`;
+    // The row is the kind badge followed by the describe line — exact, not a containment check.
+    expect(row.textContent).toBe(`Reassign area to region${expectedLine}`);
+    expect(screen.getByRole('button', { name: `Remove override: ${expectedLine}` })).toBeInTheDocument();
+  });
+
+  it("applying a REASSIGN_AREA_REGION override refetches the overrides list and shows 'Reassign <areaKey> → region <key>' (#2858/#2207)", async () => {
+    // GET .../navigation/overrides serves [] until the POST succeeds, then the persisted REASSIGN row — so the row can
+    // only appear if the create mutation's success path re-fetches the overrides query (staleTime alone would not).
+    const appliedRow = {
+      id: 12,
+      kind: 'REASSIGN_AREA_REGION',
+      applyOrder: 0,
+      subjectAreaKey: AREA_KEY,
+      targetRegionKey: 'south',
+      reason: null,
+    };
+    vi.mocked(api.post).mockImplementation(async () => {
+      overridesResponse = [appliedRow];
+      return EMPTY_DIFF;
+    });
+    const user = userEvent.setup();
+    await openHierarchyAndSelectArea(user);
+
+    await user.click(await screen.findByTestId('hierarchy-selection-action-REASSIGN_AREA_REGION'));
+    await screen.findByTestId('navigation-overrides-panel');
+    expect(screen.queryByTestId('override-12')).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText('Target region key'), 'south');
+    await user.click(screen.getByRole('button', { name: 'Apply override' }));
+
+    const row = await screen.findByTestId('override-12');
+    const expectedLine = `Reassign ${AREA_KEY} → region south`;
+    expect(row.textContent).toBe(`Reassign area to region${expectedLine}`);
+    expect(api.post).toHaveBeenCalledTimes(1);
+    const overridesGets = vi
+      .mocked(api.get)
+      .mock.calls.filter(([path]) => path === `${REVISION_BASE}/navigation/overrides`);
+    expect(overridesGets.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('Hierarchy tree: selecting a non-AREA node and clicking Relabel switches to the Overrides tab with subjectNodeKey prefilled (#2858/#2207)', async () => {
+    const CLUSTER_NODE_KEY = 'c:north:manipal';
+    const user = userEvent.setup();
+    renderAtPreviewRoute(String(CITY_ID), String(REVISION_ID));
+    await screen.findByTestId('map-discovery-stub');
+    await user.click(screen.getByRole('tab', { name: /hierarchy tree/i }));
+    await user.click(await screen.findByTestId(`nav-node-${CLUSTER_NODE_KEY}`));
+
+    const relabelAction = await screen.findByTestId('hierarchy-selection-action-RELABEL');
+    expect(relabelAction).toBeEnabled();
+    await user.click(relabelAction);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /^overrides$/i })).toHaveAttribute('data-state', 'active');
+    });
+    expect(screen.getByRole('tab', { name: /hierarchy tree/i })).toHaveAttribute('data-state', 'inactive');
+    expect(await screen.findByTestId('navigation-overrides-panel')).toBeVisible();
+    // The prefill — the selected CLUSTER's nodeKey in the Node-key field, nothing in an Area-key field.
+    expect(document.querySelector<HTMLInputElement>('#subjectNodeKey')?.value).toBe(CLUSTER_NODE_KEY);
+    expect(document.querySelector<HTMLInputElement>('#subjectAreaKey')?.value ?? '').toBe('');
+    // The prefilled kind — read from the CLOSED Radix Select trigger (never opened: opening stalls jsdom). Exact text,
+    // so the sibling node-subject kind ('Change representative areas') cannot satisfy it.
+    expect(document.querySelector('#override-kind')?.textContent).toBe('Relabel node');
+  });
+
+  it('a non-PREPARED revision (validation lifecycleStatus != PREPARED): the page disables the Hierarchy tree override actions (#2858/#2207)', async () => {
+    // Only lifecycleStatus differs from the beforeEach fixture (editable stays true), so a disabled action can only
+    // come from the page's overridesEditable = lifecycleStatus === 'PREPARED' derivation. The enabled (PREPARED)
+    // control is the Exclude-area hand-off test above, which asserts toBeEnabled() on the same action.
+    vi.mocked(api.get).mockImplementation(async (path: string) => {
+      if (path.endsWith('/validation')) return { ...DEFAULT_VALIDATION_STATE_DTO, lifecycleStatus: 'VALIDATED' };
+      if (path.endsWith('/preview/identity')) return PREVIEW_IDENTITY_DTO;
+      if (path === `${REVISION_BASE}/navigation/tree`) return HANDOFF_TREE;
+      if (path === `${REVISION_BASE}/navigation/overrides`) return overridesResponse;
+      return DEFAULT_VALIDATION_STATE_DTO;
+    });
+    const user = userEvent.setup();
+    await openHierarchyAndSelectArea(user);
+
+    expect(await screen.findByTestId('hierarchy-selection-action-EXCLUDE_AREA')).toBeDisabled();
+    expect(screen.getByTestId('hierarchy-selection-action-REASSIGN_AREA_REGION')).toBeDisabled();
+    expect(screen.getByTestId('hierarchy-selection-action-MOVE_AREA')).toBeDisabled();
+    // A disabled action is inert: the Overrides tab is not activated.
+    await user.click(screen.getByTestId('hierarchy-selection-action-EXCLUDE_AREA'));
+    expect(screen.getByRole('tab', { name: /hierarchy tree/i })).toHaveAttribute('data-state', 'active');
+  });
+});
+
 // ─── Issue #1911 PR3 rework — THE KEY TEST: real MapDiscovery, real
 // useAreaGroups, proving the area-groups isolation gap is closed.
 //
