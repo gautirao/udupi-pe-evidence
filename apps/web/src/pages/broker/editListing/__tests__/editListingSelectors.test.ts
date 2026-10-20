@@ -156,6 +156,20 @@ describe('selectRequiredFieldsComplete / selectAllConditionsMet', () => {
     })).toBe(true);
   });
 
+  // #2859 B4 (csv205 LG.derive) — a blank locality makes the required-fields term false for BOTH
+  // purposes; the same input with a locality is true (same-it control). NOTE: the client check is
+  // `!!locality`, so whitespace-only is NOT claimed here (deliberately not pinned either way);
+  // rejecting blank/whitespace is the server's guardCompleteness rule (backend slice, LTPT).
+  it('#2859 LG.derive: an empty locality makes requiredFieldsComplete false for sale and rent; a filled locality makes it true', () => {
+    const sale = { isRent: false, monthlyRent: '', priceRupees: 5000000, propertyType: 'house' as const };
+    const rent = { isRent: true, monthlyRent: '15000', priceRupees: null, propertyType: 'apartment' as const };
+
+    expect(selectRequiredFieldsComplete({ ...sale, locality: '' })).toBe(false);
+    expect(selectRequiredFieldsComplete({ ...rent, locality: '' })).toBe(false);
+    expect(selectRequiredFieldsComplete({ ...sale, locality: 'Manipal' })).toBe(true);
+    expect(selectRequiredFieldsComplete({ ...rent, locality: 'Manipal' })).toBe(true);
+  });
+
   it('selectAllConditionsMet ANDs every term, including the title/locality warning negation', () => {
     expect(selectAllConditionsMet({
       canSubmitImages: true, addressConfirmed: true, requiredFieldsComplete: true, showTitleLocalityWarning: false,

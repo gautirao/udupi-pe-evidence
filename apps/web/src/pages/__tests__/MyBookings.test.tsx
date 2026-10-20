@@ -269,4 +269,43 @@ describe('MyBookings page', () => {
     expect(await screen.findByText('On Hold')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Cancel Booking' })).not.toBeInTheDocument();
   });
+
+  // #2859 B4 (csv216, e2e/user-journeys.spec.ts U2) — the page renders its h1 and content, not an
+  // error. Same-it control: a failed load DOES render the page's error copy, so the negative half
+  // below is detecting a real, reachable state.
+  it('#2859 U2: renders the "My Bookings" h1 with content and no error copy; a failed load renders the error copy', async () => {
+    mockApiGet.mockRejectedValueOnce(new Error('synthetic 500'));
+    const failed = renderMyBookings();
+    expect(await screen.findByText('Failed to load bookings. Please try again later.')).toBeInTheDocument();
+    failed.unmount();
+
+    mockApiGet.mockResolvedValueOnce(
+      makePagedResponse([makeBooking({ id: 'booking-2859-u2', listingId: 'listing-2859-u2' })]),
+    );
+    renderMyBookings();
+
+    expect(await screen.findByText('listing-2859-u2')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'My Bookings' })).toBeInTheDocument();
+    expect(screen.queryByText(/Failed to load bookings/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Something went wrong/)).not.toBeInTheDocument();
+  });
+
+  // #2859 B4 (csv216, UJ1 'Requested' badge) — a REQUESTED booking's card shows the 'Requested'
+  // status badge; a CONFIRMED booking in the same list shows its own badge, not 'Requested'.
+  it('#2859 UJ1: a REQUESTED booking card shows the "Requested" badge, distinct from a CONFIRMED card', async () => {
+    mockApiGet.mockResolvedValueOnce(
+      makePagedResponse([
+        makeBooking({ id: 'booking-2859-req', listingId: 'listing-2859-req', status: 'REQUESTED', requestedDate: '2026-11-02' }),
+        makeBooking({ id: 'booking-2859-conf', listingId: 'listing-2859-conf', status: 'CONFIRMED', requestedDate: '2026-11-03' }),
+      ]),
+    );
+
+    renderMyBookings();
+
+    const requested = await screen.findByText('Requested');
+    expect(requested).toHaveClass('bg-yellow-100');
+    expect(screen.getAllByText('Requested')).toHaveLength(1);
+    expect(screen.getByText('Confirmed')).toBeInTheDocument();
+    expect(screen.getByText('2026-11-02')).toBeInTheDocument();
+  });
 });

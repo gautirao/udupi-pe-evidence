@@ -928,6 +928,54 @@ class CommercialSubtypeFilter2431IT {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // #2859 B4 S6d (e2e/commercial-subtype-implied-type-hotfix.spec.ts): the browser's mixed
+    // Shop + Warehouse request carries EXPLICIT property types alongside the subtypes
+    // (type=commercial,warehouse & subtype=SHOP,WAREHOUSE), so the predicate runs with
+    // hasTypes=true — not the derived-types path T2 exercises. These call the controllers with
+    // the typed arguments that request binds to; the HTTP query-string binding itself is not
+    // exercised here (S.http-binding is RETAIN in the B4 map).
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private static final List<String> BROWSER_MIXED_TYPES = List.of("commercial", "warehouse");
+    private static final List<String> BROWSER_MIXED_SUBTYPES = List.of("SHOP", "WAREHOUSE");
+
+    @Test
+    @DisplayName("#2859 B4 S6d listings: explicit types [commercial, warehouse] + subtypes [SHOP, WAREHOUSE] "
+            + "return the shops and the warehouse only; legacy NULL/no-row commercial, office and apartment excluded")
+    void s6d_listings_explicitTypes_mixedShopWarehouse() {
+        seedAllCommercialFamilies();
+
+        assertThat(idsOf(listings(BROWSER_MIXED_SUBTYPES, BROWSER_MIXED_TYPES)))
+                .containsExactlyInAnyOrder(
+                        SHOP_ID.toString(), LOWERCASE_SHOP_ID.toString(), WAREHOUSE_ID.toString());
+
+        // Exclusion controls: every excluded row IS live and reachable in the same city, so its
+        // absence above is the subtype filter's doing and not a broken fixture.
+        assertThat(idsOf(listings(null, BROWSER_MIXED_TYPES)))
+                .contains(OFFICE_ID.toString(), LEGACY_NULL_SUBTYPE_ID.toString(),
+                        LEGACY_NO_ROW_ID.toString(), WAREHOUSE_ID.toString());
+        assertThat(idsOf(listings(null, List.of("apartment"))))
+                .containsExactly(APARTMENT_ID.toString());
+    }
+
+    @Test
+    @DisplayName("#2859 B4 S6d markers: the same explicit-types mixed request returns the same pins as the list")
+    void s6d_markers_explicitTypes_mixedShopWarehouse() {
+        seedAllCommercialFamilies();
+
+        assertThat(markerIds(BROWSER_MIXED_SUBTYPES, BROWSER_MIXED_TYPES))
+                .containsExactlyInAnyOrder(
+                        SHOP_ID.toString(), LOWERCASE_SHOP_ID.toString(), WAREHOUSE_ID.toString());
+
+        // Exclusion control: without the subtypes the same typed request DOES pin the office and
+        // both legacy commercial rows, so their absence above is the subtype filter's doing.
+        assertThat(markerIds(null, BROWSER_MIXED_TYPES))
+                .contains(OFFICE_ID.toString(), LEGACY_NULL_SUBTYPE_ID.toString(),
+                        LEGACY_NO_ROW_ID.toString(), WAREHOUSE_ID.toString())
+                .doesNotContain(APARTMENT_ID.toString());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -970,6 +1018,21 @@ class CommercialSubtypeFilter2431IT {
 
     private List<String> markerIds(List<String> commercialSubtypes) {
         return markers(commercialSubtypes).stream().map(DiscoverMarker::id).toList();
+    }
+
+    /**
+     * #2859 B4: typed overload with explicit property types. getMarkers parameter slot 2 is
+     * {@code propertyTypes} and slot 3 is {@code commercialSubtypes}
+     * (DiscoverMarkersController.java:63-65). The existing single-argument helper is unchanged.
+     */
+    private List<String> markerIds(List<String> commercialSubtypes, List<String> propertyTypes) {
+        ResponseEntity<DiscoverMarkersResponse> response = markersController.getMarkers(
+                CITY_SLUG, propertyTypes, commercialSubtypes, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null);
+        DiscoverMarkersResponse body = response.getBody();
+        assertThat(body).isNotNull();
+        return body.markers().stream().map(DiscoverMarker::id).toList();
     }
 
     private static String markerSubtypeOf(List<DiscoverMarker> markers, UUID id) {

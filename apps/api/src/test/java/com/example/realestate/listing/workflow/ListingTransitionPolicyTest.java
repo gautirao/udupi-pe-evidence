@@ -604,6 +604,60 @@ class ListingTransitionPolicyTest {
     }
 
     // -----------------------------------------------------------------------
+    // #2859 B4 (csv205 LG2a-c, e2e/poi-locality-teaser.spec.ts): the submit 422
+    // carries errors[] { field: "locality", message: "Locality is required" }
+    // for a null, empty or whitespace-only locality. Each case is in isolation
+    // (only that one error), with the complete-listing control in the same test.
+    // Broker submit reaches this rule only through guardCompleteness
+    // (ListingWorkflowService.submitListing).
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("guardCompleteness locality rule (#2859 B4 LG2a-c)")
+    class GuardCompletenessLocality2859B4 {
+
+        private Listing complete() {
+            Listing l = new Listing();
+            l.setId(UUID.randomUUID());
+            l.setPropertyType("house");
+            l.setPrice(new BigDecimal("5000000"));
+            l.setLocality("Manipal");
+            l.setAddressConfirmed(true);
+            return l;
+        }
+
+        private List<Map<String, String>> errorsOf(Listing l) {
+            try {
+                policy.guardCompleteness(l);
+                return List.of();
+            } catch (ListingValidationException ex) {
+                return ex.getErrors();
+            }
+        }
+
+        static Stream<Arguments> missingLocalities() {
+            return Stream.of(
+                    Arguments.of("null", null),
+                    Arguments.of("empty", ""),
+                    Arguments.of("whitespace-only", "   \t "));
+        }
+
+        @ParameterizedTest(name = "LG2 {0} locality -> only the locality error; complete listing passes")
+        @MethodSource("missingLocalities")
+        void missingLocality_yieldsOnlyTheLocalityError_completeListingPasses(String label, String locality) {
+            Listing control = complete();
+            when(listingRepository.countImagesByListingId(control.getId())).thenReturn(3L);
+            assertThat(errorsOf(control)).isEmpty();
+
+            Listing l = complete();
+            l.setLocality(locality);
+            when(listingRepository.countImagesByListingId(l.getId())).thenReturn(3L);
+            assertThat(errorsOf(l)).containsExactly(
+                    Map.of("field", "locality", "message", "Locality is required"));
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // Submit-gate fix (#2341): the real Commercial create UI (#1684) persists
     // builtArea/builtAreaUnit + floorChoice (SHOP/OFFICE) or floorMode
     // (BUILDING) — never the pre-#1684 carpetArea/floorNumber/totalFloors/

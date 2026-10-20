@@ -361,6 +361,36 @@ describe('AC2 — AreaGuideHero', () => {
   });
 });
 
+// #2859 B4 (csv192, e2e/journey/area-trends-2581.spec.ts A1-A3 chip) — the hero confidence chip
+// shows the API label with its tier style. Each label is checked against ALL three tier classes so
+// a swapped mapping cannot pass on text alone.
+const CHIP_CASES = [
+  { label: 'Enough data', own: 'bg-emerald-50', others: ['bg-amber-50', 'bg-slate-100'] },
+  { label: 'Limited data', own: 'bg-amber-50', others: ['bg-emerald-50', 'bg-slate-100'] },
+  { label: 'Not enough data yet', own: 'bg-slate-100', others: ['bg-emerald-50', 'bg-amber-50'] },
+] as const;
+
+describe('#2859 A1-A3 — AreaGuideHero confidence chip tier', () => {
+  it.each(CHIP_CASES)('$label renders the chip text with $own', ({ label, own, others }) => {
+    render(
+      <Wrapper>
+        <AreaGuideHero
+          citySlug="udupi"
+          cityLabel="Udupi"
+          areaLabel="Malpe"
+          confidenceLabel={label}
+          areaKey="IN|KA|Udupi|Malpe"
+        />
+      </Wrapper>,
+    );
+    const chip = screen.getByText(label, { selector: 'span' });
+    expect(chip).toHaveClass(own);
+    for (const other of others) {
+      expect(chip).not.toHaveClass(other);
+    }
+  });
+});
+
 describe('AC3, AC4, AC5, AC15, AC16 — AtAGlanceMetrics', () => {
   it('renders actual metric values when non-null (AC3)', () => {
     render(
