@@ -122,6 +122,10 @@ const ALPHA_SCHOOLS = 3;
 const BETA_LISTINGS = 5;
 const BETA_SCHOOLS = 2;
 const TOTAL_LISTINGS = ALPHA_LISTINGS + BETA_LISTINGS; // 12
+// The pill copy for the two co-located members (`N areas with matches`,
+// N = number of mocked AREA children in `directionWire()` = 2).
+const CLUSTER_MEMBER_COUNT = 2;
+const CLUSTER_PILL_TEXT = `${CLUSTER_MEMBER_COUNT} areas with matches`;
 
 function rootWire() {
   return {
@@ -293,7 +297,7 @@ async function clickMarker(locator: ReturnType<typeof clusterMarkerLocator>): Pr
  */
 async function assertOptionBCardStructure(
   page: Page,
-  opts: { bodyRgb: string; footerTextRgb: string; tailRgb: string },
+  opts: { bodyRgb: string; footerTextRgb: string; tailRgb: string; schoolsJourney?: boolean },
 ): Promise<void> {
   const cluster = clusterMarkerLocator(page);
   await expect(cluster, 'exactly one visual cluster forms from the two co-located members').toHaveCount(1);
@@ -314,12 +318,34 @@ async function assertOptionBCardStructure(
   await expect(hero).toContainText(AREA_ALPHA_LABEL);
   await expect(hero).toContainText(AREA_BETA_LABEL);
 
+  if (opts.schoolsJourney) {
+    // Issue #2345 (#2826 repair) — the schools-journey card deliberately
+    // OMITS the residential listings hero (count + unit word) AND the
+    // listings phrase in its accessible name (AreaMarkerLayer.tsx
+    // `makeAreaVisualClusterCard`: `heroRow = isSchools ? '' : ...`,
+    // `ariaLabel = isSchools ? names + countLabel : ... + listingsLabel`).
+    // Summing member schoolCounts would double-count, so no school hero
+    // either. The visible text is therefore EXACTLY: names, then the
+    // "N areas with matches" pill, then the shared footer ("Zoom in" + the
+    // &#8250; chevron from markerShellHtml). `toHaveText` with a string is a
+    // full-text (whitespace-normalised) match, so a re-introduced hero count
+    // or listings phrase fails here, not just a missing one.
+    await expect(cluster).toHaveText(
+      `${AREA_ALPHA_LABEL}, ${AREA_BETA_LABEL}${CLUSTER_PILL_TEXT}Zoom in›`,
+    );
+    await expect(cluster).toHaveAttribute(
+      'aria-label',
+      `${AREA_ALPHA_LABEL}, ${AREA_BETA_LABEL}, ${CLUSTER_PILL_TEXT}`,
+    );
+    await expect(cluster).not.toContainText(/listings?/i);
+  } else {
   // Positive: mono hero count + uppercase unit word — the actual SUM of the
   // two members' listing counts, not a placeholder/zero.
   await expect(cluster).toContainText(String(TOTAL_LISTINGS));
   await expect(cluster).toContainText(/listings?/i);
   // Never the zero-count guard phrase (proves the numeric branch rendered).
   await expect(cluster).not.toContainText('No listings yet');
+  }
 
   // Positive: the pill — both members visible, both representative names
   // shown (cap 2, hiddenCount 0) => "2 areas with matches".
@@ -366,6 +392,7 @@ test.describe('@integration-ui #2305/#2330 — connected-card visual-cluster ren
       bodyRgb: ZOOM_BODY_SCHOOLS_RGB,
       footerTextRgb: PLUM_600_RGB,
       tailRgb: PLUM_600_RGB,
+      schoolsJourney: true,
     });
   });
 });
@@ -537,6 +564,7 @@ test.describe('@integration-ui #2305 PR #2315 review fix — schools-journey hov
       bodyRgb: ZOOM_BODY_SCHOOLS_RGB,
       footerTextRgb: PLUM_600_RGB,
       tailRgb: PLUM_600_RGB,
+      schoolsJourney: true,
     });
     const footer = cluster.locator('.rc-footer');
 
