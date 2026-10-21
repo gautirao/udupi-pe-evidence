@@ -1788,3 +1788,54 @@ describe('useDiscoverMapDataController — preview source marker scope (#2858/#2
     expect(params.has('nodeKey')).toBe(false);
   });
 });
+
+// ─── #2858 batch 2 (Lane C of #2750) — 2204 flow 4: group-focus marker fetch vs the area-layer zoom band ───
+// Lower-level replacement for the zoom-band half of issue-2204-canonical-node-browser-proof (flow 4): a journeyless-style
+// `groupId=` focus (area-first + groupId, no areaKey, no node) issues NO markers request at/below AREA_LAYER_MAX_ZOOM (12)
+// and, once past it, ONE request scoped to exactly the group's member areaKeys (the same set the panel shows).
+// The REAL resolveDiscoverMarkerScope + REAL useDiscoverFilteredMarkers run; only api.get (the HTTP boundary) is stubbed.
+// B2-N4 (zero calls) is vacuous on its own, so B2-N5 is its paired positive arm: same nav, same params, only mapZoom varies.
+describe('useDiscoverMapDataController — 2204-F4 group-focus marker fetch vs the zoom band (#2858 batch 2)', () => {
+  const GROUP_KEYS = ['IN|KA|Bengaluru|Hebbal', 'IN|KA|Bengaluru|Jakkur', 'IN|KA|Bengaluru|Yelahanka'];
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 60));
+  function markersUrls(): string[] {
+    return mockApiGet.mock.calls
+      .map(([url]: [string]) => url)
+      .filter((url: string) => url.includes('/api/discover/markers'));
+  }
+  function renderGroupFocus(mapZoom: number) {
+    return renderHook(
+      () =>
+        useDiscoverMapDataController({
+          ...BASE_CONTROLLER_PARAMS,
+          mapZoom,
+          groupAreaKeysForMapData: GROUP_KEYS,
+          nav: makeNav({ journey: 'area-first', groupId: 'south-premium', areaKey: null }),
+          effectiveSelectedArea: null,
+          areasNavigationJourney: makeAreasNavigationJourney(),
+        }),
+      { wrapper: makeWrapper() },
+    );
+  }
+
+  it('2204-F4 group focus below the area-layer zoom band: area-first + groupId + authed at mapZoom 12 issues ZERO markers calls (only the zoom term varied)', async () => {
+    renderGroupFocus(12);
+    await settle();
+    expect(markersUrls()).toEqual([]);
+    // The hook did run (it queried the areas list through the same mocked api.get): not a never-mounted false green.
+    expect(mockApiGet.mock.calls.length).toBeGreaterThan(0);
+  });
+
+  it("2204-F4 group focus past the zoom band: exactly one markers call at mapZoom 14, carrying exactly the group's 3 areaKeys and no nodeKey", async () => {
+    renderGroupFocus(14);
+    await waitFor(() => {
+      expect(markersUrls()).toHaveLength(1);
+    });
+    await settle();
+    expect(markersUrls()).toHaveLength(1);
+    const params = new URLSearchParams(markersUrls()[0].split('?')[1]);
+    expect(new Set(params.getAll('areaKeys'))).toEqual(new Set(GROUP_KEYS));
+    expect(params.getAll('areaKeys')).toHaveLength(GROUP_KEYS.length);
+    expect(params.get('nodeKey')).toBeNull();
+  });
+});

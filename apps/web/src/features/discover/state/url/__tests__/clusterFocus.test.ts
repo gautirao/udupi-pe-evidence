@@ -255,4 +255,63 @@ describe('clusterFocus — BR3/BR4 history behaviour through a real router (#275
       ),
     );
   });
+
+  // B2-N3 (#2858 batch 2, manifest L116 issue-1956-pr3-area-clustering AC4.7), per the
+  // approved revision_1: mirrors the legacy legs (spec :396-434) — push SW, focus a cluster
+  // (REPLACE onto the SW entry), Back to root, push W, Back to root, push SW AGAIN — and asserts
+  // the exact location.search at every leg. Back never revisits the focused entry here: the
+  // revisit is a FRESH PUSH built by applyNodeDelta from the root URL, which never carried
+  // clusterFocus. The mutation B2-M2 (delete clearClusterFocusParam in applyNodeDelta) is
+  // does NOT turn this `it` red (the source URL has no clusterFocus; see mutation/B2-M2.log), so
+  // this `it` is not mutation-credited. It is an end-state check only.
+  it('revisit (#2858/#1956 AC4.7): focus a cluster on SW, Back to root, visit W, Back to root, re-enter SW: no clusterFocus and focus is null at every leg', () => {
+    const ROOT_SEARCH = '?city=bangalore&journey=area-first';
+    const { result } = renderHistoryHarness([ROOT_ENTRY], 0);
+    expect(result.current.location.search).toBe(ROOT_SEARCH);
+
+    // Setup: enter SW (PUSH), then focus a cluster on it (REPLACE).
+    act(() => {
+      result.current.urlState[1].goToNode('d:southwest');
+    });
+    expect(result.current.navigationType).toBe('PUSH');
+    act(() => {
+      result.current.focus.setClusterFocus([AREA_KEY_WITH_SPACE, AREA_KEY_2]);
+    });
+
+    // (1) after focus: node=SW and clusterFocus present.
+    const focusedSearch = new URLSearchParams(result.current.location.search);
+    expect(focusedSearch.get('node')).toBe('d:southwest');
+    expect(focusedSearch.has(CLUSTER_FOCUS_PARAM)).toBe(true);
+    expect(result.current.focus.clusterFocus).toEqual([AREA_KEY_WITH_SPACE, AREA_KEY_2]);
+
+    // (2) Back: root entry, no node, no clusterFocus (the REPLACE means one Back leaves SW entirely).
+    act(() => {
+      result.current.navigate(-1);
+    });
+    expect(result.current.location.search).toBe(ROOT_SEARCH);
+    expect(result.current.focus.clusterFocus).toBeNull();
+
+    // (3) push W: node=W, no clusterFocus.
+    act(() => {
+      result.current.urlState[1].goToNode('d:west');
+    });
+    expect(result.current.location.search).toBe(`${ROOT_SEARCH}&node=d%3Awest`);
+    expect(result.current.focus.clusterFocus).toBeNull();
+
+    // (4) Back: root, no clusterFocus.
+    act(() => {
+      result.current.navigate(-1);
+    });
+    expect(result.current.location.search).toBe(ROOT_SEARCH);
+    expect(result.current.focus.clusterFocus).toBeNull();
+
+    // (5) push SW again: a FRESH entry for the same node — no stale subset, focus null.
+    act(() => {
+      result.current.urlState[1].goToNode('d:southwest');
+    });
+    expect(result.current.navigationType).toBe('PUSH');
+    expect(result.current.location.search).toBe(`${ROOT_SEARCH}&node=d%3Asouthwest`);
+    expect(new URLSearchParams(result.current.location.search).has(CLUSTER_FOCUS_PARAM)).toBe(false);
+    expect(result.current.focus.clusterFocus).toBeNull();
+  });
 });

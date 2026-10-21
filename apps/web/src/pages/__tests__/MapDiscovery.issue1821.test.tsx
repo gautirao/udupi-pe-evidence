@@ -332,6 +332,37 @@ describe('Issue #1821 — cold-load area drill-down camera fit', () => {
     });
   });
 
+  // B2-N2 (#2858 batch 2): AC1 above sets groupId AND scope together, so dropping
+  // either operand of the initialViewportWasBareAreaRef derivation alone survives it.
+  // One row per operand, through the real derivation + the real camera gate.
+  it.each([
+    { label: 'groupId alone', groupId: GROUP_ID, scope: null, search: `groupId=${GROUP_ID}` },
+    { label: 'scope alone', groupId: null, scope: 'north', search: 'scope=north' },
+  ])(
+    'AC1b/AC1c (#1821): $label plus an inherited viewport still fits tightly to the resolved area',
+    async ({ groupId, scope, search }) => {
+      mockUseDiscoverUrlState.mockReturnValue([
+        makeUrlState({
+          areaKey: AREA_KEY_DEVANAHALLI,
+          groupId,
+          scope,
+          viewport: { lat: 13.16923, lon: 77.63743, zoom: 12 },
+        }),
+        makeDefaultActions(),
+      ]);
+
+      renderAt(
+        `/discover?city=bangalore&${search}&lat=13.16923&lon=77.63743&zoom=12&areaKey=${encodeURIComponent(AREA_KEY_DEVANAHALLI)}`,
+      );
+
+      await waitFor(() => {
+        const last = propertyMapPropsLog.panToAreas.at(-1) as { areaKey?: string } | null;
+        expect(last).not.toBeNull();
+        expect(last?.areaKey).toBe(AREA_KEY_DEVANAHALLI);
+      });
+    },
+  );
+
   it('AC2 (#1160/#1069 non-regression): cold mount with a bare area-only URL (areaKey + viewport, no groupId/scope) preserves the user\'s own restored viewport — no fit override', async () => {
     mockUseDiscoverUrlState.mockReturnValue([
       makeUrlState({

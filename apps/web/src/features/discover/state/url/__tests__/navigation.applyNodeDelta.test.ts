@@ -269,3 +269,68 @@ describe('#2750 N2 — entering the Areas journey from a legacy URL is ONE atomi
     expect(fwd.get('node')).toBe(AREA_NODE_KEY);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #2858 batch 2 (manifest L143, issue-2204-canonical-node-browser-proof flow 1) — B2-N6.
+// N1a above proves intent survives single forward hops; it never walks Back/Forward and never counts entries.
+// The legacy flow sets intent=rent BEFORE the drill-down and asserts it on every PUSH and every Back/Forward leg,
+// with exactly three added history entries. Real MemoryRouter history over the real useDiscoverUrlState writers.
+// NOTE: B2-M5 (`next.delete('intent')` in applyNodeDelta) is ALSO killed by N1a; this `it` is credited for the
+// Back/Forward + entry-count legs on top of that, not as the sole killer.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('#2858 B2-N6 — 2204-F1: intent=rent survives three node PUSHes and three Back + three Forward legs', () => {
+  const nodeOf = (search: string) => new URLSearchParams(search).get('node');
+  const intentOf = (search: string) => new URLSearchParams(search).get('intent');
+  const CLUSTER_NODE_KEY = 'c:northeast:avalahalli';
+
+  it('2204-F1: an active intent=rent survives 3 deliberate node PUSHes and 3 Back + 3 Forward legs, with exactly 3 added entries', () => {
+    const { result } = renderFacadeWithNavigate('/discover?city=bangalore&journey=area-first&intent=rent');
+    const legs: Array<[string | null, string | null]> = [];
+    const snap = () => {
+      const s = result.current.location.search;
+      legs.push([nodeOf(s), intentOf(s)]);
+    };
+
+    snap(); // root
+    expect(legs[0]).toEqual([null, 'rent']);
+
+    for (const key of [DIRECTION_NODE_KEY, CLUSTER_NODE_KEY, AREA_NODE_KEY]) {
+      act(() => {
+        result.current.urlState[1].goToNode(key);
+      });
+      snap();
+    }
+    expect(legs.map(([n]) => n)).toEqual([null, DIRECTION_NODE_KEY, CLUSTER_NODE_KEY, AREA_NODE_KEY]);
+    expect(legs.every(([, i]) => i === 'rent')).toBe(true);
+
+    // Three Back presses land on the root: exactly three entries were added (a REPLACE writer or a
+    // double push would not end on the root after three).
+    const back: Array<[string | null, string | null]> = [];
+    for (let i = 0; i < 3; i++) {
+      act(() => {
+        result.current.navigate(-1);
+      });
+      const s = result.current.location.search;
+      back.push([nodeOf(s), intentOf(s)]);
+    }
+    expect(back).toEqual([
+      [CLUSTER_NODE_KEY, 'rent'],
+      [DIRECTION_NODE_KEY, 'rent'],
+      [null, 'rent'],
+    ]);
+
+    const fwd: Array<[string | null, string | null]> = [];
+    for (let i = 0; i < 3; i++) {
+      act(() => {
+        result.current.navigate(1);
+      });
+      const s = result.current.location.search;
+      fwd.push([nodeOf(s), intentOf(s)]);
+    }
+    expect(fwd).toEqual([
+      [DIRECTION_NODE_KEY, 'rent'],
+      [CLUSTER_NODE_KEY, 'rent'],
+      [AREA_NODE_KEY, 'rent'],
+    ]);
+  });
+});

@@ -288,6 +288,35 @@ describe('useDiscoverPageState — initial filters from URL', () => {
   });
 });
 
+// B2-N1 (#2858 batch 2, manifest L102 area-drilldown-stale-viewport-1821 AC2): the
+// mount-time classification "was this a bare area-only deep link?" is DERIVED here
+// (useDiscoverPageState.ts initialViewportWasBareAreaRef). Every other test injects
+// the ref as a fixture, so a wrong derivation survived. Each operand of
+// `!groupId && !scope && !!areaKey` gets its own row so dropping any one goes red.
+describe('useDiscoverPageState — initialViewportWasBareAreaRef derivation (#1821)', () => {
+  const AREA = 'IN|KA|Bengaluru|Devanahalli';
+  it.each([
+    { shape: 'bare areaKey only (no groupId, no scope)', url: { areaKey: AREA }, expected: true },
+    { shape: 'areaKey + groupId', url: { areaKey: AREA, groupId: 'north-belt' }, expected: false },
+    { shape: 'areaKey + scope', url: { areaKey: AREA, scope: 'region:north' }, expected: false },
+    { shape: 'groupId only, no areaKey', url: { groupId: 'north-belt' }, expected: false },
+    // No groupId/scope/areaKey at all: only the `!!areaKey` operand can make this false
+    // (the groupId-only row above is already false via `!groupId`, so it cannot kill it).
+    { shape: 'no areaKey, no groupId, no scope', url: {}, expected: false },
+  ] as Array<{ shape: string; url: Partial<DiscoverUrlState>; expected: boolean }>)(
+    'initialViewportWasBareAreaRef derivation (#1821): $shape -> $expected',
+    ({ url, expected }) => {
+      const { result } = renderHook(() =>
+        useDiscoverPageState({
+          urlState: makeUrlState(url),
+          urlActions: makeUrlActions(),
+        }),
+      );
+      expect(result.current.initialViewportWasBareAreaRef.current).toBe(expected);
+    },
+  );
+});
+
 describe('useDiscoverPageState — handleFiltersChange preserves school context', () => {
   it('school lat/lon/radius survive a property-filter change', () => {
     const { result } = renderHook(() =>

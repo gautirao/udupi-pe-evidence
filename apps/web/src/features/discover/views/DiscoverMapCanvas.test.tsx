@@ -131,6 +131,9 @@ vi.mock('@/components/map/PropertyMap', () => ({
     // G1-N2 (#2750 PR-3 B1) — the agri sector overlay value DiscoverMapCanvas
     // resolves (gate: DiscoverMapCanvas.tsx sectorOverlay={...}).
     sectorOverlay?: { directionCode: string; maxKm: number } | null;
+    // #2858 batch 2 (B2-N13) — the dense-group degradation gate value DiscoverMapCanvas
+    // resolves (DiscoverMapCanvas.tsx enableAreaMarkerDegradation={...}).
+    enableAreaMarkerDegradation?: boolean;
   }) => (
     <div
       data-testid="property-map-mock"
@@ -155,6 +158,7 @@ vi.mock('@/components/map/PropertyMap', () => ({
       data-area-set-nearby-candidates={JSON.stringify(props.areaSetNearbyCandidates ?? null)}
       data-area-set-draft-members={JSON.stringify(props.areaSetDraftMembers ?? null)}
       data-sector-overlay={props.sectorOverlay === undefined ? 'UNDEFINED' : JSON.stringify(props.sectorOverlay)}
+      data-enable-area-marker-degradation={String(props.enableAreaMarkerDegradation)}
       onClick={() => props.onSelectAgriDestination?.('IN|KA|Udupi|Brahmavar')}
     >
       <button
@@ -896,6 +900,24 @@ describe('DiscoverMapCanvas', () => {
       'true',
     );
   });
+
+  // B2-N13 (#2858 batch 2, retires part of thanisandra-hennur-belt-marker-degradation
+  // E1 wiring): the page-level gate that turns AreaMarkerLayer's dense-group degradation on.
+  // areaLayerMaxZoom is the baseProps default (12).
+  it.each([
+    { label: 'focused group [K1,K2] at mapZoom 12 (== areaLayerMaxZoom)', focusedGroupAreas: ['K1', 'K2'], mapZoom: 12, expected: 'true' },
+    { label: 'focused group [K1,K2] at mapZoom 13 (> areaLayerMaxZoom)', focusedGroupAreas: ['K1', 'K2'], mapZoom: 13, expected: 'false' },
+    { label: 'no focused group at mapZoom 12', focusedGroupAreas: undefined, mapZoom: 12, expected: 'false' },
+  ])(
+    'dense-group degradation is enabled only for a focused group at or below the area-layer zoom (#2858/#1798 PR-B): $label -> $expected',
+    ({ focusedGroupAreas, mapZoom, expected }) => {
+      renderCanvas(<DiscoverMapCanvas {...baseProps({ focusedGroupAreas, mapZoom })} />);
+      expect(screen.getByTestId('property-map-mock')).toHaveAttribute(
+        'data-enable-area-marker-degradation',
+        expected,
+      );
+    },
+  );
 
   describe('Issue #2186 / #2296 (PR #2381 second review) — agriGroupListings / agriDestinationMarkers prop resolution', () => {
     afterEach(() => {

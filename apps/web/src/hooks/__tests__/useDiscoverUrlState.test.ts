@@ -24,6 +24,9 @@ import { MemoryRouter, useLocation, useNavigate, useNavigationType } from 'react
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useDiscoverUrlState } from '../useDiscoverUrlState';
+import { applyIntentTransition } from '@/features/discover/filters/intentTransition';
+import { toDiscoverUrlFilters } from '@/features/discover/state/url/filters';
+import { projectUrlFilters } from '@/features/discover/selectors/urlFiltersProjection';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -3494,6 +3497,128 @@ describe('useDiscoverUrlState — setIntent applies the canonical filter-reset r
     expect(writes[0].search).not.toContain('type=');
     expect(writes[0].search).not.toContain('priceMin=');
   });
+});
+
+// ─── #2858 batch 2 (manifest L155, issue-2711-map-filter-intent-commit) — setIntent filtersOverride ───
+// `setIntent(next, filtersOverride)` is the Map sheet's ONE atomic commit (MapFilterSheet.handleApply). Its
+// override branch (state/url/city.ts) had no test: the existing #2708 describe above only drives List's
+// no-override shape. Real MemoryRouter history; each leg observed through a location + navigation-type probe.
+describe('useDiscoverUrlState — setIntent filtersOverride (#2711/#2858)', () => {
+  const PRE_OPEN = '/discover?city=udupi&type=apartment';
+  const OPEN_ENTRY = '/discover?city=udupi&type=apartment&priceMin=1000000';
+
+  function renderProbed(entries: string[], initialIndex: number) {
+    const seen: { search: string; type: string }[] = [];
+    function Wrapper({ children }: { children: React.ReactNode }) {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      function LocationProbe() {
+        const loc = useLocation();
+        const type = useNavigationType();
+        const last = seen[seen.length - 1];
+        if (!last || last.search !== loc.search || last.type !== type) {
+          seen.push({ search: loc.search, type });
+        }
+        return null;
+      }
+      return React.createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        React.createElement(
+          MemoryRouter,
+          { initialEntries: entries, initialIndex },
+          React.createElement(LocationProbe, null),
+          children,
+        ),
+      );
+    }
+    const view = renderHook(() => ({ state: useDiscoverUrlState(), navigate: useNavigate(), location: useLocation() }), {
+      wrapper: Wrapper,
+    });
+    return { ...view, seen };
+  }
+
+  // B2-N11
+  it("setIntent('rent', override) serializes the whole staged set (beds, priceMax, intent) in ONE REPLACE with no history growth", () => {
+    const { result, seen } = renderProbed([PRE_OPEN, OPEN_ENTRY], 1);
+    const before = seen.length;
+
+    act(() => {
+      result.current.state[1].setIntent(
+        'rent',
+        toDiscoverUrlFilters({ propertyTypes: ['apartment'], bedrooms: [2], priceMax: 80000 }),
+      );
+    });
+
+    // Exactly one write, and it is a REPLACE (zero PUSH).
+    const writes = seen.slice(before);
+    expect(writes).toHaveLength(1);
+    expect(writes[0].type).toBe('REPLACE');
+    // The single replaced URL carries the COMPLETE staged set.
+    const params = new URLSearchParams(writes[0].search);
+    expect(params.get('intent')).toBe('rent');
+    expect(params.get('beds')).toBe('2');
+    expect(params.get('priceMax')).toBe('80000');
+    // The override replaced the whole filter set: the stale priceMin of the open entry is gone.
+    expect(params.has('priceMin')).toBe(false);
+
+    // No history growth: one Back lands on the entry BEFORE the replaced one (a PUSH would land on it).
+    act(() => {
+      result.current.navigate(-1);
+    });
+    expect(result.current.location.search).toBe(new URL(PRE_OPEN, 'http://x').search);
+  });
+
+  // B2-N12 — List arm (no override) vs Map arm (override built exactly as MapFilterSheet does) must produce the same URL.
+  // Seeds a NON-EMPTY priceMin (and priceMax / type where the transition touches them) so the absolute assertions
+  // can see a surviving param; a mutation of the shared rule or of one arm's own delete cannot pass both arms.
+  const sortedEntries = (search: string) => [...new URLSearchParams(search).entries()].sort(([a], [b]) => a.localeCompare(b));
+
+  it.each([
+    {
+      label: 'Buy -> Rent: Residential Plot dropped, budget reset',
+      start: '/discover?city=udupi&type=apartment,residential_plot&priceMin=1000000&priceMax=5000000',
+      next: 'rent' as const,
+      absent: ['priceMin', 'priceMax'],
+      typeValue: 'apartment',
+    },
+    {
+      label: 'Rent -> Buy: rent budget reset',
+      start: '/discover?city=udupi&intent=rent&type=apartment&priceMin=20000&priceMax=80000',
+      next: 'buy' as const,
+      absent: ['priceMin', 'priceMax'],
+      typeValue: 'apartment',
+    },
+  ])(
+    'List and Map arms produce an identical URL for the same starting state, and the absolute outcome holds: $label',
+    ({ start, next, absent, typeValue }) => {
+      // Arm A: List (IntentSelector) — no override.
+      const list = renderProbed([start], 0);
+      act(() => {
+        list.result.current.state[1].setIntent(next);
+      });
+      const listSearch = list.result.current.location.search;
+      list.unmount();
+
+      // Arm B: Map (MapFilterSheet.handleApply) — the staged draft after the SAME transition, serialized as the override.
+      const map = renderProbed([start], 0);
+      const staged = applyIntentTransition(projectUrlFilters(map.result.current.state[0].filters), next);
+      act(() => {
+        map.result.current.state[1].setIntent(next, toDiscoverUrlFilters(staged));
+      });
+      const mapSearch = map.result.current.location.search;
+      map.unmount();
+
+      // Absolute outcome, per arm (so a bug shared by both cannot hide behind parity).
+      for (const search of [listSearch, mapSearch]) {
+        const params = new URLSearchParams(search);
+        for (const key of absent) expect(params.has(key), `${key} must be absent in ${search}`).toBe(false);
+        expect(params.get('type')).toBe(typeValue);
+        expect(params.get('intent')).toBe(next === 'rent' ? 'rent' : null);
+      }
+      // Parity (order-insensitive: the two writers may emit params in a different order).
+      expect(sortedEntries(mapSearch)).toEqual(sortedEntries(listSearch));
+    },
+  );
 });
 
 // ─── Issue #1458 — agri structured field URL params ───────────────────────────
