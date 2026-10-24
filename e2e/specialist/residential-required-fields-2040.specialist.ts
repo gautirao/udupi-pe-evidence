@@ -50,19 +50,16 @@
  *     e2e/residential-required-fields-2040.spec.ts --project=full --reporter=list
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURE_DIR = path.join(__dirname, 'fixtures');
+const FIXTURE_DIR = path.join(__dirname, '..', 'fixtures');
 
 const LISTING_ID = 'e2e-residential-2040';
 
-// Must match VITE_SUPABASE_URL's project ref (see .env) so the injected
-// localStorage key and mocked REST routes line up with what supabase-js
-// reads/calls — this is a fixed public project identifier, not a secret.
-const SUPABASE_ORIGIN = 'https://elyqnysyqbqoxqqrpiir.supabase.co';
 const FAKE_USER_ID = 'e2e-broker-2040-0000-0000-000000000000';
 
 function fulfillJson(status: number, body: unknown) {
@@ -99,22 +96,42 @@ async function mockSupabaseAuth(page: Page) {
   };
 
   await page.addInitScript(
-    ({ key, value }) => {
-      window.localStorage.setItem(key, JSON.stringify(value));
+    ({ value }) => {
+      const serialized = JSON.stringify(value);
+      window.localStorage.setItem('sb-localhost-auth-token', serialized);
+      window.localStorage.setItem('sb-127-auth-token', serialized);
+
+      const blankGif = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+      const srcDesc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+      if (srcDesc?.set) {
+        Object.defineProperty(HTMLImageElement.prototype, 'src', {
+          ...srcDesc,
+          set(v: string) {
+            srcDesc.set!.call(this, typeof v === 'string' && v.includes('ajax/libs/leaflet/') ? blankGif : v);
+          },
+        });
+      }
+      const origSetAttr = Element.prototype.setAttribute;
+      Element.prototype.setAttribute = function (name: string, val: string) {
+        if (this instanceof HTMLImageElement && name.toLowerCase() === 'src' && typeof val === 'string' && val.includes('ajax/libs/leaflet/')) {
+          return origSetAttr.call(this, name, blankGif);
+        }
+        return origSetAttr.call(this, name, val);
+      };
     },
-    { key: 'sb-elyqnysyqbqoxqqrpiir-auth-token', value: fakeSession },
+    { value: fakeSession },
   );
 
-  // Catch-all safety net FIRST (registered first = checked last by
-  // Playwright) so nothing on the real Supabase origin ever escapes to the
-  // live network.
-  await page.route(`${SUPABASE_ORIGIN}/**`, (route) =>
-    void route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
+  await page.route('**/auth/v1/token**', (route) =>
+    void route.fulfill(fulfillJson(200, fakeSession)));
 
-  await page.route(`${SUPABASE_ORIGIN}/rest/v1/user_roles**`, (route) =>
+  await page.route('**/auth/v1/user**', (route) =>
+    void route.fulfill(fulfillJson(200, fakeSession.user)));
+
+  await page.route('**/rest/v1/user_roles**', (route) =>
     void route.fulfill(fulfillJson(200, { role: 'broker' })));
 
-  await page.route(`${SUPABASE_ORIGIN}/rest/v1/profiles**`, (route) =>
+  await page.route('**/rest/v1/profiles**', (route) =>
     void route.fulfill(fulfillJson(200, { insights_access_until: null })));
 }
 
@@ -245,13 +262,13 @@ async function mockBackend(page: Page, state: MockServerState) {
     state.uploadCounter += 1;
     const n = state.uploadCounter;
     void route.fulfill(fulfillJson(200, {
-      signedUrl: `https://mock-storage.e2e-test/upload/${n}`,
+      signedUrl: `https://mock-storage.test/upload/${n}`,
       storagePath: `listing-images/${LISTING_ID}/photo-${n}.jpg`,
       expiresAt: null,
     }));
   });
 
-  await page.route('https://mock-storage.e2e-test/**', (route) => void route.fulfill({ status: 200 }));
+  await page.route('https://mock-storage.test/**', (route) => void route.fulfill({ status: 200 }));
 
   await page.route(`**/api/listings/${LISTING_ID}/pois/suggestions`, (route) =>
     void route.fulfill(fulfillJson(200, [])));
