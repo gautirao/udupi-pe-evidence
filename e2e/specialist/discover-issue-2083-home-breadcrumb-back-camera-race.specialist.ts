@@ -128,7 +128,9 @@ test.describe('@integration-ui #2083 (cycle 5) — Home breadcrumb then Back cam
     test.setTimeout(20_000 + TRIALS * 20_000);
 
     for (let trial = 1; trial <= TRIALS; trial += 1) {
-      await page.goto(`/discover?${BASE}`);
+      await page.goto(
+        `/discover?${BASE}&rscope=areas&rareas=${encodeURIComponent('IN|KA|Bengaluru|RR Nagar')}`,
+      );
       await page.waitForLoadState('domcontentloaded');
       await expect(page.getByTestId('navigation-level-panel')).toBeVisible({ timeout: 15_000 });
       await dismissConsentBannerIfPresent(page);
@@ -137,6 +139,7 @@ test.describe('@integration-ui #2083 (cycle 5) — Home breadcrumb then Back cam
       // task brief's exact guided path.
       await page.getByTestId(cardTestId(D_SE)).click();
       await expect.poll(() => nodeParam(page)).toBe(D_SE);
+      await expect.poll(() => readCamera(page).lat, { timeout: 10_000 }).not.toBeNull();
       await expect(page.getByTestId(cardTestId(AREA_RR_NAGAR))).toBeVisible({ timeout: 10_000 });
 
       await page.getByTestId(cardTestId(AREA_RR_NAGAR)).click();

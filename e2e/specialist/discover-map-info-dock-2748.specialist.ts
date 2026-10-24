@@ -835,6 +835,19 @@ test.describe('Discover Map Info Dock (#2748)', () => {
         `${vp.label} area+school: exactly one legend element must render, never a duplicate`,
       ).toHaveCount(1);
 
+      // The dock's own count/guidance in this combined state: listingCapable (a real area is
+      // selected) means no anon guidance row, and the count row reads the area's own summary
+      // once its badge data settles (own longer timeout — a real, if occasionally slower,
+      // async fetch, not a fixed layout property like the rows above). Await before measuring
+      // bounding boxes so dock height does not grow mid-measurement.
+      await expect(page.getByTestId('map-info-dock-guidance'), `${vp.label} area+school: no guidance row`).toHaveCount(
+        0,
+      );
+      await expect(
+        page.getByTestId('discover-badge'),
+        `${vp.label} area+school: count row must render`,
+      ).toBeVisible({ timeout: 15_000 });
+
       const legendBox = (await schoolRadiusLegend.boundingBox()) as BoundingBox;
       const dockBox = (await dock.boundingBox()) as BoundingBox;
       const mapBox = (await mapContainer.boundingBox()) as BoundingBox;
@@ -847,18 +860,6 @@ test.describe('Discover Map Info Dock (#2748)', () => {
       expect(leftGap, `${vp.label} area+school: dock left edge must stay flush`).toBeLessThanOrEqual(18);
 
       assertLegendStacksTightlyAbove(legendBox, dockBox, mapBox, `${vp.label} area+school`);
-
-      // The dock's own count/guidance in this combined state: listingCapable (a real area is
-      // selected) means no anon guidance row, and the count row reads the area's own summary
-      // once its badge data settles (own longer timeout — a real, if occasionally slower,
-      // async fetch, not a fixed layout property like the rows above).
-      await expect(page.getByTestId('map-info-dock-guidance'), `${vp.label} area+school: no guidance row`).toHaveCount(
-        0,
-      );
-      await expect(
-        page.getByTestId('discover-badge'),
-        `${vp.label} area+school: count row must render`,
-      ).toBeVisible({ timeout: 15_000 });
     });
 
     test(`desktop ${vp.label} — a DIRECTION node has no legend variant, dock still flush and unobstructed`, async ({
