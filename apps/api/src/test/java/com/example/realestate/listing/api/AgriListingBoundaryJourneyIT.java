@@ -281,6 +281,68 @@ class AgriListingBoundaryJourneyIT {
         assertThat(listingRepository.findBoundaryGeoJson(id)).isEmpty();
     }
 
+    /** Valid, closed, non-self-intersecting polygon in Karnataka exceeding the 100 km^2 cap (~49,000 km^2). */
+    private static final String OVERSIZED_POLYGON =
+            "{\"type\":\"Polygon\",\"coordinates\":[[[74.0,13.0],[76.0,13.0],[76.0,15.0],[74.0,15.0],[74.0,13.0]]]}";
+
+    /**
+     * #2857 (L12 / G1-N13) — retires broker-agri-listing AC4 ">100 km^2": a polygon PUT exceeding
+     * the 100 km^2 cap is rejected with BOUNDARY_TOO_LARGE AND leaves the persisted boundary
+     * unchanged (empty/null when previously unset, and equal to the prior valid polygon when
+     * already set).
+     */
+    @Test
+    @DisplayName("G1-N13 (#2857): >100 km^2 boundary → BOUNDARY_TOO_LARGE and persisted boundary stays unchanged")
+    void agriBoundaryJourney_oversizedPolygon_isRejectedAndLeavesBoundaryUnchanged() {
+        UUID id = seedSubmittableAgriDraft();
+
+        // Case 1: boundary is initially unset (null/empty) — rejected oversized PUT leaves it unset.
+        assertThatThrownBy(() -> crudService.updateListing(
+                id, OWNER_ID, false,
+                "agricultural_land", "Agri plot near Udupi", "Udupi",
+                new BigDecimal("5000000"), "Fertile agricultural land",
+                new BigDecimal("5"), null, null,
+                true, null, null, "acre", null, null, false, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null,
+                OVERSIZED_POLYGON))
+                .isInstanceOf(ListingValidationException.class)
+                .satisfies(ex -> assertThat(((ListingValidationException) ex).getErrors())
+                        .extracting(e -> (String) e.get("code"))
+                        .containsExactly("BOUNDARY_TOO_LARGE"));
+
+        assertThat(listingRepository.findBoundaryGeoJson(id)).isEmpty();
+
+        // Case 2: persist a valid boundary first, then attempt oversized PUT — prior boundary stays intact.
+        crudService.updateListing(
+                id, OWNER_ID, false,
+                "agricultural_land", "Agri plot near Udupi", "Udupi",
+                new BigDecimal("5000000"), "Fertile agricultural land",
+                new BigDecimal("5"), null, null,
+                true, null, null, "acre", null, null, false, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null,
+                VALID_POLYGON);
+        java.util.Optional<String> priorBoundary = listingRepository.findBoundaryGeoJson(id);
+        assertThat(priorBoundary).isPresent();
+
+        assertThatThrownBy(() -> crudService.updateListing(
+                id, OWNER_ID, false,
+                "agricultural_land", "Agri plot near Udupi", "Udupi",
+                new BigDecimal("5000000"), "Fertile agricultural land",
+                new BigDecimal("5"), null, null,
+                true, null, null, "acre", null, null, false, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null,
+                OVERSIZED_POLYGON))
+                .isInstanceOf(ListingValidationException.class)
+                .satisfies(ex -> assertThat(((ListingValidationException) ex).getErrors())
+                        .extracting(e -> (String) e.get("code"))
+                        .containsExactly("BOUNDARY_TOO_LARGE"));
+
+        assertThat(listingRepository.findBoundaryGeoJson(id)).isEqualTo(priorBoundary);
+    }
+
     @Test
     @DisplayName("AC6: non-agri type + boundary → BOUNDARY_NON_AGRI_TYPE (no PostGIS call)")
     void nonAgriType_withBoundary_throwsNonAgriType() {

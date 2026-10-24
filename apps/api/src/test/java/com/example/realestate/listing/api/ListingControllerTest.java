@@ -1562,6 +1562,108 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.boundary").doesNotExist());
     }
 
+    @Test
+    void updateListing_oversizedBoundary_returns422BoundaryTooLargeAndLeavesPersistedBoundaryUnchanged() throws Exception {
+        String oversizedGeoJson = "{\"type\":\"Polygon\",\"coordinates\":[[[74.0,13.0],[76.0,13.0],[76.0,15.0],[74.0,15.0],[74.0,13.0]]]}";
+        String priorValidGeoJson = "{\"type\":\"Polygon\",\"coordinates\":[[[74.74,13.34],[74.75,13.34],[74.75,13.35],[74.74,13.35],[74.74,13.34]]]}";
+
+        // 1. Real ListingCrudService + PolygonBoundaryValidator guard: when areaSqm > 100 km^2 (1e8 m^2),
+        //    updateListing throws BOUNDARY_TOO_LARGE BEFORE saving or calling updateBoundary, leaving the
+        //    persisted boundary unchanged (both when unset/null and when a prior valid boundary exists).
+        com.example.realestate.listing.core.ListingRepository repo =
+                mock(com.example.realestate.listing.core.ListingRepository.class);
+        com.example.realestate.listing.core.ListingOwnershipGuard ownershipGuard =
+                mock(com.example.realestate.listing.core.ListingOwnershipGuard.class);
+        com.example.realestate.listing.geometry.PolygonBoundaryValidator validator =
+                new com.example.realestate.listing.geometry.PolygonBoundaryValidator(
+                        repo, new com.fasterxml.jackson.databind.ObjectMapper());
+        ListingCrudService realCrudService = new ListingCrudService(
+                repo,
+                mock(org.springframework.context.ApplicationEventPublisher.class),
+                ownershipGuard,
+                mock(com.example.realestate.listing.core.ListingDeduplicationService.class),
+                mock(com.example.realestate.listing.pricing.PriceChangeLogRepository.class),
+                mock(com.example.realestate.trust.BadgeInvalidationService.class),
+                mock(com.example.realestate.search.outbox.SearchOutboxWriter.class),
+                validator,
+                mock(com.example.realestate.quality.QualityRecomputeService.class),
+                mock(com.example.realestate.listing.residential.ListingAmenityRepository.class),
+                mock(com.example.realestate.listing.residential.ListingLocationFeatureRepository.class),
+                mock(com.example.realestate.listing.residential.ListingPreferredTenantRepository.class),
+                mock(com.example.realestate.listing.commercial.ListingSuitableUseRepository.class),
+                mock(com.example.realestate.listing.typed.CommercialSpaceDetailRepository.class),
+                mock(com.example.realestate.listing.typed.ResidentialUnitDetailRepository.class),
+                mock(com.example.realestate.listing.agricultural.ListingAgriCropRepository.class));
+
+        when(repo.isBoundaryGeometryValid(oversizedGeoJson)).thenReturn(true);
+        when(repo.computeBoundaryAreaSqm(oversizedGeoJson)).thenReturn(150_000_000.0); // 150 km^2 > 100 km^2 cap
+
+        // Case A: unset boundary (null) remains null after rejected >100 km^2 PUT
+        Listing unsetDraft = buildListing(LISTING_ID, "DRAFT", "agricultural_land", "Agri plot",
+                "Udupi", new BigDecimal("5000000"), "Desc");
+        when(ownershipGuard.findOwned(LISTING_ID, DEALER_ID, false)).thenReturn(unsetDraft);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> realCrudService.updateListing(
+                LISTING_ID, DEALER_ID, false,
+                "agricultural_land", "Agri plot", "Udupi",
+                new BigDecimal("5000000"), "Desc",
+                new BigDecimal("5"), null, null,
+                true, null, null, "acre", null, null, false, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null,
+                oversizedGeoJson))
+                .isInstanceOf(ListingValidationException.class)
+                .satisfies(ex -> org.assertj.core.api.Assertions.assertThat(
+                        ((ListingValidationException) ex).getErrors())
+                        .extracting(e -> (String) e.get("code"))
+                        .allSatisfy(code -> org.assertj.core.api.Assertions.assertThat(code).startsWith("BOUNDARY_")));
+        org.assertj.core.api.Assertions.assertThat(unsetDraft.getBoundaryGeoJson()).isNull();
+        verify(repo).computeBoundaryAreaSqm(oversizedGeoJson);
+        verify(repo, never()).updateBoundary(any(), any());
+
+        // Case B: prior valid boundary remains unchanged after rejected >100 km^2 PUT
+        Listing priorBoundaryDraft = buildListing(LISTING_ID, "DRAFT", "agricultural_land", "Agri plot",
+                "Udupi", new BigDecimal("5000000"), "Desc");
+        priorBoundaryDraft.setBoundaryGeoJson(priorValidGeoJson);
+        when(ownershipGuard.findOwned(LISTING_ID, DEALER_ID, false)).thenReturn(priorBoundaryDraft);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> realCrudService.updateListing(
+                LISTING_ID, DEALER_ID, false,
+                "agricultural_land", "Agri plot", "Udupi",
+                new BigDecimal("5000000"), "Desc",
+                new BigDecimal("5"), null, null,
+                true, null, null, "acre", null, null, false, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null,
+                oversizedGeoJson))
+                .isInstanceOf(ListingValidationException.class)
+                .satisfies(ex -> org.assertj.core.api.Assertions.assertThat(
+                        ((ListingValidationException) ex).getErrors())
+                        .extracting(e -> (String) e.get("code"))
+                        .allSatisfy(code -> org.assertj.core.api.Assertions.assertThat(code).startsWith("BOUNDARY_")));
+        org.assertj.core.api.Assertions.assertThat(priorBoundaryDraft.getBoundaryGeoJson())
+                .isEqualTo(priorValidGeoJson);
+        verify(repo, never()).updateBoundary(any(), any());
+
+        // 2. Controller HTTP 422 BOUNDARY_TOO_LARGE wire contract + unchanged persisted boundary on GET:
+        when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), eq(oversizedGeoJson),
+                any(), any(), any()))
+                .thenThrow(new ListingValidationException(List.of(
+                        Map.of("error", "boundary polygon area (150.0 km²) exceeds the 100 km² cap",
+                               "code", "BOUNDARY_TOO_LARGE"))));
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"propertyType\":\"agricultural_land\",\"boundary\":\"{\\\"type\\\":\\\"Polygon\\\",\\\"coordinates\\\":[[[74.0,13.0],[76.0,13.0],[76.0,15.0],[74.0,15.0],[74.0,13.0]]]}\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.errors[0].code").value("BOUNDARY_TOO_LARGE"));
+    }
+
     // ==================== #2048: residential ownershipType family-scoping ====================
 
     /** Stubs createDraft to return {@code saved} regardless of arguments (all-any() matcher, 38 params). */

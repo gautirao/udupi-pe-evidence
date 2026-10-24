@@ -113,6 +113,8 @@ public class PolygonBoundaryValidator {
             if (!listingRepository.isBoundaryGeometryValid(geoJson)) {
                 fail("boundary polygon is self-intersecting or geometrically invalid", "BOUNDARY_INVALID_GEOMETRY");
             }
+        } catch (ListingValidationException e) {
+            throw e;
         } catch (Exception e) {
             fail("boundary geometry validation failed: " + e.getMessage(), "BOUNDARY_INVALID_GEOMETRY");
         }
@@ -123,6 +125,8 @@ public class PolygonBoundaryValidator {
             if (areaSqm > AREA_CAP_SQM) {
                 fail("boundary polygon area (" + (areaSqm / 1e6) + " km²) exceeds the 100 km² cap", "BOUNDARY_TOO_LARGE");
             }
+        } catch (ListingValidationException e) {
+            throw e;
         } catch (Exception e) {
             fail("boundary area computation failed: " + e.getMessage(), "BOUNDARY_INVALID_GEOMETRY");
         }

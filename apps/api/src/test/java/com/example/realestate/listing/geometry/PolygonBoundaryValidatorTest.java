@@ -9,6 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -44,8 +45,8 @@ class PolygonBoundaryValidatorTest {
                 .isInstanceOf(ListingValidationException.class)
                 .satisfies(ex -> {
                     var errors = ((ListingValidationException) ex).getErrors();
-                    assert errors.size() == 1;
-                    assert "BOUNDARY_NON_AGRI_TYPE".equals(errors.get(0).get("code"));
+                    assertThat(errors).hasSize(1);
+                    assertThat(errors.get(0).get("code")).isEqualTo("BOUNDARY_NON_AGRI_TYPE");
                 });
     }
 
@@ -55,7 +56,7 @@ class PolygonBoundaryValidatorTest {
                 .isInstanceOf(ListingValidationException.class)
                 .satisfies(ex -> {
                     var errors = ((ListingValidationException) ex).getErrors();
-                    assert "BOUNDARY_NON_AGRI_TYPE".equals(errors.get(0).get("code"));
+                    assertThat(errors.get(0).get("code")).isEqualTo("BOUNDARY_NON_AGRI_TYPE");
                 });
     }
 
@@ -67,7 +68,7 @@ class PolygonBoundaryValidatorTest {
                 .isInstanceOf(ListingValidationException.class)
                 .satisfies(ex -> {
                     var errors = ((ListingValidationException) ex).getErrors();
-                    assert "BOUNDARY_INVALID_JSON".equals(errors.get(0).get("code"));
+                    assertThat(errors.get(0).get("code")).isEqualTo("BOUNDARY_INVALID_JSON");
                 });
     }
 
@@ -81,7 +82,7 @@ class PolygonBoundaryValidatorTest {
                 .isInstanceOf(ListingValidationException.class)
                 .satisfies(ex -> {
                     var errors = ((ListingValidationException) ex).getErrors();
-                    assert "BOUNDARY_INVALID_TYPE".equals(errors.get(0).get("code"));
+                    assertThat(errors.get(0).get("code")).isEqualTo("BOUNDARY_INVALID_TYPE");
                 });
     }
 
@@ -97,7 +98,7 @@ class PolygonBoundaryValidatorTest {
                 .isInstanceOf(ListingValidationException.class)
                 .satisfies(ex -> {
                     var errors = ((ListingValidationException) ex).getErrors();
-                    assert "BOUNDARY_HAS_HOLES".equals(errors.get(0).get("code"));
+                    assertThat(errors.get(0).get("code")).isEqualTo("BOUNDARY_HAS_HOLES");
                 });
     }
 
@@ -112,7 +113,7 @@ class PolygonBoundaryValidatorTest {
                 .isInstanceOf(ListingValidationException.class)
                 .satisfies(ex -> {
                     var errors = ((ListingValidationException) ex).getErrors();
-                    assert "BOUNDARY_TOO_FEW_VERTICES".equals(errors.get(0).get("code"));
+                    assertThat(errors.get(0).get("code")).isEqualTo("BOUNDARY_TOO_FEW_VERTICES");
                 });
     }
 
@@ -127,7 +128,7 @@ class PolygonBoundaryValidatorTest {
                 .isInstanceOf(ListingValidationException.class)
                 .satisfies(ex -> {
                     var errors = ((ListingValidationException) ex).getErrors();
-                    assert "BOUNDARY_NOT_CLOSED".equals(errors.get(0).get("code"));
+                    assertThat(errors.get(0).get("code")).isEqualTo("BOUNDARY_NOT_CLOSED");
                 });
     }
 
@@ -142,7 +143,7 @@ class PolygonBoundaryValidatorTest {
                 .isInstanceOf(ListingValidationException.class)
                 .satisfies(ex -> {
                     var errors = ((ListingValidationException) ex).getErrors();
-                    assert "BOUNDARY_OUTSIDE_INDIA".equals(errors.get(0).get("code"));
+                    assertThat(errors.get(0).get("code")).isEqualTo("BOUNDARY_OUTSIDE_INDIA");
                 });
     }
 
@@ -156,7 +157,8 @@ class PolygonBoundaryValidatorTest {
                 .isInstanceOf(ListingValidationException.class)
                 .satisfies(ex -> {
                     var errors = ((ListingValidationException) ex).getErrors();
-                    assert "BOUNDARY_INVALID_GEOMETRY".equals(errors.get(0).get("code"));
+                    assertThat(errors).hasSize(1);
+                    assertThat(errors.get(0).get("code")).isEqualTo("BOUNDARY_INVALID_GEOMETRY");
                 });
     }
 
@@ -171,7 +173,8 @@ class PolygonBoundaryValidatorTest {
                 .isInstanceOf(ListingValidationException.class)
                 .satisfies(ex -> {
                     var errors = ((ListingValidationException) ex).getErrors();
-                    assert "BOUNDARY_TOO_LARGE".equals(errors.get(0).get("code"));
+                    assertThat(errors).hasSize(1);
+                    assertThat(errors.get(0).get("code")).isEqualTo("BOUNDARY_TOO_LARGE");
                 });
     }
 
