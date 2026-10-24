@@ -84,11 +84,12 @@
  *     panel) instead of the marker.
  *
  * Run:
- *   PLAYWRIGHT_BASE_URL=http://localhost:5173 npx playwright test \
- *     e2e/discover-2049-resize-marker-skew.spec.ts --project=full
+ *   npx playwright test \
+ *     e2e/specialist/discover-2049-resize-marker-skew.specialist.ts
  */
 
-import { test, expect, type Page, type Route } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
+import type { Page, Route } from '@playwright/test';
 
 // ---------------------------------------------------------------------------
 // Fixture constants
@@ -96,6 +97,7 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 
 const CITY = 'bangalore';
 const AREA_KEY = 'IN|KA|Bengaluru|Whitefield';
+const NODE_KEY = `a:${AREA_KEY}`;
 const GROUP_ID = 'tech-corridor';
 const GROUP_NAME = 'Tech Corridor';
 const LISTING_ID = 'c3f1a9e0-2049-4a1b-9c7d-2049205920491';
@@ -156,6 +158,7 @@ const CITY_LISTINGS_FIXTURE = {
           id: LISTING_ID,
           title: LISTING_TITLE,
           pricePaise: 750000000,
+          priceBand: '₹70L–80L',
           propertyType: 'apartment',
           locality: 'Whitefield',
           primaryImageUrl: null,
@@ -193,10 +196,52 @@ function fulfillJson(route: Route, status: number, body: unknown): Promise<void>
 
 /** Stub every Discover route this journey touches (mirrors e2e/discover-1939-*'s stubAll). */
 async function stubAll(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('discover_telemetry_consent', 'granted');
+  });
   // INTEGRATION-UI: stubs isolate from backend/seed variability.
   await page.route('**/api/discover/areas**', (r) => fulfillJson(r, 200, DISCOVER_AREAS_FIXTURE));
   await page.route('**/api/discover/area-groups**', (r) => fulfillJson(r, 200, AREA_GROUPS_FIXTURE));
   await page.route('**/api/discover/regional-area-groups**', (r) => fulfillJson(r, 200, { groups: [] }));
+  await page.route('**/api/discover/cities/*/navigation/resolve**', (r) =>
+    fulfillJson(r, 200, {
+      requested: NODE_KEY,
+      resolution: 'EXACT',
+      revisionId: 1,
+      node: {
+        nodeKey: NODE_KEY,
+        nodeType: 'AREA',
+        displayLabel: 'Whitefield',
+        depth: 1,
+        regionKey: null,
+        ancestry: [],
+        nextLevelType: 'LISTINGS',
+        children: [],
+        revisionId: 1,
+        bounds: {
+          centreLat: 12.97,
+          centreLon: 77.75,
+          minLat: 12.94,
+          minLon: 77.71,
+          maxLat: 13.0,
+          maxLon: 77.79,
+        },
+        descendantAreaKeys: null,
+        areaKey: AREA_KEY,
+      },
+    }),
+  );
+  await page.route('**/api/discover/cities/*/navigation/*/counts**', (r) =>
+    fulfillJson(r, 200, {
+      nodeKey: NODE_KEY,
+      count: 1,
+      schoolCount: 0,
+      areaCounts: { [AREA_KEY]: 1 },
+      areaSchoolCounts: { [AREA_KEY]: 0 },
+      children: [],
+      revisionId: 1,
+    }),
+  );
   await page.route('**/api/discover/cities/*/listings**', (r) => fulfillJson(r, 200, CITY_LISTINGS_FIXTURE));
   await page.route('**/api/discover/listings**', (r) => fulfillJson(r, 200, EMPTY_LISTINGS_PAGE));
   await page.route('**/api/discover/markers**', (r) => fulfillJson(r, 200, []));
@@ -219,6 +264,7 @@ function repoUrl(): string {
     lon: LON,
     zoom: ZOOM,
     areaKey: AREA_KEY,
+    node: NODE_KEY,
   });
   return `/discover?${params.toString()}`;
 }
@@ -252,7 +298,9 @@ async function shrinkMapContainerWithoutWindowResize(
   widthPx: number,
 ): Promise<void> {
   const applied = await page.evaluate((width) => {
-    const rightPanel = document.querySelector('[data-testid="discover-right-panel"]');
+    const rightPanel = document.querySelector(
+      '[data-testid="discover-right-panel"], [data-testid="discover-areas-journey-panel-shell"]',
+    );
     const wrapper = rightPanel?.previousElementSibling as HTMLElement | null;
     const mapHalf = wrapper?.firstElementChild as HTMLElement | null;
     if (!mapHalf) return false;

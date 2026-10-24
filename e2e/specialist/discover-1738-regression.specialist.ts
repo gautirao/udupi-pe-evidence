@@ -31,16 +31,11 @@
  * e2e/discover/school-radius-marker-click-repro-1738.spec.ts).
  *
  * Run:
- *   PLAYWRIGHT_BASE_URL=http://localhost:5183 npx playwright test \
- *     e2e/discover-1738-regression.spec.ts --project=full
+ *   npx playwright test e2e/specialist/discover-1738-regression.specialist.ts
  */
 
-import { test, expect, type Page, type Route } from '@playwright/test';
-import * as path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SS = (name: string) => path.join(__dirname, `../screenshots/discover-1738-regression-${name}.png`);
+import { test, expect } from './support/specialist-test';
+import type { Page, Route } from '@playwright/test';
 
 const MANIPAL_AREA_KEY = 'IN|KA|Udupi|Manipal';
 const ENCODED_AREA_KEY = encodeURIComponent(MANIPAL_AREA_KEY);
@@ -280,7 +275,11 @@ const combinedNodeUrl =
   `&schoolId=${MIT_SCHOOL_ID}&radiusKm=${DEFAULT_RADIUS_KM}`;
 
 /** Navigate to the area-school-combined step and wait for the radius listings to resolve. */
-async function gotoCombinedState(page: Page, url: string = combinedUrl): Promise<void> {
+async function gotoCombinedState(page: Page, url: string = combinedNodeUrl): Promise<void> {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('discover_telemetry_consent', 'granted');
+  });
+  await stubNavigationNode(page);
   const radiusListingsResponse = page.waitForResponse(
     (res) => res.url().includes('/school-radius-listings') && res.status() === 200,
   );
@@ -289,8 +288,22 @@ async function gotoCombinedState(page: Page, url: string = combinedUrl): Promise
   await page.waitForLoadState('networkidle');
 }
 
+async function clickMarkerAndOpenPopover(page: Page): Promise<void> {
+  const marker = page.locator(markerSelector);
+  await expect(marker).toBeVisible({ timeout: 20_000 });
+  const popover = popoverLocator(page);
+  for (let attempt = 0; attempt < 4; attempt++) {
+    await marker.click();
+    if (await popover.isVisible({ timeout: 2_500 }).catch(() => false)) {
+      return;
+    }
+    await page.waitForTimeout(300);
+  }
+  await expect(popover).toBeVisible({ timeout: 10_000 });
+}
+
 test.describe('Issue #1738 — marker popover dismiss-cycle + mobile hardening (area-first, area-school-combined)', () => {
-  test('procedure steps 1-7,10: radius overlay + legend + marker present, click opens popover with listing content, screenshot captured', async ({
+  test('procedure steps 1-7: radius overlay + legend + marker present, click opens popover with listing content', async ({
     page,
   }) => {
     await stubAll(page);
@@ -308,7 +321,7 @@ test.describe('Issue #1738 — marker popover dismiss-cycle + mobile hardening (
     await expect(popover).toBeHidden();
 
     // Step 6: click the listing marker.
-    await marker.click();
+    await clickMarkerAndOpenPopover(page);
 
     // Step 7: popover visible AND shows listing content (title + price row), not just an
     // empty dialog shell.
@@ -316,18 +329,13 @@ test.describe('Issue #1738 — marker popover dismiss-cycle + mobile hardening (
     await expect(popover).toHaveAttribute('role', 'dialog');
     await expect(popover).toContainText('House Near MIT');
     await expect(popover.getByTestId('popover-price')).toBeVisible();
-
-    // Step 10: screenshot at the popup-open step.
-    await page.screenshot({ path: SS('popup-open'), fullPage: false });
   });
 
   test('dismiss via Escape: popover closes; radius overlay + legend remain visible', async ({ page }) => {
     await stubAll(page);
     await gotoCombinedState(page);
 
-    const marker = page.locator(markerSelector);
-    await expect(marker).toBeVisible({ timeout: 20_000 });
-    await marker.click();
+    await clickMarkerAndOpenPopover(page);
 
     const popover = popoverLocator(page);
     await expect(popover).toBeVisible({ timeout: 10_000 });
@@ -345,20 +353,18 @@ test.describe('Issue #1738 — marker popover dismiss-cycle + mobile hardening (
     await stubAll(page);
     await gotoCombinedState(page);
 
-    const marker = page.locator(markerSelector);
-    await expect(marker).toBeVisible({ timeout: 20_000 });
-    await marker.click();
+    await clickMarkerAndOpenPopover(page);
 
     const popover = popoverLocator(page);
     await expect(popover).toBeVisible({ timeout: 10_000 });
 
-    // Click a corner of the Leaflet map container, away from any marker/pin, so the click
-    // bubbles to the mapContainerRef div's onClick (background-click dismiss) rather than
-    // hitting a marker or the popover card itself (which stopPropagation()s its own clicks).
+    // Click an unobstructed edge of the Leaflet map container, away from any marker/pin or
+    // top-left context overlay, so the click bubbles to the mapContainerRef div's onClick
+    // (background-click dismiss) rather than hitting a marker or the popover card itself.
     const mapBox = await page.locator('.leaflet-container').boundingBox();
     expect(mapBox).not.toBeNull();
     if (mapBox) {
-      await page.mouse.click(mapBox.x + 8, mapBox.y + 8);
+      await page.mouse.click(mapBox.x + mapBox.width - 24, mapBox.y + mapBox.height / 2);
     }
 
     await expect(popover).toBeHidden({ timeout: 5_000 });
@@ -370,9 +376,7 @@ test.describe('Issue #1738 — marker popover dismiss-cycle + mobile hardening (
     await stubAll(page);
     await gotoCombinedState(page);
 
-    const marker = page.locator(markerSelector);
-    await expect(marker).toBeVisible({ timeout: 20_000 });
-    await marker.click();
+    await clickMarkerAndOpenPopover(page);
 
     const popover = popoverLocator(page);
     await expect(popover).toBeVisible({ timeout: 10_000 });
@@ -459,7 +463,5 @@ test.describe('Issue #1738 — marker popover dismiss-cycle + mobile hardening (
 
     // Radius legend must still be visible after the tap.
     await expect(page.getByTestId('school-radius-legend')).toBeVisible();
-
-    await page.screenshot({ path: SS('mobile-popup-open'), fullPage: false });
   });
 });

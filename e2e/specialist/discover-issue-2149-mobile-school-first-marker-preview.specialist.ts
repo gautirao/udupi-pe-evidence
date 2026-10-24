@@ -19,90 +19,142 @@
  * and reports it through the SAME `onSelectedListingPreviewChange` pathway
  * #1956 established.
  *
- * This spec drives the real school-first flow against the ORIGINAL bug
- * report's live environment: `PLAYWRIGHT_BASE_URL` targets a dev server on
- * localhost:5174 backed by the shared/hosted Supabase database (read-only
- * verification here — no listing creation/deletion), the same environment
- * the #2149 report was filed against. .env.e2e already sets
- * PLAYWRIGHT_BASE_URL=http://localhost:5174, which playwright.config.ts
- * picks up automatically — no config override needed. Do not run this spec
- * against a fixture-seeded backend; it will find zero listings.
+ * This spec drives the school-first flow with deterministic route stubs for
+ * the Bellandur school and its surrounding radius listings so it runs
+ * self-contained under the specialist harness without depending on a shared
+ * hosted database.
  *
  * School: 'Narayana eTechno (CBSE) School - Bellandur', Bangalore
  * (schoolId 666e457e-1bcc-4d1a-834d-dd250d23865b, areaKey
- * IN|KA|Bengaluru|Bellandur). This is a DIFFERENT school from the original
- * bug report (which cited a Koramangala school + schoolId
- * 557024e9-1fcd-45a5-ac57-046ac584073c) — deliberately re-picked per the
- * task's own "latitude to choose good repro coordinates... as long as it's
- * real data on this server" allowance. Live-verified (2026-08-13, against
- * localhost:5174 / the shared hosted DB):
- *   - The original Koramangala school + radiusKm=3 (the bug report's own
- *     radius) returns 0 homes on this server's current data. Widening to
- *     radiusKm=10 does return 25 homes, but they're scattered across
- *     Bellandur/Vijayanagar/Akshayanagar/Kudlu — Bangalore neighbourhoods
- *     several km apart — so the school-first camera auto-fit zooms out far
- *     enough that Leaflet virtualizes (unmounts) markers as the map settles.
- *   - This Bellandur school sits inside the same neighbourhood as most of
- *     this server's actual listing inventory (many listings titled "... in
- *     Bellandur"). At radiusKm=3, it returns 7 homes, the closest just
- *     0.8 km away, and 4 of them render as independent (non-clustered)
- *     `property-marker` pins on cold map-mode entry.
- *   - The camera auto-fits to the school + radius bounds
- *     (`SchoolMarkerFocusPanner`, PropertyMap.tsx) on load and overwrites any
- *     lat/lon/zoom URL hint — REPRO_URL deliberately omits lat/lon/zoom.
+ * IN|KA|Bengaluru|Bellandur).
  *
- * MARKER CLICK MECHANISM:
- * Desktop's `clickAnyMarker` still uses `locator.dispatchEvent('click')` — a
- * real 'click' DOM event dispatched straight at the marker element, run
- * through the exact same listener chain a genuine click ultimately triggers
- * (live-verified necessary there: neither `locator.click()` nor a synthetic
- * `page.mouse` move/down/up at the marker's own bounding-box centre reliably
- * reached the click handler on desktop's data/layout).
- *
- * The two mobile tests below instead use `tapMarkerViaTouchscreen`, a real
- * `page.touchscreen.tap(x, y)` — a genuine touch action that goes through
- * actual browser hit-testing/actionability, added per PR #2150 review
- * (the committed evidence's prior mobile use of `dispatchEvent` bypassed
- * hit-testing and didn't actually exercise a real tap). Live-verified
- * (2026-08-13, this exact repro URL, real local backend at :8085 against the
- * shared hosted Supabase DB, 2 consecutive full runs): a real
- * `page.touchscreen.tap()` at a marker's live-measured bounding-box centre
- * DOES reliably reach the school-first marker click handler on this data —
- * both runs passed all 3 tests first-try (~2s per mobile test, no retries
- * needed). The earlier "neither click() nor mouse reliably reaches the
- * handler" finding was specific to a different, now-superseded mobile
- * mechanism explored during the original fix — it does not hold for
- * `touchscreen.tap`. `tapMarkerViaTouchscreen` still defends against
- * flakiness from live, re-clustering data: it re-reads the marker set and
- * re-measures the bounding box on every attempt, and — before tapping —
- * asserts via `document.elementFromPoint(x, y)` that the tap point actually
- * resolves to the intended marker element (or a descendant of it), retrying
- * with a freshly re-acquired marker/coordinates rather than ever falling
- * back to a synthetic dispatch if that check fails.
- *
- * MARKER "SELECTED" STATE — not asserted here, deliberately: the copper
- * `data-selected="true"` marker highlight (`PropertyMap.tsx`
- * `createSelectedMarkerIcon`) is driven by `selectedListingId`, which for
- * AREA-first is the URL-backed `listing=` param. School-first marker clicks
- * deliberately never write that URL param (see module doc above) and,
- * live-verified against this data, `data-selected="true"` never appears on
- * any marker after a school-first tap even once the preview sheet is open —
- * that DOM attribute is simply not wired to school-first's local
- * `selectedMarkerListing` state at all. Asserting it here would test a
- * mechanism this fix doesn't touch and structurally cannot pass. Instead,
- * the marker-A-vs-marker-B swap is proven the same way a real user would
- * notice it: the sheet's own displayed price/bedrooms/area text changes.
- *
- * Run (reuses the already-running localhost:5174 dev server — do not start
- * a new one):
- *   npx playwright test e2e/discover/issue-2149-mobile-school-first-marker-preview.spec.ts --project=full
+ * Run:
+ *   npx playwright test e2e/specialist/discover-issue-2149-mobile-school-first-marker-preview.specialist.ts
  */
-import { test, expect, type Page, type Locator } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
+import type { Page, Locator, Route } from '@playwright/test';
 
 const CITY = 'bangalore';
 const SCHOOL_ID = '666e457e-1bcc-4d1a-834d-dd250d23865b';
 const AREA_KEY = 'IN|KA|Bengaluru|Bellandur';
 const RADIUS_KM = '3';
+const SCHOOL_LAT = 12.93147;
+const SCHOOL_LON = 77.53048;
+
+const BELLANDUR_SCHOOL = {
+  id: SCHOOL_ID,
+  name: 'Narayana eTechno (CBSE) School - Bellandur',
+  board: 'CBSE',
+  boardType: null,
+  address: 'Bellandur, Bangalore, Karnataka',
+  latitude: SCHOOL_LAT,
+  longitude: SCHOOL_LON,
+  distanceKm: 0.0,
+  areaKey: AREA_KEY,
+};
+
+const SCHOOL_RADIUS_LISTINGS = [
+  {
+    id: '2149a000-0000-4000-8000-000000000001',
+    listingNumber: 21491,
+    propertyType: 'apartment',
+    title: 'Bellandur 2BHK Alpha',
+    locality: 'Bellandur',
+    areaKey: AREA_KEY,
+    pricePaise: 900_000_000,
+    priceBand: '₹85L–95L',
+    landArea: null,
+    landAreaUnit: null,
+    builtArea: 1150,
+    builtAreaUnit: 'sqft',
+    bedrooms: 2,
+    latitude: SCHOOL_LAT + 0.012,
+    longitude: SCHOOL_LON - 0.015,
+    lat: SCHOOL_LAT + 0.012,
+    lon: SCHOOL_LON - 0.015,
+    heroImageUrl: null,
+    listingPurpose: 'sale',
+    possessionStatus: 'ready_to_move',
+    daysOnMarket: 7,
+    backOnMarket: false,
+    createdAt: '2026-05-01T00:00:00Z',
+  },
+  {
+    id: '2149b000-0000-4000-8000-000000000002',
+    listingNumber: 21492,
+    propertyType: 'apartment',
+    title: 'Bellandur 3BHK Beta',
+    locality: 'Bellandur',
+    areaKey: AREA_KEY,
+    pricePaise: 1_350_000_000,
+    priceBand: '₹1.3Cr–1.4Cr',
+    landArea: null,
+    landAreaUnit: null,
+    builtArea: 1620,
+    builtAreaUnit: 'sqft',
+    bedrooms: 3,
+    latitude: SCHOOL_LAT - 0.012,
+    longitude: SCHOOL_LON + 0.015,
+    lat: SCHOOL_LAT - 0.012,
+    lon: SCHOOL_LON + 0.015,
+    heroImageUrl: null,
+    listingPurpose: 'sale',
+    possessionStatus: 'ready_to_move',
+    daysOnMarket: 4,
+    backOnMarket: false,
+    createdAt: '2026-05-02T00:00:00Z',
+  },
+];
+
+function fulfillJson(route: Route, status: number, body: unknown): Promise<void> {
+  return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+}
+
+async function stubSchoolFirstData(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('discover_telemetry_consent', 'granted');
+  });
+  await page.route('**/api/discover/areas**', (route) =>
+    fulfillJson(route, 200, {
+      city: CITY,
+      areas: [
+        {
+          areaKey: AREA_KEY,
+          name: 'Bellandur',
+          geoCenterLat: SCHOOL_LAT,
+          geoCenterLon: SCHOOL_LON,
+          minLat: SCHOOL_LAT - 0.02,
+          maxLat: SCHOOL_LAT + 0.02,
+          minLon: SCHOOL_LON - 0.02,
+          maxLon: SCHOOL_LON + 0.02,
+          listingCount: 2,
+          schoolCount: 1,
+          trendDirection: 'stable',
+        },
+      ],
+    }),
+  );
+  await page.route('**/api/public/schools/popular**', (route) => fulfillJson(route, 200, [BELLANDUR_SCHOOL]));
+  await page.route('**/api/public/schools/search**', (route) => fulfillJson(route, 200, [BELLANDUR_SCHOOL]));
+  await page.route(`**/api/public/schools/${SCHOOL_ID}**`, (route) => fulfillJson(route, 200, BELLANDUR_SCHOOL));
+  await page.route('**/api/public/schools/by-area**', (route) => fulfillJson(route, 200, [BELLANDUR_SCHOOL]));
+  await page.route('**/api/discover/cities/*/listings**', (route) =>
+    fulfillJson(route, 200, {
+      city: CITY,
+      limitPerArea: 50,
+      areas: [{ areaKey: AREA_KEY, areaName: 'Bellandur', listings: SCHOOL_RADIUS_LISTINGS }],
+    }),
+  );
+  await page.route('**/api/discover/cities/*/school-radius-listings**', (route) =>
+    fulfillJson(route, 200, {
+      content: SCHOOL_RADIUS_LISTINGS,
+      page: 0,
+      size: 50,
+      hasMore: false,
+    }),
+  );
+}
+
 // Deliberately NO lat/lon/zoom hint — see module doc: `SchoolMarkerFocusPanner`
 // (PropertyMap.tsx) imperatively fitBounds-es the camera to
 // markerBounds ∩ radiusBounds on cold load regardless of any URL hint, so a
@@ -291,6 +343,7 @@ test.describe('@integration-ui #2149 — mobile school-first marker tap opens th
 
   /** Shared setup: load the repro URL, enter mobile Map mode, wait for markers to attach and the network to settle. Returns the currently-visible marker ids (>= 2). */
   async function setUpMapWithMarkers(page: Page): Promise<string[]> {
+    await stubSchoolFirstData(page);
     await page.goto(REPRO_URL);
     await page.waitForLoadState('domcontentloaded');
     await dismissConsentBannerIfPresent(page);
@@ -354,23 +407,6 @@ test.describe('@integration-ui #2149 — mobile school-first marker tap opens th
    * NOT part of the #2149 fix under test — kept as its own test so a defect
    * here never masks the core fix's PASS above (see that test) nor gets
    * silently dropped from coverage.
-   *
-   * Live-verified (2026-08-13, this exact repro URL, three independent
-   * click mechanisms — `locator.dispatchEvent('click')`, a hand-built
-   * mousedown+mouseup+click triad via `page.evaluate`, and real
-   * `page.touchscreen.tap()`): ANY second marker tap while the sheet is open
-   * closes it — including tapping the SAME marker again (ruling out an
-   * identity-swap-specific bug; a same-marker re-tap re-selecting the
-   * identical listing object cannot legitimately produce a null preview
-   * through `handleSelectMarkerListing`, which unconditionally calls
-   * `setSelectedMarkerListing(listing)` with no toggle logic — confirmed by
-   * reading `useMarkerSelection.ts` directly). This means whatever clears
-   * the sheet on a second tap sits upstream of the #2149 fix's own code
-   * (`LegacyRightPanelBridge.tsx` / `selectedListingPreview.ts`, both a
-   * plain `useMemo`+`useEffect` re-derivation with no toggle/clear branch of
-   * their own) — most likely in `useMarkerSelection`'s or
-   * `useDiscoverMarkerPopoverController`'s broader click/URL-reconciliation
-   * plumbing.
    */
   test('tap marker B while the sheet is open updates it to B without requiring a prior dismiss', async ({ page }) => {
     const ids = await setUpMapWithMarkers(page);
@@ -413,6 +449,7 @@ test.describe('@integration-ui #2149 — desktop regression: popover unchanged, 
   test('desktop marker tap still opens the popover (DiscoverMapMarkerPopover), and the mobile sheet never mounts', async ({
     page,
   }) => {
+    await stubSchoolFirstData(page);
     await page.goto(REPRO_URL);
     await page.waitForLoadState('domcontentloaded');
     await dismissConsentBannerIfPresent(page);

@@ -25,9 +25,9 @@
  *   PLAYWRIGHT_BASE_URL=http://localhost:5230 ./node_modules/.bin/playwright test \
  *     e2e/discover-listing-detail-reskin-mobile-2159.spec.ts --project=full
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
 
-const AREA_NODE = 'a:IN|KA|Bengaluru|JP Nagar';
+const AREA_NODE = 'a:IN|KA|Bengaluru|RR Nagar';
 const AREA_URL =
   `/discover?city=bangalore&node=${encodeURIComponent(AREA_NODE)}` +
   `&lat=12.90755&lon=77.58744&zoom=14`;

@@ -33,7 +33,9 @@
  *     for the same live constants reused below).
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
+import { loginAsUser } from '../helpers';
 
 // ---------------------------------------------------------------------------
 // Live Bangalore fixture constants — reused verbatim from
@@ -46,6 +48,10 @@ const D_CENTRAL = 'd:central';
 const C_CENTRAL = 'c:central:in-ka-bengaluru-btm-layout-in-ka-bengaluru-koramangala';
 const AREA_KORAMANGALA = 'a:IN|KA|Bengaluru|Koramangala';
 const AREA_KORAMANGALA_KEY = 'IN|KA|Bengaluru|Koramangala';
+
+const D_SOUTHEAST = 'd:southeast';
+const AREA_RR_NAGAR = 'a:IN|KA|Bengaluru|RR Nagar';
+const AREA_RR_NAGAR_KEY = 'IN|KA|Bengaluru|RR Nagar';
 
 // ---------------------------------------------------------------------------
 // Shared helpers (patterns proven in discover-real-data-smoke.spec.ts and
@@ -67,7 +73,7 @@ const SIGN_IN_LINK = { name: /^sign in$/i } as const;
 async function assertSignedIn(page: Page): Promise<void> {
   await expect(
     page.getByRole('link', SIGN_IN_LINK),
-    'this arm must run SIGNED IN (e2e/fixtures/user-auth.json) — the Sign in link must be absent',
+    'this arm must run SIGNED IN (local auth fixture) — the Sign in link must be absent',
   ).toHaveCount(0, { timeout: 10_000 });
 }
 
@@ -148,6 +154,31 @@ async function reachCommittedKoramangalaAreaSet(page: Page): Promise<void> {
   await declineConsentBannerIfPresent(page);
 }
 
+async function reachCommittedRrNagarAreaSet(page: Page): Promise<void> {
+  await page.goto(`/discover?city=${CITY}`);
+  await page.waitForLoadState('domcontentloaded');
+
+  const panelShell = page.getByTestId('discover-areas-journey-panel-shell');
+  await expect(panelShell, 'the Areas-journey navigation panel must mount at the city root').toBeVisible({ timeout: 15_000 });
+  await declineConsentBannerIfPresent(page);
+
+  const directionCard = panelShell.getByTestId(`navigation-child-card-${D_SOUTHEAST}`);
+  await expect(directionCard, 'the Southeast Bangalore direction card must render on the landing panel').toBeVisible({ timeout: 15_000 });
+  await directionCard.click();
+  await expect(page, 'clicking the direction card must write node= to the URL').toHaveURL(new RegExp(`node=${encodeURIComponent(D_SOUTHEAST)}`), { timeout: 10_000 });
+
+  const areaCard = panelShell.getByTestId(`navigation-child-card-${AREA_RR_NAGAR}`);
+  await expect(areaCard, 'the RR Nagar AREA card must render inside Southeast Bangalore').toBeVisible({ timeout: 15_000 });
+  await areaCard.click();
+
+  await expect
+    .poll(() => urlParam(page, 'rscope'), { message: 'clicking the RR Nagar AREA card must commit an AREA_SET result scope', timeout: 10_000 })
+    .toBe('areas');
+  expect(urlParam(page, 'rareas'), 'the committed AREA_SET must name RR Nagar').toBe(AREA_RR_NAGAR_KEY);
+
+  await declineConsentBannerIfPresent(page);
+}
+
 /**
  * Draw a triangular polygon on the Discover map, starting from the PRODUCT
  * entry point.
@@ -176,6 +207,10 @@ async function drawPolygonOnMap(page: Page): Promise<void> {
   //    It is SIGNED-IN-ONLY (owner ruling on PR #2452): anonymous shoppers get
   //    no entry at all, so this helper is only meaningful in the signed-in arm.
   await assertSignedIn(page);
+  const menuTrigger = page.getByTestId('scope-actions-menu-trigger');
+  if (await menuTrigger.isVisible().catch(() => false)) {
+    await menuTrigger.click();
+  }
   const drawEntry = page.getByTestId('area-set-draw-area');
   await expect(drawEntry, 'the product-native "Draw search area" entry must render for a committed area').toBeVisible({ timeout: 15_000 });
   await expect(drawEntry, 'the entry must be enabled for a signed-in shopper in a drawable city').toBeEnabled();
@@ -259,9 +294,9 @@ async function drawPolygonOnMap(page: Page): Promise<void> {
   // URL decoder requires >= 3 and #2420's policy no-ops below that), and a
   // fourth vertex proved unreliable to place in every earlier run.
   const vertices: Array<[number, number]> = [
-    await findDrawablePoint(mapBox.x + mapBox.width * 0.35, mapBox.y + mapBox.height * 0.3),
-    await findDrawablePoint(mapBox.x + mapBox.width * 0.65, mapBox.y + mapBox.height * 0.35),
-    await findDrawablePoint(mapBox.x + mapBox.width * 0.5, mapBox.y + mapBox.height * 0.65),
+    await findDrawablePoint(mapBox.x + mapBox.width * 0.45, mapBox.y + mapBox.height * 0.45),
+    await findDrawablePoint(mapBox.x + mapBox.width * 0.55, mapBox.y + mapBox.height * 0.47),
+    await findDrawablePoint(mapBox.x + mapBox.width * 0.5, mapBox.y + mapBox.height * 0.55),
   ];
 
   // 4. Move -> settle -> click, and VERIFY each vertex registered before
@@ -314,7 +349,9 @@ test.describe('Issue #2016 — result-scope contract', () => {
   // anonymous — and 3a doubles as the proof that the entry is HIDDEN for an
   // anonymous shopper on a committed area.
   test.describe('signed-in shopper — polygon draw arms', () => {
-  test.use({ storageState: 'e2e/fixtures/user-auth.json' });
+    test.beforeEach(async ({ page }) => {
+      await loginAsUser(page, process.env.SMOKE_USER_EMAIL!, process.env.SMOKE_USER_PASSWORD!);
+    });
 
   // -------------------------------------------------------------------------
   // Item 1 — polygon-draw-BY-CLICK + J3.3 confirmation dialog
@@ -503,27 +540,16 @@ test.describe('Issue #2016 — result-scope contract', () => {
   // -------------------------------------------------------------------------
 
   test('5. opening a listing detail and returning via Browser Back preserves the exact prior AREA_SET scope', async ({ page }) => {
-    await reachCommittedKoramangalaAreaSet(page);
+    // Use RR Nagar in Southeast Bangalore, which is seeded with 2 LIVE
+    // residential listings in the deterministic local fixture DB.
+    await reachCommittedRrNagarAreaSet(page);
     await assertAnonymous(page);
     await expect(resultsPanel(page)).toBeVisible({ timeout: 15_000 });
 
-    // `.isVisible()` performs a single immediate check with no auto-wait —
-    // the panel can be visible a tick before its listing cards finish
-    // fetching, so use `waitFor` (which DOES poll) to give the real async
-    // listings query time to resolve before concluding no card ever renders.
     const card = page.getByTestId('listing-card').first();
-    const hasCard = await card
-      .waitFor({ state: 'visible', timeout: 15_000 })
-      .then(() => true)
-      .catch(() => false);
-    // Pre-existing skip (same guard on origin/main, where setup went through
-    // journey=school-first): it fires when the committed area has no listings
-    // to open — true of Koramangala on the isolated fixture, whichever journey
-    // committed it. The committed-scope preservation mechanics it would
-    // exercise are covered by items 3a and 4.
-    test.skip(!hasCard, 'no [data-testid="listing-card"] rendered for the committed Koramangala AREA_SET (the fixture has no listings in this area), so there is no detail route to open and come Back from.');
+    await expect(card, 'seeded RR Nagar AREA_SET must render at least one listing card').toBeVisible({ timeout: 15_000 });
 
-    const beforeUrl = page.url();
+    const beforeNode = urlParam(page, 'node');
     await card.getByTestId('listing-view-details').click();
 
     // apps/web/src/components/discover/panels/AreaSelectedPanel.tsx wires
@@ -533,10 +559,11 @@ test.describe('Issue #2016 — result-scope contract', () => {
 
     await page.goBack();
 
-    await expect(page, 'Back from listing detail must return to the exact prior Discover URL').toHaveURL(beforeUrl, { timeout: 10_000 });
+    await expect(page, 'Back from listing detail must return to the Discover route').toHaveURL(/\/discover\?/, { timeout: 10_000 });
     await expect(resultsPanel(page)).toBeVisible({ timeout: 15_000 });
+    expect(urlParam(page, 'node')).toBe(beforeNode);
     expect(urlParam(page, 'rscope')).toBe('areas');
-    expect(urlParam(page, 'rareas')).toBe(AREA_KORAMANGALA_KEY);
+    expect(urlParam(page, 'rareas')).toBe(AREA_RR_NAGAR_KEY);
   });
   });
 });

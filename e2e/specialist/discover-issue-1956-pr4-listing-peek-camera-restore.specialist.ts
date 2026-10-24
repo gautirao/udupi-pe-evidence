@@ -77,12 +77,13 @@
  *     e2e/discover/issue-1956-pr4-listing-peek-camera-restore.spec.ts --project=full
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
+import type { Page } from '@playwright/test';
 
 const CITY = 'bangalore';
 const BASE = `city=${CITY}&journey=area-first`;
-const AREA_BASAVESHWARA = 'a:IN|KA|Bengaluru|Basaveshwara Nagar';
-const SALE_LISTING_A_ID = 'e2e19560-0003-0000-0000-000000000001';
+const AREA_BASAVESHWARA = 'a:IN|KA|Bengaluru|RR Nagar';
+const SALE_LISTING_A_ID = 'f1956005-0000-0000-0000-000000000001';
 
 // Comfortably longer than the confirmed 650-900ms delayed camera-fit REPLACE
 // window (see PR-2's fix-verify cycle 4 module doc).

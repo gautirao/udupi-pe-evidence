@@ -4,13 +4,9 @@
  * none of which exist pre-#2729; running it unmodified against the BEFORE arm is the
  * discriminating proof flow (5) below documents).
  */
-import { test, expect, type Page } from '@playwright/test';
-import * as fs from 'fs';
-import * as path from 'path';
-import { fileURLToPath } from 'url';
-import { grantDiscoverConsent } from './helpers';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import type { Page } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
+import { grantDiscoverConsent, loginAsBroker } from '../helpers';
 
 const SANJEEVINI_NAGAR_NODE = 'a%3AIN%7CKA%7CBengaluru%7CSanjeevini+Nagar';
 const SANJEEVINI_NAGAR_RAREA = 'IN%7CKA%7CBengaluru%7CSanjeevini+Nagar';
@@ -21,17 +17,6 @@ const MULTI_AREA_URL =
   `/discover?city=bangalore&node=${SANJEEVINI_NAGAR_NODE}&rscope=areas` +
   `&rareas=${SANJEEVINI_NAGAR_RAREA}%2C${KORAMANGALA_RAREA}` +
   `&areaKey=${SANJEEVINI_NAGAR_RAREA}&rprev=areas%3A${SANJEEVINI_NAGAR_RAREA}`;
-
-// Issue #2729 (post-merge fix-verify, SHOULD-FIX) — same broker storage-state pattern the
-// capture spec uses for the "Options" scope menu frame.
-function hasStorageState(filePath: string): boolean {
-  try {
-    const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as { cookies?: unknown[]; origins?: unknown[] };
-    return (raw.cookies?.length ?? 0) > 0 || (raw.origins?.length ?? 0) > 0;
-  } catch {
-    return false;
-  }
-}
 
 async function waitForRealCards(page: Page): Promise<void> {
   await expect
@@ -202,12 +187,6 @@ test.describe('#2729 — global search at 1366', () => {
     const option = page.getByRole('option', { name: 'Jayanagar', exact: true });
     await expect(option).toBeVisible();
     await option.click();
-    // Issue #2729 (post-merge fix-verify) — was `page.url() !== beforeNavUrl`, which real-Playwright
-    // evidence found gives a MISLEADING pass: an incidental URL write (e.g. a map camera lat/lon/zoom
-    // sync) can change the URL for a reason completely unrelated to this selection, satisfying "the
-    // URL changed at all" while the actual navigation-path resolution failed. Polling for the URL
-    // actually containing the selected area's name is the real assertion this test wants and fails
-    // with a clear diagnostic instead of a confusing two-step failure.
     await expect
       .poll(() => decodeURIComponent(page.url()), { timeout: 10_000 })
       .toContain('Jayanagar');
@@ -221,21 +200,14 @@ test.describe('#2729 — global search at 1366', () => {
 });
 
 test.describe('#2729 — signed-in "Options" scope menu: Draw search area closes the menu', () => {
-  const storageStatePath = path.join(__dirname, 'fixtures', 'broker-auth.json');
-  test.use({ storageState: storageStatePath, viewport: { width: 1366, height: 768 } });
+  test.use({ viewport: { width: 1366, height: 768 } });
 
-  // Issue #2729 (post-merge fix-verify, SHOULD-FIX) — the reviewer found `DrawSearchAreaEntry`'s
-  // `asMenuItem` branch calling `e.preventDefault()` in its `onSelect`, keeping the Radix menu
-  // open after "Draw search area" while every sibling item ("Edit areas", "Clear selected areas",
-  // "Fit all", "Redraw", "Return") closes it. That `preventDefault` is now removed (see
-  // `AreaSetSelectedExtras.tsx`'s doc on the `asMenuItem` branch); this proves BOTH halves of the
-  // fix with a real indicator, not just DOM absence: the menu closes, AND draw mode actually
-  // started — `DrawModeOverlay` renders `data-testid="draw-mode-overlay"` only while
-  // `phase.status === 'DRAWING'` (see `DrawModeOverlay.tsx`), so its visibility is the real
-  // signal the click armed the draw tool, not merely that the menu item was clickable.
-  test('opening Options, clicking "Draw search area" closes the menu AND arms draw mode', async ({ page }) => {
-    test.skip(!hasStorageState(storageStatePath), 'No BROKER_EMAIL/BROKER_PASSWORD auth state available.');
+  test.beforeEach(async ({ page }) => {
+    await loginAsBroker(page, process.env.BROKER_EMAIL!, process.env.BROKER_PASSWORD!);
     await grantDiscoverConsent(page);
+  });
+
+  test('opening Options, clicking "Draw search area" closes the menu AND arms draw mode', async ({ page }) => {
     await page.goto(SINGLE_AREA_URL, { waitUntil: 'networkidle' });
     await waitForRealCards(page);
 
@@ -256,17 +228,7 @@ test.describe('#2729 — signed-in "Options" scope menu: Draw search area closes
     await expect(page.getByTestId('draw-mode-overlay')).toBeVisible({ timeout: 10_000 });
   });
 
-  // Issue #2729 (post-merge fix-verify, NIT — "if feasible") — a UNIT test for this is not
-  // feasible in this repo: `ScopeActionsMenu.test.tsx`'s own documented environment note records
-  // that a Radix `DropdownMenu` cannot be reliably opened in jsdom via `userEvent.click` (hangs)
-  // nor a manual `pointerdown`/`pointerup`/`click` sequence (`aria-expanded` stays `false`,
-  // `DropdownMenuContent` never mounts either way) — confirmed there, not merely assumed here. A
-  // real-browser E2E check is feasible and is the only reliable way to exercise it, so it lives
-  // here instead. Radix's `DropdownMenu` documents restoring focus to the trigger on close "for
-  // free" (see `ScopeActionsMenu.tsx`'s own doc comment) — this proves that holds for real.
   test('Escape closes the menu and returns focus to the scope-menu trigger', async ({ page }) => {
-    test.skip(!hasStorageState(storageStatePath), 'No BROKER_EMAIL/BROKER_PASSWORD auth state available.');
-    await grantDiscoverConsent(page);
     await page.goto(SINGLE_AREA_URL, { waitUntil: 'networkidle' });
     await waitForRealCards(page);
 

@@ -41,11 +41,11 @@
  *     e2e/discover/issue-1956-pr4-mobile-listings-scroll.spec.ts --project=full
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
 
 const CITY = 'bangalore';
 const BASE = `city=${CITY}&journey=area-first`;
-const AREA_BASAVESHWARA = 'a:IN|KA|Bengaluru|Basaveshwara Nagar';
+const AREA_BASAVESHWARA = 'a:IN|KA|Bengaluru|RR Nagar';
 
 /** See issue-1956-pr4-listing-peek-camera-restore.spec.ts's JSDoc for the
  * confirmed-live root cause: the telemetry-consent banner's fixed wrapper

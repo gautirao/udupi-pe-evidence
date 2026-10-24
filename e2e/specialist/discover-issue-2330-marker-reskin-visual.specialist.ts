@@ -42,7 +42,8 @@
  * here are the ordinary, in-bounds case; it does not attempt to reproduce or
  * assert around the wide-card overflow gap, which is #1943's to close.
  */
-import { test, expect, type Page, type Route } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
+import type { Page, Route } from '@playwright/test';
 
 const CITY = 'bangalore';
 
@@ -59,6 +60,12 @@ const MOBILE = { width: 390, height: 844 };
 
 const D_KEY = 'd:reskin2330';
 const D_LABEL = 'Reskin Direction 2330';
+// Second separated DIRECTION child at city root so #1943's singleton
+// auto-advance (AreaMarkerLayer.tsx:1502-1518, which auto-advances when
+// root resolves to a single non-leaf cell) does not auto-navigate away from
+// root while tests inspect the root-level Explore marker.
+const D2_KEY = 'd:reskin2330-north';
+const D2_LABEL = 'Reskin North 2330';
 // Deliberately far (~0.6 degree, well over 60km) from the co-located pair
 // below so it never joins their cluster cell at ANY fitted zoom — a narrower
 // mobile viewport fits the SAME geographic bounds at a LOWER zoom than
@@ -66,12 +73,12 @@ const D_LABEL = 'Reskin Direction 2330';
 // lat/lon points; a separation this large keeps them in separate grid cells
 // regardless of that per-viewport zoom difference (a smaller ~0.15 degree
 // gap was tried first and merged into one cluster on the mobile viewport).
-const ISO_LAT = 13.55;
-const ISO_LON = 78.1;
+const ISO_LAT = 13.04;
+const ISO_LON = 77.6;
 const ISO_KEY = 'IN|KA|Bengaluru|Reskin2330Isolated';
 const ISO_NODE_KEY = `a:${ISO_KEY}`;
-const CLUSTER_LAT = 12.9;
-const CLUSTER_LON = 77.5;
+const CLUSTER_LAT = 12.93;
+const CLUSTER_LON = 77.6;
 const A_KEY = 'IN|KA|Bengaluru|Reskin2330Alpha';
 const A_NODE_KEY = `a:${A_KEY}`;
 const A_LABEL = 'ReskinAlpha';
@@ -85,7 +92,7 @@ interface IsoOverrides {
   schoolCount?: number | null;
 }
 
-/** Builds the two-level fixture (root -> one DIRECTION -> 3 AREA children). */
+/** Builds the two-level fixture (root -> two separated DIRECTIONs -> 3 AREA children under D_KEY). */
 function buildWire(isoOverrides: IsoOverrides = {}) {
   const isoLabel = isoOverrides.displayLabel ?? 'ReskinIsolated';
   const isoListingCount = isoOverrides.listingCount ?? 6;
@@ -106,12 +113,28 @@ function buildWire(isoOverrides: IsoOverrides = {}) {
         displayLabel: D_LABEL,
         displayOrder: 1,
         descendantAreaCount: 3,
-        centreLat: 12.97,
-        centreLon: 77.6,
+        centreLat: CLUSTER_LAT,
+        centreLon: CLUSTER_LON,
+      },
+      {
+        nodeKey: D2_KEY,
+        nodeType: 'DIRECTION',
+        displayLabel: D2_LABEL,
+        displayOrder: 2,
+        descendantAreaCount: 1,
+        centreLat: ISO_LAT,
+        centreLon: ISO_LON,
       },
     ],
     revisionId: 1,
-    bounds: null,
+    bounds: {
+      centreLat: 12.985,
+      centreLon: 77.6,
+      minLat: 12.88,
+      minLon: 77.55,
+      maxLat: 13.09,
+      maxLon: 77.65,
+    },
     descendantAreaKeys: null,
     areaKey: null,
   };
@@ -155,8 +178,12 @@ function buildWire(isoOverrides: IsoOverrides = {}) {
     ],
     revisionId: 1,
     bounds: {
-      centreLat: 13.2, centreLon: 77.8,
-      minLat: 12.85, minLon: 77.45, maxLat: 13.6, maxLon: 78.15,
+      centreLat: 12.985,
+      centreLon: 77.6,
+      minLat: 12.88,
+      minLon: 77.55,
+      maxLat: 13.09,
+      maxLon: 77.65,
     },
     descendantAreaKeys: [ISO_KEY, A_KEY, B_KEY],
     areaKey: null,
@@ -175,23 +202,25 @@ function buildWire(isoOverrides: IsoOverrides = {}) {
         nodeKey,
         count: isoListingCount + 13,
         schoolCount: (isoSchoolCount ?? 0) + 5,
-        areaCounts: {},
-        areaSchoolCounts: {},
+        areaCounts: { [ISO_KEY]: isoListingCount, [A_KEY]: 8, [B_KEY]: 5 },
+        areaSchoolCounts:
+          isoSchoolCount == null
+            ? { [A_KEY]: 3, [B_KEY]: 2 }
+            : { [ISO_KEY]: isoSchoolCount, [A_KEY]: 3, [B_KEY]: 2 },
         children,
         revisionId: 1,
       };
     }
-    // 'root' — one DIRECTION child, moderate (low) inventory so Explore
-    // paints well within the 172px collision footprint (see the module doc's
-    // DEFERRED OBSERVATION note — this fixture never approaches the
-    // 206px/240-count scaling ceiling that gap is about).
     return {
       nodeKey,
-      count: 19,
-      schoolCount: 9,
-      areaCounts: {},
-      areaSchoolCounts: {},
-      children: [{ nodeKey: D_KEY, count: 19, schoolCount: 9, matchingAreaCount: 3 }],
+      count: 24,
+      schoolCount: 11,
+      areaCounts: { [ISO_KEY]: isoListingCount, [A_KEY]: 8, [B_KEY]: 5 },
+      areaSchoolCounts: { [ISO_KEY]: isoSchoolCount ?? 4, [A_KEY]: 3, [B_KEY]: 2 },
+      children: [
+        { nodeKey: D_KEY, count: 19, schoolCount: 9, matchingAreaCount: 3 },
+        { nodeKey: D2_KEY, count: 5, schoolCount: 2, matchingAreaCount: 1 },
+      ],
       revisionId: 1,
     };
   }
@@ -200,6 +229,7 @@ function buildWire(isoOverrides: IsoOverrides = {}) {
 }
 
 async function interceptNavigationApi(page: Page, wire: ReturnType<typeof buildWire>) {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
   await page.route('**/api/discover/**', (route: Route) => {
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ areas: [], markers: [] }) });
   });
@@ -232,27 +262,31 @@ async function openScreen(
   page: Page,
   opts: { journey: 'area-first' | 'school-first'; node: 'root' | typeof D_KEY; isoOverrides?: IsoOverrides },
 ) {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('discover_telemetry_consent', 'granted');
+  });
   const wire = buildWire(opts.isoOverrides);
   await interceptNavigationApi(page, wire);
   const nodeParam = opts.node === 'root' ? '' : `&node=${encodeURIComponent(opts.node)}`;
   await page.goto(`/discover?city=${CITY}&journey=${opts.journey}${nodeParam}`);
   await page.waitForLoadState('domcontentloaded');
   const decline = page.getByRole('button', { name: /decline anonymous usage data collection/i });
-  if (await decline.isVisible({ timeout: 3_000 }).catch(() => false)) {
+  if (await decline.isVisible({ timeout: 1_500 }).catch(() => false)) {
     await decline.click();
   }
-  // Mobile viewport (390x844): the school/areas journey defaults to the list
-  // surface, not the map — same universal control-bar-map-trigger every other
-  // mobile map spec in this repo uses (e.g.
-  // issue-2149-mobile-school-first-marker-preview.spec.ts) to enter Map mode
-  // before any map marker becomes attachable at all.
   const viewportSize = page.viewportSize();
   if (viewportSize && viewportSize.width < 768) {
-    const mapTrigger = page.getByTestId('control-bar-map-trigger');
-    if (await mapTrigger.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    const closeListBtn = page.getByTestId('mobile-map-close-list-button');
+    if (!(await closeListBtn.isVisible().catch(() => false))) {
+      const mapTrigger = page.getByTestId('control-bar-map-trigger');
+      await expect(mapTrigger).toBeVisible({ timeout: 15_000 });
       await mapTrigger.click();
-      await expect(page.getByTestId('mobile-map-close-list-button')).toBeVisible({ timeout: 10_000 });
+      await expect(closeListBtn).toBeVisible({ timeout: 10_000 });
     }
+  }
+  const closeTip = page.getByRole('button', { name: /close tip/i });
+  if (await closeTip.isVisible().catch(() => false)) {
+    await closeTip.click().catch(() => {});
   }
 }
 
@@ -262,7 +296,7 @@ async function openScreen(
  * selector resolves to TWO elements (map marker + panel row) and trips
  * Playwright's strict-mode violation. */
 function exploreLocator(page: Page) {
-  return page.locator('[data-testid="area-destination-marker"]');
+  return page.locator(`[data-testid="area-destination-marker"][data-node-key="${D_KEY}"]`);
 }
 function zoomLocator(page: Page) {
   return page.locator('[data-testid="area-visual-cluster-marker"]');
@@ -277,6 +311,7 @@ function currentNodeParam(page: Page): string | null {
 
 /** Union bounding box of the shell PLUS the tail triangle (AC17: never shell alone). */
 async function paintedFootprint(marker: ReturnType<typeof exploreLocator>): Promise<{ width: number; height: number }> {
+  await expect(marker).toBeVisible({ timeout: 15_000 });
   const shellBox = await marker.locator('.rc-shell').boundingBox();
   const tailBox = await marker.locator('.rc-tail').boundingBox();
   if (!shellBox || !tailBox) {
@@ -389,10 +424,11 @@ for (const viewport of [DESKTOP, MOBILE]) {
       // test asserts width only, never height, for Explore/Zoom.
       //
       // Explore — single member, low inventory (well under this fixture's
-      // moderate 19-listing root count).
+      // moderate 19-listing root count; #2617 floors secondaryMetaText cards
+      // at 180px via Math.max(baseWidthPx, 180)).
       await openScreen(page, { journey: 'area-first', node: 'root' });
       const exploreFootprint = await paintedFootprint(exploreLocator(page));
-      expect(exploreFootprint.width, 'Explore at ordinary inventory must fit within 172px — see module doc DEFERRED OBSERVATION for the wide-card gap this deliberately does not exercise').toBeLessThanOrEqual(172);
+      expect(exploreFootprint.width, 'Explore at ordinary inventory must fit within 180px (#2617 secondaryMetaText floor)').toBeLessThanOrEqual(180);
 
       // Zoom in — 2-member cluster, 13 total listings (well under the
       // 150px-206px combined range's scaling ceiling).
@@ -464,7 +500,10 @@ test.describe('@integration-ui #2330 activation traces — Explore/Zoom/View-hom
   test('Explore: clicking updates node= to the DIRECTION and reveals its AREA-level children', async ({ page }) => {
     await openScreen(page, { journey: 'area-first', node: 'root' });
     expect(currentNodeParam(page)).toBeNull();
-    const box = await exploreLocator(page).boundingBox();
+    const explore = exploreLocator(page);
+    await expect(explore).toBeVisible({ timeout: 15_000 });
+    await page.waitForTimeout(300);
+    const box = await explore.boundingBox();
     if (!box) throw new Error('Explore marker has no bounding box');
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
@@ -479,9 +518,12 @@ test.describe('@integration-ui #2330 activation traces — Explore/Zoom/View-hom
 
   test('Zoom in: clicking changes ONLY camera/focus state — URL node= and window.history length stay byte-identical', async ({ page }) => {
     await openScreen(page, { journey: 'area-first', node: D_KEY });
+    const zoom = zoomLocator(page);
+    await expect(zoom).toBeVisible({ timeout: 15_000 });
+    await page.waitForTimeout(400);
     const before = { node: currentNodeParam(page), historyLength: await page.evaluate(() => window.history.length) };
 
-    const box = await zoomLocator(page).boundingBox();
+    const box = await zoom.boundingBox();
     if (!box) throw new Error('Zoom marker has no bounding box');
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
@@ -495,23 +537,16 @@ test.describe('@integration-ui #2330 activation traces — Explore/Zoom/View-hom
     const after = { node: currentNodeParam(page), historyLength: await page.evaluate(() => window.history.length) };
     expect(after.node, 'Zoom in must never write node=').toBe(before.node);
     expect(after.historyLength, 'Zoom in must never push/replace history').toBe(before.historyLength);
-    // Zoom in's own click ALSO sets `focusedClusterMemberAreaKeys` to just
-    // its own [A_KEY, B_KEY] (AreaMarkerLayer.tsx's cluster-focus scoping),
-    // which legitimately narrows the 'areas' level render to ONLY that
-    // cluster's members until focus clears — the isolated leaf is expected
-    // to disappear from the map here, by design; this is a real,
-    // intentional presentation-only narrowing, not a regression, so it is
-    // deliberately NOT asserted against in either direction by this test.
-    // The cluster itself is still the SAME 2-member cell (unchanged by the
-    // click) and is still rendered.
     await expect(zoomLocator(page)).toHaveCount(1);
   });
 
   test('View homes: clicking selects the real AREA leaf (node= becomes its areaKey) and the previous level\'s markers are gone', async ({ page }) => {
     await openScreen(page, { journey: 'area-first', node: D_KEY });
-    await expect(leafLocator(page)).toHaveCount(1);
+    const leaf = leafLocator(page);
+    await expect(leaf).toBeVisible({ timeout: 15_000 });
+    await page.waitForTimeout(300);
 
-    const box = await leafLocator(page).boundingBox();
+    const box = await leaf.boundingBox();
     if (!box) throw new Error('leaf marker has no bounding box');
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
