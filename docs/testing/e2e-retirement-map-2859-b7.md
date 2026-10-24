@@ -25,7 +25,7 @@ tests that mock the API or the data hook give API-call argument coverage only. C
 - `2087-1` (stale click recipe): **STALE**, not OBSOLETE. The text still exists (`JourneySwitcher.tsx:120-122`), so there is no removal
   evidence; the product contradicts the recipe because `/discover?city=bangalore` lands on the area-first city root, which lists the
   Direction nodes directly (`area.ts:92-98`, `NavigationLevelPanel.tsx:114-125,150-162`).
-- `url-state-1`, probe-200 branch (a city WITH a navigation hierarchy): **RETAIN + owner question OQ2**, not STALE. The observed
+- `url-state-1`, probe-200 branch (a city WITH a navigation hierarchy): **RETAIN (Owner ruling on OQ2 = Option C: keep RETAIN under investigation pending a realistic hierarchy fixture)**, not STALE. The observed
   area-first panel sat on `areas-journey-panel-loading`, which may be a stub artefact, so it is not a supported product contradiction.
   `N11` covers the probe-404 branch only.
 - `2015-3`, `2015-4`, `url-state-5`: the sweep's `MUT-… NOT_IN_REGISTER` flags are naming only. The cited PR-5 id is the one re-proven by the
@@ -251,7 +251,7 @@ Dispositions: `COVERED_NEW`, `COVERED_EXISTING`, `RETAIN`, `STALE`, `OBSOLETE`. 
 | Spec | COVERED_NEW | COVERED_EXISTING | OBSOLETE | RETAIN | STALE |
 |---|---|---|---|---|---|
 | csv 62 2189 | 3 (2189-1 and 2189-2 outbound-wire halves, 2189-5) | 2 (2189-1/2 hook ARGUMENT halves, via L69 only) | 0 | 2 (2189-3, 2189-4) | 0 |
-| csv 97 url-state | 2 (url-state-1 narrowed to the 404 branch, url-state-6 control replacement) | 3 (url-state-4, -5, -7) | 2 (url-state-2, -3) | 0 (url-state-1 200 branch = owner question OQ2, not a RETAIN row) | 0 |
+| csv 97 url-state | 2 (url-state-1 narrowed to the 404 branch, url-state-6 control replacement) | 3 (url-state-4, -5, -7) | 2 (url-state-2, -3) | 1 (url-state-1 200 branch = RETAIN per Owner OQ2 Option C) | 0 |
 | csv 180 2017 | 1 (2017-9 URL/commit/cancel half; also supplies the 2017-8 "no CTA" control) | 5 (2017-2/3, 2017-4, 2017-5 ARGUMENT half, 2017-6, 2017-7/8 chips half) | 0 | 4 (2017-1, 2017-5 outbound request, 2017-6 composed count, 2017-9 request+count composed halves) | 0 |
 
 ### New tests (slice B2)
@@ -328,7 +328,7 @@ Both arms: `/discover?city=udupi&areaKey=IN|KA|Udupi|Manipal`, areas mocked with
 
 - Probe 404 (`area.ts:196-229`: `ApiError` 404 -> `hierarchyConfirmedUnavailable`; `:237-247` REPLACE-writes `scope=''`; `:250-257` `journey = null`): the legacy shell renders. Observed testids (N11 asserts these): `listing-card` (2) and `back-button` render without interaction; the URL keeps `areaKey` and gains `scope=`; clicking `back-button` drops `areaKey` (`area.ts:324`). Product path: `rightPanelRoute.ts:84-99` -> `{kind:'journey', journey:'area'}`.
 - Probe 200 (the D18 case; `area.ts:250-257`: `journey = 'area-first'`, no `scope=` write): the page renders the area-first shell, NOT the area panel. Observed testids (scratch run, deleted): `discover-areas-journey-panel-shell`, `areas-breadcrumb-trail`, `breadcrumb-seg-root`, `journey-switcher-section`, `journey-card-area-first(-selected-check)`, `journey-card-school-first`, `journey-card-agri-first`, `journey-metadata-strip`, `areas-journey-panel-loading`, `control-bar-*`, `map-info-dock`. NO `listing-card`, NO `back-button`. `areaKey` stays in the URL, zero URL writes after mount (`seen.length === 1`). The listings request still fires (`GET /api/discover/cities/udupi/listings?areaKeys=IN|KA|Udupi|Manipal...`), but no card renders; the panel sits on `areas-journey-panel-loading` (my counts stub returned empty children for `root`; I did not chase whether richer counts would resolve it).
-- So the legacy spec's expectation ("cold journey-less `?areaKey=` shows cards") holds only for a city whose hierarchy probe is a 404. For a city WITH a hierarchy it is not what the product renders. This is the OQ2 evidence. I did not force or assert the 200 arm; the claim in `N11` is the 404 branch and is worded so. OQ2 (owner): is the 200-branch expectation STALE (default) or a regression to file?
+- So the legacy spec's expectation ("cold journey-less `?areaKey=` shows cards") holds only for a city whose hierarchy probe is a 404. For a city WITH a hierarchy it is not what the product renders. This is the OQ2 evidence. I did not force or assert the 200 arm; the claim in `N11` is the 404 branch and is worded so. OQ2 (owner): resolved as **Option C** (remain RETAIN under investigation pending a realistic hierarchy fixture).
 
 ### 2017 — `e2e/issue-2017-multi-area-areaset-commit-regression.spec.ts` (csv 180)
 
@@ -372,7 +372,7 @@ Both arms: `/discover?city=udupi&areaKey=IN|KA|Udupi|Manipal`, areas mocked with
 
 ### Owner questions
 
-- OQ2 (url-state-1): see the AC12 finding. Team Lead: the 200 branch is RETAIN + owner question OQ2 (not STALE); `N11` claims the 404 branch only.
+- OQ2 (url-state-1): see the AC12 finding. Owner decision: **Option C** — keep the 200 branch `RETAIN` under investigation pending a realistic hierarchy fixture (not STALE); `N11` claims the 404 branch only.
 - No product, spec, existing test, config or manifest edit was needed or made. Mutation edits were applied and restored by `run_mutation.py` only; `verify_restore.py` = `BYTE_IDENTICAL`.
 
 ## Web slice C — map-hierarchy (csv 72, AC11)
