@@ -85,10 +85,10 @@
  * skipped, faked, or worked around with a mocked click.
  *
  * Run:
- *   PLAYWRIGHT_BASE_URL=http://localhost:<port> npx playwright test \
- *     e2e/discover/issue-1956-pr5-s5-mobile-listing-preview.spec.ts --project=full
+ *   npm run test:e2e:specialist
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
+import type { Page } from '@playwright/test';
 import { assertReachable } from '../support/reachability';
 
 const CITY = 'bangalore';

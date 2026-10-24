@@ -18,7 +18,8 @@
  *   bash scripts/run-e2e-local.sh --project=full e2e/discover/control-bar-mobile-reachability-1953.spec.ts
  */
 
-import { test, expect, type Page, type Route } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
+import type { Page, Route } from '@playwright/test';
 
 const CITY = 'bangalore';
 // Exact defect viewport from the #1953 hit-test report (390×844).

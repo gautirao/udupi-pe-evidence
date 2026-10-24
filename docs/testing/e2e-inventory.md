@@ -7,12 +7,12 @@ static source counts (`test(...)` call sites); the number Playwright COLLECTS is
 
 | metric | before | after | delta |
 |---|---:|---:|---:|
-| legacy_spec_files | 215 | 133 | -82 |
-| legacy_static_test_callsites | 1043 | 685 | -358 |
+| legacy_spec_files | 215 | 127 | -88 |
+| legacy_static_test_callsites | 1043 | 668 | -375 |
 | canonical_spec_files | 12 | 17 | +5 |
 | canonical_static_tests | 34 | 56 | +22 |
 | parity_spec_files | 2 | 2 | +0 |
-| specialist_spec_files | 0 | 5 | +5 |
+| specialist_spec_files | 0 | 11 | +11 |
 
 ## BEFORE (retirement series base)
 
@@ -161,20 +161,20 @@ Ref: `HEAD`
   ],
   "journey_matrix_present": true,
   "legacy_by_bucket": {
-    "discover_subdir": 44,
+    "discover_subdir": 39,
     "journey": 9,
-    "top_level": 80
+    "top_level": 79
   },
-  "legacy_files_with_loop_generated_tests": 12,
-  "legacy_files_with_network_mocks": 68,
+  "legacy_files_with_loop_generated_tests": 11,
+  "legacy_files_with_network_mocks": 64,
   "legacy_files_with_skip_or_fixme": 43,
   "legacy_project_membership": {
-    "full": 133,
+    "full": 127,
     "integration-ui": 3,
     "journey": 9
   },
-  "legacy_spec_files": 133,
-  "legacy_static_test_callsites": 685,
+  "legacy_spec_files": 127,
+  "legacy_static_test_callsites": 668,
   "manifest_present": true,
   "package_scripts_mentioning_e2e": {
     "prepare": "chmod +x scripts/run-e2e-local.sh scripts/run-e2e-gate.sh .githooks/pre-push && git config core.hooksPath .githooks",
@@ -201,6 +201,6 @@ Ref: `HEAD`
     "playwright.parity.config.ts",
     "playwright.specialist.config.ts"
   ],
-  "specialist_spec_files": 5
+  "specialist_spec_files": 11
 }
 ```

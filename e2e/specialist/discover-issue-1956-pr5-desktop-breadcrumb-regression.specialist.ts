@@ -19,7 +19,7 @@
  * present, via `scope=north&groupId=airport-belt&areaKey=...Yelahanka`,
  * confirmed live to produce all three optional crumbs).
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
 
 const DESKTOP_VIEWPORT = { width: 1366, height: 768 };
 // Issue #1956 PR-6 REWORK ([rulings.oq_a_v2], superseding the Option A

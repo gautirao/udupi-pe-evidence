@@ -30,7 +30,7 @@
  *   npx playwright test --project=full e2e/discover/mobile-list-map-shell-1953.spec.ts
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
 
 const CITY = 'bangalore';
 const VIEWPORT = { width: 390, height: 844 };

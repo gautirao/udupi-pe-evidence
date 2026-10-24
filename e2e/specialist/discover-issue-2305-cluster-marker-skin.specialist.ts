@@ -56,7 +56,8 @@
  * opens the cluster-focus panel, data-selected flips, hover/focus tint
  * mechanics, keyboard-focus ring) is preserved unchanged.
  */
-import { test, expect, type Page, type Route } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
+import type { Page, Route } from '@playwright/test';
 
 const CITY = 'bangalore';
 

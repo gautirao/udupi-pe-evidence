@@ -26,7 +26,8 @@
  *   bash scripts/run-e2e-local.sh --project=full e2e/discover-mobile-map-badge-zoom-2716.spec.ts
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
+import type { Page } from '@playwright/test';
 
 const CITY = 'bangalore';
 
