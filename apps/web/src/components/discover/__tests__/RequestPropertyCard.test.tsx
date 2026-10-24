@@ -4,7 +4,7 @@
  * global fetch so the request that leaves the browser is what is asserted.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -682,4 +682,67 @@ describe('RequestPropertyCard — failures never look like success or zero resul
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send request' })).toBeEnabled();
   });
+
+  it("consent unticked shows the hint 'Tick the box above to send'; ticking removes it", async () => {
+    const user = userEvent.setup();
+    renderCard();
+    await expand(user);
+    expect(screen.getByText('Tick the box above to send')).toBeInTheDocument();
+    await tickConsent(user);
+    expect(screen.queryByText('Tick the box above to send')).toBeNull();
+  });
+
+  it('while consent is unticked the Send button is described by the hint element; after ticking it has no aria-describedby', async () => {
+    const user = userEvent.setup();
+    renderCard();
+    await expand(user);
+    const submit = screen.getByRole('button', { name: 'Send request' });
+    const hintId = submit.getAttribute('aria-describedby');
+    expect(hintId).toBeTruthy();
+    expect(document.getElementById(hintId ?? '')?.textContent).toBe('Tick the box above to send');
+    await tickConsent(user);
+    expect(submit.getAttribute('aria-describedby')).toBeNull();
+  });
+
+  it('the submit HANDLER refuses a submit event while consent is unticked (no POST); the same form sends exactly once after ticking', async () => {
+    fetchMock.mockResolvedValue(json({ id: 'r-consent', status: 'NEW', createdAt: 'x' }, 201));
+    const user = userEvent.setup();
+    renderCard();
+    await expand(user);
+    await fillValid(user);
+    const form = screen.getByRole('button', { name: 'Send request' }).closest('form');
+    expect(form).not.toBeNull();
+
+    // Leg A (credited, handler protection only): fireEvent.submit with consent unticked sends nothing.
+    fireEvent.submit(form!);
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+
+    // Leg B (UNCREDITED, proves nothing about the Enter journey across a disabled button):
+    await user.type(screen.getByLabelText(/phone number/i), '{Enter}');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+
+    // Leg C (credited positive control): tick consent and fire submit -> sends once with consent: true.
+    await tickConsent(user);
+    fireEvent.submit(form!);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.consent).toBe(true);
+    expect(body.phone).toBe(PHONE);
+  });
+
+  it("429 shows only the rate-limit alert: no 'We could not send your request' text and no Retry button", async () => {
+    fetchMock.mockResolvedValueOnce(json({ error: 'RATE_LIMIT_EXCEEDED' }, 429));
+    const user = userEvent.setup();
+    renderCard();
+    await expand(user);
+    await fillValid(user);
+    await tickConsent(user);
+    await user.click(screen.getByRole('button', { name: 'Send request' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Too many requests from this device or number. Please try again later.');
+    expect(screen.queryByText('We could not send your request. Please try again.')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
+  });
 });
+

@@ -400,4 +400,73 @@ describe('ListingsBody — navigation-node scope never submits a node key as an 
     expect(body.areaLabel).toBe('North Udupi');
     expect(JSON.stringify(body)).not.toContain('d:north');
   });
+
+  it.each([
+    ['single area Buy', {}, 'Buy · Kalsanka, Udupi'],
+    ['single area rent', { intentNoun: 'rent' as const }, 'Rent · Kalsanka, Udupi'],
+    ['POLYGON', { resultScopeKind: 'POLYGON' as const }, 'Buy · Drawn area, Udupi'],
+    ['VIEWPORT', { resultScopeKind: 'VIEWPORT' as const, isViewportScope: true }, 'Buy · Visible map area, Udupi'],
+    ['two areas', { multiAreaKeys: ['IN|KA|Udupi|kalsanka', 'IN|KA|Udupi|manipal'] }, 'Buy · kalsanka, manipal, Udupi'],
+  ] as const)(
+    'request card context line comes from the scope: %s -> %s',
+    async (_label, patch, expectedLine) => {
+      const user = userEvent.setup();
+      render(<ListingsBody {...baseProps} {...patch} />);
+      await user.click(screen.getByRole('button', { name: CARD }));
+      const card = screen.getByTestId('request-property-card');
+      const contextLine = Array.from(card.querySelectorAll('p')).find((p) =>
+        /^(Buy|Rent) · /.test(p.textContent ?? ''),
+      );
+      expect(contextLine?.textContent).toBe(expectedLine);
+    },
+  );
+
+  it('the zero-result recovery is dimmed only while a refetch is in flight (idle: not dimmed; isFetching: dimmed; isFetching during initial page load: not dimmed; back to idle: not dimmed)', async () => {
+    const dimmedAncestor = (el: HTMLElement): HTMLElement | null => {
+      for (let n: HTMLElement | null = el; n; n = n.parentElement) {
+        if (n.classList.contains('pointer-events-none') || n.classList.contains('opacity-50')) return n;
+      }
+      return null;
+    };
+    function Harness() {
+      const [step, setStep] = useState<'idle' | 'fetching' | 'initial' | 'released'>('idle');
+      const patch =
+        step === 'fetching'
+          ? { isFetching: true, isInitialLoading: false }
+          : step === 'initial'
+            ? { isFetching: true, isInitialLoading: true }
+            : { isFetching: false, isInitialLoading: false };
+      return (
+        <>
+          <button type="button" onClick={() => setStep('fetching')}>
+            to-fetching
+          </button>
+          <button type="button" onClick={() => setStep('initial')}>
+            to-initial
+          </button>
+          <button type="button" onClick={() => setStep('released')}>
+            to-released
+          </button>
+          <ListingsBody {...baseProps} {...patch} />
+        </>
+      );
+    }
+    const user = userEvent.setup();
+    render(<Harness />);
+    // (a) idle (isFetching false): not dimmed
+    expect(dimmedAncestor(screen.getByTestId('area-zero-result-recovery'))).toBeNull();
+
+    // (b) isFetching true: dimmed
+    await user.click(screen.getByRole('button', { name: 'to-fetching' }));
+    expect(dimmedAncestor(screen.getByTestId('area-zero-result-recovery'))).not.toBeNull();
+
+    // (c) isFetching true + isInitialLoading true: not dimmed
+    await user.click(screen.getByRole('button', { name: 'to-initial' }));
+    expect(dimmedAncestor(screen.getByTestId('area-zero-result-recovery'))).toBeNull();
+
+    // (d) back to idle (isFetching false): not dimmed
+    await user.click(screen.getByRole('button', { name: 'to-released' }));
+    expect(dimmedAncestor(screen.getByTestId('area-zero-result-recovery'))).toBeNull();
+  });
 });
+

@@ -300,4 +300,72 @@ describe.each(PANELS)('$name — request card in the school-radius zero state', 
     expect(body.areaLabel).toContain('3 km');
     expect(body.areaLabel.length).toBeLessThanOrEqual(200);
   });
+
+  it.each([
+    ['buy', 'BUY', 'Buy · Manipal Public School, within 3 km'],
+    ['rent', 'RENT', 'Rent · Manipal Public School, within 3 km'],
+  ] as const)(
+    'school card submits journey SCHOOL with intent %s -> %s and shows the exact context line %s',
+    async (viewerIntent, expectedIntent, expectedContextLine) => {
+      const fetchMock = vi.fn(async (...args: [unknown, RequestInit?]) =>
+        String(args[0]).includes('/api/public/property-requests')
+          ? new Response(JSON.stringify({ id: 'r', status: 'NEW', createdAt: 'x' }), { status: 201 })
+          : new Response('{}', { status: 404 }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+      const user = userEvent.setup();
+      render({ intent: viewerIntent });
+      await user.click(screen.getByRole('button', { name: CARD }));
+      const card = screen.getByTestId('request-property-card');
+      const contextLine = Array.from(card.querySelectorAll('p')).find((p) =>
+        /^(Buy|Rent) · /.test(p.textContent ?? ''),
+      );
+      expect(contextLine?.textContent).toBe(expectedContextLine);
+      await user.type(screen.getByLabelText(/phone number/i), '9876543210');
+      await user.click(screen.getByRole('checkbox', { name: /i agree to share this information/i }));
+      await user.click(screen.getByRole('button', { name: 'Send request' }));
+      const posts = () =>
+        fetchMock.mock.calls.filter(([u]) => String(u).includes('/api/public/property-requests'));
+      await waitFor(() => expect(posts()).toHaveLength(1));
+      const body = JSON.parse((posts()[0][1] as RequestInit).body as string);
+      expect(body.journey).toBe('SCHOOL');
+      expect(body.intent).toBe(expectedIntent);
+      expect(body.city).toBe('udupi');
+      expect(body.areaLabel).toContain('Manipal Public School');
+      expect(body.areaLabel).toContain('3 km');
+    },
+  );
+
+  it('idle options are not dimmed; during a refetch they are; after the refetch releases (fetching true -> false) they are not dimmed again', async () => {
+    const dimmedAncestor = (el: HTMLElement): HTMLElement | null => {
+      for (let n: HTMLElement | null = el; n; n = n.parentElement) {
+        if (n.classList.contains('pointer-events-none') || n.classList.contains('opacity-50')) return n;
+      }
+      return null;
+    };
+    function Harness() {
+      const [fetching, setFetching] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setFetching((v) => !v)}>
+            toggle-refetch
+          </button>
+          {element({ fetching, settled: true })}
+        </>
+      );
+    }
+    const user = userEvent.setup();
+    renderWithProviders(
+      <DiscoverProvider>
+        <Harness />
+      </DiscoverProvider>,
+      { router: 'browser' },
+    );
+    expect(dimmedAncestor(screen.getByTestId('change-school-empty-btn'))).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'toggle-refetch' }));
+    expect(dimmedAncestor(screen.getByTestId('change-school-empty-btn'))).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: 'toggle-refetch' }));
+    expect(dimmedAncestor(screen.getByTestId('change-school-empty-btn'))).toBeNull();
+  });
 });
+
