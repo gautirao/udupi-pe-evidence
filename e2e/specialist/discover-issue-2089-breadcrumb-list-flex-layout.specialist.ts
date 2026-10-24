@@ -28,9 +28,8 @@
  * Reuses the committed, idempotent
  * `scripts/db/fixtures/navigation-hierarchy-fixture-seed.sql` (Issue #1956
  * PR-5) against the local fixture backend (`scripts/dev/local-fixture-
- * backend.sh`, port 8087 per this session's live port probe — NOT the
- * hosted-dev-DB stack on 5174/8085, which does not carry this fixture
- * shape). That seed's own header documents the `d:northeast` tree
+ * backend.sh` — NOT the shared dev DB stack, which does not carry this
+ * fixture shape). That seed's own header documents the `d:northeast` tree
  * (`North-East Bangalore` -> `Kannamangala - Hoskote Corridor` Local
  * Destination CLUSTER -> `Kannamangala - Whitefield Hoskote Road` AREA leaf)
  * as EXISTING PRECISELY so a real, full-depth City > Direction > Local
@@ -43,10 +42,11 @@
  * drill-down/back-button behaviour, not this layout).
  *
  * Run:
- *   PLAYWRIGHT_BASE_URL=http://localhost:5173 npx playwright test \
- *     e2e/discover/issue-2089-breadcrumb-list-flex-layout.spec.ts --project=full
+ *   npx playwright test \
+ *     e2e/specialist/discover-issue-2089-breadcrumb-list-flex-layout.specialist.ts
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, backendGet } from './support/specialist-test';
+import type { Page } from '@playwright/test';
 
 const CITY = 'bangalore';
 const BASE = `city=${CITY}&journey=area-first`;
@@ -119,6 +119,32 @@ test.describe('@integration-ui #2089 — mobile breadcrumb/List-button flex layo
   test('a deep/long trail wraps onto a second line; a shallow 2-crumb trail stays single-line', async ({
     page,
   }) => {
+    // At 390px alongside the List button, "Bangalore / South-East Bangalore"
+    // already wraps onto 2 lines because "South-East Bangalore" is 20 chars.
+    // Override only d:southeast's displayLabel to a concise direction label
+    // ("East") for this single-line reference measurement so the 2-crumb trail
+    // genuinely stays on 1 row (~18px) while the 4-crumb Kannamangala trail
+    // wraps onto 2 rows (~42px).
+    await page.route('**/api/discover/cities/*/navigation/resolve**', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.searchParams.get('node') === D_SOUTHEAST) {
+        const res = await backendGet(page, `${url.pathname}${url.search}`);
+        const json = await res.json();
+        if (json && typeof json === 'object') {
+          json.displayLabel = 'E';
+          if (json.node && typeof json.node === 'object') {
+            json.node.displayLabel = 'E';
+          }
+        }
+        await route.fulfill({
+          status: res.status(),
+          contentType: 'application/json',
+          body: JSON.stringify(json),
+        });
+        return;
+      }
+      await route.fallback();
+    });
     await gotoNodeMapMode(page, D_SOUTHEAST);
     const shallowBox = await page
       .getByTestId('areas-breadcrumb-trail')

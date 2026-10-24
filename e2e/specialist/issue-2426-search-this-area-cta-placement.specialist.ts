@@ -28,12 +28,8 @@
  * dev stack with the seeded Bangalore fixture.
  */
 
-import { test, expect, type Page, type Locator } from '@playwright/test';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const EVIDENCE_DIR = path.join(__dirname, '..', 'docs', 'pr-evidence', 'issue-2426');
+import { test, expect } from './support/specialist-test';
+import type { Page, Locator } from '@playwright/test';
 
 const CITY = 'bangalore';
 const D_SOUTHEAST = 'd:southeast';
@@ -57,6 +53,9 @@ async function declineConsentBannerIfPresent(page: Page): Promise<void> {
 
 /** Same journey pattern as e2e/issue-2015-search-this-area-viewport.spec.ts's reachCommittedKoramangalaAreaSet — see its own doc for the rationale. Retargeted onto a node this fixture actually contains (see module doc above). */
 async function reachCommittedRRNagarAreaSet(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('discover_telemetry_consent', 'granted');
+  });
   await page.goto(`/discover?city=${CITY}&journey=area-first`);
   await page.waitForLoadState('domcontentloaded');
 
@@ -81,6 +80,9 @@ async function reachCommittedRRNagarAreaSet(page: Page): Promise<void> {
     .toBe('areas');
   expect(urlParam(page, 'rareas'), 'rareas should carry the RR Nagar area key').toBe(AREA_RR_NAGAR_KEY);
   await declineConsentBannerIfPresent(page);
+  // Allow the programmatic camera fitBounds + debounced mapBbox settle for RR Nagar to complete
+  // before user pan gestures begin.
+  await page.waitForTimeout(1000);
 }
 
 /** Same real-mouse-event pan helper as e2e/issue-2015-search-this-area-viewport.spec.ts — see its own doc. */
@@ -88,8 +90,8 @@ async function panMap(page: Page, dx: number, dy: number): Promise<void> {
   const mapContainer = page.locator('.leaflet-container').first();
   const box = await mapContainer.boundingBox();
   if (!box) throw new Error('leaflet container has no bounding box');
-  const startX = box.x + box.width / 2;
-  const startY = box.y + box.height / 2;
+  const startX = box.x + box.width * 0.65;
+  const startY = box.y + box.height * 0.65;
 
   await page.mouse.move(startX, startY);
   await page.mouse.down();
@@ -102,14 +104,14 @@ async function panMap(page: Page, dx: number, dy: number): Promise<void> {
 }
 
 async function panUntilCtaVisible(page: Page, ctaButton: Locator): Promise<void> {
-  let dx = -180;
-  let dy = -120;
-  const maxAttempts = 4;
+  // Keep each drag strictly inside the map container bounds on both desktop (683px map width)
+  // and mobile (390px map width) so mousemove coordinates never go negative or leave the viewport.
+  const dx = -150;
+  const dy = -120;
+  const maxAttempts = 6;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (await ctaButton.isVisible().catch(() => false)) return;
     await panMap(page, dx, dy);
-    dx *= 1.6;
-    dy *= 1.6;
   }
   await expect(ctaButton, 'CTA should appear once the pan drifts the viewport past tolerance').toBeVisible({
     timeout: 5_000,
@@ -143,10 +145,7 @@ function breadcrumbLocator(page: Page): Locator {
  * Full required lifecycle sequence (owner ruling on #2426): initial hidden ->
  * first genuine pan -> visible (no overlap with breadcrumb/AreaSetChips/List
  * button) -> commit VIEWPORT -> hidden -> resize/invalidateSize/moveend ->
- * still hidden -> next genuine pan -> visible. Captures a numbered screenshot
- * at each state into docs/pr-evidence/issue-2426/ for the PR body. `prefix`
- * distinguishes desktop vs mobile file names; `extraOverlapChecks` lets the
- * mobile variant also assert against the mobile Map/List toggle.
+ * still hidden -> next genuine pan -> visible.
  */
 async function runFullLifecycleWithEvidence(
   page: Page,
@@ -157,7 +156,6 @@ async function runFullLifecycleWithEvidence(
 
   // 1. Initial: committed AREA_SET, no drift yet — CTA hidden.
   await expect(ctaButton, 'CTA must not render before the viewport has drifted (AC1, unchanged from #2015)').not.toBeVisible();
-  await page.screenshot({ path: path.join(EVIDENCE_DIR, `${prefix}-1-initial-hidden.png`) });
 
   // 2. First genuine pan — CTA visible, clear of breadcrumb/AreaSetChips/List button.
   await panUntilCtaVisible(page, ctaButton);
@@ -185,7 +183,6 @@ async function runFullLifecycleWithEvidence(
   if (extraOverlapChecks && ctaBox) {
     await extraOverlapChecks(ctaBox);
   }
-  await page.screenshot({ path: path.join(EVIDENCE_DIR, `${prefix}-2-first-pan-visible.png`) });
 
   // 3. Commit VIEWPORT — CTA hides.
   await ctaButton.click();
@@ -193,7 +190,6 @@ async function runFullLifecycleWithEvidence(
     .poll(() => urlParam(page, 'rscope'), { message: 'activation should commit rscope=vp', timeout: 10_000 })
     .toBe('vp');
   await expect(ctaButton, 'CTA must hide right after activation').not.toBeVisible({ timeout: 5_000 });
-  await page.screenshot({ path: path.join(EVIDENCE_DIR, `${prefix}-3-commit-hidden.png`) });
 
   // 4. Layout resize (ResizeObserver -> invalidateSize -> debounced moveend, no user pan/zoom) — CTA must stay hidden (#2426 resize-veto fix).
   const originalViewport = page.viewportSize() ?? DESKTOP_VIEWPORT;
@@ -205,7 +201,6 @@ async function runFullLifecycleWithEvidence(
     ctaButton,
     'a layout resize must NOT re-show "Search this area" with no user pan/zoom (#2426 resize-veto fix)',
   ).not.toBeVisible({ timeout: 5_000 });
-  await page.screenshot({ path: path.join(EVIDENCE_DIR, `${prefix}-4-resize-still-hidden.png`) });
 
   // 5. Next genuine pan — CTA visible again (proves the resize-veto is a targeted one-shot, not a blanket suppression).
   await panUntilCtaVisible(page, ctaButton);
@@ -217,7 +212,6 @@ async function runFullLifecycleWithEvidence(
       `CTA bounding box must not overlap the breadcrumb bounding box after the second pan (${prefix})`,
     ).toBe(false);
   }
-  await page.screenshot({ path: path.join(EVIDENCE_DIR, `${prefix}-5-next-pan-visible.png`) });
 }
 
 test.describe.configure({ mode: 'serial' });
@@ -245,6 +239,7 @@ test.describe('@integration-ui #2426 — "Search this area" CTA placement', () =
 
     const closeListButton = page.getByTestId('mobile-map-close-list-button');
     await expect(closeListButton, 'mobile Map overlay should be open').toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(1000);
 
     await runFullLifecycleWithEvidence(page, 'mobile', async (ctaBox) => {
       const mapListButtonBox = await closeListButton.boundingBox();

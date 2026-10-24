@@ -62,7 +62,7 @@ export const ISSUE_2751_FILES = [
   'e2e/discover-school-first-journey.spec.ts',
   'e2e/discover-school-journey.spec.ts',
   'e2e/discover-school-selected.spec.ts',
-  'e2e/discover/desktop-control-bar-shell-1953.spec.ts',
+  'e2e/specialist/discover-desktop-control-bar-shell-1953.specialist.ts',
   'e2e/discover/issue-1956-pr6-no-blank-panel.spec.ts',
   'e2e/discover/mobile-landing-journey-switcher-1953.spec.ts',
   'e2e/discover/school-panel-error-states.spec.ts',

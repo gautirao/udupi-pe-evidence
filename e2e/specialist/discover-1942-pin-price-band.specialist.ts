@@ -36,8 +36,8 @@
  *   npx playwright test e2e/discover-1942-pin-price-band.spec.ts --project=full
  */
 
-import { test, expect, type Page, type Route } from '@playwright/test';
-import { hasRealCredentials } from './helpers';
+import { test, expect } from './support/specialist-test';
+import type { Page, Route } from '@playwright/test';
 
 // ── Fixture IDs (distinct from #1941's fixtures to avoid any cross-suite
 //    coincidental collision; each test's page.route stubs are scoped to the
@@ -52,6 +52,8 @@ const AUTHED_PIN_ID = 'b1942a10-0000-0000-0000-000000000005';
 
 const MANIPAL_AREA_KEY = 'IN|KA|Udupi|Manipal';
 const ENCODED_AREA_KEY = encodeURIComponent(MANIPAL_AREA_KEY);
+const MANIPAL_NODE_KEY = `a:${MANIPAL_AREA_KEY}`;
+const ENCODED_MANIPAL_NODE_KEY = encodeURIComponent(MANIPAL_NODE_KEY);
 const MANIPAL_LAT = 13.3525;
 const MANIPAL_LON = 74.79226;
 
@@ -63,10 +65,6 @@ const BAND = '₹1–2Cr';
 // and #1941's spec — the authed control-flow formatting is unchanged).
 const EXACT_PRICE_RUPEES = 13_500_000;
 const EXACT_PRICE_TEXT = '₹1.35 Cr';
-
-const userEmail = process.env.SMOKE_USER_EMAIL ?? '';
-const userPassword = process.env.SMOKE_USER_PASSWORD ?? '';
-const hasUserCreds = hasRealCredentials(userEmail, userPassword);
 
 // ── Route helpers (mirrors #1941's spec) ───────────────────────────────────
 
@@ -90,6 +88,9 @@ function cityListingsFixture(areaKey: string, listings: Record<string, unknown>[
 
 /** Stub every side call MapDiscovery fires so the area-first map is backend-free. */
 async function stubMapSideCalls(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('discover_telemetry_consent', 'granted');
+  });
   await page.route('**/api/trends/options**', (route) =>
     fulfillJson(route, 200, {
       city: 'udupi',
@@ -116,6 +117,45 @@ async function stubMapSideCalls(page: Page): Promise<void> {
       ],
     }),
   );
+  await page.route('**/api/discover/cities/*/navigation/resolve**', (route) =>
+    fulfillJson(route, 200, {
+      requested: MANIPAL_NODE_KEY,
+      resolution: 'EXACT',
+      revisionId: 1,
+      node: {
+        nodeKey: MANIPAL_NODE_KEY,
+        nodeType: 'AREA',
+        displayLabel: 'Manipal',
+        depth: 1,
+        regionKey: null,
+        ancestry: [],
+        nextLevelType: 'LISTINGS',
+        children: [],
+        revisionId: 1,
+        bounds: {
+          centreLat: MANIPAL_LAT,
+          centreLon: MANIPAL_LON,
+          minLat: 13.33,
+          minLon: 74.77,
+          maxLat: 13.38,
+          maxLon: 74.82,
+        },
+        descendantAreaKeys: null,
+        areaKey: MANIPAL_AREA_KEY,
+      },
+    }),
+  );
+  await page.route('**/api/discover/cities/*/navigation/*/counts**', (route) =>
+    fulfillJson(route, 200, {
+      nodeKey: MANIPAL_NODE_KEY,
+      count: 1,
+      schoolCount: 0,
+      areaCounts: { [MANIPAL_AREA_KEY]: 1 },
+      areaSchoolCounts: { [MANIPAL_AREA_KEY]: 0 },
+      children: [],
+      revisionId: 1,
+    }),
+  );
   await page.route('**/api/public/schools/popular**', (route) => fulfillJson(route, 200, []));
   await page.route('**/api/discover/area-groups**', (route) => fulfillJson(route, 200, { groups: [] }));
   await page.route('**/api/discover/listings**', (route) =>
@@ -130,6 +170,39 @@ async function stubMapSideCalls(page: Page): Promise<void> {
   );
 }
 
+async function mockLocalSupabaseUserSession(page: Page): Promise<void> {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const fakeUser = {
+    id: '00000000-0000-4000-8000-000000001942',
+    aud: 'authenticated',
+    role: 'authenticated',
+    email: 'buyer-1942@local.test',
+    email_confirmed_at: new Date().toISOString(),
+    app_metadata: { provider: 'email', providers: ['email'] },
+    user_metadata: { full_name: 'Buyer 1942' },
+    identities: [],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  const fakeSession = {
+    access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDE5NDIiLCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImV4cCI6OTk5OTk5OTk5OX0.sig',
+    token_type: 'bearer',
+    expires_in: 3600,
+    expires_at: nowSec + 3600,
+    refresh_token: 'fake-refresh-token-1942',
+    user: fakeUser,
+  };
+  await page.addInitScript((session) => {
+    const raw = JSON.stringify(session);
+    window.localStorage.setItem('sb-localhost-auth-token', raw);
+    window.localStorage.setItem('sb-127-auth-token', raw);
+  }, fakeSession);
+  await page.route('**/auth/v1/user**', (route) => fulfillJson(route, 200, fakeUser));
+  await page.route('**/auth/v1/token**', (route) => fulfillJson(route, 200, fakeSession));
+  await page.route('**/rest/v1/user_roles**', (route) => fulfillJson(route, 200, { role: 'user' }));
+  await page.route('**/rest/v1/profiles**', (route) => fulfillJson(route, 200, { insights_access_until: null }));
+}
+
 function markerSelector(id: string): string {
   return `[data-listing-id="${id}"] [data-testid="property-marker"]`;
 }
@@ -139,7 +212,7 @@ function markerSelector(id: string): string {
 // cluster pins) is the primary layer rather than AreaMarkerLayer — same URL
 // shape as #1941's spec.
 const areaFirstUrl =
-  `/discover?city=udupi&journey=area-first&areaKey=${ENCODED_AREA_KEY}` +
+  `/discover?city=udupi&journey=area-first&areaKey=${ENCODED_AREA_KEY}&node=${ENCODED_MANIPAL_NODE_KEY}` +
   `&lat=${MANIPAL_LAT}&lon=${MANIPAL_LON}&zoom=14`;
 
 /** Navigate to the area-first map with the given listing fixtures already stubbed. */
@@ -269,10 +342,8 @@ test.describe('@integration-ui #1942 — residual pin exposes an accessible labe
 // ─────────────────────────────────────────────────────────────────────────
 
 test.describe('#1942 — authed pin shows exact price, not the band', () => {
-  test.use({ storageState: 'e2e/fixtures/user-auth.json' });
-
   test('4: authed session renders the exact price on the pin, never the band', async ({ page }) => {
-    test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not configured');
+    await mockLocalSupabaseUserSession(page);
 
     await gotoAreaFirstMap(page, [
       {

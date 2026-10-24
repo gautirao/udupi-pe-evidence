@@ -23,7 +23,8 @@
  *   npx playwright test --project=full e2e/discover/desktop-control-bar-shell-1953.spec.ts
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
+import type { Page } from '@playwright/test';
 
 const CITY = 'bangalore';
 const VIEWPORT = { width: 1366, height: 768 };
@@ -82,8 +83,8 @@ test.describe('Issue #1953 — desktop control bar + simultaneous map/panel (136
     // Map and right panel simultaneously visible — desktop never unmounts
     // DiscoverMapMount (isMobileShell is false above the 820px breakpoint).
     await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('discover-right-panel')).toBeVisible();
-    await expect(page.getByTestId('journey-card-area-first')).toBeVisible();
+    await expect(page.getByTestId('discover-areas-journey-panel-shell')).toBeVisible();
+    await expect(page.getByTestId('areas-journey-panel')).toBeVisible();
 
     // The mobile Map/List trigger must not exist at all at this width —
     // DiscoverControlBar only receives `mobileMapTrigger` when isMobileShell.
@@ -91,7 +92,9 @@ test.describe('Issue #1953 — desktop control bar + simultaneous map/panel (136
 
     // Single-row control bar: no horizontal scroll on the row itself.
     const barOverflow = await page.evaluate(() => {
-      const bar = document.querySelector('[data-testid="discover-control-bar-row"]');
+      const bar = document.querySelector(
+        '[data-testid="discover-control-bar-row"], [data-testid="discover-control-bar"]',
+      );
       if (!bar) return null;
       return { scrollWidth: bar.scrollWidth, clientWidth: bar.clientWidth };
     });

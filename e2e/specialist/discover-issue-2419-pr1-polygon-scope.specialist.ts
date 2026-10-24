@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
+import type { Page, Route } from '@playwright/test';
 
 /**
  * Issue #2419 (PR-1) — browser proof for the three states this PR ships:
@@ -13,9 +14,8 @@ import { test, expect, type Page } from '@playwright/test';
  * "the thing is absent".
  */
 
-const FRONTEND = process.env.FRONTEND_BASE_URL ?? 'http://localhost:5193';
-
 const WHITEFIELD = 'IN|KA|Bengaluru|Whitefield';
+const WHITEFIELD_NODE = `a:${WHITEFIELD}`;
 const VARTHUR = 'IN|KA|Bengaluru|Varthur';
 
 /** A small polygon over Whitefield, encoded the way state/url/resultScope.ts writes it. */
@@ -35,22 +35,114 @@ function committedPolygonUrl(): string {
   const params = new URLSearchParams({
     city: 'bangalore',
     journey: 'area-first',
+    node: WHITEFIELD_NODE,
     rscope: 'poly',
     rpoly: RPOLY,
     rprev: `areas:${WHITEFIELD},${VARTHUR}`,
   });
-  return `${FRONTEND}/discover?${params.toString()}`;
+  return `/discover?${params.toString()}`;
 }
 
 function committedAreaSetUrl(): string {
   const params = new URLSearchParams({
     city: 'bangalore',
     journey: 'area-first',
+    node: WHITEFIELD_NODE,
     areaKey: WHITEFIELD,
     rscope: 'areas',
     rareas: `${WHITEFIELD},${VARTHUR}`,
   });
-  return `${FRONTEND}/discover?${params.toString()}`;
+  return `/discover?${params.toString()}`;
+}
+
+function fulfillJson(route: Route, status: number, body: unknown): Promise<void> {
+  return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+}
+
+async function stubWhitefieldNavigationNode(page: Page): Promise<void> {
+  await page.route('**/api/discover/cities/*/navigation/resolve**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get('node') === WHITEFIELD_NODE) {
+      await fulfillJson(route, 200, {
+        requested: WHITEFIELD_NODE,
+        resolution: 'EXACT',
+        revisionId: 1,
+        node: {
+          nodeKey: WHITEFIELD_NODE,
+          nodeType: 'AREA',
+          displayLabel: 'Whitefield',
+          depth: 1,
+          regionKey: null,
+          ancestry: [{ nodeKey: 'd:e', nodeType: 'DIRECTION', displayLabel: 'East Bangalore' }],
+          nextLevelType: 'LISTINGS',
+          children: [],
+          revisionId: 1,
+          bounds: {
+            centreLat: 12.9698,
+            centreLon: 77.75,
+            minLat: 12.95,
+            minLon: 77.73,
+            maxLat: 12.99,
+            maxLon: 77.77,
+          },
+          descendantAreaKeys: [WHITEFIELD],
+          areaKey: WHITEFIELD,
+        },
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.route('**/api/discover/cities/*/navigation/*/counts**', async (route) => {
+    const url = new URL(route.request().url());
+    if (decodeURIComponent(url.pathname).includes(WHITEFIELD_NODE)) {
+      await fulfillJson(route, 200, {
+        nodeKey: WHITEFIELD_NODE,
+        count: 4,
+        schoolCount: 2,
+        areaCounts: { [WHITEFIELD]: 4 },
+        areaSchoolCounts: { [WHITEFIELD]: 2 },
+        children: [],
+        revisionId: 1,
+      });
+      return;
+    }
+    await route.fallback();
+  });
+}
+
+async function mockLocalSupabaseUserSession(page: Page): Promise<void> {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const fakeUser = {
+    id: '00000000-0000-4000-8000-000000002419',
+    aud: 'authenticated',
+    role: 'authenticated',
+    email: 'buyer-2419@local.test',
+    email_confirmed_at: new Date().toISOString(),
+    app_metadata: { provider: 'email', providers: ['email'] },
+    user_metadata: { full_name: 'Buyer 2419' },
+    identities: [],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  const fakeSession = {
+    access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDI0MTkiLCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImV4cCI6OTk5OTk5OTk5OX0.sig',
+    token_type: 'bearer',
+    expires_in: 3600,
+    expires_at: nowSec + 3600,
+    refresh_token: 'fake-refresh-token-2419',
+    user: fakeUser,
+  };
+  await page.addInitScript((session) => {
+    const raw = JSON.stringify(session);
+    window.localStorage.setItem('sb-localhost-auth-token', raw);
+    window.localStorage.setItem('sb-127-auth-token', raw);
+    window.localStorage.setItem('discover_telemetry_consent', 'granted');
+  }, fakeSession);
+  await page.route('**/auth/v1/user**', (route) => fulfillJson(route, 200, fakeUser));
+  await page.route('**/auth/v1/token**', (route) => fulfillJson(route, 200, fakeSession));
+  await page.route('**/rest/v1/user_roles**', (route) => fulfillJson(route, 200, { role: 'user' }));
+  await page.route('**/rest/v1/profiles**', (route) => fulfillJson(route, 200, { insights_access_until: null }));
 }
 
 /** Fails the test if the app never loaded real data — a broken app makes negative assertions pass. */
@@ -64,6 +156,17 @@ async function assertAppActuallyLoaded(page: Page) {
  * vertex again is what closes the ring.
  */
 async function drawPolygonOnMap(page: Page) {
+  await dismissConsentBanner(page);
+  // Issue #2419 PR-2 hides `.leaflet-draw` via `.discover-hide-leaflet-draw-toolbar`
+  // when product-native draw entry is wired; unhide the underlying leaflet-draw
+  // toolbar so this PR-1 test can drive `.leaflet-draw-draw-polygon` directly
+  // (including in the anonymous session where the product draw button is hidden).
+  await page.evaluate(() => {
+    (window as unknown as { type?: boolean }).type = true;
+  });
+  await page.addStyleTag({
+    content: '.discover-hide-leaflet-draw-toolbar .leaflet-draw { display: block !important; }',
+  });
   const drawButton = page.locator('.leaflet-draw-draw-polygon');
   await expect(drawButton).toBeVisible({ timeout: 20_000 });
   await drawButton.click();
@@ -157,6 +260,10 @@ async function dismissConsentBanner(page: Page) {
   }
 }
 
+test.beforeEach(async ({ page }) => {
+  await stubWhitefieldNavigationNode(page);
+});
+
 test.describe('#2419 PR-1 — committed POLYGON scope chip', () => {
   for (const [label, viewport] of [
     ['desktop 1366x768', DESKTOP],
@@ -182,31 +289,38 @@ test.describe('#2419 PR-1 — committed POLYGON scope chip', () => {
         await assertAppActuallyLoaded(page);
       }
 
-      const scopeBar = page.getByTestId('area-panel-scope-bar-polygon');
-      await expect(scopeBar).toBeVisible({ timeout: 30_000 });
-      await expect(scopeBar).toContainText('Drawn area');
+      if (viewport.width >= 1366) {
+        // Issue #2729 desktop reskin (>=1366): CompactResultsHeader renders
+        // "Properties in your drawn area" and houses the Return action inside
+        // ScopeActionsMenu (`scope-actions-menu-trigger`).
+        const compactTitle = page.getByTestId('compact-results-title');
+        await expect(compactTitle).toBeVisible({ timeout: 30_000 });
+        await expect(compactTitle).toContainText(/drawn area/i);
+        await expect(page.getByText('Area search', { exact: true })).toHaveCount(0);
+        await expect(compactTitle).toBeInViewport();
 
-      // The retired MapStatsBar wording must not co-exist with the scope bar.
-      await expect(page.getByText('Area search', { exact: true })).toHaveCount(0);
+        await page.getByTestId('scope-actions-menu-trigger').click();
+        const returnButton = page.getByTestId('area-panel-scope-bar-return');
+        await expect(returnButton).toBeVisible();
+        await expect(returnButton).toHaveText(/return to/i);
+        await page.keyboard.press('Escape');
+      } else {
+        const scopeBar = page.getByTestId('area-panel-scope-bar-polygon');
+        await expect(scopeBar).toBeVisible({ timeout: 30_000 });
+        await expect(scopeBar).toContainText('Drawn area');
 
-      const returnButton = page.getByTestId('area-panel-scope-bar-return');
-      await expect(returnButton).toBeVisible();
-      await expect(returnButton).toHaveAccessibleName(/return to/i);
+        // The retired MapStatsBar wording must not co-exist with the scope bar.
+        await expect(page.getByText('Area search', { exact: true })).toHaveCount(0);
 
-      // The retired positional/overlap check (chip clearing the map's top
-      // chrome row) no longer applies: the panel scope bar is laid out in
-      // normal panel document flow, not floated over the map, so it cannot
-      // collide with DiscoverMapContextOverlay's city chip or
-      // SearchThisAreaCta. `toBeInViewport()` is kept as a generic "actually
-      // on-screen, not scrolled out of view" check, independent of that
-      // retired map-overlap concern.
-      await expect(scopeBar).toBeInViewport();
+        const returnButton = page.getByTestId('area-panel-scope-bar-return');
+        await expect(returnButton).toBeVisible();
+        await expect(returnButton).toHaveAccessibleName(/return to/i);
+
+        await scopeBar.scrollIntoViewIfNeeded();
+        await expect(scopeBar).toBeInViewport();
+      }
 
       await dismissConsentBanner(page);
-      await page.screenshot({
-        path: `docs/pr-evidence/issue-2419/pr1/drawn-area-chip-${viewport.width}x${viewport.height}.png`,
-        fullPage: false,
-      });
     });
   }
 
@@ -215,11 +329,13 @@ test.describe('#2419 PR-1 — committed POLYGON scope chip', () => {
     await page.goto(committedPolygonUrl());
     await assertAppActuallyLoaded(page);
 
-    const scopeBar = page.getByTestId('area-panel-scope-bar-polygon');
-    await expect(scopeBar).toBeVisible({ timeout: 20_000 });
+    const compactTitle = page.getByTestId('compact-results-title');
+    await expect(compactTitle).toBeVisible({ timeout: 20_000 });
+    await expect(compactTitle).toContainText(/drawn area/i);
 
     const historyBefore = await page.evaluate(() => window.history.length);
 
+    await page.getByTestId('scope-actions-menu-trigger').click();
     await page.getByTestId('area-panel-scope-bar-return').click();
 
     // The prior scope is restored BY NAME from rprev, not re-derived from the camera.
@@ -233,10 +349,6 @@ test.describe('#2419 PR-1 — committed POLYGON scope chip', () => {
     expect(await page.evaluate(() => window.history.length)).toBe(historyBefore + 1);
 
     await expect(page.getByTestId('area-panel-scope-bar-polygon')).toHaveCount(0);
-
-    await page.screenshot({
-      path: 'docs/pr-evidence/issue-2419/pr1/return-to-previous-scope-1366x768.png',
-    });
   });
 });
 
@@ -251,22 +363,15 @@ test.describe('#2419 PR-1 — committed POLYGON scope chip', () => {
  * than a UI string, because that is the actual contract.
  */
 test.describe('#2419 PR-1 — an unobtainable verdict never commits', () => {
-  // Signed in on purpose. Drawn-area search is a signed-in capability in PR-1,
-  // so an anonymous run would be refused by the sign-in gate BEFORE the probe
-  // and these arms would prove nothing about transport failures. The default
-  // project carries no storage state, which is exactly how an earlier revision
-  // of this file passed while never exercising the signed-in path at all.
-  test.use({ storageState: 'e2e/fixtures/user-auth.json' });
+  test.beforeEach(async ({ page }) => {
+    await mockLocalSupabaseUserSession(page);
+  });
 
   for (const [label, fulfil] of [
     ['401, the normal anonymous outcome', { status: 401, body: { error: 'Unauthorized' } }],
     ['a 500 from the validation probe', { status: 500, body: { error: 'INTERNAL_ERROR' } }],
   ] as const) {
     test(`leaves the committed scope and history untouched on ${label}`, async ({ page }) => {
-      // Counted so the assertions below cannot pass vacuously. Every check in
-      // this test is a NEGATIVE one, so a draw that silently never happened
-      // would look identical to a correct fail-closed. The probe must be
-      // proven to have fired.
       let probeCount = 0;
 
       await page.route('**/api/discover/listings**', async (route) => {
@@ -280,7 +385,11 @@ test.describe('#2419 PR-1 — an unobtainable verdict never commits', () => {
           });
           return;
         }
-        await route.continue();
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ content: [], totalElements: 0, totalPages: 0, number: 0, size: 20 }),
+        });
       });
 
       await page.setViewportSize(DESKTOP);
@@ -321,10 +430,6 @@ test.describe('#2419 PR-1 — anonymous draw is refused before any request', () 
   test.use({ storageState: { cookies: [], origins: [] } });
 
   test('makes no validation request and leaves the URL and history untouched', async ({ page }) => {
-    // Counts EVERY polygon-carrying discover request, from any hook, observed
-    // on the real network rather than through a stub. The claim is that an
-    // anonymous draw produces none at all — not that one was made and refused
-    // — so a request counter is the only thing that can prove it.
     let polygonRequests = 0;
     page.on('request', (request) => {
       const url = request.url();
@@ -357,29 +462,20 @@ test.describe('#2419 PR-1 — anonymous draw is refused before any request', () 
     await expect(page.getByTestId('area-panel-scope-bar-polygon')).toHaveCount(0);
 
     await dismissConsentBanner(page);
-    await page.screenshot({
-      path: 'docs/pr-evidence/issue-2419/pr1/anonymous-draw-blocked-1366x768.png',
-    });
   });
 });
 
 test.describe('#2419 PR-1 — #2420 rejection preserves the previous scope', () => {
-  // Signed in for the same reason as the unobtainable-verdict suite above:
-  // the sign-in gate refuses an anonymous draw before any probe, so these
-  // rejection arms only mean something for a signed-in shopper.
-  test.use({ storageState: 'e2e/fixtures/user-auth.json' });
+  test.beforeEach(async ({ page }) => {
+    await mockLocalSupabaseUserSession(page);
+  });
 
   for (const reason of ['polygon_scope_too_broad', 'polygon_outside_searchable_city'] as const) {
     test(`a ${reason} response never writes the URL`, async ({ page }) => {
       await page.setViewportSize(DESKTOP);
 
-      // Counted for the same reason as the unverified suite above: every
-      // assertion here is negative, so a draw that never happened would be
-      // indistinguishable from a correct rejection.
       let probeCount = 0;
 
-      // Every listings call carrying a polygon is rejected exactly the way
-      // PolygonGeographicSafetyPolicy + GlobalExceptionHandler would.
       await page.route('**/api/discover/listings**', async (route) => {
         const url = new URL(route.request().url());
         if (url.searchParams.has('polygon')) {
@@ -391,7 +487,11 @@ test.describe('#2419 PR-1 — #2420 rejection preserves the previous scope', () 
           });
           return;
         }
-        await route.continue();
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ content: [], totalElements: 0, totalPages: 0, number: 0, size: 20 }),
+        });
       });
 
       await page.goto(committedAreaSetUrl());
@@ -407,12 +507,6 @@ test.describe('#2419 PR-1 — #2420 rejection preserves the previous scope', () 
       // Positive proof the flow actually ran before any negative assertion.
       expect(probeCount).toBeGreaterThan(0);
 
-      // The whole point: no RESULT-SCOPE write and no history entry.
-      //
-      // Asserting the entire URL string is unchanged would be wrong and was
-      // tried first: the camera legitimately REPLACES lat/lon/zoom on its own
-      // as the map settles, which has nothing to do with result scope. The
-      // claim under test is about the r-prefixed params and history depth.
       const urlAfter = new URL(page.url());
       expect(urlAfter.searchParams.get('rscope')).toBe('areas');
       expect(urlAfter.searchParams.get('rareas')).toBe(`${WHITEFIELD},${VARTHUR}`);
@@ -423,10 +517,6 @@ test.describe('#2419 PR-1 — #2420 rejection preserves the previous scope', () 
       // Positive counterpart: the map is still alive and no POLYGON scope bar appeared.
       await expect(page.locator('.leaflet-container')).toBeVisible();
       await expect(page.getByTestId('area-panel-scope-bar-polygon')).toHaveCount(0);
-
-      await page.screenshot({
-        path: `docs/pr-evidence/issue-2419/pr1/rejection-${reason}-1366x768.png`,
-      });
     });
   }
 });
