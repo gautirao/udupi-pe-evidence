@@ -63,7 +63,8 @@
  *     e2e/discover/journey-switch-overlay-cleanup-1940.spec.ts --project=full
  */
 
-import { test, expect, type Page, type Route } from '@playwright/test';
+import { type Page, type Route } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
 
 // Force anonymous context throughout — no storageState (no Authorization
 // token), so the schoolRadiusHint banner's !isAuthenticated gate is satisfied.
@@ -248,6 +249,47 @@ async function stubBangalore(page: Page): Promise<void> {
   await page.route('**/api/discover/markers**', (route) => fulfillJson(route, 200, { city: 'bangalore', markers: [] }));
   await page.route('**/api/discover/cities/*/listings**', (route) => fulfillJson(route, 200, EMPTY_CITY_LISTINGS));
   await page.route('**/api/discover/listings**', (route) => fulfillJson(route, 200, EMPTY_LISTINGS_PAGE));
+  await page.route('**/api/discover/cities/*/areas/*/navigation-path**', (route) =>
+    fulfillJson(route, 200, {
+      nodeKey: `a:${BANGALORE_AREA_KEY}`,
+      areaKey: BANGALORE_AREA_KEY,
+      displayLabel: 'Whitefield',
+      ancestry: [],
+      revisionId: 1,
+    }),
+  );
+  await page.route('**/api/discover/cities/*/navigation/resolve**', (route) =>
+    fulfillJson(route, 200, {
+      requested: `a:${BANGALORE_AREA_KEY}`,
+      resolution: 'EXACT',
+      revisionId: 1,
+      node: {
+        nodeKey: `a:${BANGALORE_AREA_KEY}`,
+        nodeType: 'AREA',
+        displayLabel: 'Whitefield',
+        depth: 1,
+        regionKey: null,
+        ancestry: [],
+        nextLevelType: 'LISTINGS',
+        children: [],
+        revisionId: 1,
+        bounds: null,
+        descendantAreaKeys: null,
+        areaKey: BANGALORE_AREA_KEY,
+      },
+    }),
+  );
+  await page.route('**/api/discover/cities/*/navigation/*/counts**', (route) =>
+    fulfillJson(route, 200, {
+      nodeKey: `a:${BANGALORE_AREA_KEY}`,
+      count: 4,
+      schoolCount: 5,
+      areaCounts: { [BANGALORE_AREA_KEY]: 4 },
+      areaSchoolCounts: { [BANGALORE_AREA_KEY]: 5 },
+      children: [],
+      revisionId: 1,
+    }),
+  );
   // Registered after the broader /listings glob so its more specific path wins
   // (Playwright matches the most-recently-added route first).
   await page.route('**/api/discover/cities/*/school-radius-listings**', (route) =>
@@ -264,6 +306,38 @@ async function stubUdupi(page: Page): Promise<void> {
   await page.route('**/api/discover/markers**', (route) => fulfillJson(route, 200, { city: 'udupi', markers: [] }));
   await page.route('**/api/discover/cities/*/listings**', (route) => fulfillJson(route, 200, UDUPI_CITY_LISTINGS));
   await page.route('**/api/discover/listings**', (route) => fulfillJson(route, 200, EMPTY_LISTINGS_PAGE));
+  await page.route('**/api/discover/cities/*/navigation/resolve**', (route) =>
+    fulfillJson(route, 200, {
+      requested: `a:${UDUPI_AREA_KEY}`,
+      resolution: 'EXACT',
+      revisionId: 1,
+      node: {
+        nodeKey: `a:${UDUPI_AREA_KEY}`,
+        nodeType: 'AREA',
+        displayLabel: 'Manipal',
+        depth: 1,
+        regionKey: null,
+        ancestry: [],
+        nextLevelType: 'LISTINGS',
+        children: [],
+        revisionId: 1,
+        bounds: null,
+        descendantAreaKeys: null,
+        areaKey: UDUPI_AREA_KEY,
+      },
+    }),
+  );
+  await page.route('**/api/discover/cities/*/navigation/*/counts**', (route) =>
+    fulfillJson(route, 200, {
+      nodeKey: `a:${UDUPI_AREA_KEY}`,
+      count: 6,
+      schoolCount: 3,
+      areaCounts: { [UDUPI_AREA_KEY]: 6 },
+      areaSchoolCounts: { [UDUPI_AREA_KEY]: 3 },
+      children: [],
+      revisionId: 1,
+    }),
+  );
 }
 
 const SCHOOL_FIRST_RADIUS_URL =
@@ -300,7 +374,7 @@ async function gotoSchoolFirstWithActiveRadius(page: Page): Promise<void> {
   );
   await page.goto(SCHOOL_FIRST_RADIUS_URL);
   await radiusListingsResponse;
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
 
   // Precondition: genuinely in the school-selected, radius-active state before
   // the journey switch — otherwise a "0 overlays" assertion after switching
@@ -324,7 +398,7 @@ async function gotoAreaFirstCombinedWithActiveRadius(page: Page): Promise<void> 
   );
   await page.goto(AREA_FIRST_COMBINED_SCHOOL_RADIUS_URL);
   await radiusListingsResponse;
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
 
   // Precondition: genuinely in the combined area-first+school, radius-active
   // state before the journey switch — otherwise a "0 overlays" assertion after
@@ -346,6 +420,7 @@ test.describe('Issue #1940 — journey-switch overlay cleanup (regression)', () 
     await stubBangalore(page);
     await gotoSchoolFirstWithActiveRadius(page);
 
+    // The exact user gesture from the bug report: top-nav click, no "Start over".
     await page.getByRole('link', { name: 'Agricultural land' }).click();
 
     // Sanity: the nav switch actually happened (journey changed, school params dropped).
@@ -378,7 +453,7 @@ test.describe('Issue #1940 — journey-switch overlay cleanup (regression)', () 
     await stubUdupi(page);
 
     await page.goto('/discover?city=udupi&journey=agri-first');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Confirm the agri landing actually rendered (corridor list mounted), so
     // the absence assertions below reflect a settled page, not a blank one.
@@ -400,31 +475,18 @@ test.describe('Issue #1940 — journey-switch overlay cleanup (regression)', () 
     await expect(page).toHaveURL(/journey=agri-first/, { timeout: 10_000 });
     await expect(radiusCircleLocator(page)).toHaveCount(0, { timeout: 10_000 });
 
-    // Come back to School-first via the top nav (bare landing — getDiscoverRoute
-    // does not carry a schoolId forward).
+    // Come back to School-first via the top nav.
     await page.getByRole('link', { name: 'Schools' }).click();
     await expect(page).toHaveURL(/journey=school-first/, { timeout: 10_000 });
     await expect(page).not.toHaveURL(/schoolId=/);
     await expect(radiusCircleLocator(page)).toHaveCount(0);
 
-    // Re-select the school through the real search UI (not a URL hack) — proves
+    // Re-select the school through the real UI (not a URL hack) — proves
     // the fix didn't regress the working School journey (AC5).
-    //
-    // NOTE: the bare school-first landing renders SchoolBrowsePanel (school
-    // zones list), NOT the ScopedSearch component (which only backs the
-    // area-first AreaGroupsLandingPanel/AreaGroupSelectedPanel — see
-    // src/components/discover/panels/AreaGroupsLandingPanel.tsx and
-    // AreaGroupSelectedPanel.tsx). SchoolBrowsePanel already IS school-only,
-    // so it has no Area/School mode toggle and no `scoped-search-input` /
-    // `search-result-school-*` testids — its inline search box only carries
-    // the placeholder "Search school name..." (deliberately kept as the live
-    // testing locator per the comment in SchoolJourneyPanels.tsx), and its
-    // SchoolCard results render as plain buttons keyed off the school name
-    // text (see src/components/discover/panels/SchoolJourneyPanels.tsx
-    // SchoolBrowsePanel / SchoolCard). Match the real DOM instead of a
-    // testid that doesn't exist on this view.
-    await page.getByPlaceholder('Search school name...').fill('Whitefield');
-    const suggestion = page.getByText(SCHOOL_FIXTURE.name, { exact: true });
+    const searchInput = page.getByPlaceholder('Search school name...');
+    await expect(searchInput).toBeVisible({ timeout: 10_000 });
+    await searchInput.fill('Whitefield');
+    const suggestion = page.getByText(SCHOOL_FIXTURE.name, { exact: true }).first();
     await expect(suggestion).toBeVisible({ timeout: 10_000 });
     await suggestion.click();
 
@@ -443,7 +505,7 @@ test.describe('Issue #1940 — journey-switch overlay cleanup (regression)', () 
     // school marker, and "more homes near this school" banner all rendered.
     await gotoAreaFirstCombinedWithActiveRadius(page);
 
-    // Same top-nav link AC1 uses to switch to agri-first.
+    // Same top-nav gesture AC1 uses (no "Start over").
     await page.getByRole('link', { name: 'Agricultural land' }).click();
 
     // Sanity: the nav switch actually happened (journey changed, school params dropped).

@@ -68,7 +68,8 @@
  *   PLAYWRIGHT_BASE_URL=http://localhost:<port> npx playwright test \
  *     --project=full e2e/discover/issue-1823-camera-fit-policy.spec.ts
  */
-import { test, expect, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { test, expect, backendGet } from './support/specialist-test';
 
 const CITY = 'bangalore';
 const AREA_FIRST_BASE = `city=${CITY}&journey=area-first`;
@@ -78,6 +79,7 @@ const AREA_RR_NAGAR = 'a:IN|KA|Bengaluru|RR Nagar';
 const D_CENTRAL = 'd:central';
 
 const SETTLE_MS = 2_500;
+const INLINE_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
 type Camera = { lat: string | null; lon: string | null; zoom: string | null };
 
@@ -133,6 +135,19 @@ async function dismissConsentBannerIfPresent(page: Page): Promise<void> {
   }
 }
 
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/discover/cities/*/school-radius-listings**', async (route) => {
+    const reqUrl = new URL(route.request().url());
+    const res = await backendGet(page, `${reqUrl.pathname}${reqUrl.search}`);
+    const body = await res.text();
+    await route.fulfill({
+      status: res.status(),
+      headers: res.headers(),
+      body: body.replace(/https?:\/\/[^"]*Fixture\+Photo[^"]*/g, INLINE_GIF),
+    });
+  });
+});
+
 test.describe('@integration-ui #1823 — camera fit policy', () => {
   // ─────────────────────────────────────────────────────────────────────
   // T1 — canonical Area/node listing entry fires on a fresh navigation,
@@ -147,7 +162,9 @@ test.describe('@integration-ui #1823 — camera fit policy', () => {
     // can publish its seq-1 write before AreaPanner's own effect has ever
     // run once. Pre-fix (adopt-on-mount sentinel), that first write was
     // silently absorbed and the map stayed on the default city view.
-    await page.goto(`/discover?${AREA_FIRST_BASE}&node=${encodeURIComponent(AREA_RR_NAGAR)}`);
+    await page.goto(
+      `/discover?${AREA_FIRST_BASE}&rscope=areas&rareas=${encodeURIComponent('IN|KA|Bengaluru|RR Nagar')}&node=${encodeURIComponent(AREA_RR_NAGAR)}`,
+    );
     await page.waitForLoadState('domcontentloaded');
     await dismissConsentBannerIfPresent(page);
     // Fix-verify correction — `navigation-level-panel` only mounts at an
@@ -207,6 +224,13 @@ test.describe('@integration-ui #1823 — camera fit policy', () => {
 
     await page.getByTestId(cardTestId(D_CENTRAL)).click();
     await expect.poll(() => nodeParam(page)).toBe(D_CENTRAL);
+    await expect
+      .poll(() => getCanonicalNodeFitCount(page), {
+        timeout: 10_000,
+        message: 'T1: a fresh PUSH to a DIFFERENT node must fire its own fit — a value equal to countAtRoot means the fit was dropped',
+      })
+      .toBeGreaterThan(countAtRoot as number);
+    await expect.poll(() => readCamera(page).lat, { timeout: 10_000 }).not.toBeNull();
     await page.waitForTimeout(SETTLE_MS);
 
     const countAfterDifferentNode = await getCanonicalNodeFitCount(page);
@@ -230,7 +254,9 @@ test.describe('@integration-ui #1823 — camera fit policy', () => {
   // after #1823's consolidation.
   // ─────────────────────────────────────────────────────────────────────
   test('T2: browser Back onto a previously-visited Area with a persisted viewport does not re-fire the canonical fit', async ({ page }) => {
-    await page.goto(`/discover?${AREA_FIRST_BASE}`);
+    await page.goto(
+      `/discover?${AREA_FIRST_BASE}&rscope=areas&rareas=${encodeURIComponent('IN|KA|Bengaluru|RR Nagar')}`,
+    );
     await page.waitForLoadState('domcontentloaded');
     await expect(page.getByTestId('navigation-level-panel')).toBeVisible({ timeout: 15_000 });
     await dismissConsentBannerIfPresent(page);
@@ -241,10 +267,11 @@ test.describe('@integration-ui #1823 — camera fit policy', () => {
 
     await page.getByTestId(cardTestId(AREA_RR_NAGAR)).click();
     await expect.poll(() => nodeParam(page)).toBe(AREA_RR_NAGAR);
-    // Real settle window so the debounced viewport write persists lat/lon/
-    // zoom onto THIS history entry before we leave it — otherwise Back
-    // would restore an entry with no persisted viewport at all, trivially
-    // routing around the guard this test targets.
+    // Wait for initial camera write before starting the settle window so the
+    // debounced viewport write persists lat/lon/zoom onto THIS history entry
+    // before we leave it — otherwise Back would restore an entry with no
+    // persisted viewport at all, trivially routing around the guard this test targets.
+    await expect.poll(() => readCamera(page).lat, { timeout: 10_000 }).not.toBeNull();
     await page.waitForTimeout(SETTLE_MS);
 
     const areaCameraBeforeHome = readCamera(page);
@@ -284,7 +311,7 @@ test.describe('@integration-ui #1823 — camera fit policy', () => {
     await page.waitForLoadState('domcontentloaded');
     await dismissConsentBannerIfPresent(page);
 
-    const exploreByAreaBtn = page.getByText('Explore by area');
+    const exploreByAreaBtn = page.getByText('Explore by area').first();
     await exploreByAreaBtn.waitFor({ state: 'visible', timeout: 10_000 });
     await exploreByAreaBtn.click();
 
@@ -292,7 +319,7 @@ test.describe('@integration-ui #1823 — camera fit policy', () => {
     await regionBtn.waitFor({ state: 'visible', timeout: 10_000 });
     await regionBtn.click();
 
-    const clusterBtn = page.getByText('Domlur Layout & Kodihalli').first();
+    const clusterBtn = page.getByText('Jayanagar & Sanjeevini Nagar').first();
     await clusterBtn.waitFor({ state: 'visible', timeout: 10_000 });
     await clusterBtn.click();
     await dismissConsentBannerIfPresent(page);
@@ -301,6 +328,7 @@ test.describe('@integration-ui #1823 — camera fit policy', () => {
     await expect(browseListingsBtn).toBeVisible({ timeout: 15_000 });
     // Let the cluster node's own fit fully settle before capturing the
     // baseline — this is the fit T3 asserts does NOT get a second sibling.
+    await expect.poll(() => readCamera(page).lat, { timeout: 10_000 }).not.toBeNull();
     await page.waitForTimeout(SETTLE_MS);
 
     const countBeforeCta = await getCanonicalNodeFitCount(page);
@@ -472,6 +500,9 @@ test.describe('@integration-ui #1823 — camera fit policy', () => {
     await page.route(`**/api/discover/cities/${MOCK_CITY}/listings**`, (route) =>
       route.fulfill({ json: { city: MOCK_CITY, limitPerArea: 5, areas: [] } }),
     );
+    await page.route('**/api/discover/cities/*/navigation/**', (route) =>
+      route.fulfill({ status: 404, json: {} }),
+    );
 
     // Cold load carrying a deliberately WRONG "restored" viewport far from
     // Udupi (lat=1/lon=1, near the equator/prime-meridian). If the group
@@ -484,7 +515,7 @@ test.describe('@integration-ui #1823 — camera fit policy', () => {
     );
     await page.waitForLoadState('domcontentloaded');
     await dismissConsentBannerIfPresent(page);
-    await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('area-group-focus-panel')).toBeVisible({ timeout: 10_000 });
 
     await expect
       .poll(

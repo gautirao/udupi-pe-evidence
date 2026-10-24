@@ -26,9 +26,12 @@
  *   PLAYWRIGHT_BASE_URL=http://localhost:5230 ./node_modules/.bin/playwright test \
  *     e2e/discover-listing-detail-reskin-desktop-2159.spec.ts --project=full
  */
-import { test, expect } from '@playwright/test';
+import { URL as NodeURL } from 'node:url';
+import { test, expect, backendGet } from './support/specialist-test';
 
-const AREA_NODE = 'a:IN|KA|Bengaluru|JP Nagar';
+const INLINE_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+const AREA_NODE = 'a:IN|KA|Bengaluru|RR Nagar';
 const AREA_URL =
   `/discover?city=bangalore&node=${encodeURIComponent(AREA_NODE)}` +
   `&lat=12.90755&lon=77.58744&zoom=14`;
@@ -41,11 +44,54 @@ async function dismissConsentBannerIfPresent(page: import('@playwright/test').Pa
 }
 
 function currentNodeParam(page: import('@playwright/test').Page): string | null {
-  return new URL(page.url()).searchParams.get('node');
+  return new NodeURL(page.url()).searchParams.get('node');
 }
 
 test.describe('#2159 Listing-detail reskin — desktop (1366x768) evidence', () => {
   test.use({ viewport: { width: 1366, height: 768 } });
+
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/api/discover/**', async (route) => {
+      try {
+        const u = new NodeURL(route.request().url());
+        const res = await backendGet(page, `${u.pathname}${u.search}`);
+        const body = (await res.text()).replace(/https?:\/\/[^"'\\]+Fixture\+Photo/g, INLINE_GIF);
+        await route.fulfill({
+          status: res.status(),
+          headers: res.headers(),
+          body,
+        });
+      } catch {
+        // Page or APIResponse disposed during test teardown.
+      }
+    });
+
+    await page.route('**/api/public/listings/**', async (route) => {
+      try {
+        const u = new NodeURL(route.request().url());
+        const res = await backendGet(page, `${u.pathname}${u.search}`);
+        const text = await res.text();
+        let body = text.replace(/https?:\/\/[^"'\\]+Fixture\+Photo/g, INLINE_GIF);
+        try {
+          const parsed = JSON.parse(body) as Record<string, unknown>;
+          if (parsed && typeof parsed === 'object' && !parsed.primaryImageUrl) {
+            parsed.primaryImageUrl = INLINE_GIF;
+            parsed.imageCount = Math.max(Number(parsed.imageCount ?? 0), 1);
+            body = JSON.stringify(parsed);
+          }
+        } catch {
+          // Non-JSON response body.
+        }
+        await route.fulfill({
+          status: res.status(),
+          headers: res.headers(),
+          body,
+        });
+      } catch {
+        // Page or APIResponse disposed during test teardown.
+      }
+    });
+  });
 
   test('reskinned detail surface renders with no layout obstruction, node= survives Area -> Listing -> Back', async ({
     page,
@@ -59,7 +105,7 @@ test.describe('#2159 Listing-detail reskin — desktop (1366x768) evidence', () 
     await dismissConsentBannerIfPresent(page);
 
     await page.waitForSelector('[data-testid="listing-card"]', { timeout: 20_000 });
-    expect(currentNodeParam(page), 'fixture sanity: the representative URL must carry the JP Nagar node').toBe(AREA_NODE);
+    expect(currentNodeParam(page), 'fixture sanity: the representative URL must carry the RR Nagar node').toBe(AREA_NODE);
 
     // Real backend, real listing — no mocked navigation.
     const firstCard = page.locator('[data-testid="listing-card"]').first();

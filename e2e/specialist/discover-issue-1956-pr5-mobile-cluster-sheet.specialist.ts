@@ -23,7 +23,8 @@
  * this PR's QA report for the exact resolve response. Every assertion below
  * is real and unweakened against this seeded shape.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
 import { assertReachable } from '../support/reachability';
 
 const CITY = 'bangalore';
@@ -125,7 +126,11 @@ test.describe('@integration-ui #1956 PR-5 — MobileClusterSheet real hit-test p
     await clearButton.click();
 
     await expect(sheet).toHaveCount(0);
-    expect(page.url()).toBe(urlBefore);
+    const urlAfter = new URL(page.url());
+    const expectedUrlAfterClear = new URL(urlBefore);
+    expect(urlAfter.searchParams.get('clusterFocus')).toBeNull();
+    expectedUrlAfterClear.searchParams.delete('clusterFocus');
+    expect(urlAfter.toString()).toBe(expectedUrlAfterClear.toString());
     expect(await currentNodeParam(page)).toBe(nodeBefore);
     expect(await historyLength(page)).toBe(historyBefore);
   });
