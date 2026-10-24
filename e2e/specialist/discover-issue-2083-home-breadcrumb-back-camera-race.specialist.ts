@@ -65,7 +65,8 @@
  *   PLAYWRIGHT_BASE_URL=http://localhost:<port> npx playwright test \
  *     --project=full e2e/discover/issue-2083-home-breadcrumb-back-camera-race.spec.ts
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
+import type { Page } from '@playwright/test';
 
 const CITY = 'bangalore';
 const BASE = `city=${CITY}&journey=area-first`;
@@ -140,6 +141,7 @@ test.describe('@integration-ui #2083 (cycle 5) — Home breadcrumb then Back cam
 
       await page.getByTestId(cardTestId(AREA_RR_NAGAR)).click();
       await expect.poll(() => nodeParam(page)).toBe(AREA_RR_NAGAR);
+      await expect.poll(() => readCamera(page).lat, { timeout: 10_000 }).not.toBeNull();
       // Real settle window so the Area's own camera fit — and the resulting
       // debounced reportViewport REPLACE that persists lat/lon/zoom onto THIS
       // history entry — is fully done before we leave it. Without this, the

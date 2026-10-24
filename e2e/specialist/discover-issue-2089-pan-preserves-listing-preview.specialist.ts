@@ -16,7 +16,8 @@
  *   PLAYWRIGHT_BASE_URL=http://localhost:5174 npx playwright test \
  *     e2e/discover/issue-2089-pan-preserves-listing-preview.spec.ts --project=full
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
+import type { Page } from '@playwright/test';
 
 const CITY = 'bangalore';
 const BASE = `city=${CITY}&journey=area-first`;

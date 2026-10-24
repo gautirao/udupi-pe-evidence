@@ -42,7 +42,8 @@
  * dashed-cluster/`AreaDestinationMarkerLayer` surface (real node keys/labels
  * copied verbatim from that file's own real #2113 candidate-tree fixture).
  */
-import { test, expect, type Page, type Route } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
+import type { Page, Route } from '@playwright/test';
 
 const CITY = 'bangalore';
 const MOBILE_VIEWPORT = { width: 390, height: 844 };

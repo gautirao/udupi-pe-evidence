@@ -24,7 +24,25 @@
  * assertions have already passed — a broken/blank map would otherwise make
  * "no pill" trivially true.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { URL as NodeURL } from 'node:url';
+import { test, expect, backendGet } from './support/specialist-test';
+import type { Page } from '@playwright/test';
+
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/discover/**', async (route) => {
+    try {
+      const u = new NodeURL(route.request().url());
+      const res = await backendGet(page, `${u.pathname}${u.search}`);
+      const body = (await res.text()).replace(
+        /https?:\/\/[^"\x27\s]*Fixture\+Photo[^"\x27\s]*/g,
+        'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+      );
+      await route.fulfill({ status: res.status(), headers: res.headers(), body });
+    } catch {
+      /* page or APIResponse disposed during test teardown */
+    }
+  });
+});
 
 const SCHOOL_ID = '11111111-2222-3333-4444-555555555555';
 const AREA_KEY = 'IN|KA|Udupi|Manipal';

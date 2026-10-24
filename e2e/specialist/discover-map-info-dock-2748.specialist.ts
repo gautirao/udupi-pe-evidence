@@ -14,7 +14,8 @@
  *     npx playwright test e2e/discover-map-info-dock-2748.spec.ts --project=full
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
+import type { Page } from '@playwright/test';
 
 const CITY = 'bangalore';
 const RR_NAGAR_NODE = 'a:IN|KA|Bengaluru|RR Nagar';
@@ -1101,7 +1102,7 @@ test.describe('Discover Map Info Dock (#2748)', () => {
   // here. Two real trigger paths were attempted live at 844×390 and neither was
   // reachable for reasons unrelated to the z-index fix under test — draw mode requires
   // sign-in (`resolveDrawSearchAreaEligibility` hides it for anon unconditionally, and
-  // a `storageState` built from `e2e/fixtures/user-auth.json` did not visibly
+  // a `storageState` built from `e2e/fixtures/user-auth-state` did not visibly
   // authenticate against this dev backend); "Search this area" requires a committed
   // AREA_SET (confirmed via `e2e/discover/issue-2494-mobile-return-camera-restore.spec.ts`'s
   // `reachCommittedRrNagarDeepanjaliAreaSet`), and reproducing that flow's "Add nearby
