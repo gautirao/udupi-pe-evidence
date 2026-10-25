@@ -50,7 +50,8 @@
  *   npx playwright test --project=full e2e/discover/issue-1762-listing-density-clustering.spec.ts
  */
 
-import { test, expect, type Page, type Route, type Locator } from '@playwright/test';
+import { type Page, type Route, type Locator } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
 
 const CITY = 'bangalore';
 const AREA_KEY = 'IN|KA|Bangalore|DenseClusterTest';
@@ -314,6 +315,10 @@ async function stubDenseFixture(page: Page, listings: DenseListing[]): Promise<v
   await page.route('**/api/public/schools/popular**', (route) => fulfillJson(route, 200, []));
   await page.route('**/api/public/schools/search**', (route) => fulfillJson(route, 200, []));
   await page.route('**/api/public/schools/by-area**', (route) => fulfillJson(route, 200, []));
+  // Prevent live-backend city-root navigation/resolve bounds from overriding
+  // the test's synthetic camera (CENTER_LAT/CENTER_LON at zoom 13 or settledZoom).
+  await page.route('**/api/discover/cities/*/navigation/resolve**', (route) => fulfillJson(route, 404, {}));
+  await page.route('**/api/discover/cities/*/navigation/*/counts**', (route) => fulfillJson(route, 404, {}));
 }
 
 function areaFirstUrl(zoom = 13): string {
@@ -1177,10 +1182,10 @@ test.describe('Issue #1762 — mobile marker A → marker B preview replacement 
       bounds: {
         centreLat: CENTER_LAT,
         centreLon: CENTER_LON,
-        minLat: CENTER_LAT - TOP_CELL_SPACING_DEG * 1.5,
-        maxLat: CENTER_LAT + TOP_CELL_SPACING_DEG * 1.5,
-        minLon: CENTER_LON - TOP_CELL_SPACING_DEG * 1.5,
-        maxLon: CENTER_LON + TOP_CELL_SPACING_DEG * 1.5,
+        minLat: CENTER_LAT - 0.05,
+        minLon: CENTER_LON - 0.05,
+        maxLat: CENTER_LAT + 0.05,
+        maxLon: CENTER_LON + 0.05,
       },
       descendantAreaKeys: null,
       areaKey: AREA_KEY,

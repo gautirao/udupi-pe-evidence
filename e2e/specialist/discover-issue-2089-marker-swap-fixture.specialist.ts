@@ -43,10 +43,10 @@
  * the seeded fixture DB) and the test will fail to find a second marker.
  *
  * Run:
- *   PLAYWRIGHT_BASE_URL=http://localhost:<fixture-backend-port> npx playwright test \
- *     e2e/discover/issue-2089-marker-swap-fixture.spec.ts --project=full
+ *   npm run test:e2e:specialist
  */
-import { test, expect, type Page, type Locator } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
+import type { Page, Locator } from '@playwright/test';
 
 const CITY = 'bangalore';
 const BASE = `city=${CITY}&journey=area-first`;

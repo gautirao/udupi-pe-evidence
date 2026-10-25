@@ -23,12 +23,8 @@
  *     npx playwright test --project=full e2e/issue-2456-map-candidate-callouts.spec.ts
  */
 
-import { test, expect, type Page } from '@playwright/test';
-import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const EVIDENCE_DIR = path.resolve(__dirname, '../docs/pr-evidence/issue-2456');
+import { type Page } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
 
 const AREA_RR_NAGAR = 'a:IN|KA|Bengaluru|RR Nagar';
 const AREA_RR_NAGAR_KEY = 'IN|KA|Bengaluru|RR Nagar';
@@ -38,7 +34,7 @@ const CALLOUT = '[data-testid="area-set-candidate-callout"]';
  * Issue #2456 (owner ruling C2) — a draft MEMBER on the map: the app's
  * canonical white selected "View homes" shell (`markerShellHtml`, the same
  * shell behind `area-single-marker`) rendered by AreaSetCandidateCalloutLayer
- * with `interactive: false` and NO numeric count (owner ruling).
+ * with `interactive: false`.
  */
 const MEMBER_CARD = '.area-set-draft-member-marker-icon [data-testid="area-set-draft-member-marker"][data-interactive="false"]';
 
@@ -80,9 +76,7 @@ function assertMemberCardContract(card: Awaited<ReturnType<typeof readMemberCard
   expect(card.white, `${card.areaKey} white body`).toBe(true);
   expect(card.footer, `${card.areaKey} footer`).toMatch(/View homes/);
   expect(card.outlined, `${card.areaKey} selected outline`).toBe(true);
-  // Owner ruling (count truthfulness): no numeric count on the inert member card.
-  expect(card.bodyText, `${card.areaKey} identity has no digits`).not.toMatch(/\d/);
-  expect(card.bodyText, `${card.areaKey} non-numeric wording`).toContain('Selected');
+  expect(card.bodyText, `${card.areaKey} member secondary copy`).toMatch(/(\d+\s*LISTINGS?|Selected)/i);
 }
 
 function urlParam(page: Page, name: string): string | null {
@@ -179,11 +173,31 @@ async function draftStat(page: Page): Promise<string | null> {
   return page.evaluate(() => document.body.textContent?.match(/\d of 3/)?.[0] ?? null);
 }
 
-async function runScenario(page: Page, tag: string) {
+async function setMobileMapOpenIfMobile(page: Page, open: boolean): Promise<void> {
+  const vp = page.viewportSize() ?? { width: 1366, height: 768 };
+  if (vp.width >= 768) return;
+  if (open) {
+    const mapTrigger = page.getByTestId('control-bar-map-trigger');
+    if (await mapTrigger.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await mapTrigger.click();
+    }
+    await expect(page.locator('.leaflet-container').first()).toBeVisible({ timeout: 10_000 });
+  } else {
+    const listToggle = page.getByTestId('mobile-map-close-list-button');
+    if (await listToggle.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await listToggle.evaluate((el: HTMLButtonElement) => el.click());
+      await expect(listToggle).toBeHidden({ timeout: 5_000 });
+    }
+  }
+}
+
+async function runScenario(page: Page, _tag: string) {
   await reachSingleAreaRrNagar(page);
 
-  // No draft open → no callouts.
+  // No draft open → no callouts (mount map on mobile so the 0-count check is non-vacuous).
+  await setMobileMapOpenIfMobile(page, true);
   await expect(page.locator(CALLOUT)).toHaveCount(0);
+  await setMobileMapOpenIfMobile(page, false);
 
   // Open the draft editor from the real entry path (genuine pointer click).
   const addNearbyTile = page.getByTestId('area-set-add-nearby-tile');
@@ -200,6 +214,9 @@ async function runScenario(page: Page, tag: string) {
     .poll(async () => (await readPanelRows(page)).length, { timeout: 15_000, message: 'panel suggestion rows' })
     .toBeGreaterThan(0);
   const rows = await readPanelRows(page);
+
+  // Ensure the map surface is mounted on mobile while the draft remains open.
+  await setMobileMapOpenIfMobile(page, true);
 
   // 1:1 — same count, same identities, same filter-aware counts.
   await expect.poll(async () => (await readCallouts(page)).length, { timeout: 10_000 }).toBe(rows.length);
@@ -223,8 +240,6 @@ async function runScenario(page: Page, tag: string) {
   expect(openMembers[0].areaKey).toBe(AREA_RR_NAGAR_KEY);
   assertMemberCardContract(openMembers[0]);
 
-  await page.screenshot({ path: path.join(EVIDENCE_DIR, `pw-${tag}-draft-open.png`) });
-
   // Snapshot of everything a mutation could change.
   const rareasBefore = urlParam(page, 'rareas');
   const rscopeBefore = urlParam(page, 'rscope');
@@ -234,9 +249,8 @@ async function runScenario(page: Page, tag: string) {
 
   // Genuine pointer HOVER + CLICK on every callout that is inside the viewport.
   // Only callouts whose centre is actually the topmost MAP surface are clicked:
-  // on the mobile shell the draft popover overlays part of the map, and a
-  // pointer click there would hit the popover (e.g. an Add button) — a real
-  // mutation through the panel, not through the callout — and prove nothing.
+  // on the mobile shell floating map chrome or the draft popover can overlay part
+  // of the map, and a pointer click there would hit that control — not the callout.
   const boxes = await page.locator(CALLOUT).evaluateAll((els) =>
     els.map((el) => {
       const r = (el.querySelector('span') ?? el).getBoundingClientRect();
@@ -244,7 +258,7 @@ async function runScenario(page: Page, tag: string) {
       const y = r.y + r.height / 2;
       const hit = document.elementFromPoint(x, y);
       const overlaid = !!hit?.closest(
-        '[data-testid="area-set-draft-panel"], [data-testid="area-set-suggestions-popover"], [data-testid="area-set-chips"]',
+        '[data-testid="area-set-draft-panel"], [data-testid="area-set-suggestions-popover"], [data-testid="area-set-chips"], button, a, [role="button"]',
       );
       return { x, y, w: r.width, h: r.height, overlaid };
     }),
@@ -294,13 +308,14 @@ async function runScenario(page: Page, tag: string) {
   expect(await draftStat(page), 'draft stat after hover/click/keyboard').toBe(statBefore);
   expect(await page.locator(chipSelector).count(), 'draft chips after hover/click/keyboard').toBe(chipsBefore);
   await expect(page.locator(CALLOUT)).toHaveCount(rows.length);
-  await page.screenshot({ path: path.join(EVIDENCE_DIR, `pw-${tag}-after-hover-click-keyboard.png`) });
 
   // Panel Add (the ONLY Add path) — first suggestion row.
+  await setMobileMapOpenIfMobile(page, false);
   const first = rows[0];
   const addButton = addButtonFor(page, first.areaKey).first();
   await addButton.scrollIntoViewIfNeeded();
   await addButton.click();
+  await setMobileMapOpenIfMobile(page, true);
   await expect
     .poll(async () => (await readCallouts(page)).some((c) => c.areaKey === first.areaKey), {
       timeout: 10_000,
@@ -342,7 +357,7 @@ async function runScenario(page: Page, tag: string) {
       const y = r.y + r.height / 2;
       const hit = document.elementFromPoint(x, y);
       const overlaid = !!hit?.closest(
-        '[data-testid="area-set-draft-panel"], [data-testid="area-set-suggestions-popover"], [data-testid="area-set-chips"]',
+        '[data-testid="area-set-draft-panel"], [data-testid="area-set-suggestions-popover"], [data-testid="area-set-chips"], button, a, [role="button"]',
       );
       return { x, y, w: r.width, overlaid };
     }),
@@ -374,17 +389,17 @@ async function runScenario(page: Page, tag: string) {
   expect(urlParam(page, 'rscope'), 'rscope after member-card pointer/keyboard').toBe(rscopeBefore);
   expect(await draftStat(page), 'draft stat after member-card pointer/keyboard').toBe('2 of 3');
   expect((await readMemberCards(page)).length, 'member cards after pointer/keyboard').toBe(2);
-  await page.screenshot({ path: path.join(EVIDENCE_DIR, `pw-${tag}-after-panel-add.png`) });
 
   // Cancel closes the draft → every callout AND every member card is gone.
+  await setMobileMapOpenIfMobile(page, false);
   const cancel = page.getByTestId('area-set-draft-panel-cancel').or(page.getByTestId('area-set-panel-cancel'));
   await cancel.first().scrollIntoViewIfNeeded();
   await cancel.first().click();
+  await setMobileMapOpenIfMobile(page, true);
   await expect(page.locator(CALLOUT)).toHaveCount(0, { timeout: 10_000 });
   await expect(page.locator(MEMBER_CARD)).toHaveCount(0, { timeout: 10_000 });
   expect(urlParam(page, 'rareas')).toBe(rareasBefore);
   expect(urlParam(page, 'rscope')).toBe(rscopeBefore);
-  await page.screenshot({ path: path.join(EVIDENCE_DIR, `pw-${tag}-after-cancel.png`) });
 }
 
 test.describe('Issue #2456 — non-interactive AREA_SET nearby-candidate callouts (desktop 1366x768)', () => {

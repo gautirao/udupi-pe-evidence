@@ -32,10 +32,10 @@
  * fixture listings only exist in the seeded fixture DB.
  *
  * Run:
- *   PLAYWRIGHT_BASE_URL=http://localhost:<fixture-backend-port> npx playwright test \
- *     e2e/discover/issue-2089-filter-list-map-parity.spec.ts --project=full
+ *   npm run test:e2e:specialist
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './support/specialist-test';
+import type { Page } from '@playwright/test';
 
 const CITY = 'bangalore';
 const BASE = `city=${CITY}&journey=area-first`;

@@ -147,9 +147,31 @@ test.describe('#2770 compact selected-school context', () => {
       await listBtn.first().click();
     }
     await expect(page.getByTestId('listing-card').first()).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId('school-summary-band')).toBeVisible();
+    const summaryBand = page.getByTestId('school-summary-band');
+    await expect(summaryBand).toBeVisible();
     await expect(page.getByTestId('change-school-btn')).toBeVisible();
     const y = await firstCardTop(page);
     expect(y, 'first listing card top at 390x844').toBeLessThan(844);
+
+    // Issue #1745 Batch B (B8) / #2770 mobile 390x844 reflow guard:
+    // 1. No horizontal page-level overflow.
+    const hasHorizontalOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    );
+    expect(hasHorizontalOverflow, 'mobile 390x844 school-selected state must not overflow horizontally').toBe(false);
+
+    // 2. school-summary-band fits within the 390px viewport width (not clipped off-screen).
+    const bandBox = await summaryBand.boundingBox();
+    expect(bandBox, 'school-summary-band must have a bounding box at 390x844').not.toBeNull();
+    expect(bandBox!.x).toBeGreaterThanOrEqual(0);
+    expect(bandBox!.x + bandBox!.width).toBeLessThanOrEqual(390 + 1);
+
+    // 3. No page-level (document) vertical scroll — only the panel itself scrolls (no double-scroll regression).
+    const documentScrolls = await page.evaluate(
+      () => document.documentElement.scrollHeight > document.documentElement.clientHeight + 1,
+    );
+    expect(documentScrolls, 'mobile 390x844 school-selected state must not introduce page-level double-scroll').toBe(
+      false,
+    );
   });
 });
