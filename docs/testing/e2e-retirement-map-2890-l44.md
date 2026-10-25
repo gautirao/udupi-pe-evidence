@@ -71,12 +71,9 @@ aa0769594e71832479fe19725e1b2458f292f02163bbe15c5ed27d981d3731bc  apps/web/src/c
 
 ---
 
-## 3. Candidate Manifest & Deletion Gate Status for `L44` (`docs/testing/e2e-retirement-manifest.csv`)
+## 3. Manifest & Deletion Gate Status for `L44` (`docs/testing/e2e-retirement-manifest.csv`)
 
-- **Current Status:** `CANDIDATE — pending independent evidence verification and owner exact-filename approval on the deleting PR`.
-- **No Deletion Authorised Here:** Per `#2750` and `#2890` governance rules, this PR does **not** edit `docs/testing/e2e-retirement-manifest.csv` and does **not** delete `e2e/discover-agri-grouped-journey-1412.spec.ts`.
-- **Conditions Required Before `L44` May Be Retired/Deleted in a Future PR:**
-  1. Independent verification of the reconciled assertion evidence in §1 above (confirming that `#1`–`#4`, `#5b`, `#12` are `OBSOLETE` due to product removal of `AgriRegionalGroupsPanel`, `group=`, and `areaKeys=`, while `#5a`, `#5c`, `#6`, and `#7`–`#11` are covered by existing + new lower-level tests `L44-N1`..`L44-N6`).
-  2. Explicit **new exact-filename owner approval** (`e2e/discover-agri-grouped-journey-1412.spec.ts`) on the future deleting PR (including owner acceptance of the `OBSOLETE` classification for `#1`–`#4`, `#5b`, `#12`).
-- **Prospective Manifest Citation String (for use only if/when those conditions and owner approval are satisfied):**
-  - `apps/web/src/components/listing/agri/__tests__/AgriListingDetail.groupedJourney1412.test.tsx;apps/web/src/components/listing/agri/__tests__/AgriListingDetail.priceGate2859.test.tsx;apps/web/src/components/discover/panels/__tests__/DiscoverRightPanel.routing.test.tsx;apps/web/src/features/discover/controllers/__tests__/useDiscoverMapDataController.test.ts;apps/api/src/test/java/com/example/realestate/listing/api/ListingResponseMapperTest.java;apps/api/src/test/java/com/example/realestate/listing/api/PublicListingControllerTest.java;apps/api/src/test/java/com/example/realestate/discover/DiscoverAgriMapListingsServiceTest.java` (with `docs/testing/e2e-retirement-map-2890-l44.md` cited for the mixed `COVERED` + `OBSOLETE` per-test reconciliation).
+- **Current Status:** `RETIRED` in `#2750` / PR `#2909` (`decision: MOVE_DOWN`, `canonical_equivalent_or_destination: apps/web/src/components/listing/agri/__tests__/AgriListingDetail.groupedJourney1412.test.tsx`).
+- **Verification Summary:**
+  1. All live assertions (`#5a`, `#5c`, `#6`, and `#7`–`#11`) are covered by `apps/web/src/components/listing/agri/__tests__/AgriListingDetail.groupedJourney1412.test.tsx` (`L44-N1`..`L44-N6`, mutation proofs `M1`..`M14`), `apps/web/src/components/listing/agri/__tests__/AgriListingDetail.priceGate2859.test.tsx`, `apps/web/src/components/discover/panels/__tests__/DiscoverRightPanel.routing.test.tsx`, `apps/web/src/features/discover/controllers/__tests__/useDiscoverMapDataController.test.ts`, `apps/api/src/test/java/com/example/realestate/listing/api/ListingResponseMapperTest.java`, `apps/api/src/test/java/com/example/realestate/listing/api/PublicListingControllerTest.java`, and `apps/api/src/test/java/com/example/realestate/discover/DiscoverAgriMapListingsServiceTest.java`.
+  2. Legacy assertions `#1`–`#4`, `#5b`, and `#12` (`?group=DIR:BAND`, plural `areaKeys=`, and unmounted `AgriRegionalGroupsPanel`) are deliberately retired as obsolete per §1 above.

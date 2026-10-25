@@ -414,7 +414,25 @@ export function checkIsolation({ root = DEFAULT_ROOT, runList = defaultRunList }
   ]) {
     if (config === 'playwright.config.ts' && !legacyPresent) continue;
     const r = runList(root, config, extraArgs, extraEnv);
-    if (r.status !== 0) { errors.push(`FAIL[SP-ISO] the ${label} --list exited ${r.status}; isolation cannot be proven (${String(r.stderr).split('\n').find((l) => l.trim()) ?? 'no stderr'})`); continue; }
+    const isEmptyLegacyList = () => {
+      if (config !== 'playwright.config.ts' || !r.stdout.trim().startsWith('{')) return false;
+      try {
+        const doc = JSON.parse(r.stdout);
+        return (
+          Array.isArray(doc.suites) &&
+          doc.suites.length === 0 &&
+          Array.isArray(doc.errors) &&
+          doc.errors.length === 1 &&
+          /No tests found/.test(String(doc.errors[0]?.message ?? ''))
+        );
+      } catch {
+        return false;
+      }
+    };
+    if (r.status !== 0 && !isEmptyLegacyList()) {
+      errors.push(`FAIL[SP-ISO] the ${label} --list exited ${r.status}; isolation cannot be proven (${String(r.stderr).split('\n').find((l) => l.trim()) ?? 'no stderr'})`);
+      continue;
+    }
     try {
       const hits = specialistPathsInListJson(r.stdout);
       for (const h of hits) errors.push(`FAIL[SP-ISO] the ${label} config collects ${h} (e2e/specialist must be collected only by playwright.specialist.config.ts)`);

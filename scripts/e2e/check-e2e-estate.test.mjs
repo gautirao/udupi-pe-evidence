@@ -217,7 +217,7 @@ test('FC-24: a wrong #2751 sum and a missing #2751 file row both fail', () => {
 test('FC-24: a #2751 file whose row carries 0 titles fails', () => {
   const real = fs.readFileSync(path.join(DEFAULT_ROOT, MANIFEST_REL), 'utf8').split('\n');
   const target = ISSUE_2751_FILES[3];
-  const mutated = real.map((l) => (l.startsWith(`${target},`) ? l.replace(/,(\d+),SCHEDULED/, ',0,SCHEDULED') : l)).join('\n');
+  const mutated = real.map((l) => (l.startsWith(`${target},`) ? l.replace(/,(\d+),(SCHEDULED|RETIRED)/, ',0,$2') : l)).join('\n');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'e2e-estate-m-'));
   try {
     const mp = path.join(tmp, 'm.csv');

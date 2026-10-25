@@ -1,5 +1,6 @@
 package com.example.realestate.intelligence;
 
+import com.example.realestate.discover.CityActivationGuard;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -23,6 +24,9 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -48,7 +52,13 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.flyway.locations=classpath:db/test-stubs,classpath:db/migration",
         "spring.flyway.placeholders.concurrently_keyword="
 })
-@Import({AreaIntelligenceSnapshotService.class, AreaIntelligenceSnapshotRollupJob.class})
+@Import({
+        AreaIntelligenceSnapshotService.class,
+        AreaIntelligenceSnapshotRollupJob.class,
+        AdminIntelligenceService.class,
+        BuyerAreaIntelligenceService.class,
+        CityActivationGuard.class
+})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class AreaIntelligenceSnapshotRollupJobIT {
 
@@ -75,6 +85,12 @@ class AreaIntelligenceSnapshotRollupJobIT {
 
     @Autowired
     private AreaIntelligenceSnapshotRollupJob rollupJob;
+
+    @Autowired
+    private AdminIntelligenceService adminIntelligenceService;
+
+    @Autowired
+    private BuyerAreaIntelligenceService buyerAreaIntelligenceService;
 
     @Autowired
     private ListingRepository listingRepository;
@@ -127,6 +143,47 @@ class AreaIntelligenceSnapshotRollupJobIT {
         assertThat(insufficientSnap.getConfidence())
                 .as("3 LIVE listings (<10) must classify as 'insufficient'")
                 .isEqualTo("insufficient");
+
+        // L192 Arm 9 real-DB cross-path parity: Admin live aggregate confidence
+        // (AdminIntelligenceService -> AreaIntelligenceRepository.findLive90dAggregates)
+        // must agree with Buyer cached snapshot confidenceLabel
+        // (BuyerAreaIntelligenceService -> AreaIntelligenceSnapshotRepository) across all 3 bands.
+        Map<String, AreaIntelligenceResponse> adminByAreaKey =
+                adminIntelligenceService.getAreaIntelligence(null).stream()
+                        .collect(Collectors.toMap(AreaIntelligenceResponse::areaKey, Function.identity()));
+
+        AreaIntelligenceResponse adminFull = adminByAreaKey.get(FULL_AREA_KEY);
+        BuyerAreaIntelligenceResponse buyerFull =
+                buyerAreaIntelligenceService.getAreaIntelligence("udupi", FULL_AREA_KEY);
+        assertThat(adminFull).isNotNull();
+        assertThat(adminFull.live90dCount()).isEqualTo(36);
+        assertThat(adminFull.confidence()).isEqualTo("full");
+        assertThat(buyerFull.available()).isTrue();
+        assertThat(buyerFull.confidenceLabel())
+                .isEqualTo(BuyerConfidenceLabel.ofLabel(adminFull.confidence()).getDisplayLabel())
+                .isEqualTo("Enough data");
+
+        AreaIntelligenceResponse adminLimited = adminByAreaKey.get(LIMITED_AREA_KEY);
+        BuyerAreaIntelligenceResponse buyerLimited =
+                buyerAreaIntelligenceService.getAreaIntelligence("udupi", LIMITED_AREA_KEY);
+        assertThat(adminLimited).isNotNull();
+        assertThat(adminLimited.live90dCount()).isEqualTo(15);
+        assertThat(adminLimited.confidence()).isEqualTo("limited");
+        assertThat(buyerLimited.available()).isTrue();
+        assertThat(buyerLimited.confidenceLabel())
+                .isEqualTo(BuyerConfidenceLabel.ofLabel(adminLimited.confidence()).getDisplayLabel())
+                .isEqualTo("Limited data");
+
+        AreaIntelligenceResponse adminInsuff = adminByAreaKey.get(INSUFFICIENT_AREA_KEY);
+        BuyerAreaIntelligenceResponse buyerInsuff =
+                buyerAreaIntelligenceService.getAreaIntelligence("udupi", INSUFFICIENT_AREA_KEY);
+        assertThat(adminInsuff).isNotNull();
+        assertThat(adminInsuff.live90dCount()).isEqualTo(3);
+        assertThat(adminInsuff.confidence()).isEqualTo("insufficient");
+        assertThat(buyerInsuff.available()).isTrue();
+        assertThat(buyerInsuff.confidenceLabel())
+                .isEqualTo(BuyerConfidenceLabel.ofLabel(adminInsuff.confidence()).getDisplayLabel())
+                .isEqualTo("Not enough data yet");
     }
 
     /**

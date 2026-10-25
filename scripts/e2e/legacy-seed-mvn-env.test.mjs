@@ -491,7 +491,13 @@ test('W0 stripComments removes comments but keeps string contents', () => {
   assert.ok(!s.includes('process.env'));
 });
 
-test('W1 spec routes both seed launches through runLegacySeedMvn', () => {
+test('W1 spec routes both seed launches through runLegacySeedMvn (or is RETIRED in manifest)', () => {
+  if (!fs.existsSync(SPEC_PATH)) {
+    const manifestPath = fileURLToPath(new URL('../../docs/testing/e2e-retirement-manifest.csv', import.meta.url));
+    const manifest = fs.readFileSync(manifestPath, 'utf8');
+    assert.match(manifest, /^e2e\/journey\/area-trends-2581\.spec\.ts,.*,RETIRED$/m, 'retired spec must carry status RETIRED in manifest');
+    return;
+  }
   const s = stripComments(fs.readFileSync(SPEC_PATH, 'utf8'));
   // Non-vacuity: the stripped text is still the spec.
   assert.ok(s.includes('const hasLocalFixtureDb'), 'stripped spec lost its code');

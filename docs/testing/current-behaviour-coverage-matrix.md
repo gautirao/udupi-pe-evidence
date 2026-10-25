@@ -49,7 +49,7 @@ This document is the authoritative **current-product behaviour coverage matrix**
 | `/broker/dashboard` | `BrokerDashboard` | Broker KPI summary, recent bookings, listing quality prompt, quick actions | — | — | `pages/broker/__tests__/BrokerDashboard.pageHttp.test.tsx`, `pages/broker/__tests__/BrokerDashboard.v2.test.tsx` | `DashboardControllerTest.java` |
 | `/broker/bookings` | `BrokerBookings` | Incoming buyer viewing requests, confirm/decline/reschedule actions | `booking-request.canonical.ts` (`J10`: `T17b`) | — | `pages/__tests__/useBrokerBookings.envelope.test.tsx`, `pages/broker/__tests__/BrokerBookings.test.tsx` | `BookingServiceTest.java`, `BookingPersistenceIT.java` |
 | `/broker/listing-quality` | `ListingQuality` | Listing completeness scores, improvement recommendations, deep link to edit | — | — | `pages/broker/__tests__/ListingQuality.test.tsx`, `__tests__/App.brokerListingQualityRoute.test.tsx` | `ListingQualityControllerTest.java` |
-| `/broker/preferences` | `Preferences` | Broker market focus areas, specialization preferences, RERA/identity trust progress panel (`TrustProgressPanel`), POI manager (`PoiManager`) | — | — | `pages/broker/__tests__/Preferences.addFlow2859.test.tsx`, `pages/broker/__tests__/Preferences.realSelect2859.test.tsx`, `components/trust/__tests__/TrustProgressPanel.identityRealSelect2859.test.tsx`, `components/poi/__tests__/PoiManager.approve2859.test.tsx` | `PoiApproveAuthorization2859IT.java` |
+| `/broker/preferences` | `Preferences` | Broker market focus areas, specialization preferences, RERA/identity trust progress panel (`TrustProgressPanel`), POI manager (`PoiManager`) | — | — | `pages/broker/__tests__/Preferences.addFlow2859.test.tsx`, `pages/broker/__tests__/Preferences.realSelect2859.test.tsx`, `pages/broker/__tests__/Preferences.pageHttp.test.tsx`, `components/trust/__tests__/TrustProgressPanel.identityRealSelect2859.test.tsx`, `components/poi/__tests__/PoiManager.approve2859.test.tsx` | `BrokerMarketFocusControllerTest.java`, `BrokerMarketFocusServiceTest.java`, `PoiApproveAuthorization2859IT.java` |
 | `/broker/demand-gaps` | `BrokerDemandGaps` | High-demand / low-supply locality gap insights for brokers | — | — | `pages/broker/__tests__/BrokerDemandGaps.pageHttp.test.tsx`, `pages/broker/__tests__/BrokerDemandGaps.test.tsx` | `BrokerDemandGapsControllerTest.java` |
 | `/broker/areas/:citySlug/:areaKey` | `BrokerAreaInsights` | Per-locality supply/demand/pricing insights for brokers | — | — | `pages/broker/__tests__/BrokerAreaInsights.pageHttp.test.tsx`, `pages/broker/__tests__/BrokerAreaInsights.test.tsx` | `BrokerAreaInsightsControllerTest.java` |
 
@@ -125,7 +125,7 @@ Every single one of the **96** remaining legacy `e2e/**/*.spec.ts` files (after 
 
 ### Batch A — School-First & Agricultural Lower-Level Replacements (`#2857` / `#2890` — 9 files)
 1. `e2e/broker-agri-listing.spec.ts` (`L12`) → `e2e/canonical/agri-lifecycle.canonical.ts` (`AG1`–`AG3`) + `apps/api/src/test/java/com/example/realestate/listing/api/AgriListingBoundaryJourneyIT.java` (`#2894`)
-2. `e2e/discover-agri-grouped-journey-1412.spec.ts` (`L44`) → `apps/web/src/components/listing/agri/__tests__/AgriListingDetail.groupedJourney1412.test.tsx` + `apps/web/src/hooks/__tests__/useRegionalAreaGroups.test.ts` (`#2895`)
+2. `e2e/discover-agri-grouped-journey-1412.spec.ts` (`L44`) → `apps/web/src/components/listing/agri/__tests__/AgriListingDetail.groupedJourney1412.test.tsx` (`L44-N1`..`L44-N6`, `M1`..`M14`) + `apps/web/src/components/listing/agri/__tests__/AgriListingDetail.priceGate2859.test.tsx` + `apps/web/src/hooks/__tests__/useRegionalAreaGroups.test.ts` + `apps/api/src/test/java/com/example/realestate/listing/api/PublicListingControllerTest.java` + `apps/api/src/test/java/com/example/realestate/discover/DiscoverAgriMapListingsServiceTest.java` (`#2895` / `#2899`; see §4.5 below)
 3. `e2e/discover-agri-journey-1375.spec.ts` (`L45`) → `e2e/canonical/discover-agri-first.canonical.ts` (`T8`/`T9`) + `apps/web/src/pages/__tests__/MapDiscovery.agriOverlayPeek2857.test.tsx` (`#2894`)
 4. `e2e/discover-agri-overlay-peek-journey-1431.spec.ts` (`L47`) → `apps/web/src/pages/__tests__/MapDiscovery.agriOverlayPeek2857.test.tsx` (`#2894`)
 5. `e2e/discover-school-first-journey.spec.ts` (`L84`) → `e2e/canonical/discover-school-first.canonical.ts` (`T7`/`T7b`) + `apps/web/src/components/map/__tests__/AreaMarkerLayer.schoolBadge2857.test.tsx` (`#2894`)
@@ -150,7 +150,7 @@ Every single one of the **96** remaining legacy `e2e/**/*.spec.ts` files (after 
 20. `e2e/area-intelligence-1528.spec.ts` (`L7`) → `apps/web/src/hooks/__tests__/useAreaIntelligence.2859.test.tsx` + `apps/web/src/pages/__tests__/Trends.areaIntelligenceWire2859.test.tsx` (`#2900`)
 21. `e2e/broker-address-reconciliation.spec.ts` (`L11`) → `apps/web/src/components/broker/__tests__/ResidentialListingForm.locationFlow2859.test.tsx` + `apps/web/src/pages/broker/editListing/__tests__/EditListingForm.titleLocality2859.test.tsx` (`#2899`)
 22. `e2e/broker-listing-form.spec.ts` (`L16`) → `e2e/canonical/listing-lifecycle.canonical.ts` (`T13`) + `e2e/canonical/listing-edit.canonical.ts` (`T22`) + `apps/web/src/components/broker/__tests__/ResidentialListingForm.locationFlow2859.test.tsx` (`#2899`)
-23. `e2e/broker-preferences.spec.ts` (`L18`) → `apps/web/src/pages/broker/__tests__/Preferences.addFlow2859.test.tsx` + `apps/web/src/pages/broker/__tests__/Preferences.realSelect2859.test.tsx` (`#2898`)
+23. `e2e/broker-preferences.spec.ts` (`L18`) → `apps/web/src/pages/broker/__tests__/Preferences.addFlow2859.test.tsx` + `apps/web/src/pages/broker/__tests__/Preferences.realSelect2859.test.tsx` + `apps/web/src/pages/broker/__tests__/Preferences.pageHttp.test.tsx` + `apps/api/src/test/java/com/example/realestate/broker/focus/BrokerMarketFocusControllerTest.java` + `apps/api/src/test/java/com/example/realestate/broker/focus/BrokerMarketFocusServiceTest.java` (`#2898`; see §4.2 below)
 24. `e2e/buyer-area-route-1539.spec.ts` (`L20`) → `apps/web/src/__tests__/App.trendsAreaRoute2859.test.tsx` + `apps/web/src/__tests__/pages/TrendsAreaResolved.test.tsx` (`#2900`)
 25. `e2e/commercial-create-listing-1684.spec.ts` (`L33`) → `e2e/canonical/commercial-lifecycle.canonical.ts` (`CC1`–`CC4`) + `apps/web/src/components/broker/__tests__/CommercialListingForm.gating2859.test.tsx` (`#2899`)
 26. `e2e/commercial-subtype-implied-type-hotfix.spec.ts` (`L35`) → `e2e/canonical/commercial-lifecycle.canonical.ts` (`CC1b`/`CC1c`) + `apps/web/src/components/map/filters/__tests__/PropertyTypeFilter.impliedPropertyType.test.tsx` (`#2899`)
@@ -180,7 +180,7 @@ Every single one of the **96** remaining legacy `e2e/**/*.spec.ts` files (after 
 50. `e2e/issue-2454-scope-aware-relaxation-previews.spec.ts` (`L183`) → `apps/web/src/hooks/__tests__/useRelaxationPreviews.test.ts` + `apps/web/src/components/discover/panels/__tests__/AreaZeroResultRecovery.test.tsx` (`#2901`)
 51. `e2e/journey/admin-listings-inventory-2370.spec.ts` (`L189`) → `apps/web/src/components/admin/listings/__tests__/ListingEditorDrawer.inventory2859.test.tsx` + `apps/web/src/pages/admin/__tests__/Listings.editParam2859.test.tsx` (`#2898`)
 52. `e2e/journey/admin-moderation.spec.ts` (`L190`) → `apps/web/src/pages/admin/__tests__/PendingListings.moderation2859.test.tsx` (`#2898`)
-53. `e2e/journey/area-trends-2581.spec.ts` (`L192`) → `apps/web/src/components/area/__tests__/AreaGuide.test.tsx` + `apps/web/src/pages/__tests__/Trends.areaIntelligenceWire2859.test.tsx` (`#2900`)
+53. `e2e/journey/area-trends-2581.spec.ts` (`L192`) → `apps/web/src/pages/__tests__/TrendsAreaResolved.journey2581.test.tsx` + `apps/web/src/components/area/__tests__/AreaGuide.test.tsx` + `apps/web/src/pages/__tests__/Trends.areaIntelligenceWire2859.test.tsx` + `apps/api/src/test/java/com/example/realestate/intelligence/AreaIntelligenceSnapshotRollupJobIT.java` (`#2900` / `#2909`; see §4.4 below)
 54. `e2e/journey/listing-lifecycle.spec.ts` (`L195`) → `e2e/canonical/listing-lifecycle.canonical.ts` (`T13`–`T15b`) + `apps/web/src/pages/__tests__/ListingDetail.previewLifecycle2859.test.tsx` (`#2898`)
 55. `e2e/journey/pending-approvals-review-2369.spec.ts` (`L196`) → `apps/web/src/pages/admin/__tests__/PendingListings.moderation2859.test.tsx` (`#2898`)
 56. `e2e/journey/trust-identity-review.spec.ts` (`L197`) → `apps/web/src/components/trust/__tests__/TrustProgressPanel.identityRealSelect2859.test.tsx` (`#2898`)
@@ -201,9 +201,9 @@ Every single one of the **96** remaining legacy `e2e/**/*.spec.ts` files (after 
 69. `e2e/discover/issue-2205-schoolfirst-groupid-clear-browser-proof.spec.ts` (`L145`) → `e2e/canonical/discover-school-first.canonical.ts` (`T7b`) (`#2873` / `#2896`)
 70. `e2e/issue-1065-final.spec.ts` (`L177`) → `e2e/canonical/discover-area-first.canonical.ts` (`T25`, `T10b`) (`#2873` / `#2896`)
 71. `e2e/admin-intelligence-smoke.spec.ts` (`L4`) → `apps/web/src/pages/admin/__tests__/AdminIntelligence.2861.test.tsx` (`#2896`)
-72. `e2e/area-overview.spec.ts` (`L8`) → Obsolete standalone `/areas/:slug` route (superseded by `/trends/:citySlug/areas/:areaSlug` covered by `apps/web/src/__tests__/pages/TrendsAreaResolved.test.tsx`)
+72. `e2e/area-overview.spec.ts` (`L8`) → `apps/web/src/pages/__tests__/TrendsAreaResolved.journey2581.test.tsx` + `apps/web/src/pages/__tests__/Trends.noErrorGuide2859.test.tsx` + `apps/web/src/pages/__tests__/Trends.issue1528.test.tsx` + `apps/web/src/components/layout/__tests__/AppLayout.navRoles2859.test.tsx` (`#2909`; `/insights` route retired in `apps/web/src/App.tsx`; see §4.1 below)
 73. `e2e/auth-journey-1509.spec.ts` (`L9`) → `e2e/canonical/auth-session.canonical.ts` (`T1c`, `T2`, `T2b`) (`#2873` / `#2896`)
-74. `e2e/discover-opensearch-parity.spec.ts` (`L75`) → Obsolete OpenSearch parity probe (search backed by PostGIS `apps/api/src/test/java/com/example/realestate/discover/CityAreaListingsIT.java`)
+74. `e2e/discover-opensearch-parity.spec.ts` (`L75`) → `apps/api/src/test/java/com/example/realestate/discover/CityAreaListingsIT.java` + `e2e/canonical/discover-area-first.canonical.ts` (`T4`–`T6`) + `e2e/canonical/discover-school-first.canonical.ts` (`T7`) + `apps/web/src/features/discover/controllers/__tests__/useDiscoverFilterChromeController.search2859.test.tsx` + `apps/api/src/test/java/com/example/realestate/discover/RoutingDiscoverListingsServiceTest.java` + `apps/api/src/test/java/com/example/realestate/discover/DiscoverQueryDslTest.java` (`#2909`; see §4.3 below)
 75. `e2e/discover-to-trends.spec.ts` (`L94`) → `apps/web/src/components/map/__tests__/PropertyMap.discoverToTrends2861.test.tsx` + `apps/web/src/features/discover/navigation/__tests__/discoverAreasJourneyPanelAreaLeaf.test.tsx` (`#2896`)
 76. `e2e/journey/admin-duplicates.spec.ts` (`L188`) → `apps/web/src/pages/admin/__tests__/Duplicates.2861.test.tsx` (`#2896`)
 77. `e2e/journey/booking-journey.spec.ts` (`L193`) → `e2e/canonical/booking-request.canonical.ts` (`T16`, `T17`, `T17b`) + `apps/api/src/test/java/com/example/realestate/booking/BookingPersistenceIT.java` (`#2879` / `#2896`)
@@ -234,3 +234,108 @@ Every single one of the **96** remaining legacy `e2e/**/*.spec.ts` files (after 
 - `e2e/fixtures/regions-summary.json` (0 references outside retired legacy specs)
 - `e2e/fixtures/test-image.jpg` (0 references outside retired legacy specs)
 - `e2e/integration-ui/.gitkeep` (empty legacy directory placeholder)
+
+---
+
+## 4. Resolution of the Five Specific Coverage Concerns (`L8`, `L18`, `L75`, `L192`, `L44`)
+
+### 4.1 `L8` — `e2e/area-overview.spec.ts` (`AO5`–`AO9`)
+- **Current supported or obsolete behaviour:**
+  - `AO1`–`AO4` were already removed inside the spec itself (`area-overview.spec.ts:4-5`: tested legacy confidence-tier tables on `/area-overview`).
+  - `AO5` (**Supported**): Global header navigation displays `"Trends"` (never `"Insights"`), and clicking `"Trends"` navigates to `/trends`.
+  - `AO6` (**Obsolete / Retired**): The legacy `/insights` route was removed from `apps/web/src/App.tsx` (`App.tsx:127-128, 415` routes `/trends` and `/trends/:citySlug/areas/:areaSlug` only; `/insights` falls through to `<Route path="*" element={<NotFound />} />`).
+  - `AO7` (**Supported**): Unknown non-pipe `areaKey` (`/trends?areaKey=INVALID...`) renders `"Area not found"` without crashing, while a full pipe `areaKey` renders `AreaGuide` without falling through to the legacy error screen.
+  - `AO8` (**Superseded in `#1528`, Supported via `AreaGuide`**): Under `#1528` (`apps/web/src/pages/Trends.tsx:25-38, 100-101, 205-231`), `AreaGuide` is the default `/trends` experience (`shouldRenderGuide = isAreaGuideMode || selectedKey === ''`); the old `"Select an area to explore"` empty state from the legacy `#771` dashboard was intentionally removed (`Trends.issue1528.test.tsx:215-217`), and `/trends?city=udupi&areaKey=` renders `AreaGuide` (`AreaGuideSkeleton` / default-area auto-population / `AreaGuideNoCityAreas`) without crashing or showing `"Area not found"`.
+  - `AO9` (**Supported**): `/trends?city=udupi&areaKey=IN|KA|Udupi|Manipal` (4-segment pipe key) renders the area heading (`<h1>Manipal</h1>`) without `"Area not found"` or crash.
+- **Exact existing or newly implemented replacement tests:**
+  - `apps/web/src/components/layout/__tests__/AppLayout.test.tsx:141` (`"Insights"` nav link absent)
+  - `apps/web/src/components/layout/__tests__/AppLayout.navRoles2859.test.tsx` & `apps/web/src/pages/__tests__/LandingPage.navigation2859.test.tsx` (`"Trends"` nav link visible and click lands on `/trends`)
+  - `apps/web/src/pages/__tests__/Trends.noErrorGuide2859.test.tsx` (`M4.neg`: pipe `areaKey` renders guide `h1` and never `"Area not found"`)
+  - `apps/web/src/pages/__tests__/Trends.issue1528.test.tsx` (bare `/trends`, `/trends?city=udupi`, no-area city `AreaGuideNoCityAreas`, pipe `areaKey` heading, and non-pipe `areaKey` legacy fallback)
+  - `apps/web/src/pages/__tests__/TrendsAreaResolved.journey2581.test.tsx` (**Newly implemented**: `AO6` `/insights` 404 boundary proof + `AO8`/`AO9` `/trends?city=udupi&areaKey=` and `/trends?city=udupi` default-area auto-population into `<h1>Manipal</h1>`)
+- **Remaining gaps and how they were closed:**
+  - Explicit route-level verification of `/insights` hitting `NotFound` (`AO6`) and `/trends?city=udupi&areaKey=` + `/trends?city=udupi` auto-population (`AO8`/`AO9`) was added in `apps/web/src/pages/__tests__/TrendsAreaResolved.journey2581.test.tsx`. Zero remaining gaps.
+- **Final deletion justification:**
+  - `AO6` (`/insights` redirect) and the pre-`#1528` `"Select an area to explore"` copy in `AO8` are deliberately retired as obsolete product contracts; all supported `/trends` navigation, empty-param, invalid-key, and pipe-key behaviours (`AO5`, `AO7`, `AO8`, `AO9`) are protected in deterministic Vitest route/component suites. Manifest row `L8` is updated to `MOVE_DOWN` → `apps/web/src/pages/__tests__/TrendsAreaResolved.journey2581.test.tsx`.
+
+### 4.2 `L18` — `e2e/broker-preferences.spec.ts` (`BP1`–`BP5`, `BP-422`)
+- **Current supported or obsolete behaviour:**
+  - All broker market-focus behaviours in `e2e/broker-preferences.spec.ts` are **supported** in current product code (`apps/web/src/pages/broker/Preferences.tsx` and `apps/api/src/main/java/com/example/realestate/broker/focus/BrokerMarketFocusController.java`):
+    - `BP1-a..b`: `/broker/preferences` route guard for broker role vs anonymous/buyer redirect.
+    - `BP2-a..d`: `GET /api/broker/market-focus` renders seeded and manual focus rows, heading, and re-seed button (with Remove action only on `manual` rows).
+    - `BP3-a..e`: Empty state renders `"Seed from my listings"` button, `POST /api/broker/market-focus/seed`, and refetches list.
+    - `BP4-a..j`: Add market-focus form with real Radix `<Select>` dropdowns for Area (`Kadri, Mangalore`), Property Type (`Apartment`), and Purpose (`For Rent`), `POST /api/broker/market-focus` sending `{ areaKey, propertyType, listingPurpose }` (no `citySlug`), refetching `GET` (`1 -> 2` rows), and rendering the new row with `manual` badge.
+    - `BP-422`: `422` response on `POST /api/broker/market-focus` renders error toast (`"Unknown area"`) via real `<Toaster />`.
+    - `BP5-a..j`: Clicking Remove opens `alertdialog`, confirming sends `DELETE /api/broker/market-focus` with `citySlug` in body, and refetches list back to empty state.
+- **Exact existing or newly implemented replacement tests:**
+  - `apps/web/src/pages/broker/__tests__/Preferences.realSelect2859.test.tsx` (`BP4-c`: real Radix Select interaction for Area / Property Type / Purpose; mutation `M-BP4c` killed)
+  - `apps/web/src/pages/broker/__tests__/Preferences.addFlow2859.test.tsx` (`BP4-e..j` + `BP-422`: exact `POST` body without `citySlug`, refetch `1 -> 2`, rendered `Kadri, Mangalore`, `manual` vs `seeded` badge, and `422` `<Toaster />` `"Unknown area"`; mutations `A29`, `A30`, `A31`, `A33`, `M-BP4g`, `M-BP4i`, `M-BP4j`, `M-BP422` killed)
+  - `apps/web/src/pages/broker/__tests__/Preferences.pageHttp.test.tsx` (`BP2-a..d`, `BP3-a..e`, `BP4-a..b`, `BP5-a..j`: `GET` list, empty state, `POST /seed`, Remove `alertdialog`, `DELETE` with `citySlug`, refetch; 9 tests)
+  - `apps/web/src/__tests__/App.brokerWorkspaceRoutes.test.tsx` (`BP1-a..b`: `/broker/preferences` route protection)
+  - `apps/api/src/test/java/com/example/realestate/broker/focus/BrokerMarketFocusControllerTest.java` & `apps/api/src/test/java/com/example/realestate/broker/focus/BrokerMarketFocusServiceTest.java` (backend persistence, `422` area validation, duplicate handling, and JWT broker isolation)
+- **Remaining gaps and how they were closed:**
+  - Historical `PR-6a` (`#2835`) had marked `L18` as `KEEP` solely because `BP4-c`, `BP4-e..j`, and `BP-422` (`A29, A30, A31, A33`) lacked lower-level coverage at that time. Issue `#2859` Batch B1 (`docs/testing/e2e-retirement-map-2859-b1.md:174-191`, merged in `#2898`) closed every one of those surviving mutations with `Preferences.realSelect2859.test.tsx` and `Preferences.addFlow2859.test.tsx`. Zero remaining gaps.
+- **Final deletion justification:**
+  - Supersedes the historical `PR-6a` conditional `KEEP` decision under the clean-slate direction: 100% of `BP1`–`BP5` and `BP-422` UI, Radix Select, toast, HTTP payload, and backend persistence contracts are mutation-proven in Vitest and JUnit.
+
+### 4.3 `L75` — `e2e/discover-opensearch-parity.spec.ts` (`J1`–`J4`)
+- **Current supported or obsolete behaviour:**
+  - **OpenSearch Feature Flag Status:** `discover.opensearch.enabled` defaults to `false` in `apps/api/src/main/resources/application.yml` (`@Value("${discover.opensearch.enabled:false}")`), and `OpenSearchAreaCountProvider.java:29` / `PostgresAreaSchoolCountProvider.java:20` explicitly document that `discover.opensearch.enabled` **must remain `false`** in production and CI because the area-hierarchy and school-count indices exist only in PostgreSQL/PostGIS. Consequently, running a Playwright browser spec against the default-off runtime never exercised OpenSearch — it only re-tested the standard PostgreSQL/PostGIS `/api/discover/**` endpoints.
+  - **Supported Buyer & API Behaviours (`J1`–`J4`):**
+    - `J1`: Anonymous area-first `/api/discover/cities/{city}/listings` returns `200`, renders listing cards, emits zero `401`/`403`, respects `limitPerArea`, and leaks zero private seller/broker PII fields (`sellerPhone`, `sellerEmail`, `sellerWhatsapp`, `brokerUserId`, `adminNotes`, `ExactPricePaise`).
+    - `J2` & `J3`: Anonymous and authenticated school-radius `/api/discover/cities/{city}/school-radius-listings` returns `200` with boolean `hasMore` and renders listing cards.
+    - `J4`: Keyword contextual search (`q=apartment`) narrows area listings (`filtered <= baseline`) and clearing `q` restores the baseline count.
+    - **Backend OpenSearch Adapter Contract:** Flag-gated routing (`RoutingDiscoverListingsService`, `RoutingDiscoverMarkersService`, `RoutingDiscoverSummaryService`) and OpenSearch DSL generation (`DiscoverQueryDsl`, `OpenSearchDiscoverListingsAdapter`).
+- **Exact existing or newly implemented replacement tests:**
+  - **Canonical & Specialist Browser E2E (PostgreSQL/PostGIS runtime):**
+    - `e2e/canonical/discover-area-first.canonical.ts` (`T4`, `T5`, `T6`: area-first drilldown, card rendering, filter narrowing)
+    - `e2e/canonical/discover-school-first.canonical.ts` (`T7`: school-first selection and radius listings)
+    - `e2e/specialist/discover-viewport-truncation.specialist.ts` (`L98`: `limitPerArea` truncation indicator and cap)
+  - **Frontend Integration / Controller Unit Tests:**
+    - `apps/web/src/pages/__tests__/MapDiscovery.schoolJourney2857.test.tsx` (`J2`/`J3` school-radius listings request and card rendering)
+    - `apps/web/src/features/discover/controllers/__tests__/useDiscoverFilterChromeController.search2859.test.tsx`, `apps/web/src/hooks/__tests__/useDiscoverUrlState.searchQuery2859.test.ts`, and `apps/web/src/features/discover/presentation/__tests__/discoverBadge.searchQuery2859.test.ts` (`J4`: `q=` keyword search narrowing and chip dismiss restoring baseline)
+  - **Backend Integration & Unit Tests (PostGIS + OpenSearch Routing/DSL):**
+    - `apps/api/src/test/java/com/example/realestate/discover/CityAreaListingsIT.java` & `apps/api/src/test/java/com/example/realestate/discover/CityAreaListingsPriceProjection2859IT.java` (`J1` & `J4`: `/api/discover/cities/{city}/listings`, `limitPerArea`, keyword `q=`, and anonymous PII/price projection omission)
+    - `apps/api/src/test/java/com/example/realestate/discover/SchoolRadiusListingsControllerIT.java` (`J2` & `J3`: `/api/discover/cities/{city}/school-radius-listings` and `hasMore` contract)
+    - `apps/api/src/test/java/com/example/realestate/discover/RoutingDiscoverListingsServiceTest.java`, `apps/api/src/test/java/com/example/realestate/discover/RoutingDiscoverMarkersServiceTest.java`, `apps/api/src/test/java/com/example/realestate/discover/RoutingDiscoverSummaryServiceTest.java`, `apps/api/src/test/java/com/example/realestate/discover/DiscoverQueryDslTest.java`, and `apps/api/src/test/java/com/example/realestate/discover/OpenSearchDiscoverListingsAdapterTest.java` (flag-on vs flag-off delegation and OpenSearch query DSL parity)
+- **Remaining gaps and how they were closed:**
+  - No functional gaps existed; manifest row `L75` was updated from stale `DELETE_OBSOLETE` (`awaiting owner ruling`) to `MOVE_DOWN` → `apps/api/src/test/java/com/example/realestate/discover/CityAreaListingsIT.java` with full citations across Canonical E2E, Vitest, PostGIS ITs, and OpenSearch unit tests.
+- **Final deletion justification:**
+  - Browser-level OpenSearch parity testing against a default-off (`discover.opensearch.enabled=false`) backend is redundant with Canonical E2E (`T4`–`T7`) and PostGIS ITs, while the OpenSearch routing and DSL contracts are directly tested in `RoutingDiscover*ServiceTest` and `DiscoverQueryDslTest`.
+
+### 4.4 `L192` — `e2e/journey/area-trends-2581.spec.ts` (`Arms 1–9`)
+- **Current supported or obsolete behaviour:**
+  - All 9 arms (`A0`, `A1`–`A3`, `A1-A3.tier`, `A1-A3.wiring`, `A4`, `A5`, `A6`, `A7`, `A8.href`, `A8.land`, `A9`) represent **supported** product behaviour across Discover area leaf (`AreaLeafListingsSurface` / `AreaSelectedPanel`), `/trends/:citySlug/areas/:areaSlug` (`TrendsAreaResolved` + `AreaGuide`), and `/admin/intelligence` (`AdminIntelligence`).
+- **Exact existing or newly implemented replacement tests:**
+  - `apps/web/src/pages/__tests__/TrendsAreaResolved.journey2581.test.tsx` (**Newly implemented — 7 journey tests covering all `#2859 B4` `RETAIN` subclaims**):
+    - `A0 + A1-A3.wiring + A4` (3 parameterized tests across Arms 1–3): mounts the real `AreaSelectedPanel` wired with `slugifyFromAreaKey(areaKey)` → clicks `'Trends'` link → navigates router to `/trends/udupi/areas/manipal` (`FULL` → `'Enough data'`), `/trends/udupi/areas/brahmavar` (`LIMITED` → `'Limited data'`), and `/trends/udupi/areas/kaup` (`INSUFFICIENT` → `'Not enough data yet'`) via `GET /api/trends/resolve-area` and `GET /api/trends/area-intelligence` for an anonymous buyer with zero `/auth` redirect.
+    - `A5`: signed-in normal `USER` role navigating from Discover area leaf to `/trends/udupi/areas/brahmavar` renders `'Limited data'` with zero `/auth` redirect.
+    - `A6`: mobile `390×844` viewport (`mockMatchMediaWidth(390)`) renders the mobile toolbar `'Trends'` link on `AreaSelectedPanel`, navigates to `/trends/udupi/areas/kaup`, and renders `'Not enough data yet'`.
+    - `A7 + A8.land`: remounting/reloading at `/trends/udupi/areas/manipal` preserves URL and `'Enough data'`, and clicking `'View homes in Manipal'` lands on `/discover?city=udupi&areaKey=IN%7CKA%7CUdupi%7CManipal`, where the mounted real `MapDiscovery` restores the selected `Manipal` area leaf (`areas-breadcrumb-trail` = `'Manipal'`, auto-committed `rscope=areas&rareas=IN%7CKA%7CUdupi%7CManipal`, and `compact-results-trends-link` wired back to `/trends/udupi/areas/manipal`).
+    - `A9`: mounts `AdminIntelligence` at `/admin/intelligence` (`Full`, `Limited`, `Insufficient`) and mounts `TrendsAreaResolved` across all three buyer pages (`/trends/udupi/areas/manipal` → `'Enough data'`, `/trends/udupi/areas/brahmavar` → `'Limited data'`, `/trends/udupi/areas/kaup` → `'Not enough data yet'`).
+  - `apps/api/src/test/java/com/example/realestate/intelligence/AreaIntelligenceSnapshotRollupJobIT.java` (`run_seedsThreeBands_persistsDistinctConfidenceOutcomes`): seeds real LIVE listings across all 3 bands (`36` full, `15` limited, `3` insufficient) against real PostgreSQL, executes `AreaIntelligenceSnapshotRollupJob.run()`, and asserts real-DB cross-path parity between `AdminIntelligenceService.getAreaIntelligence(null)` live aggregate confidence (`"full"`, `"limited"`, `"insufficient"`) and `BuyerAreaIntelligenceService.getAreaIntelligence("udupi", areaKey)` cached snapshot `confidenceLabel` (`"Enough data"`, `"Limited data"`, `"Not enough data yet"`).
+  - `apps/web/src/components/area/__tests__/AreaGuide.test.tsx` (`A1`, `A2`, `A3` chip rendering and styling, `MA1r`–`MA3r`)
+  - `apps/web/src/__tests__/pages/TrendsAreaResolved.test.tsx` (`A8.href` CTA href `/discover?city=udupi&areaKey=IN%7CKA%7CUdupi%7CMalpe`, `MTA1`)
+  - `apps/api/src/test/java/com/example/realestate/intelligence/BuyerAreaIntelligenceServiceTest.java` (`MBA2`: tier → buyer confidence label)
+- **Remaining gaps and how they were closed:**
+  - The `#2859 B4` retirement map (`docs/testing/e2e-retirement-map-2859-b4.md:144-152`) had left `A0`, `A1-A3.wiring`, `A4`, `A5`, `A6`, `A7`, `A8.land`, and `A9` marked `RETAIN`. All 8 subclaims are now closed across `apps/web/src/pages/__tests__/TrendsAreaResolved.journey2581.test.tsx` (including real `MapDiscovery` area restoration in `A8.land` and all 3 buyer pages in `A9`) and `apps/api/src/test/java/com/example/realestate/intelligence/AreaIntelligenceSnapshotRollupJobIT.java` (real-DB cross-path Admin live vs Buyer snapshot confidence parity across all 3 bands).
+- **Final deletion justification:**
+  - Every assertion of `e2e/journey/area-trends-2581.spec.ts` (including the previously self-skipping admin-credential E2E arm `A9`) now runs deterministically and unconditionally across `TrendsAreaResolved.journey2581.test.tsx`, `AreaIntelligenceSnapshotRollupJobIT.java`, `AreaGuide.test.tsx`, `TrendsAreaResolved.test.tsx`, and `BuyerAreaIntelligenceServiceTest.java`.
+
+### 4.5 `L44` — `e2e/discover-agri-grouped-journey-1412.spec.ts` (`Tests #1`–`#12`)
+- **Current supported or obsolete behaviour:**
+  - **Obsolete / Retired (`#1`–`#4`, `#5b`, `#12`):** Tested the unmounted `AgriRegionalGroupsPanel` (`apps/web/src/components/discover/panels/AgriRegionalGroupsPanel.tsx:153`), legacy `?group=DIR:BAND` URL parameter (migrated to `region=` in `apps/web/src/features/discover/state/url/agricultural.ts:156-185`), and plural `areaKeys=` on `/api/discover/agri-map-listings` (replaced by singular `areaKey` / corridor params).
+  - **Supported (`#5a`, `#5c`, `#6`, `#7`, `#8`, `#9`, `#10`, `#11`):**
+    - `#5a` & `#5c`: Anonymous agri journey calls `GET /api/discover/cities/udupi/regional-area-groups?propertyType=agricultural_land` without `Authorization` and makes `0` requests to `/api/discover/markers`.
+    - `#6` & `#10`: Clicking an agri listing card or clicking a rendered agri parcel `<Polygon>` (opening `AgriListingPanel` and clicking `agri-view-full-details-cta`) navigates to `/listing/:id`.
+    - `#7`, `#8`, `#9`, `#11`: `AgriListingDetail` renders agricultural spec rows (`Water Source`, `Soil Type`, `Cultivation Status`, `Road Access`, `Ownership Type`, `Land Area`, `Approx. Area`, crops), renders the real `ListingDetailBoundaryMap` (`<Polygon>` + `fitBounds` when `boundary` GeoJSON is present; `<Marker>` centre fallback and `0` disclaimers when `boundary` is `null`), gates price and survey number for anonymous viewers (`agri-detail-survey-signin`, zero seller PII in backend teaser response), and displays formatted price, per-acre price, and survey number (`SY-88/4B`) for authenticated viewers.
+- **Exact existing or newly implemented replacement tests:**
+  - `apps/web/src/components/listing/agri/__tests__/AgriListingDetail.groupedJourney1412.test.tsx` (`L44-N1`..`L44-N6`, 6 tests, 14 transient mutation proofs `M1`..`M14` delivered in merged PR `#2899` / issue `#2890`; full per-assertion table in `docs/testing/e2e-retirement-map-2890-l44.md`)
+  - `apps/web/src/components/listing/agri/__tests__/AgriListingDetail.priceGate2859.test.tsx` (anonymous vs authenticated price gating)
+  - `apps/web/src/components/discover/panels/__tests__/DiscoverRightPanel.routing.test.tsx:850` & `apps/web/src/features/discover/controllers/__tests__/useDiscoverMapDataController.test.ts:1388` (`#6` card routing & `#5c` anonymous `0` markers requests)
+  - `apps/api/src/test/java/com/example/realestate/listing/api/ListingResponseMapperTest.java:985-1036`, `apps/api/src/test/java/com/example/realestate/listing/api/PublicListingControllerTest.java:1008-1063`, and `apps/api/src/test/java/com/example/realestate/discover/DiscoverAgriMapListingsServiceTest.java:238-359` (backend PII/price/survey omission for anonymous agri responses and full payload for authenticated viewers)
+  - `e2e/canonical/discover-agri-first.canonical.ts` (`T8`, `T8b`, `T8c`, `T9`: modern corridor-card `region=` agri-first browser journey)
+- **Remaining gaps and how they were closed:**
+  - All live assertion gaps (`#5a`, `#7`, `#8`, `#9`, `#10`, `#11`) were closed and mutation-proven (`M1`..`M14`) in merged PR `#2899`. In this PR (`#2909`), the stale manifest row (`L44`) and `docs/testing/e2e-retirement-map-2890-l44.md` §3 were updated from `DELETE_OBSOLETE` / `'replacement coverage scheduled after Friday in #2890'` to `MOVE_DOWN` → `apps/web/src/components/listing/agri/__tests__/AgriListingDetail.groupedJourney1412.test.tsx`.
+- **Final deletion justification:**
+  - All live agricultural discovery, parcel polygon selection, and `AgriListingDetail` behaviours (`#5a`, `#5c`, `#6`–`#11`) are protected by mutation-proven Vitest, JUnit, and Canonical E2E (`T8`–`T9`) tests; the remaining legacy assertions (`#1`–`#4`, `#5b`, `#12`) target the retired `?group=DIR:BAND` / `AgriRegionalGroupsPanel` / plural `areaKeys=` contract.
