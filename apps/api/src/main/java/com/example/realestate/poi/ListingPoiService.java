@@ -1,5 +1,9 @@
 package com.example.realestate.poi;
 
+import com.example.realestate.listing.core.Listing;
+import com.example.realestate.listing.core.ListingRepository;
+import com.example.realestate.listing.core.ListingStatus;
+import com.example.realestate.listing.exception.ListingNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -20,18 +24,29 @@ public class ListingPoiService {
     private static final Logger log = LoggerFactory.getLogger(ListingPoiService.class);
 
     private final ListingPoiRepository repository;
+    private final ListingRepository listingRepository;
 
-    public ListingPoiService(ListingPoiRepository repository) {
+    public ListingPoiService(ListingPoiRepository repository,
+                             ListingRepository listingRepository) {
         this.repository = repository;
+        this.listingRepository = listingRepository;
     }
 
     /**
-     * Returns approved POIs for a listing, ordered pinned DESC then distance ASC,
+     * Returns approved POIs for a LIVE listing, ordered pinned DESC then distance ASC,
      * capped at 15 items. Public endpoint — no auth required.
+     * Throws {@link ListingNotFoundException} for nonexistent, archived, or non-LIVE listings
+     * so non-public listing existence and location context are never leaked (#2887).
      * Note: rate limiting for this endpoint is tracked as a future cross-cutting concern.
      */
     public List<PoiResponse> getApproved(UUID listingId) {
         log.debug("getApproved listingId={}", listingId);
+        Listing listing = listingRepository.findById(listingId).orElse(null);
+        if (listing == null
+                || !ListingStatus.LIVE.toDbValue().equals(listing.getStatus())
+                || listing.getArchivedAt() != null) {
+            throw new ListingNotFoundException(listingId);
+        }
         return repository.findByListingIdAndApprovedTrue(listingId).stream()
                 .sorted(Comparator.comparing((ListingPoi p) -> Boolean.TRUE.equals(p.getPinned()) ? 0 : 1)
                         .thenComparingInt(p -> p.getDistanceMeters() != null ? p.getDistanceMeters() : Integer.MAX_VALUE))

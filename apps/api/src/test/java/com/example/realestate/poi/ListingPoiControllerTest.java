@@ -1,6 +1,7 @@
 package com.example.realestate.poi;
 
 import com.example.realestate.listing.core.Listing;
+import com.example.realestate.listing.exception.ListingNotFoundException;
 import com.example.realestate.listing.exception.ListingOwnershipException;
 import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.security.CallerInfoResolver;
@@ -119,6 +120,17 @@ class ListingPoiControllerTest {
         mockMvc.perform(get("/api/listings/{listingId}/pois", LISTING_ID).with(jwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    // ==================== Test 3b (#2887): non-public or missing listing returns 404 ====================
+
+    @Test
+    void getApproved_nonPublicOrMissingListing_returns404() throws Exception {
+        when(service.getApproved(LISTING_ID)).thenThrow(new ListingNotFoundException(LISTING_ID));
+
+        mockMvc.perform(get("/api/listings/{listingId}/pois", LISTING_ID).with(jwt()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Listing not found"));
     }
 
     // ==================== Test 4: no Authorization header → 401 ====================

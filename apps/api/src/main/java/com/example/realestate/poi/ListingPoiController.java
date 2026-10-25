@@ -73,11 +73,17 @@ public class ListingPoiController {
 
     /**
      * Public endpoint — no auth required.
-     * Returns approved POIs for a listing, ordered pinned DESC then distance ASC, capped at 15.
+     * Returns approved POIs for a LIVE listing, ordered pinned DESC then distance ASC, capped at 15.
+     * Returns 404 for unknown IDs, soft-deleted listings, or any non-LIVE status
+     * (DRAFT, PENDING_REVIEW, REJECTED, ARCHIVED, SCRAPED).
      */
     @GetMapping
-    public ResponseEntity<List<PoiResponse>> getApproved(@PathVariable UUID listingId) {
-        return ResponseEntity.ok(service.getApproved(listingId));
+    public ResponseEntity<?> getApproved(@PathVariable UUID listingId) {
+        try {
+            return ResponseEntity.ok(service.getApproved(listingId));
+        } catch (ListingNotFoundException e) {
+            return notFound();
+        }
     }
 
     // ===== Dealer/admin endpoints =====

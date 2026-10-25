@@ -262,11 +262,155 @@ class PoiApproveAuthorization2859IT {
         assertPoiRow(POI_A_AMENITY, true, OWNER_ID);
     }
 
+    // ===== #2887: Non-public listings must return 404 on GET /api/listings/{id}/pois =====
+
+    @Test
+    @DisplayName("#2887: DRAFT, PENDING_REVIEW, REJECTED, ARCHIVED, SCRAPED, soft-deleted, deleted, and nonexistent "
+            + "listings return identical 404 {'error':'Listing not found'} on public POI read; LIVE control returns 200")
+    void nonPublicAndMissingListings_return404OnPublicPoiRead_whileLiveControlReturns200() throws Exception {
+        UUID draftListing = seedListingWithStatus(OWNER_ID, "IT-2887-Draft", ListingStatus.DRAFT, null);
+        UUID pendingListing = seedListingWithStatus(OWNER_ID, "IT-2887-Pending", ListingStatus.PENDING_REVIEW, null);
+        UUID rejectedListing = seedListingWithStatus(OWNER_ID, "IT-2887-Rejected", ListingStatus.REJECTED, null);
+        UUID archivedListing = seedListingWithStatus(OWNER_ID, "IT-2887-Archived", ListingStatus.ARCHIVED, Instant.now());
+        UUID scrapedListing = seedListingWithStatus(null, "IT-2887-Scraped", ListingStatus.SCRAPED, null);
+        UUID softDeletedLiveListing = seedListingWithStatus(OWNER_ID, "IT-2887-SoftDeletedLive", ListingStatus.LIVE, Instant.now());
+        UUID deletedListing = seedListingWithStatus(OWNER_ID, "IT-2887-Deleted", ListingStatus.LIVE, null);
+        UUID nonexistentListing = UUID.fromString("28590400-0000-0000-0000-00000000dead");
+
+        UUID draftPoi = UUID.fromString("28590400-0000-0000-0000-0000000000c1");
+        UUID pendingPoi = UUID.fromString("28590400-0000-0000-0000-0000000000c2");
+        UUID rejectedPoi = UUID.fromString("28590400-0000-0000-0000-0000000000c3");
+        UUID archivedPoi = UUID.fromString("28590400-0000-0000-0000-0000000000c4");
+        UUID scrapedPoi = UUID.fromString("28590400-0000-0000-0000-0000000000c5");
+        UUID softDeletedPoi = UUID.fromString("28590400-0000-0000-0000-0000000000c6");
+        UUID deletedPoi = UUID.fromString("28590400-0000-0000-0000-0000000000c7");
+
+        try {
+            seedApprovedPoi(draftPoi, draftListing, "Secret Draft Hospital", "HOSPITAL", 350, "osm-2887-c1");
+            seedApprovedPoi(pendingPoi, pendingListing, "Secret Pending Hospital", "HOSPITAL", 400, "osm-2887-c2");
+            seedApprovedPoi(rejectedPoi, rejectedListing, "Secret Rejected Hospital", "HOSPITAL", 450, "osm-2887-c3");
+            seedApprovedPoi(archivedPoi, archivedListing, "Secret Archived Hospital", "HOSPITAL", 500, "osm-2887-c4");
+            seedApprovedPoi(scrapedPoi, scrapedListing, "Secret Scraped Hospital", "HOSPITAL", 550, "osm-2887-c5");
+            seedApprovedPoi(softDeletedPoi, softDeletedLiveListing, "Secret SoftDeleted Hospital", "HOSPITAL", 600, "osm-2887-c6");
+            seedApprovedPoi(deletedPoi, deletedListing, "Secret Deleted Hospital", "HOSPITAL", 650, "osm-2887-c7");
+
+            // Hard-delete deletedListing (cascades its POIs).
+            jdbc.update("DELETE FROM public.property_listings WHERE id = ?", deletedListing);
+
+            UUID[] nonPublicIds = new UUID[]{
+                    draftListing, pendingListing, rejectedListing, archivedListing,
+                    scrapedListing, softDeletedLiveListing, deletedListing, nonexistentListing
+            };
+
+            for (UUID id : nonPublicIds) {
+                // Anonymous caller gets 404 with identical body {"error":"Listing not found"}
+                anonymousRead(id)
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.error").value("Listing not found"));
+
+                // Authenticated non-owner caller also gets 404 on the public POI endpoint
+                authenticatedRead(id, OTHER_BROKER_ID)
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.error").value("Listing not found"));
+            }
+
+            // Positive control: LIVE listing with approved POI returns 200 to anonymous and authenticated callers
+            approve(listingA, POI_A_AMENITY, OWNER_ID)
+                    .andExpect(status().isOk());
+            anonymousRead(listingA)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[?(@.id=='" + POI_A_AMENITY + "')].name").value("IT-2859 City Hospital"));
+            authenticatedRead(listingA, OTHER_BROKER_ID)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[?(@.id=='" + POI_A_AMENITY + "')].name").value("IT-2859 City Hospital"));
+        } finally {
+            for (UUID id : new UUID[]{draftListing, pendingListing, rejectedListing, archivedListing, scrapedListing, softDeletedLiveListing, deletedListing}) {
+                if (id == null) continue;
+                jdbc.update("DELETE FROM public.listing_status_history WHERE listing_id = ?", id);
+                jdbc.update("DELETE FROM public.property_listings WHERE id = ?", id);
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("#2887: owner and admin can still manage POIs (/suggestions, /approve) on non-LIVE listings, "
+            + "while public GET /pois returns 404 until the listing becomes LIVE")
+    void nonLiveListing_ownerAndAdminManagementPreserved_whilePublicReadGatedByLiveStatus() throws Exception {
+        UUID draftListing = seedListingWithStatus(OWNER_ID, "IT-2887-Draft-Manage", ListingStatus.DRAFT, null);
+        UUID draftPoi = UUID.fromString("28590400-0000-0000-0000-0000000000d1");
+
+        try {
+            seedPoi(draftPoi, draftListing, "IT-2887 Draft School", "SCHOOL", 420, "osm-2887-d1");
+
+            // Anonymous caller is rejected with 401 by the real security filter chain on /suggestions
+            mockMvc.perform(get("/api/listings/" + draftListing + "/pois/suggestions"))
+                    .andExpect(status().isUnauthorized());
+
+            // Authenticated non-owner broker is rejected with 403 on /suggestions and /approve
+            suggestions(draftListing, OTHER_BROKER_ID)
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error").value("Access denied: not listing owner or admin"));
+            approve(draftListing, draftPoi, OTHER_BROKER_ID)
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error").value("Access denied: not listing owner or admin"));
+
+            // Owner and admin can read /suggestions on the DRAFT listing
+            suggestions(draftListing, OWNER_ID)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.pois[?(@.id=='" + draftPoi + "')].name").value("IT-2887 Draft School"));
+            suggestions(draftListing, ADMIN_ID)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.pois[?(@.id=='" + draftPoi + "')].name").value("IT-2887 Draft School"));
+
+            // Owner approves the POI while listing is still DRAFT
+            approve(draftListing, draftPoi, OWNER_ID)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.approved").value(true));
+            assertPoiRow(draftPoi, true, OWNER_ID);
+
+            // Even though the POI is approved, public GET /pois still returns 404 while listing is DRAFT
+            anonymousRead(draftListing)
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error").value("Listing not found"));
+
+            // Transition listing to LIVE -> public GET /pois now returns 200 with the approved POI
+            jdbc.update("UPDATE public.property_listings SET status = 'LIVE' WHERE id = ?", draftListing);
+            anonymousRead(draftListing)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[?(@.id=='" + draftPoi + "')].name").value("IT-2887 Draft School"));
+
+            // Transition listing to ARCHIVED -> public GET /pois returns 404 again, while owner/admin /suggestions still works
+            jdbc.update("UPDATE public.property_listings SET status = 'ARCHIVED', archived_at = NOW() WHERE id = ?", draftListing);
+            anonymousRead(draftListing)
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error").value("Listing not found"));
+            suggestions(draftListing, OWNER_ID)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.pois[?(@.id=='" + draftPoi + "')].name").value("IT-2887 Draft School"));
+            suggestions(draftListing, ADMIN_ID)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.pois[?(@.id=='" + draftPoi + "')].name").value("IT-2887 Draft School"));
+        } finally {
+            jdbc.update("DELETE FROM public.listing_status_history WHERE listing_id = ?", draftListing);
+            jdbc.update("DELETE FROM public.property_listings WHERE id = ?", draftListing);
+        }
+    }
+
     // ===== helpers =====
 
     private ResultActions anonymousRead(UUID listingId) throws Exception {
         // Deliberately NO Authorization header (NearbyPois.tsx calls this endpoint with skipAuth).
         return mockMvc.perform(get("/api/listings/" + listingId + "/pois"));
+    }
+
+    private ResultActions authenticatedRead(UUID listingId, UUID caller) throws Exception {
+        return mockMvc.perform(get("/api/listings/" + listingId + "/pois")
+                .header("Authorization", "Bearer " + caller));
+    }
+
+    private ResultActions suggestions(UUID listingId, UUID caller) throws Exception {
+        return mockMvc.perform(get("/api/listings/" + listingId + "/pois/suggestions")
+                .header("Authorization", "Bearer " + caller));
     }
 
     private ResultActions approve(UUID listingId, UUID poiId, UUID caller) throws Exception {
@@ -289,10 +433,15 @@ class PoiApproveAuthorization2859IT {
     }
 
     private UUID seedListing(UUID owner, String title) {
+        return seedListingWithStatus(owner, title, ListingStatus.LIVE, null);
+    }
+
+    private UUID seedListingWithStatus(UUID owner, String title, ListingStatus status, Instant archivedAt) {
         OffsetDateTime now = OffsetDateTime.now();
         Listing listing = new Listing();
         listing.setCreatedBy(owner);
-        listing.setStatus(ListingStatus.LIVE.toDbValue());
+        listing.setStatus(status.toDbValue());
+        listing.setArchivedAt(archivedAt);
         listing.setPropertyType("house");
         listing.setTitle(title);
         listing.setCreatedAt(now);
@@ -303,6 +452,12 @@ class PoiApproveAuthorization2859IT {
     private void seedPoi(UUID id, UUID listingId, String name, String category, int distance, String osmId) {
         jdbc.update("INSERT INTO public.listing_pois (id, listing_id, name, category, distance_meters, source, osm_id, "
                         + "approved, pinned) VALUES (?, ?, ?, ?, ?, 'overpass', ?, false, false)",
+                id, listingId, name, category, distance, osmId);
+    }
+
+    private void seedApprovedPoi(UUID id, UUID listingId, String name, String category, int distance, String osmId) {
+        jdbc.update("INSERT INTO public.listing_pois (id, listing_id, name, category, distance_meters, source, osm_id, "
+                        + "approved, pinned) VALUES (?, ?, ?, ?, ?, 'overpass', ?, true, false)",
                 id, listingId, name, category, distance, osmId);
     }
 }
