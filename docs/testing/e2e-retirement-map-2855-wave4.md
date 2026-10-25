@@ -4,10 +4,16 @@
 
 Wave 4 of `#2855` (`FU-ADMIT-ANON`) completes the evaluation and admission of the remaining `#2855` / `#2089` browser-only candidate specs in `docs/testing/e2e-retirement-manifest.csv`:
 
-- **8 browser-only specs admitted** into `e2e/specialist/*.specialist.ts` (`L70`, `L107`, `L108`, `L122`, `L135`, `L136`, `L158`, `L184`), preserving **100% of `test(...)` blocks** (0 tests deleted, 0 assertions weakened) and adding **46 tests** across the 8 files (bringing `e2e/specialist/` from 34 files / 194 tests at `main` `ea47cf59` to **42 files / 240 tests** in this worktree).
+- **8 browser-only specs admitted** into `e2e/specialist/*.specialist.ts` (`L70`, `L107`, `L108`, `L122`, `L135`, `L136`, `L158`, `L184`), preserving **100% of `test(...)` blocks** (0 tests deleted) and adding **46 tests** across the 8 files (bringing `e2e/specialist/` from 34 files / 194 tests at `main` `ea47cf59` to **42 files / 240 tests** in this worktree).
+- **Explicit disclosure of contract-aligned assertion updates in admitted Wave 4 specs**:
+  - `L122` (`e2e/specialist/discover-issue-1956-pr5-mobile-cluster-sheet.specialist.ts`, Test 2): updated the post-dismissal URL comparison to compare against `urlBefore` with `clusterFocus` deleted rather than raw `urlBefore.toString()`, so that Leaflet's debounced `lat`/`lon`/`zoom` URL write before the click does not cause a false mismatch while still asserting `clusterFocus === null`, `node=` unchanged, and `window.history.length` unchanged.
+  - `L184` (`e2e/specialist/issue-2456-map-candidate-callouts.specialist.ts`, `assertMemberCardContract`): updated the secondary-copy assertion from `/Selected/i` to `/\d+\s*LISTINGS?|Selected/i` to match the current count-aware `AreaSetCandidateCalloutLayer` member card contract (`AreaSetCandidateCalloutLayer.test.tsx`).
 - **2 Wave 2 timing races hardened (`L73`, `L131`)**:
   - `L73` (`e2e/specialist/discover-map-info-dock-2748.specialist.ts`): awaited `map-info-dock-guidance` (`toHaveCount(0)`) and `discover-badge` (`toBeVisible`) before reading `schoolRadiusLegend.boundingBox()` and `dock.boundingBox()` so async count-row mount does not grow `dockBox` mid-measurement.
   - `L131` (`e2e/specialist/discover-issue-2083-home-breadcrumb-back-camera-race.specialist.ts`): seeded `rscope=areas&rareas=IN%7CKA%7CBengaluru%7CRR%20Nagar` on the initial `goto` (matching `L108` `T2` so `#2015` load-time `commitResultScope` `REPLACE` does not clobber `AreaPanner`'s `reportViewport` timer) and awaited `readCamera(page).lat` after clicking `D_SE` before clicking `AREA_RR_NAGAR`.
+- **Direct browser-only assertion migrations added to existing admitted specialist specs (`L57`, `L60/B8`)**:
+  - `L57` (`e2e/discover-area-reskin-mobile-2159.spec.ts` → `e2e/specialist/discover-issue-1956-pr4-mobile-listings-scroll.specialist.ts` `L119`): added the 3 mobile `390×844` area-leaf reskin guards (`document.documentElement.scrollWidth <= 390 && document.body.scrollWidth <= 390`, single-column vertical card stacking where `card[1].y >= card[0].y + card[0].height - 2` and `|card[0].x - card[1].x| <= 2`, and `node=` byte-identically surviving the `List -> Map -> List` round-trip via `control-bar-map-trigger` / `mobile-map-close-list-button`).
+  - `L60/B8` (`e2e/discover-batch-b-journeys.spec.ts` `B8` → `e2e/specialist/discover-issue-2770-compact-school-context.specialist.ts` `L157`): added the 3 mobile `390×844` selected-school-state reflow guards (`document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1`, `school-summary-band` bounding box within `0..391`px, and `document.documentElement.scrollHeight <= document.documentElement.clientHeight + 1` proving no page-level double-scroll).
 - **7 mixed specs documented as non-admissible / superseded** (`L52`, `L56`, `L57`, `L58`, `L60`, `L77`, `L172`) with per-assertion obsolescence and replacement proofs below, alongside the complete current-behaviour coverage matrix in [`docs/testing/current-behaviour-coverage-matrix.md`](current-behaviour-coverage-matrix.md).
 
 ---
@@ -29,73 +35,78 @@ Wave 4 of `#2855` (`FU-ADMIT-ANON`) completes the evaluation and admission of th
 
 ## 3. Non-Admissible / Superseded Mixed `#2855` Specs (7 Files)
 
-Each of the remaining 7 mixed `#2855` specs fails against the current product UI or canonical local fixture for architectural reasons (superseded components, removed testids, or unseeded fixture rows) and is covered by existing canonical E2E, admitted specialist E2E, or lower-level Vitest suites.
+Each of the remaining 7 mixed `#2855` specs fails against the current product UI or canonical local fixture for architectural reasons (superseded components, removed testids, or unseeded fixture rows) and is covered by existing canonical E2E, admitted specialist E2E, or lower-level Vitest suites. Every file path cited below is verified on disk.
 
-### 3.1 `L52` — `e2e/discover-1738-regression.spec.ts` (7 tests)
-
-- **Why non-admissible**:
-  - Uses `https://placehold.co/...` external image URLs in its inline fixture (`heroImageUrl`), violating `SP2` (`findForbiddenHostLiterals`) and Layer-2 network policy unless rewritten.
-  - Tests 1–5 (`1738-1`..`1738-5`) assert the pre-`#2130`/`#2459` `areaKey=` legacy URL contract and `MarkerPopoverCard` interaction on bare `journey=area-first&areaKey=...` without `node=`.
-- **Existing replacement coverage**:
-  - **Specialist E2E**: `e2e/specialist/discover-issue-1762-listing-density-clustering.specialist.ts` (`L107`, admitted in Wave 4) — test 20 (`Area listings (sparse, non-cluster path): marker click opens popover unaffected`), test 21 (`Selected-school-radius (#1738/#2130 protected surface): marker click still opens popover, radius circle unaffected`), and test 22 (`Issue #1762 — mobile marker A → marker B preview replacement (required browser evidence item 8)`).
-  - **Specialist E2E**: `e2e/specialist/discover-issue-2129-mobile-marker-occlusion.specialist.ts` (`L138`, admitted in `S0`) — mobile 2-marker tap replacement and preview-sheet reachability.
-  - **Canonical E2E**: `e2e/canonical/map-marker-interaction.canonical.ts` (`T19`, `T20`).
-  - **Lower-level Vitest**: `apps/web/src/pages/__tests__/MapDiscovery.issue2149.secondMarkerTap.test.tsx`, `apps/web/src/components/map/__tests__/PropertyMap.schoolCircle.test.tsx`, `apps/web/src/utils/__tests__/markerPopoverEligibility.test.ts` (all cited in `L170` retirement).
-
-### 3.2 `L56` — `e2e/discover-area-nav-journey.spec.ts` (5 tests)
+### 3.1 `L52` — `e2e/discover-area-cards.spec.ts` (8 tests)
 
 - **Why non-admissible**:
-  - Asserts the superseded pre-`#1956` `AreaGroupsLandingPanel` (`data-testid="area-groups-landing"`, `data-testid="area-group-card-*"`, `data-testid="scoped-search-input"`).
-  - Issue `#1956` replaced the area-first landing surface with `DiscoverAreasJourneyPanel` (`data-testid="discover-areas-journey-panel-shell"`, `data-testid="navigation-level-panel"`, `navigation-child-card-*`). `area-groups-landing` is never mounted on `/discover?city=bangalore&journey=area-first`.
+  - Tests 1–3 (`area markers appear on the map for default Udupi city`, `clicking an area marker selects the area`, `switching city replaces area markers`) and `A1`–`A5` assume a bare `/discover?city=udupi` URL renders the pre-`#1956`/`#2088` legacy `GuidedEntryPanel` (`Find properties your way`, `journey-card-area-first`), `.leaflet-marker-icon.area-marker` legacy ring markers from `/api/discover/areas`, and `back-button` / `div.h-44.relative` card selectors removed by `#1956` and `#2729`.
 - **Existing replacement coverage**:
-  - **Canonical E2E**: `e2e/canonical/area-hierarchy-navigation.canonical.ts` (`T4`, `T5`, `T6`) and `e2e/canonical/panel-exclusivity.canonical.ts` (`T18`).
-  - **Specialist E2E**: `e2e/specialist/discover-issue-1956-areas-adaptive-journeys.specialist.ts` (`L109`, admitted in Wave 2) and `e2e/specialist/discover-issue-1823-camera-fit-policy.specialist.ts` (`L108`, admitted in Wave 4).
-  - **Lower-level Vitest**: `apps/web/src/features/discover/navigation/__tests__/useAreasNavigationJourney.test.ts`, `apps/web/src/components/map/__tests__/AreaMarkerLayer.destinations.test.tsx`.
+  - **Canonical E2E**: `e2e/canonical/discover-area-first.canonical.ts` (`T4`, `T5`, `T6`) and `e2e/canonical/anon-discover-teaser.canonical.ts` (`T10`).
+  - **Specialist E2E**: `e2e/specialist/discover-issue-1823-camera-fit-policy.specialist.ts` (`L108`, camera fit & `lat`/`lon`/`zoom` URL write on area selection), `e2e/specialist/discover-issue-2305-cluster-marker-skin.specialist.ts` (`L147`, real `.area-marker` painted geometry), and `e2e/specialist/discover-listing-detail-reskin-desktop-2159.specialist.ts` (`L70`, area card click -> `/listing/:id`).
+  - **Lower-level Vitest**: `apps/web/src/components/map/__tests__/AreaMarkerLayer.destinations.test.tsx`, `apps/web/src/components/discover/__tests__/DiscoverControlBar.kundapur2859.test.tsx`, `apps/web/src/pages/__tests__/MapDiscovery.areaKeyColdLoad2859.test.tsx`.
 
-### 3.3 `L57` — `e2e/discover-area-school-combined.spec.ts` (5 tests)
+### 3.2 `L56` — `e2e/discover-area-nav-journey.spec.ts` (7 tests)
 
 - **Why non-admissible**:
-  - Enters via the superseded `AreaGroupsLandingPanel` (`area-group-card-*` -> `area-row-*` -> `See schools in this area` CTA) and asserts the pre-`#2124`/`#2660` combined area+school panel flow.
-  - Under `#1956`/`#2124`/`#2660`, area-leaf drilldown renders `AreaLeafListingsSurface` and school-first drilldown renders `DiscoverSchoolsJourneyPanel` -> `SchoolsInAreaPanel` -> `AreaSchoolCombinedPanel`.
+  - Drives the pre-`#1956` `scope=` guided-entry state (`Where do you want to explore?`, `journey-card-area-first`, `back-button`, and legacy `?areaKey=` URL transitions) superseded by the `#1956` canonical `node=` hierarchy (`d:*` -> `c:*` -> `a:*`).
 - **Existing replacement coverage**:
-  - **Canonical E2E**: `e2e/canonical/school-first-journey.canonical.ts` (`T7`, `T8`, `T9`).
-  - **Specialist E2E**: `e2e/specialist/discover-issue-1823-camera-fit-policy.specialist.ts` (`L108` `T4`: `d:central -> c:central:... -> a:IN|KA|Bengaluru|Koramangala -> school-card -> combined-radius-btn-3/5/10`) and `e2e/specialist/discover-journey-switch-overlay-cleanup-1940.specialist.ts` (`L158` `AC5`: combined `journey=area-first&areaKey=...&schoolId=...` overlay lifecycle).
-  - **Lower-level Vitest**: `apps/web/src/features/discover/navigation/__tests__/discoverAreasJourneyPanelAreaLeaf.test.tsx`, `apps/web/src/components/discover/panels/__tests__/SchoolSelectedPanel.test.tsx`.
+  - **Canonical E2E**: `e2e/canonical/discover-area-first.canonical.ts` (`T4`, `T5`, `T6`) and `e2e/canonical/panel-exclusivity.canonical.ts` (`T18`).
+  - **Specialist E2E**: `e2e/specialist/discover-issue-1823-camera-fit-policy.specialist.ts` (`L108`, `T1`–`T6` camera fit & URL `lat`/`lon`/`zoom` preservation) and `e2e/specialist/discover-issue-2083-home-breadcrumb-back-camera-race.specialist.ts` (`L131`, hierarchy drilldown + Back camera restoration).
+  - **Lower-level Vitest**: `apps/web/src/pages/__tests__/MapDiscovery.areaKeyColdLoad2859.test.tsx`, `apps/web/src/pages/__tests__/MapDiscovery.nodeListingsBack2859.test.tsx`, `apps/web/src/features/discover/navigation/__tests__/useAreasNavigationJourney.test.ts`.
 
-### 3.4 `L58` — `e2e/discover-area-scoped-listings.spec.ts` (5 tests)
+### 3.3 `L57` — `e2e/discover-area-reskin-mobile-2159.spec.ts` (1 test)
+
+- **Why non-admissible as a standalone file**:
+  - Hard-codes `a:IN|KA|Bengaluru|JP Nagar` (which has 0 seeded listings in the canonical gate fixture) and queries `.area-listings-grid`, a CSS class removed when `#2729` reskinned the area-leaf results surface (`ListingsBody.tsx`).
+- **Direct browser replacement coverage (migrated into `L119`)**:
+  - **Specialist E2E**: `e2e/specialist/discover-issue-1956-pr4-mobile-listings-scroll.specialist.ts` (`L119`) now directly asserts all 3 `L57` browser invariants at `390×844` on `a:IN|KA|Bengaluru|RR Nagar` (2 real seeded listings):
+    1. `document.documentElement.scrollWidth <= 390` and `document.body.scrollWidth <= 390` (no horizontal overflow at 390px).
+    2. Single-column vertical card layout (`|firstCardBox.x - secondCardBox.x| <= 2` and `secondCardBox.y >= firstCardBox.y + firstCardBox.height - 2`).
+    3. Canonical `node=` parameter survives the `List -> Map -> List` toggle round-trip (`control-bar-map-trigger` -> `mobile-map-close-list-button`) byte-identically.
+  - **Specialist E2E**: `e2e/specialist/discover-listing-detail-reskin-mobile-2159.specialist.ts` (`L71`) and `e2e/specialist/discover-issue-2089-filter-list-map-parity.specialist.ts` (`L135`).
+
+### 3.4 `L58` — `e2e/discover-area-selected-filters.spec.ts` (22 tests)
 
 - **Why non-admissible**:
-  - Navigates via the superseded `AreaGroupsLandingPanel` (`area-group-card-*` -> `area-row-*`) to reach area-scoped listings and test marker hover / card click.
+  - Tests 1–12 and `T1`–`T8` cold-load bare `/discover?areaKey=IN|KA|Udupi|Manipal` and assert legacy testids (`quick-chip-apartment`, `quick-chip-2-bhk`, `combined-chips`, `panel-header-back-button`) that were removed by `#2660` (`AreaFirstJourneyPanel`) and `#2729` (`ListingsBody` / `DiscoverControlBar` popovers).
 - **Existing replacement coverage**:
-  - **Canonical E2E**: `e2e/canonical/area-hierarchy-navigation.canonical.ts` (`T4`, `T5`, `T6`) and `e2e/canonical/map-marker-interaction.canonical.ts` (`T19`, `T20`).
-  - **Specialist E2E**: `e2e/specialist/discover-issue-1956-areas-adaptive-journeys.specialist.ts` (`L109`, marker-count == card-count parity at area leaf) and `e2e/specialist/discover-listing-detail-reskin-desktop-2159.specialist.ts` (`L70`, area-leaf listing card -> detail -> Back restores `node=`).
-  - **Lower-level Vitest**: `apps/web/src/features/discover/navigation/__tests__/discoverAreasJourneyPanelAreaLeaf.test.tsx`, `apps/web/src/features/discover/hooks/__tests__/useAreaLeafResultSource.test.ts`.
+  - **Canonical E2E**: `e2e/canonical/discover-area-first.canonical.ts` (`T4`, `T5`, `T6`, `T24`, `T25`, `T26`) and `e2e/canonical/discover-school-first.canonical.ts` (`T7`, `T7b`).
+  - **Specialist E2E**:
+    - `e2e/specialist/discover-issue-2715-school-pin-vs-empty-pill.specialist.ts` (`L156` — school-pin vs empty-pill rendering and selected-school pin + dashed radius circle on real Leaflet map).
+    - `e2e/specialist/discover-journey-switch-overlay-cleanup-1940.specialist.ts` (`L158` `AC1`–`AC5` — real Leaflet `.school-marker` pin + `path.leaflet-interactive` radius circle mount, redraw, and unmount across `area-first` / `school-first` transitions).
+    - `e2e/specialist/discover-issue-2089-filter-list-map-parity.specialist.ts` (`L135` — property-type filter chip narrowing on canonical `node=a:IN|KA|Bengaluru|RR Nagar` across List and Map).
+    - `e2e/specialist/discover-results-reskin-2729.specialist.ts` (`L78` — `#2729` filter popovers and quick-filter controls).
+  - **Lower-level Vitest**: `apps/web/src/features/discover/navigation/__tests__/discoverAreasJourneyPanelAreaLeaf.test.tsx`, `apps/web/src/pages/__tests__/MapDiscovery.schoolJourney2857.test.tsx`.
 
 ### 3.5 `L60` — `e2e/discover-batch-b-journeys.spec.ts` (7 tests: `B1`, `B2`, `B3`, `B5`, `B6`, `B7`, `B8`)
 
-- **Why non-admissible**:
-  - `B1`, `B2`, `B3`, `B6`, `B7` drive the superseded `AreaGroupsLandingPanel` / `SchoolBrowsePanel` zone ladder (`area-group-card-*`, `school-zone-card-*`) retired in `#1956` and `#2124` (see `L82` `discover-school-first-grouping-1485.spec.ts` and `L169` `school-panel-error-states.spec.ts`, both retired under `R6`).
-  - `B5` (school-radius pins in `school-first`) and `B8` (390px horizontal overflow) are embedded in the same multi-step journey file whose entry selectors no longer exist.
-- **Existing replacement coverage**:
+- **Why non-admissible as a standalone file**:
+  - `B1`, `B2`, `B3`, `B6`, `B7` drive the superseded pre-`#1956`/`#2715` `journey-switcher` tabs (`journey-tab-area-first`, `journey-tab-school-first`, `journey-tab-agri-first`), `region-scope-south`, and `purpose-toggle-rent` testids removed when `#1953`/`#2715` replaced the panel journey switcher with `DiscoverControlBar`.
+- **Direct browser replacement coverage for `B5` and `B8`**:
   - **For `B5` (`[LEAFLET_REAL]` school-radius pins & circle)**:
-    - `e2e/specialist/discover-issue-2715-school-pin-vs-empty-pill.specialist.ts` (`L156`, admitted in Wave 2)
-    - `e2e/specialist/discover-issue-2149-mobile-school-first-marker-preview.specialist.ts` (`L141`, admitted in Wave 2)
-    - `e2e/specialist/discover-issue-1823-camera-fit-policy.specialist.ts` (`L108` `T4`, admitted in Wave 4)
-  - **For `B8` (`[LAYOUT_OVERFLOW]` 390px horizontal overflow)**:
-    - `e2e/specialist/discover-mobile-guard.specialist.ts` (`L106`, admitted in Wave 2 — checks `scrollWidth <= clientWidth` at 390x844 across 3 Discover checkpoints)
-    - `e2e/specialist/discover-control-bar-mobile-reachability-1953.specialist.ts` (`L104`, admitted in Wave 1)
-    - `e2e/specialist/discover-mobile-landing-journey-switcher-1953.specialist.ts` (`L159`, admitted in Wave 2)
+    - `e2e/specialist/discover-issue-2715-school-pin-vs-empty-pill.specialist.ts` (`L156`)
+    - `e2e/specialist/discover-issue-2149-mobile-school-first-marker-preview.specialist.ts` (`L141`)
+    - `e2e/specialist/discover-issue-1823-camera-fit-policy.specialist.ts` (`L108` `T4`)
+  - **For `B8` (`[LAYOUT_OVERFLOW]` mobile `390×844` selected-school-state reflow, `school-summary-band` width, and no page-level double-scroll — migrated into `L157`)**:
+    - `e2e/specialist/discover-issue-2770-compact-school-context.specialist.ts` (`L157`, test `mobile 390x844: first listing card is inside the viewport in List view`) now directly asserts all 3 `B8` invariants in the mobile `390×844` selected-school state (`school-summary-band` + `combined-radius-btn-3` + `listing-card` visible):
+      1. `document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1` (no horizontal page overflow).
+      2. `school-summary-band` bounding box fits within the `390px` viewport (`box.x >= 0` and `box.x + box.width <= 391`).
+      3. `document.documentElement.scrollHeight <= document.documentElement.clientHeight + 1` (no document-level vertical scroll / double-scroll).
+    - Complemented by `e2e/specialist/discover-control-bar-mobile-reachability-1953.specialist.ts` (`L104`) and `e2e/specialist/discover-issue-2089-breadcrumb-list-flex-layout.specialist.ts` (`L134`).
 
 ### 3.6 `L77` — `e2e/discover-results-redesign-1547.spec.ts` (8 tests)
 
 - **Why non-admissible**:
-  - Targets the superseded pre-`#1956`/`#2729` legacy right-panel results list (`area-groups-landing` -> `area-group-card-*`, old card layout, and pre-`#2729` card selection contract where clicking a card selected it in-place rather than navigating or opening the current reskinned card surface).
+  - Targets the pre-`#1956`/`#2729` legacy `?areaKey=IN|KA|Udupi|Manipal` right-panel results surface (`discover-right-panel`) and old `PropertyCard` selected-state DOM contract (`data-selected="true"` in-place selection on marker click, and `grid-cols-1 2xl:grid-cols-2` two-column card grid removed in `#2729`).
 - **Existing replacement coverage**:
   - **Specialist E2E**:
-    - `e2e/specialist/discover-issue-1956-pr4-mobile-listings-scroll.specialist.ts` (`L119`, admitted in Wave 2 — scroll container geometry, viewport reachability, card click)
-    - `e2e/specialist/discover-issue-1956-pr4-listing-peek-camera-restore.specialist.ts` (`L117`, admitted in `Wave 3` / `#2855` — card peek, camera restore)
-    - `e2e/specialist/discover-listing-detail-reskin-desktop-2159.specialist.ts` (`L70`, admitted in Wave 4) & `e2e/specialist/discover-listing-detail-reskin-mobile-2159.specialist.ts` (`L71`, admitted in `Wave 3`)
-  - **Canonical E2E**: `e2e/canonical/area-hierarchy-navigation.canonical.ts` (`T6`, `T10`).
+    - `e2e/specialist/discover-issue-1956-pr4-mobile-listings-scroll.specialist.ts` (`L119` — scroll container geometry, single-column card layout, viewport reachability, card click)
+    - `e2e/specialist/discover-issue-1956-pr4-listing-peek-camera-restore.specialist.ts` (`L117` — card peek, camera restore)
+    - `e2e/specialist/discover-listing-detail-reskin-desktop-2159.specialist.ts` (`L70`) & `e2e/specialist/discover-listing-detail-reskin-mobile-2159.specialist.ts` (`L71`)
+    - `e2e/specialist/discover-results-reskin-2729.specialist.ts` (`L78`)
+  - **Canonical E2E**: `e2e/canonical/discover-area-first.canonical.ts` (`T6`) and `e2e/canonical/anon-discover-teaser.canonical.ts` (`T10`).
+  - **Lower-level Vitest**: `apps/web/src/pages/__tests__/MapDiscovery.listingSelectedMarker2859.test.tsx`.
 
 ### 3.7 `L172` — `e2e/discover/thanisandra-hennur-belt-label-collision-1815.spec.ts` (3 tests)
 
@@ -104,6 +115,6 @@ Each of the remaining 7 mixed `#2855` specs fails against the current product UI
   - Furthermore, issue `#2213` (`AreaGroupFocusPanel`) replaced the `groupId=` map marker layer with `AreaGroupFocusLayer` / `AreaGroupFocusPanel`, retiring the old `AreaMarkerLayer` `groupId=` pill-collision path (`R2`) and group-chip URL toggle (`R5`/`R6`).
 - **Existing replacement coverage**:
   - **Specialist E2E**:
-    - `e2e/specialist/discover-issue-2305-cluster-marker-skin.specialist.ts` (`L147`, admitted in Wave 1 — painted cluster/area marker geometry, focus ring, hover state)
-    - `e2e/specialist/discover-issue-2330-marker-reskin-visual.specialist.ts` (`L148`, admitted in Wave 2 — painted marker footprint `<= 172x140`, focus ring cascade)
+    - `e2e/specialist/discover-issue-2305-cluster-marker-skin.specialist.ts` (`L147` — painted cluster/area marker geometry, focus ring, hover state)
+    - `e2e/specialist/discover-issue-2330-marker-reskin-visual.specialist.ts` (`L148` — painted marker footprint `<= 172x140`, focus ring cascade)
   - **Lower-level Vitest**: `apps/web/src/components/map/__tests__/AreaMarkerLayer.destinations.test.tsx`, `apps/web/src/components/map/__tests__/AreaMarkerLayer.test.tsx`.

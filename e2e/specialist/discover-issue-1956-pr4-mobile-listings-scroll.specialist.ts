@@ -134,6 +134,41 @@ test.describe('@integration-ui #1956 PR-4 — mobile (390x844) listings branch r
       expect(box.y).toBeGreaterThanOrEqual(0);
       expect(box.y + box.height).toBeLessThanOrEqual(844);
     }
+    // Issue #2159 (L57) mobile 390x844 layout & node= round-trip guards:
+    // 1. No horizontal overflow at 390px.
+    const scrollWidths = await page.evaluate(() => ({
+      documentElement: document.documentElement.scrollWidth,
+      body: document.body.scrollWidth,
+    }));
+    expect(scrollWidths.documentElement, 'document.documentElement must not overflow 390px').toBeLessThanOrEqual(390);
+    expect(scrollWidths.body, 'document.body must not overflow 390px').toBeLessThanOrEqual(390);
+
+    // 2. Cards render in a single vertical column at 390px (second card sits below the first, never side-by-side).
+    const secondCard = page.getByTestId('listing-card').nth(1);
+    const firstCardBox = await firstCard.boundingBox();
+    const secondCardBox = await secondCard.boundingBox();
+    expect(firstCardBox, 'first listing card has a layout box').not.toBeNull();
+    expect(secondCardBox, 'second listing card has a layout box').not.toBeNull();
+    expect(Math.abs(firstCardBox!.x - secondCardBox!.x), 'cards share the same single-column left edge').toBeLessThanOrEqual(2);
+    expect(secondCardBox!.y, 'second card stacks vertically below the first card').toBeGreaterThanOrEqual(
+      firstCardBox!.y + firstCardBox!.height - 2,
+    );
+
+    // 3. Canonical node= survives the List -> Map -> List toggle round-trip byte-identically.
+    const currentNodeParam = () => new URL(page.url()).searchParams.get('node');
+    expect(currentNodeParam()).toBe(AREA_BASAVESHWARA);
+    const mapTrigger = page.getByTestId('control-bar-map-trigger');
+    await expect(mapTrigger).toBeVisible({ timeout: 10_000 });
+    await mapTrigger.click();
+    const closeListButton = page.getByTestId('mobile-map-close-list-button');
+    await expect(closeListButton).toBeVisible({ timeout: 10_000 });
+    expect(currentNodeParam(), 'node= unchanged after List -> Map').toBe(AREA_BASAVESHWARA);
+    await closeListButton.click();
+    await expect(firstCard).toBeVisible({ timeout: 10_000 });
+    expect(currentNodeParam(), 'node= unchanged after Map -> List return leg').toBe(AREA_BASAVESHWARA);
+
+    await viewDetails.scrollIntoViewIfNeeded();
+    await expect(viewDetails).toBeVisible();
     // A real click (not force:true) must land — proves it's not obstructed
     // by an overlapping element (e.g. a sibling with a higher z-index).
     await viewDetails.click();
