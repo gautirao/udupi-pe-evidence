@@ -160,9 +160,10 @@ public class JwtConfig {
                         // #2878: defence in depth for identity-evidence approval. Admin-only at the filter chain;
                         // AdminTrustController#approveIdentityEvidence keeps its own caller.isAdmin() check.
                         // ROLE_ADMIN is the authority DbRoleJwtAuthenticationConverter derives from user_roles
-                        // ("ROLE_" + role.toUpperCase()), the same literal as @IsAdmin. Scope: this one endpoint only;
-                        // other /api/admin/** endpoints are unchanged pending an audit (see #2878).
+                        // ("ROLE_" + role.toUpperCase()), the same literal as @IsAdmin.
                         .requestMatchers(HttpMethod.POST, "/api/admin/trust/identity/*/approve").hasAuthority("ROLE_ADMIN")
+                        // #2888: enforce ROLE_ADMIN across all /api/admin/** routes at the filter chain (64-route audit complete).
+                        .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
                         .anyRequest().authenticated()
                 )
                 // Wire DbRoleJwtAuthenticationConverter to perform the user_roles DB lookup per

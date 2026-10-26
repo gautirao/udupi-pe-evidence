@@ -37,10 +37,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
 /**
- * #2878 — real-chain proof that {@code POST /api/admin/trust/identity/{id}/approve} is admin-only at the Spring
- * Security FILTER CHAIN (JwtConfig matcher, hasAuthority("ROLE_ADMIN")), independently of the controller's own
- * {@code caller.isAdmin()} check, and that the rule does not extend to sibling admin endpoints.
+ * #2878 / #2888 — real-chain proof that {@code POST /api/admin/trust/identity/{id}/approve} and {@code /api/admin/**}
+ * are admin-only at the Spring Security FILTER CHAIN (JwtConfig matcher, hasAuthority("ROLE_ADMIN")), independently of
+ * controller-level {@code @IsAdmin}, {@code @PreAuthorize("#caller.isAdmin()")}, or {@code caller.isAdmin()} checks.
  *
  * <p>Layer signatures (observed, .claude/handoffs/issue-2878/evidence/observed-responses.txt):
  * <ul>
@@ -195,16 +198,6 @@ class AdminIdentityApproveSecurityChainIT {
                 .isEmpty();
     }
 
-    /** 403 from AdminTrustController: JSON {"error":"Admin access required"}, no Bearer challenge. */
-    private void assertControllerRefusal(MockHttpServletResponse r) throws Exception {
-        assertThat(r.getStatus()).isEqualTo(403);
-        assertThat(r.getHeader("WWW-Authenticate"))
-                .as("controller refusal carries no Bearer challenge (rule must not cover this endpoint)")
-                .isNull();
-        assertThat(objectMapper.readTree(r.getContentAsString()).path("error").asText())
-                .isEqualTo(CONTROLLER_DENY_MESSAGE);
-    }
-
     @Test
     @DisplayName("a) admin (bearer -> DbRoleJwtAuthenticationConverter -> user_roles) approves: 200, APPROVED, reviewedBy=admin")
     void admin_approves() throws Exception {
@@ -247,13 +240,13 @@ class AdminIdentityApproveSecurityChainIT {
     }
 
     @Test
-    @DisplayName("e) scope pin: dealer reject + GET pending are refused by the CONTROLLER, not the chain rule")
+    @DisplayName("e) #2888: sibling endpoints (dealer reject + GET pending) are now refused by the FILTER CHAIN; evidence stays PENDING")
     void scopePin_siblingEndpointsStillControllerGuardedOnly() throws Exception {
         UUID id = freshPendingEvidence();
-        assertControllerRefusal(call("e1 dealer reject", as(post("/api/admin/trust/identity/" + id + "/reject"), DEALER_ID)
+        assertChainRefusal(call("e1 dealer reject", as(post("/api/admin/trust/identity/" + id + "/reject"), DEALER_ID)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"x\"}")));
         assertThat(reviewState(id)).isEqualTo("PENDING");
-        assertControllerRefusal(call("e2 dealer GET pending", as(get("/api/admin/trust/identity/pending"), DEALER_ID)));
+        assertChainRefusal(call("e2 dealer GET pending", as(get("/api/admin/trust/identity/pending"), DEALER_ID)));
         assertThat(reviewState(id)).isEqualTo("PENDING");
     }
 
@@ -317,5 +310,100 @@ class AdminIdentityApproveSecurityChainIT {
         assertThat(dbl.getStatus()).as("i3 must never succeed").isNotEqualTo(200);
         assertThat(dbl.getStatus()).as("i3 must be a 4xx refusal").isBetween(400, 499);
         assertThat(reviewState(id)).as("i3 must leave evidence PENDING").isEqualTo("PENDING");
+    }
+
+    @ParameterizedTest(name = "j) #2888 representative GET {0}: dealer/user -> 403 chain refusal; anonymous -> 401")
+    @ValueSource(strings = {
+            "/api/admin/trust/identity/pending",
+            "/api/admin/listings/pending",
+            "/api/admin/intelligence/areas",
+            "/api/admin/audit-log",
+            "/api/admin/localities/candidates",
+            "/api/admin/duplicates",
+            "/api/admin/property-requests",
+            "/api/admin/city-launch/cities",
+            "/api/admin/area-onboarding/batches/1"
+    })
+    void representativeAdminGetRoutes_enforcedAtChain(String path) throws Exception {
+        assertChainRefusal(call("j dealer GET " + path, as(get(path), DEALER_ID)));
+        assertChainRefusal(call("j user GET " + path, as(get(path), USER_ID)));
+
+        MockHttpServletResponse anon = call("j anon GET " + path, get(path));
+        assertThat(anon.getStatus()).isEqualTo(401);
+        assertThat(anon.getHeader("WWW-Authenticate")).isEqualTo("Bearer");
+        assertThat(anon.getContentAsString()).isEmpty();
+    }
+
+    @ParameterizedTest(name = "k) #2888 safe GET {0}: admin succeeds with 200")
+    @ValueSource(strings = {
+            "/api/admin/trust/identity/pending",
+            "/api/admin/listings/pending",
+            "/api/admin/intelligence/areas",
+            "/api/admin/audit-log",
+            "/api/admin/localities/candidates",
+            "/api/admin/duplicates",
+            "/api/admin/property-requests",
+            "/api/admin/city-launch/cities"
+    })
+    void representativeSafeAdminGetRoutes_adminSucceeds(String path) throws Exception {
+        MockHttpServletResponse r = call("k admin GET " + path, as(get(path), ADMIN_ID));
+        assertThat(r.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("l) #2888 nonexistent batch GET /api/admin/area-onboarding/batches/1: admin passes chain (404, not 403)")
+    void nonexistentBatch_adminPassesChain() throws Exception {
+        MockHttpServletResponse r = call("l admin GET batches/1", as(get("/api/admin/area-onboarding/batches/1"), ADMIN_ID));
+        assertThat(r.getStatus()).isNotEqualTo(403).isNotEqualTo(401);
+        assertThat(r.getStatus()).isIn(200, 400, 404, 409);
+    }
+
+    @Test
+    @DisplayName("m) #2888 mutation POST /api/admin/trust/identity/{id}/reject: dealer/user 403 chain, anon 401; stays PENDING")
+    void rejectMutation_enforcedAtChainWithoutStateChange() throws Exception {
+        UUID id = freshPendingEvidence();
+        String path = "/api/admin/trust/identity/" + id + "/reject";
+        String body = "{\"reason\":\"valid rejection reason\"}";
+
+        assertChainRefusal(call("m dealer POST reject",
+                as(post(path).contentType(MediaType.APPLICATION_JSON).content(body), DEALER_ID)));
+        assertThat(reviewState(id)).isEqualTo("PENDING");
+
+        assertChainRefusal(call("m user POST reject",
+                as(post(path).contentType(MediaType.APPLICATION_JSON).content(body), USER_ID)));
+        assertThat(reviewState(id)).isEqualTo("PENDING");
+
+        MockHttpServletResponse anon = call("m anon POST reject",
+                post(path).contentType(MediaType.APPLICATION_JSON).content(body));
+        assertThat(anon.getStatus()).isEqualTo(401);
+        assertThat(anon.getHeader("WWW-Authenticate")).isEqualTo("Bearer");
+        assertThat(anon.getContentAsString()).isEmpty();
+        assertThat(reviewState(id)).isEqualTo("PENDING");
+    }
+
+    @Test
+    @DisplayName("n) #2888 mutation POST /api/admin/listings/{id}/archive (non-existent UUID): dealer/user 403 chain (no existence oracle), anon 401, admin 404")
+    void archiveListingMutation_enforcedAtChainNoExistenceOracle() throws Exception {
+        UUID unknownListing = UUID.fromString("28880000-dead-0000-0000-000000000099");
+        assertThat(listingRepository.findById(unknownListing)).isEmpty();
+        String path = "/api/admin/listings/" + unknownListing + "/archive";
+        String body = "{\"reason\":\"archived in test\"}";
+
+        assertChainRefusal(call("n dealer POST archive",
+                as(post(path).contentType(MediaType.APPLICATION_JSON).content(body), DEALER_ID)));
+        assertChainRefusal(call("n user POST archive",
+                as(post(path).contentType(MediaType.APPLICATION_JSON).content(body), USER_ID)));
+
+        MockHttpServletResponse anon = call("n anon POST archive",
+                post(path).contentType(MediaType.APPLICATION_JSON).content(body));
+        assertThat(anon.getStatus()).isEqualTo(401);
+        assertThat(anon.getHeader("WWW-Authenticate")).isEqualTo("Bearer");
+        assertThat(anon.getContentAsString()).isEmpty();
+
+        MockHttpServletResponse admin = call("n admin POST archive",
+                as(post(path).contentType(MediaType.APPLICATION_JSON).content(body), ADMIN_ID));
+        assertThat(admin.getStatus()).isNotEqualTo(403).isNotEqualTo(401);
+        assertThat(admin.getStatus()).isIn(400, 404, 409);
+        assertThat(listingRepository.findById(unknownListing)).isEmpty();
     }
 }
