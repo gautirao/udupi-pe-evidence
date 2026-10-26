@@ -397,4 +397,62 @@ class PublicSchoolRadiusListingsServiceTest {
         // pl.listing_purpose appears in the SELECT clause always; must NOT appear as a WHERE filter
         assertThat(sqlCaptor.getValue()).doesNotContain("pl.listing_purpose = ?");
     }
+
+    // ── 11. #2806 areaBbox == null preserves ORDER BY pl.created_at DESC ─────
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void areaBboxNull_preservesCreatedAtDescOrdering_andNoAreaBboxClause() {
+        when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of());
+
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<Object[]> paramsCaptor = ArgumentCaptor.forClass(Object[].class);
+
+        service.getListings("udupi", 13.33, 74.76, 3.0, 0, 50, null, null);
+
+        verify(jdbc).query(sqlCaptor.capture(), any(RowMapper.class), paramsCaptor.capture());
+        String sql = sqlCaptor.getValue();
+        Object[] params = paramsCaptor.getValue();
+
+        assertThat(sql).contains("ORDER BY pl.created_at DESC");
+        assertThat(sql).doesNotContain("ORDER BY ST_Distance");
+        assertThat(sql).doesNotContain("ST_MakeEnvelope");
+        assertThat(params[params.length - 2]).isEqualTo(51);
+        assertThat(params[params.length - 1]).isEqualTo(0L);
+    }
+
+    // ── 12. #2806 areaBbox != null adds Area bounds predicate and distance-first ORDER BY ──
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void areaBboxPresent_appliesAreaBoundsPredicate_andOrdersByDistanceThenCreatedAtDescThenIdAsc() {
+        when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of());
+
+        DiscoverListingPredicateBuilder.Bbox areaBbox =
+                new DiscoverListingPredicateBuilder.Bbox(13.30, 74.74, 13.36, 74.80);
+
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<Object[]> paramsCaptor = ArgumentCaptor.forClass(Object[].class);
+
+        service.getListings("udupi", 13.33, 74.76, 5.0, 0, 50, "sale", areaBbox);
+
+        verify(jdbc).query(sqlCaptor.capture(), any(RowMapper.class), paramsCaptor.capture());
+        String sql = sqlCaptor.getValue();
+        Object[] params = paramsCaptor.getValue();
+
+        assertThat(sql).contains("AND pl.geog && ST_MakeEnvelope(?, ?, ?, ?, 4326)::geography");
+        assertThat(sql).contains("ORDER BY ST_Distance(pl.geog, ST_MakePoint(?, ?)::geography) ASC, pl.created_at DESC, pl.id ASC");
+        assertThat(sql).doesNotContain("ORDER BY pl.created_at DESC\n");
+
+        // Area envelope params (west, south, east, north) sit in WHERE before listingPurpose/excludePropertyTypes,
+        // and the final 4 params are schoolLon, schoolLat (for ORDER BY ST_MakePoint), probeSize (51), offset (0L)
+        assertThat(java.util.Arrays.asList(params))
+                .containsSubsequence(74.74, 13.30, 74.80, 13.36, 74.76, 13.33, 51, 0L);
+        assertThat(params[params.length - 4]).isEqualTo(74.76);
+        assertThat(params[params.length - 3]).isEqualTo(13.33);
+        assertThat(params[params.length - 2]).isEqualTo(51);
+        assertThat(params[params.length - 1]).isEqualTo(0L);
+    }
 }

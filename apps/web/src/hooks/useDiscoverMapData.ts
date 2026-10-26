@@ -255,6 +255,12 @@ export interface UseDiscoverMapDataParams {
   debouncedSearch: string;
   /** School ID from URL — used to restore school on mount */
   urlSchoolId: string | null;
+  /**
+   * Issue #2806 — optional raw Area key from URL state, used to detect when a
+   * URL-selected Area has not yet resolved into `selectedArea` so the public
+   * school-radius query stays disabled instead of briefly fetching an unscoped city page.
+   */
+  urlAreaKey?: string | null;
   isAuthenticated: boolean;
   /** fitTick is threaded in so activeFocusBounds reacts to refit clicks */
   fitTick: number;
@@ -646,6 +652,7 @@ export function useDiscoverMapData({
   filters,
   debouncedSearch,
   urlSchoolId,
+  urlAreaKey,
   isAuthenticated,
   fitTick,
   markersEnabled,
@@ -931,8 +938,25 @@ export function useDiscoverMapData({
   // public-endpoint data serves as radius-filtered marker fallback pins. Automatically
   // idle when no school coordinates are set. Radius is clamped with the shared #1210
   // helper so a 0 km value does not collapse the result set.
+  //
+  // Issue #2806: pass `selectedArea.areaKey` ONLY for Area+School (selected school +
+  // resolved Area, no drawn polygon); omit it in pure School-first. Disable the public
+  // request while a URL-selected Area is unresolved (`scope.kind === 'unresolved'` or
+  // `urlAreaKey` present before `selectedArea` resolves), rather than briefly fetching
+  // an unscoped city page.
+  const hasUnresolvedUrlArea =
+    scope.kind === 'unresolved' ||
+    (Boolean(urlAreaKey && urlAreaKey.trim().length > 0) && selectedArea == null);
+  const schoolRadiusAreaKey =
+    !filters.polygon && urlSchoolId && selectedArea?.areaKey
+      ? selectedArea.areaKey
+      : !filters.polygon && filters.schoolAreaKey
+        ? filters.schoolAreaKey
+        : undefined;
   const schoolRadiusEnabled =
-    filters.schoolLat != null && filters.schoolLon != null &&
+    filters.schoolLat != null &&
+    filters.schoolLon != null &&
+    !hasUnresolvedUrlArea &&
     (!isAuthenticated || !markersEnabled);
   const schoolRadiusKmClamped =
     filters.schoolRadiusKm != null ? clampSchoolRadiusKm(filters.schoolRadiusKm) : undefined;
@@ -950,6 +974,7 @@ export function useDiscoverMapData({
     size: 50, // DECISION-2: request the full single page; surface hasMore as a hint.
     enabled: schoolRadiusEnabled,
     listingPurpose,
+    schoolAreaKey: schoolRadiusAreaKey,
   });
 
   const {
@@ -1044,13 +1069,19 @@ export function useDiscoverMapData({
     [cityListingsData, activeAreaListingKeys],
   );
 
-  // ── Derived: anon school-radius listings (Issue #1261) ─────────────────────
+  // ── Derived: anon school-radius listings (Issue #1261 / #2806) ─────────────
   // Mapped to DiscoverCityListingItem so the school-first panels/map consume them
-  // identically to areaListings. Empty for authenticated users.
+  // identically to areaListings. Empty for authenticated users. When the response is
+  // settled (!schoolRadiusIsPlaceholder), stamp `scopedAreaKey` so `useSchoolListings`
+  // can verify that the rows came from the active `schoolAreaKey` scope before
+  // bypassing client bbox clipping.
   const schoolRadiusListings = useMemo(
     (): SchoolRadiusListingItem[] =>
-      (schoolRadiusData?.content ?? []).map(mapSchoolRadiusCard),
-    [schoolRadiusData],
+      (schoolRadiusData?.content ?? []).map((card) => ({
+        ...mapSchoolRadiusCard(card),
+        ...(schoolRadiusIsPlaceholder ? {} : { scopedAreaKey: schoolRadiusAreaKey ?? null }),
+      })),
+    [schoolRadiusData, schoolRadiusIsPlaceholder, schoolRadiusAreaKey],
   );
   const schoolRadiusListingsLoading = schoolRadiusEnabled && schoolRadiusQueryLoading;
   const schoolRadiusHasMore = schoolRadiusData?.hasMore ?? false;

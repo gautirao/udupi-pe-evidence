@@ -1,4 +1,4 @@
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { DiscoverCommercialFactsDto } from '@/hooks/useDiscoverListings';
@@ -87,6 +87,8 @@ export interface UseSchoolRadiusListingsParams {
   enabled?: boolean;
   /** Issue #1494 — buy/rent intent mapped to listingPurpose for the backend. */
   listingPurpose?: string;
+  /** Issue #2806 — optional canonical Area key for combined Area+School server-side bounds scoping. */
+  schoolAreaKey?: string | null;
 }
 
 /**
@@ -100,6 +102,12 @@ export type SchoolRadiusListingItem = DiscoverCityListingItem & {
   backOnMarket?: boolean | null;
   possessionStatus?: string | null;
   areaKey?: string | null;
+  /**
+   * Issue #2806 — the server `schoolAreaKey` scope that produced this settled response
+   * (`null` when fetched unscoped; `undefined` when not stamped or while placeholder).
+   * Used by `useSchoolListings` to verify response scope before bypassing client bbox clipping.
+   */
+  scopedAreaKey?: string | null;
 };
 
 /**
@@ -174,8 +182,11 @@ export function useSchoolRadiusListings({
   size = 50,
   enabled = true,
   listingPurpose,
+  schoolAreaKey,
 }: UseSchoolRadiusListingsParams) {
   const hasCoords = schoolLat != null && schoolLon != null;
+  const normalizedSchoolAreaKey =
+    schoolAreaKey != null && schoolAreaKey.length > 0 ? schoolAreaKey : null;
 
   return useQuery<PublicSchoolRadiusListingsPage>({
     queryKey: [
@@ -187,6 +198,7 @@ export function useSchoolRadiusListings({
       page,
       size,
       listingPurpose ?? null,
+      normalizedSchoolAreaKey,
     ],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -196,6 +208,7 @@ export function useSchoolRadiusListings({
       params.set('page', String(page));
       params.set('size', String(size));
       if (listingPurpose != null) params.set('listingPurpose', listingPurpose);
+      if (normalizedSchoolAreaKey != null) params.set('schoolAreaKey', normalizedSchoolAreaKey);
       return api.get<PublicSchoolRadiusListingsPage>(
         `/api/discover/cities/${encodeURIComponent(city)}/school-radius-listings?${params.toString()}`,
         { skipAuth: true },
@@ -203,6 +216,22 @@ export function useSchoolRadiusListings({
     },
     enabled: enabled && city.length > 0 && hasCoords,
     staleTime: 60_000,
-    placeholderData: keepPreviousData,
+    // Issue #2806 — only retain placeholder data across radius/page/purpose changes within
+    // the SAME city + school + schoolAreaKey scope. Never retain a previous Area's (or unscoped)
+    // listing set when `schoolAreaKey` changes, so stale cross-area rows are never rendered
+    // while the new Area's query is in flight.
+    placeholderData: (previousData, previousQuery) => {
+      const prevKey = previousQuery?.queryKey;
+      if (
+        !prevKey ||
+        prevKey[2] !== city ||
+        prevKey[3] !== (schoolLat ?? null) ||
+        prevKey[4] !== (schoolLon ?? null) ||
+        prevKey[9] !== normalizedSchoolAreaKey
+      ) {
+        return undefined;
+      }
+      return previousData;
+    },
   });
 }

@@ -197,23 +197,97 @@ describe('useSchoolListings', () => {
     expect(result.current.schoolRadiusFallbackMarkers).not.toBe(first);
   });
 
-  // ── Issue #2183 regression: area-bbox scoping of the school-radius fallback ──
-  //
-  // Repro: a direct URL load of the school-first journey with both `areaKey`
-  // (the school's own area — written by handleSchoolSelect as breadcrumb
-  // context on EVERY school pick) and `schoolId` set resolves to the
-  // 'area-school-combined' panel state. The AUTHENTICATED path's badge/panel
-  // count is scoped to the intersection of the selected area's bbox AND the
-  // school radius (useDiscoverMapDataController.ts's effectiveFilters `polygon`
-  // injection — the polygon IS literally the area's bbox rectangle). Before
-  // this fix, the anon panel count and the pre-CTA map fallback markers
-  // (schoolRadiusFallbackMarkers, active for anon AND for authenticated users
-  // before the bounded-search CTA) read raw schoolRadiusListings with no area
-  // bound at all, so the map could show homes far outside the area the
-  // authenticated badge had already excluded — the map/panel disagreement
-  // reported in #2183.
-  describe('Issue #2183 — area-bbox scoping keeps the school-radius fallback consistent with the combined-state panel count', () => {
-    it('anon, active school-radius, selected area whose bbox EXCLUDES the listing: schoolListings and schoolRadiusFallbackMarkers both drop to empty', () => {
+  // ── Issue #2806 / #2183: server-scoped schoolAreaKey pass-through vs legacy client bbox fallback ──
+  describe('Issue #2806 & #2183 — server-scoped schoolAreaKey avoids double-filtering coarsened coordinates; legacy fallback applies when not server-scoped', () => {
+    it('#2806: when server-scoped by schoolId + selectedArea.areaKey (no polygon), does NOT re-filter schoolRadiusListings by client selectedArea.bbox (preserves coarsened boundary listing)', () => {
+      // Simulate a boundary listing whose exact DB geog is inside the Area bounds,
+      // but whose 2-decimal-place coarsened coordinate (13.35, 74.79) sits just outside
+      // selectedArea.bbox ([[13.352, 74.792], [13.38, 74.82]]).
+      const boundaryArea: AreaPoint = {
+        areaKey: 'IN|KA|Udupi|Kunjibettu',
+        areaLabel: 'Kunjibettu',
+        geo_center_lat: 13.36,
+        geo_center_lon: 74.8,
+        bbox: [[13.352, 74.792], [13.38, 74.82]],
+      };
+      const { result } = renderHook(() =>
+        useSchoolListings(
+          makeParams({
+            filters: { ...EMPTY_FILTERS, schoolLat: 13.33, schoolLon: 74.76, schoolRadiusKm: 3 },
+            journey: 'school-first',
+            schoolId: 'school-1',
+            selectedArea: boundaryArea,
+          }),
+        ),
+      );
+      expect(result.current.schoolListings).toHaveLength(1);
+      expect(result.current.schoolListings[0].id).toBe('radius-1');
+      expect(result.current.schoolRadiusFallbackMarkers).toHaveLength(1);
+      expect(result.current.schoolRadiusFallbackMarkers[0].id).toBe('radius-1');
+    });
+
+    it('#2806: when server-scoped via explicit filters.schoolAreaKey (journey=area-first), does NOT re-filter schoolRadiusListings by client selectedArea.bbox', () => {
+      const boundaryArea: AreaPoint = {
+        areaKey: 'IN|KA|Udupi|Kunjibettu',
+        areaLabel: 'Kunjibettu',
+        geo_center_lat: 13.36,
+        geo_center_lon: 74.8,
+        bbox: [[13.352, 74.792], [13.38, 74.82]],
+      };
+      const { result } = renderHook(() =>
+        useSchoolListings(
+          makeParams({
+            filters: {
+              ...EMPTY_FILTERS,
+              schoolLat: 13.33,
+              schoolLon: 74.76,
+              schoolRadiusKm: 3,
+              schoolAreaKey: 'IN|KA|Udupi|Kunjibettu',
+            },
+            journey: 'area-first',
+            schoolId: null,
+            selectedArea: boundaryArea,
+          }),
+        ),
+      );
+      expect(result.current.schoolListings).toHaveLength(1);
+      expect(result.current.schoolListings[0].id).toBe('radius-1');
+    });
+
+    it('#2183 fallback: when NOT server-scoped by schoolAreaKey (e.g. polygon filter active), client selectedArea.bbox still filters out-of-bbox listings', () => {
+      const areaFarFromListing: AreaPoint = {
+        areaKey: 'area:far',
+        areaLabel: 'Far Area',
+        geo_center_lat: 12.9,
+        geo_center_lon: 77.5,
+        bbox: [[12.9, 77.5], [12.95, 77.6]],
+      };
+      const { result } = renderHook(() =>
+        useSchoolListings(
+          makeParams({
+            filters: {
+              ...EMPTY_FILTERS,
+              schoolLat: 13.35,
+              schoolLon: 74.79,
+              schoolRadiusKm: 2,
+              polygon: [
+                [12.9, 77.5],
+                [12.95, 77.5],
+                [12.95, 77.6],
+                [12.9, 77.6],
+              ],
+            },
+            journey: 'school-first',
+            schoolId: 'school-1',
+            selectedArea: areaFarFromListing,
+          }),
+        ),
+      );
+      expect(result.current.schoolListings).toEqual([]);
+      expect(result.current.schoolRadiusFallbackMarkers).toEqual([]);
+    });
+
+    it('#2183 fallback: when schoolId is null and no schoolAreaKey is on filters, client selectedArea.bbox excludes out-of-bbox listings', () => {
       const areaFarFromListing: AreaPoint = {
         areaKey: 'area:far',
         areaLabel: 'Far Area',
@@ -225,18 +299,41 @@ describe('useSchoolListings', () => {
         useSchoolListings(
           makeParams({
             filters: { ...EMPTY_FILTERS, schoolLat: 13.35, schoolLon: 74.79, schoolRadiusKm: 2 },
-            journey: 'school-first',
-            schoolId: 'school-1',
+            journey: 'area-first',
+            schoolId: null,
             selectedArea: areaFarFromListing,
           }),
         ),
       );
-      // Panel count: the fixture listing (13.35, 74.79) falls outside
-      // areaFarFromListing's bbox, so it must be excluded — matching what the
-      // authenticated path's polygon-scoped query would also exclude.
       expect(result.current.schoolListings).toEqual([]);
-      // Map fallback markers: must agree with the panel count above — this is
-      // the exact map/panel disagreement #2183 reported.
+    });
+
+    it('#2806 response-scope guard: when schoolRadiusListings still carries rows from a previous Area (mismatched scopedAreaKey or areaKey), client bbox clipping is NOT bypassed', () => {
+      const newlySelectedArea: AreaPoint = {
+        areaKey: 'IN|KA|Udupi|Kunjibettu',
+        areaLabel: 'Kunjibettu',
+        geo_center_lat: 12.9,
+        geo_center_lon: 77.5,
+        bbox: [[12.9, 77.5], [12.95, 77.6]],
+      };
+      const { result } = renderHook(() =>
+        useSchoolListings(
+          makeParams({
+            filters: { ...EMPTY_FILTERS, schoolLat: 13.35, schoolLon: 74.79, schoolRadiusKm: 3 },
+            journey: 'school-first',
+            schoolId: 'school-1',
+            selectedArea: newlySelectedArea,
+            schoolRadiusListings: [
+              makeSchoolRadiusListing({
+                id: 'stale-prev-area',
+                areaKey: 'IN|KA|Udupi|Manipal',
+                scopedAreaKey: 'IN|KA|Udupi|Manipal',
+              }),
+            ],
+          }),
+        ),
+      );
+      expect(result.current.schoolListings).toEqual([]);
       expect(result.current.schoolRadiusFallbackMarkers).toEqual([]);
     });
 
@@ -269,37 +366,6 @@ describe('useSchoolListings', () => {
       );
       expect(result.current.schoolListings).toHaveLength(1);
       expect(result.current.schoolRadiusFallbackMarkers).toHaveLength(1);
-    });
-
-    // Fix cycle 2 (code review) — the anon schoolListings branch above is gated
-    // ONLY on `!isAuthenticated && filters.schoolLat/Lon/RadiusKm`, with NO
-    // journey check (unlike schoolRadiusFallbackMarkers, which requires
-    // journey === 'school-first'). It is therefore reachable from the
-    // canonical `node=` area-first + school-combined state, where journey
-    // stays 'area-first' (per e2e/discover-area-selected-filters.spec.ts) and
-    // the caller must pass effectiveSelectedArea (not the always-null legacy
-    // value) for this scoping to take effect. This case proves the hook itself
-    // applies the bbox scoping regardless of journey — i.e. it does NOT
-    // silently no-op just because journey isn't 'school-first'.
-    it('anon, active school-radius, journey=area-first (canonical node= area+school-combined state), selected area bbox EXCLUDES the listing: schoolListings drops it', () => {
-      const areaFarFromListing: AreaPoint = {
-        areaKey: 'area:far',
-        areaLabel: 'Far Area',
-        geo_center_lat: 12.9,
-        geo_center_lon: 77.5,
-        bbox: [[12.9, 77.5], [12.95, 77.6]],
-      };
-      const { result } = renderHook(() =>
-        useSchoolListings(
-          makeParams({
-            filters: { ...EMPTY_FILTERS, schoolLat: 13.35, schoolLon: 74.79, schoolRadiusKm: 2 },
-            journey: 'area-first',
-            schoolId: 'school-1',
-            selectedArea: areaFarFromListing,
-          }),
-        ),
-      );
-      expect(result.current.schoolListings).toEqual([]);
     });
 
     it('selected area with a null bbox: treated as no area constraint (identity pass-through), matching filterSchoolRadiusListingsByAreaBbox\'s null-bbox no-op contract', () => {

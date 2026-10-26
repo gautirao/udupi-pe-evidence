@@ -58,6 +58,9 @@ class PublicSchoolRadiusListingsControllerTest {
     private PublicSchoolRadiusListingsService service;
 
     @MockitoBean
+    private AreaSummaryService areaSummaryService;
+
+    @MockitoBean
     private UserRoleService userRoleService;
 
     private static final String BASE_URL = "/api/discover/cities/udupi/school-radius-listings";
@@ -96,14 +99,14 @@ class PublicSchoolRadiusListingsControllerTest {
 
     @BeforeEach
     void setUp() {
-        reset(service, userRoleService);
+        reset(service, areaSummaryService, userRoleService);
     }
 
     // ── 1. No JWT → 200 (public endpoint) ────────────────────────────────────
 
     @Test
     void noJwt_returns200_publicEndpoint() throws Exception {
-        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any()))
+        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any(), any()))
                 .thenReturn(emptyPage());
 
         mockMvc.perform(get(BASE_URL)
@@ -198,7 +201,7 @@ class PublicSchoolRadiusListingsControllerTest {
 
     @Test
     void sizeAboveMax_clampedTo50() throws Exception {
-        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any()))
+        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any(), any()))
                 .thenReturn(new PublicSchoolRadiusListingsPage(List.of(), 0, 50, false));
 
         mockMvc.perform(get(BASE_URL)
@@ -207,14 +210,14 @@ class PublicSchoolRadiusListingsControllerTest {
                         .param("size", "51"))
                 .andExpect(status().isOk());
 
-        verify(service).getListings(eq("udupi"), eq(13.3), eq(74.7), anyDouble(), eq(0), eq(50), isNull());
+        verify(service).getListings(eq("udupi"), eq(13.3), eq(74.7), anyDouble(), eq(0), eq(50), isNull(), isNull());
     }
 
     // ── 9. radius > 10 → clamped to 10 ──────────────────────────────────────
 
     @Test
     void radiusAboveMax_clampedTo10() throws Exception {
-        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any()))
+        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any(), any()))
                 .thenReturn(emptyPage());
 
         mockMvc.perform(get(BASE_URL)
@@ -223,7 +226,7 @@ class PublicSchoolRadiusListingsControllerTest {
                         .param("schoolRadiusKm", "99"))
                 .andExpect(status().isOk());
 
-        verify(service).getListings(eq("udupi"), eq(13.3), eq(74.7), eq(10.0), eq(0), anyInt(), isNull());
+        verify(service).getListings(eq("udupi"), eq(13.3), eq(74.7), eq(10.0), eq(0), anyInt(), isNull(), isNull());
     }
 
     // ── 10. Valid request → 200, correct shape, 20 included fields present ────
@@ -234,7 +237,7 @@ class PublicSchoolRadiusListingsControllerTest {
         PublicSchoolRadiusListingsPage page = new PublicSchoolRadiusListingsPage(
                 List.of(card), 0, 20, false);
 
-        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any()))
+        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any(), any()))
                 .thenReturn(page);
 
         mockMvc.perform(get(BASE_URL)
@@ -281,7 +284,7 @@ class PublicSchoolRadiusListingsControllerTest {
 
     @Test
     void cityWithNoResults_returns200_emptyContent() throws Exception {
-        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any()))
+        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any(), any()))
                 .thenReturn(emptyPage());
 
         mockMvc.perform(get("/api/discover/cities/unknown-city/school-radius-listings")
@@ -296,7 +299,7 @@ class PublicSchoolRadiusListingsControllerTest {
 
     @Test
     void omittedRadius_appliesDefault2km() throws Exception {
-        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any()))
+        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any(), any()))
                 .thenReturn(emptyPage());
 
         mockMvc.perform(get(BASE_URL)
@@ -304,14 +307,14 @@ class PublicSchoolRadiusListingsControllerTest {
                         .param("schoolLon", "74.7"))
                 .andExpect(status().isOk());
 
-        verify(service).getListings(eq("udupi"), eq(13.3), eq(74.7), eq(2.0), eq(0), eq(20), isNull());
+        verify(service).getListings(eq("udupi"), eq(13.3), eq(74.7), eq(2.0), eq(0), eq(20), isNull(), isNull());
     }
 
     // ── 13. radius=0 is valid (exact-location match) ─────────────────────────
 
     @Test
     void radiusZero_isValid_returns200() throws Exception {
-        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any()))
+        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any(), any()))
                 .thenReturn(emptyPage());
 
         mockMvc.perform(get(BASE_URL)
@@ -320,14 +323,14 @@ class PublicSchoolRadiusListingsControllerTest {
                         .param("schoolRadiusKm", "0"))
                 .andExpect(status().isOk());
 
-        verify(service).getListings(eq("udupi"), eq(13.3), eq(74.7), eq(0.0), eq(0), anyInt(), isNull());
+        verify(service).getListings(eq("udupi"), eq(13.3), eq(74.7), eq(0.0), eq(0), anyInt(), isNull(), isNull());
     }
 
     // ── Cache-Control: public, max-age=60 ────────────────────────────────────
 
     @Test
     void getSchoolRadiusListings_responseHasCacheControlPublicMaxAge60() throws Exception {
-        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any()))
+        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any(), any()))
                 .thenReturn(emptyPage());
 
         mockMvc.perform(get(BASE_URL)
@@ -337,5 +340,83 @@ class PublicSchoolRadiusListingsControllerTest {
                 .andExpect(header().string("Cache-Control", containsString("max-age=60")))
                 .andExpect(header().string("Cache-Control", containsString("public")))
                 .andExpect(header().string("Cache-Control", not(containsString("no-store"))));
+    }
+
+    // ── #2806: schoolAreaKey resolution & fail-closed validation ─────────────
+
+    @Test
+    void validSingletonSchoolAreaKey_resolvesCanonicalBounds_andForwardsAreaBboxToService() throws Exception {
+        String key = "IN|KA|Udupi|Kunjibettu";
+        DiscoverListingPredicateBuilder.Bbox expectedBbox =
+                new DiscoverListingPredicateBuilder.Bbox(13.32, 74.74, 13.36, 74.79);
+        when(areaSummaryService.findAreaBounds("udupi", key))
+                .thenReturn(java.util.Optional.of(new AreaSummaryService.AreaBounds(13.32, 74.74, 13.36, 74.79)));
+        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any(), any()))
+                .thenReturn(emptyPage());
+
+        mockMvc.perform(get(BASE_URL)
+                        .param("schoolLat", "13.33")
+                        .param("schoolLon", "74.76")
+                        .param("schoolRadiusKm", "3")
+                        .param("schoolAreaKey", key))
+                .andExpect(status().isOk());
+
+        verify(areaSummaryService).findAreaBounds("udupi", key);
+        verify(service).getListings(eq("udupi"), eq(13.33), eq(74.76), eq(3.0), eq(0), eq(20), isNull(), eq(expectedBbox));
+    }
+
+    @Test
+    void blankSchoolAreaKey_returns400_neverCallsService() throws Exception {
+        mockMvc.perform(get(BASE_URL)
+                        .param("schoolLat", "13.33")
+                        .param("schoolLon", "74.76")
+                        .param("schoolAreaKey", "  "))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(areaSummaryService, service);
+    }
+
+    @Test
+    void duplicateSchoolAreaKeys_returns400_neverCallsService() throws Exception {
+        mockMvc.perform(get(BASE_URL)
+                        .param("schoolLat", "13.33")
+                        .param("schoolLon", "74.76")
+                        .param("schoolAreaKey", "IN|KA|Udupi|Kunjibettu")
+                        .param("schoolAreaKey", "IN|KA|Udupi|Manipal"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(areaSummaryService, service);
+    }
+
+    @Test
+    void invalidOrOtherCitySchoolAreaKey_returns400_neverFallsBackToUnscoped() throws Exception {
+        String otherCityKey = "IN|KA|Bangalore|Jayanagar";
+        when(areaSummaryService.findAreaBounds("udupi", otherCityKey))
+                .thenReturn(java.util.Optional.empty());
+
+        mockMvc.perform(get(BASE_URL)
+                        .param("schoolLat", "13.33")
+                        .param("schoolLon", "74.76")
+                        .param("schoolAreaKey", otherCityKey))
+                .andExpect(status().isBadRequest());
+
+        verify(areaSummaryService).findAreaBounds("udupi", otherCityKey);
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void nullBoundsSchoolAreaKey_returns400_neverFallsBackToUnscoped() throws Exception {
+        String noBoundsKey = "IN|KA|Udupi|NoBoundsArea";
+        when(areaSummaryService.findAreaBounds("udupi", noBoundsKey))
+                .thenReturn(java.util.Optional.of(new AreaSummaryService.AreaBounds(null, null, null, null)));
+
+        mockMvc.perform(get(BASE_URL)
+                        .param("schoolLat", "13.33")
+                        .param("schoolLon", "74.76")
+                        .param("schoolAreaKey", noBoundsKey))
+                .andExpect(status().isBadRequest());
+
+        verify(areaSummaryService).findAreaBounds("udupi", noBoundsKey);
+        verifyNoInteractions(service);
     }
 }

@@ -55,14 +55,29 @@ public class PublicSchoolRadiusListingsService {
             int size,
             String listingPurpose
     ) {
+        return getListings(city, schoolLat, schoolLon, schoolRadiusKm, page, size, listingPurpose, null);
+    }
+
+    @Transactional(readOnly = true)
+    public PublicSchoolRadiusListingsPage getListings(
+            String city,
+            double schoolLat,
+            double schoolLon,
+            double schoolRadiusKm,
+            int page,
+            int size,
+            String listingPurpose,
+            DiscoverListingPredicateBuilder.Bbox areaBbox
+    ) {
         // Normalise listingPurpose: blank → absent
         String normPurpose = (listingPurpose != null && !listingPurpose.isBlank())
                 ? listingPurpose.trim() : null;
 
-        // Build predicate: city + school proximity only; all other filters null.
+        // Build predicate: city + school proximity (+ optional server-derived Area bounds); all other filters null.
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 city,
                 null,   // propertyTypes
+                null,   // commercialSubtypes
                 null,   // priceMinPaise
                 null,   // priceMaxPaise
                 null,   // dateFrom
@@ -82,7 +97,10 @@ public class PublicSchoolRadiusListingsService {
                 normPurpose,
                 List.of(PropertyType.AGRICULTURAL_LAND.getValue()),  // excludePropertyTypes — school-first never shows agri
                 null,   // areaKeys — school-radius path does not apply group filtering
-                null    // viewportScope — school-radius path does not apply a viewport scope
+                null,   // viewportScope — school-radius path does not apply a viewport scope
+                null,   // areaMinSqft
+                null,   // areaMaxSqft
+                areaBbox // #2806 / #2767 server-derived Area bounds when schoolAreaKey is supplied
         );
 
         DiscoverListingPredicateBuilder.Sql predicate = DiscoverListingPredicateBuilder.build(filters);
@@ -91,6 +109,14 @@ public class PublicSchoolRadiusListingsService {
 
         // size+1 probe to determine hasMore without a COUNT query
         int probeSize = size + 1;
+
+        // #2806: When areaBbox != null (Area-scoped public branch), order by distance from the
+        // school first (then created_at DESC, id ASC) so that expanding 3 km -> 5 km -> 10 km
+        // keeps closer listings ahead of farther listings even when >50 in-Area rows match.
+        // Keep the unscoped public branch (areaBbox == null) on ORDER BY pl.created_at DESC.
+        String orderByClause = areaBbox != null
+                ? "ORDER BY ST_Distance(pl.geog, ST_MakePoint(?, ?)::geography) ASC, pl.created_at DESC, pl.id ASC"
+                : "ORDER BY pl.created_at DESC";
 
         // SELECT only the approved public columns — never SELECT *. Beyond the original 20,
         // this now carries the #2516 allowlisted Commercial subtype + fact columns, read
@@ -154,13 +180,17 @@ public class PublicSchoolRadiusListingsService {
                     ON lwd.listing_id = pl.id
                 LEFT JOIN listing_commercial_land_details lcld
                     ON lcld.listing_id = pl.id
-                WHERE \s""" + whereFragment + """
+                WHERE \s""" + whereFragment + "\n\n                " + orderByClause + """
 
-                ORDER BY pl.created_at DESC
                 LIMIT ? OFFSET ?
                 """;
 
         List<Object> pageParams = new ArrayList<>(baseParams);
+        if (areaBbox != null) {
+            // ST_MakePoint(lon, lat) in ORDER BY
+            pageParams.add(schoolLon);
+            pageParams.add(schoolLat);
+        }
         pageParams.add(probeSize);
         pageParams.add((long) page * size);
 

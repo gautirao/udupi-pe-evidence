@@ -228,7 +228,7 @@ export function useDiscoverMapDataController({
     // areaKeys derivation (useDiscoverMapData.ts:511) resolves to
     // [effectiveSelectedArea.areaKey] instead of [] at a canonical AREA leaf.
     city, selectedArea: effectiveSelectedArea, filters: effectiveFilters, debouncedSearch,
-    urlSchoolId: nav.schoolId, isAuthenticated, fitTick,
+    urlSchoolId: nav.schoolId, urlAreaKey: nav.areaKey, isAuthenticated, fitTick,
     // Issue #2185 S2 — replaces the separate groupAreaKeys/nodeKey params
     // (#1806/#2087). The canonical node journey never sets nav.groupId, so
     // groupAreaKeysForMapData was always undefined there and the marker

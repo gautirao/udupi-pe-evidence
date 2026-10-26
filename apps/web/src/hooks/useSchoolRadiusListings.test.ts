@@ -167,6 +167,146 @@ describe('useSchoolRadiusListings', () => {
     expect(result.current.data?.content).toEqual([]);
     expect(result.current.data?.hasMore).toBe(false);
   });
+
+  // ── #2806: schoolAreaKey forwarding & React Query cache key isolation ──────
+
+  it('forwards schoolAreaKey in URLSearchParams when non-empty (#2806)', async () => {
+    mockGet.mockResolvedValue(PAGE);
+    const { result } = renderHook(
+      () =>
+        useSchoolRadiusListings({
+          city: 'udupi',
+          schoolLat: 13.33,
+          schoolLon: 74.76,
+          schoolRadiusKm: 3,
+          schoolAreaKey: 'IN|KA|Udupi|Kunjibettu',
+        }),
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const [url] = mockGet.mock.calls[0] as [string];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.get('schoolAreaKey')).toBe('IN|KA|Udupi|Kunjibettu');
+  });
+
+  it('omits schoolAreaKey when undefined, null, or empty string (#2806)', async () => {
+    mockGet.mockResolvedValue(PAGE);
+    for (const schoolAreaKey of [undefined, null, ''] as const) {
+      mockGet.mockClear();
+      const { result } = renderHook(
+        () =>
+          useSchoolRadiusListings({
+            city: 'udupi',
+            schoolLat: 13.33,
+            schoolLon: 74.76,
+            schoolRadiusKm: 3,
+            schoolAreaKey,
+          }),
+        { wrapper: makeWrapper() },
+      );
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      const [url] = mockGet.mock.calls[0] as [string];
+      const params = new URLSearchParams(url.split('?')[1]);
+      expect(params.has('schoolAreaKey')).toBe(false);
+    }
+  });
+
+  it('isolates React Query cache entries by normalized schoolAreaKey (#2806)', async () => {
+    const unscopedCard: PublicSchoolRadiusListingCard = { ...FULL_CARD, id: 'unscoped-1' };
+    const areaACard: PublicSchoolRadiusListingCard = { ...FULL_CARD, id: 'area-a-1' };
+    const areaBCard: PublicSchoolRadiusListingCard = { ...FULL_CARD, id: 'area-b-1' };
+
+    mockGet
+      .mockResolvedValueOnce({ content: [unscopedCard], page: 0, size: 50, hasMore: false })
+      .mockResolvedValueOnce({ content: [areaACard], page: 0, size: 50, hasMore: false })
+      .mockResolvedValueOnce({ content: [areaBCard], page: 0, size: 50, hasMore: false });
+
+    const wrapper = makeWrapper();
+    const { result, rerender } = renderHook(
+      ({ schoolAreaKey }: { schoolAreaKey?: string | null }) =>
+        useSchoolRadiusListings({
+          city: 'udupi',
+          schoolLat: 13.33,
+          schoolLon: 74.76,
+          schoolRadiusKm: 3,
+          schoolAreaKey,
+        }),
+      { wrapper, initialProps: { schoolAreaKey: undefined as string | null | undefined } },
+    );
+
+    await waitFor(() => expect(result.current.data?.content[0]?.id).toBe('unscoped-1'));
+    expect(mockGet).toHaveBeenCalledTimes(1);
+
+    // Switching from undefined to null should hit the same normalized `null` cache key (no extra network call)
+    rerender({ schoolAreaKey: null });
+    await waitFor(() => expect(result.current.data?.content[0]?.id).toBe('unscoped-1'));
+    expect(mockGet).toHaveBeenCalledTimes(1);
+
+    // Switching to Area A triggers a separate fetch and caches under Area A's key
+    rerender({ schoolAreaKey: 'IN|KA|Udupi|Kunjibettu' });
+    await waitFor(() => expect(result.current.data?.content[0]?.id).toBe('area-a-1'));
+    expect(mockGet).toHaveBeenCalledTimes(2);
+
+    // Switching to Area B triggers a separate fetch and caches under Area B's key
+    rerender({ schoolAreaKey: 'IN|KA|Udupi|Manipal' });
+    await waitFor(() => expect(result.current.data?.content[0]?.id).toBe('area-b-1'));
+    expect(mockGet).toHaveBeenCalledTimes(3);
+  });
+
+  it('retains placeholderData across radius changes within the same schoolAreaKey, but clears it when schoolAreaKey changes (#2806)', async () => {
+    const areaA3km: PublicSchoolRadiusListingCard = { ...FULL_CARD, id: 'area-a-3km' };
+    let resolve5km!: (page: PublicSchoolRadiusListingsPage) => void;
+    let resolveAreaB!: (page: PublicSchoolRadiusListingsPage) => void;
+
+    mockGet
+      .mockResolvedValueOnce({ content: [areaA3km], page: 0, size: 50, hasMore: false })
+      .mockImplementationOnce(
+        () =>
+          new Promise<PublicSchoolRadiusListingsPage>((resolve) => {
+            resolve5km = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<PublicSchoolRadiusListingsPage>((resolve) => {
+            resolveAreaB = resolve;
+          }),
+      );
+
+    const wrapper = makeWrapper();
+    const { result, rerender } = renderHook(
+      ({ schoolRadiusKm, schoolAreaKey }: { schoolRadiusKm: number; schoolAreaKey: string }) =>
+        useSchoolRadiusListings({
+          city: 'udupi',
+          schoolLat: 13.33,
+          schoolLon: 74.76,
+          schoolRadiusKm,
+          schoolAreaKey,
+        }),
+      {
+        wrapper,
+        initialProps: { schoolRadiusKm: 3, schoolAreaKey: 'IN|KA|Udupi|Kunjibettu' },
+      },
+    );
+
+    await waitFor(() => expect(result.current.data?.content[0]?.id).toBe('area-a-3km'));
+
+    // Same schoolAreaKey, radius 3 -> 5: placeholderData preserves the 3km response while 5km is pending
+    rerender({ schoolRadiusKm: 5, schoolAreaKey: 'IN|KA|Udupi|Kunjibettu' });
+    expect(result.current.data?.content[0]?.id).toBe('area-a-3km');
+    expect(result.current.isPlaceholderData).toBe(true);
+
+    resolve5km({ content: [{ ...FULL_CARD, id: 'area-a-5km' }], page: 0, size: 50, hasMore: false });
+    await waitFor(() => expect(result.current.data?.content[0]?.id).toBe('area-a-5km'));
+
+    // Switching schoolAreaKey to Manipal: placeholderData must NOT leak Kunjibettu's listings while Manipal is pending
+    rerender({ schoolRadiusKm: 5, schoolAreaKey: 'IN|KA|Udupi|Manipal' });
+    expect(result.current.data).toBeUndefined();
+    expect(result.current.isPlaceholderData).toBe(false);
+
+    resolveAreaB({ content: [{ ...FULL_CARD, id: 'area-b-5km' }], page: 0, size: 50, hasMore: false });
+    await waitFor(() => expect(result.current.data?.content[0]?.id).toBe('area-b-5km'));
+  });
 });
 
 describe('useSchoolRadiusListings outgoing request layer (S2-HDR)', () => {

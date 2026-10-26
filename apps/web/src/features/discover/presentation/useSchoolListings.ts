@@ -54,14 +54,32 @@ export function useSchoolListings({
   schoolId,
   selectedArea,
 }: UseSchoolListingsParams): UseSchoolListingsResult {
-  // Issue #2183 — area-bbox-scoped view of schoolRadiusListings, shared by both
-  // consumers below (anon schoolListings + schoolRadiusFallbackMarkers) so they
-  // stay in lockstep with the authenticated path's area+school-radius combined
-  // scoping. No-op (identity) when selectedArea/bbox is null. See
-  // filterSchoolRadiusListingsByAreaBbox's doc comment for the full rationale.
+  // Issue #2806 — when the public `/school-radius-listings` request was already
+  // server-scoped by `schoolAreaKey` (combined Area+School with no drawn polygon,
+  // or explicit `filters.schoolAreaKey`) AND the current `schoolRadiusListings`
+  // belong to that same scope (verified via `scopedAreaKey` or matching `areaKey`,
+  // never stale placeholder rows from a previous Area), do NOT re-filter
+  // `schoolRadiusListings` client-side with `selectedArea.bbox`: public coordinates
+  // are privacy-coarsened via `GeoCoarsener.coarsen` (2 decimal places), so client
+  // bbox clipping can falsely drop boundary listings that satisfied the server's
+  // exact Area bounds. Preserve the legacy #2183 client bbox-filter fallback when
+  // not server-scoped or when rows carry a mismatched previous-scope area key.
+  const targetSchoolAreaKey = !filters.polygon
+    ? (filters.schoolAreaKey ?? (schoolId && selectedArea?.areaKey ? selectedArea.areaKey : null))
+    : null;
+  const isServerScopedBySchoolAreaKey =
+    targetSchoolAreaKey != null &&
+    schoolRadiusListings.every((item) =>
+      item.scopedAreaKey !== undefined
+        ? item.scopedAreaKey === targetSchoolAreaKey
+        : item.areaKey == null || item.areaKey === targetSchoolAreaKey,
+    );
   const areaScopedSchoolRadiusListings = useMemo(
-    () => filterSchoolRadiusListingsByAreaBbox(schoolRadiusListings, selectedArea?.bbox),
-    [schoolRadiusListings, selectedArea],
+    () =>
+      isServerScopedBySchoolAreaKey
+        ? schoolRadiusListings
+        : filterSchoolRadiusListingsByAreaBbox(schoolRadiusListings, selectedArea?.bbox),
+    [isServerScopedBySchoolAreaKey, schoolRadiusListings, selectedArea],
   );
   // Convert filteredListings (PropertyListing[]) to DiscoverCityListingItem[] for
   // SchoolSelectedPanel card list. filteredListings is the school-proximity-filtered

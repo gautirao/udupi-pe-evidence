@@ -92,6 +92,9 @@ class CityAreaListingsIT {
     private PublicSchoolRadiusListingsService schoolRadiusListingsService;
 
     @MockitoBean
+    private AreaSummaryService areaSummaryService;
+
+    @MockitoBean
     private UserRoleService userRoleService;
 
     /**
@@ -405,7 +408,7 @@ class CityAreaListingsIT {
                 List.of(card), 0, 20, false);
 
         when(schoolRadiusListingsService.getListings(
-                eq("udupi"), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any()))
+                eq("udupi"), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any(), any()))
                 .thenReturn(page);
 
         mockMvc.perform(get(SCHOOL_RADIUS_URL)

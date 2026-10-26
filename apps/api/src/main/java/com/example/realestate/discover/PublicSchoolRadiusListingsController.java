@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -22,7 +23,8 @@ import java.util.concurrent.TimeUnit;
  * <p>Required: schoolLat + schoolLon (must be provided together).
  * Optional: schoolRadiusKm (default 2.0, server-clamped to [0, 10]),
  *           page (default 0, must be >= 0),
- *           size (default 20, server-clamped to [1, 50]).
+ *           size (default 20, server-clamped to [1, 50]),
+ *           schoolAreaKey (optional single canonical Area key for combined Area+School scoping).
  */
 @RestController
 @RequestMapping("/api/discover/cities/{city}/school-radius-listings")
@@ -42,9 +44,14 @@ public class PublicSchoolRadiusListingsController {
     private static final double MAX_ABS_LON = 180.0;
 
     private final PublicSchoolRadiusListingsService service;
+    private final AreaSummaryService areaSummaryService;
 
-    public PublicSchoolRadiusListingsController(PublicSchoolRadiusListingsService service) {
+    public PublicSchoolRadiusListingsController(
+            PublicSchoolRadiusListingsService service,
+            AreaSummaryService areaSummaryService
+    ) {
         this.service = service;
+        this.areaSummaryService = areaSummaryService;
     }
 
     @GetMapping
@@ -55,10 +62,11 @@ public class PublicSchoolRadiusListingsController {
             @RequestParam(name = "schoolRadiusKm", required = false) Double schoolRadiusKm,
             @RequestParam(name = "page", required = false, defaultValue = "0") int page,
             @RequestParam(name = "size", required = false, defaultValue = "20") int size,
-            @RequestParam(name = "listingPurpose", required = false) String listingPurpose
+            @RequestParam(name = "listingPurpose", required = false) String listingPurpose,
+            @RequestParam(name = "schoolAreaKey", required = false) List<String> schoolAreaKeys
     ) {
-        log.debug("GET /api/discover/cities/{}/school-radius-listings schoolLat={} schoolLon={} radiusKm={} page={} size={}",
-                city, schoolLat, schoolLon, schoolRadiusKm, page, size);
+        log.debug("GET /api/discover/cities/{}/school-radius-listings schoolLat={} schoolLon={} radiusKm={} page={} size={} schoolAreaKey={}",
+                city, schoolLat, schoolLon, schoolRadiusKm, page, size, schoolAreaKeys);
 
         // schoolLat and schoolLon are both required — reject if only one is present
         if (schoolLat == null || schoolLon == null) {
@@ -85,6 +93,11 @@ public class PublicSchoolRadiusListingsController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "page_exceeds_max");
         }
 
+        // #2806 / #2767: resolve canonical server-owned Area bounds when schoolAreaKey is supplied.
+        // Fails closed with 400 on blank, duplicate, unknown, other-city, inactive-city, or null-bounds keys.
+        DiscoverListingPredicateBuilder.Bbox areaBbox =
+                SchoolAreaBoundsParam.resolve(areaSummaryService, city, schoolAreaKeys, schoolLat, schoolLon, null);
+
         // Server-clamp radius: 0.0 is valid (exact-location match), max is 10.0
         double effectiveRadius = schoolRadiusKm != null
                 ? Math.max(0.0, Math.min(schoolRadiusKm, MAX_RADIUS_KM))
@@ -95,6 +108,6 @@ public class PublicSchoolRadiusListingsController {
 
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(60, TimeUnit.SECONDS).cachePublic())
-                .body(service.getListings(city, schoolLat, schoolLon, effectiveRadius, page, effectiveSize, listingPurpose));
+                .body(service.getListings(city, schoolLat, schoolLon, effectiveRadius, page, effectiveSize, listingPurpose, areaBbox));
     }
 }
