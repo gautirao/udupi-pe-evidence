@@ -11,7 +11,9 @@ interface AgriculturalLandDetailsSectionProps {
   landAreaUnit: string;
   onLandAreaChange: (area: number | null, unit: string) => void;
   priceRupees: number | null;
+  priceHydrationSeed: number | null;
   onPriceChange: (rupees: number | null) => void;
+  isRecoveringDraft?: boolean;
   hasAttempted: boolean;
   priceBreakdown: AgriPriceBreakdown;
   facing: string;
@@ -19,13 +21,15 @@ interface AgriculturalLandDetailsSectionProps {
   fieldVisible: (key: ListingFieldKey) => boolean;
 }
 
-/** #2398 — Section 2: "Land details" (area, price + breakdown, facing). Verbatim extraction, no behaviour change. */
+/** #2398 / #2811 — Section 2: "Land details" (area, price + breakdown, facing). */
 export function AgriculturalLandDetailsSection({
   landArea,
   landAreaUnit,
   onLandAreaChange,
   priceRupees,
+  priceHydrationSeed,
   onPriceChange,
+  isRecoveringDraft = false,
   hasAttempted,
   priceBreakdown,
   facing,
@@ -44,7 +48,7 @@ export function AgriculturalLandDetailsSection({
       />
 
       <div>
-        <PriceField id="price" initialRupees={null} onChange={onPriceChange} required />
+        <PriceField id="price" initialRupees={priceHydrationSeed} onChange={onPriceChange} required disabled={isRecoveringDraft} />
         {hasAttempted && (priceRupees == null || priceRupees <= 0) && (
           <p className="mt-1 text-sm text-destructive">A valid price greater than 0 is required.</p>
         )}

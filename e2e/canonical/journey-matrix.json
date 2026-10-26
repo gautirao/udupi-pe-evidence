@@ -386,7 +386,7 @@
           "project": "canonical-broker"
         }
       ],
-      "notes": "T8/T9 prove agri discovery over seeded data; AG1 (created via the real agri form; closed submit gate proven in UI; submit via the product endpoint (arranged) - the UI Submit click is NOT exercised because AgriculturalListingForm has no draft hydration, an open product question), AG2 (admin approve), AG3 (approved parcel is in the SW agri corridor: total +1, listed by id, rendered)."
+      "notes": "T8/T9 prove agri discovery over seeded data; AG1 (created via the real agri form; closed submit gate proven in UI; photos + confirmed pin/locality arranged via the real product endpoints; page reload hydrates ?draftId=<id> and broker submits for review through the real UI button -> agricultural-submitted-panel), AG2 (admin approve), AG3 (approved parcel is in the SW agri corridor: total +1, listed by id, rendered)."
     },
     {
       "id": "J16",

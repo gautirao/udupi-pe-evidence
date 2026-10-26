@@ -1,17 +1,17 @@
 /**
- * Agricultural lifecycle — AG1 (broker create -> submit) / AG2 (admin approve) / AG3 (buyer agri discovery), J15,
- * issue #2750 PR-1 C2. Mirrors listing-lifecycle.canonical.ts' T13/T14/T15 (same project topology, same identity switch,
- * same arranged-gate rules); read that file's module docstring first.
+ * Agricultural lifecycle — AG1 (broker create -> hydrate -> UI submit) / AG2 (admin approve) / AG3 (buyer agri discovery), J15,
+ * issue #2750 PR-1 C2 + issue #2811 (AgriculturalListingForm URL-seeded draft hydration & real UI submit). Mirrors
+ * listing-lifecycle.canonical.ts' T13/T14/T15 (same project topology, same identity switch, same arranged-gate rules); read that
+ * file's module docstring first.
  *
  * ARRANGED, NOT PROVEN (stated so it is never mistaken for proof):
  *   - The three photos, the confirmed address + coordinates + locality are registered through the SAME authenticated
  *     endpoints the product uses (POST /api/listings/{id}/images, PUT /api/listings/{id}), because the real routes need a live
- *     third-party geocoder (not deterministic). Every arranged call asserts 2xx.
- *   - The final POST /api/listings/{id}/submit is also made with the broker's own bearer, NOT clicked. The agricultural form
- *     (AgriculturalListingForm) has no draft hydration: its Submit button enables from React-Query state that was read BEFORE
- *     the arrangement, and any later UI save would overwrite the arranged locality with the form's empty one. So the UI part of
- *     AG1 is: fill the real form, Save draft (real POST), open Review (real PUT) and prove the Submit button is DISABLED while
- *     photos/location are missing (closed-gate control). Submission itself is the product's real endpoint, status asserted.
+ *     third-party geocoder and signed-URL storage upload (not deterministic). Every arranged call asserts 2xx.
+ *   - Once those two non-deterministic gates are arranged, AG1 reloads the page at `/broker/listings/new/agricultural?draftId=<id>`
+ *     (stamped into the URL via history REPLACE when the draft was created), proves one-shot draft hydration of the agricultural
+ *     form fields + location/pin + photos, clicks `Review` -> `Submit for review` through the REAL UI (parity with Residential T13
+ *     and Commercial CC1), and asserts `POST /api/listings/{id}/submit` returns `PENDING_REVIEW` and renders `agricultural-submitted-panel`.
  *
  * WHERE THE LISTING LANDS: locality 'Rajarajeshwari Nagar' (RR Nagar's full name; the product resolves area_key alias-first
  * from the locality text, and the canonical fixture carries a curated alias row for it, see part (e) of
@@ -75,7 +75,7 @@ async function agriTotal(page: import('./support/canonical-test').Page): Promise
 }
 
 test.describe.serial('AG — agricultural lifecycle (AG2/AG3 depend on AG1)', () => {
-  test('[role:broker] AG1 — broker creates an agricultural listing via the real form; closed submit gate proven in UI; submit via the product endpoint (arranged)', async ({ page }) => {
+  test('[role:broker] AG1 — broker creates an agricultural listing via the real form, arranges photos+pin out-of-band, reloads to hydrate draftId, and submits for review through the real UI', async ({ page }) => {
     await page.goto('/broker/listings/new/agricultural');
     await page.waitForLoadState('domcontentloaded');
     await expect(page.getByText('Agricultural land listing', { exact: true })).toBeVisible({ timeout: 15_000 });
@@ -100,6 +100,9 @@ test.describe.serial('AG — agricultural lifecycle (AG2/AG3 depend on AG1)', ()
     brokerBearer = (auth ?? '').replace(/^Bearer\s+/i, '');
     const brokerUserId = decodeJwtSub(brokerBearer);
 
+    // #2811 AC1: history REPLACE stamps `?draftId=<id>` into the URL on initial draft create.
+    await expect(page).toHaveURL(new RegExp(`[?&]draftId=${agriId}`), { timeout: 10_000 });
+
     // CLOSED-GATE CONTROL: open Review (a real PUT); with no photos/location the Submit button must be disabled.
     const reviewPut = page.waitForResponse((r) => r.url().endsWith(`/api/listings/${agriId}`) && r.request().method() === 'PUT', { timeout: 15_000 });
     await page.getByRole('button', { name: 'Review', exact: true }).click();
@@ -122,10 +125,56 @@ test.describe.serial('AG — agricultural lifecycle (AG2/AG3 depend on AG1)', ()
     });
     expect(arranged.ok(), `arranged address/locality PUT must respond 2xx - got ${arranged.status()}: ${await arranged.text()}`).toBe(true);
 
-    // The product's real submit endpoint.
-    const submit = await page.request.post(`${backend()}/api/listings/${agriId}/submit`, { headers: { Authorization: `Bearer ${brokerBearer}` } });
-    expect(submit.ok(), `POST /api/listings/{id}/submit must respond 2xx - got ${submit.status()}: ${await submit.text()}`).toBe(true);
-    expect(((await submit.json()) as { status?: string }).status).toBe('PENDING_REVIEW');
+    // #2811 AC2/AC3: reload the page (URL already carries `?draftId=${agriId}`) so AgriculturalListingForm
+    // re-fetches and hydrates the draft (title, landArea, price, locality, confirmed pin, and 3 photos) in edit mode.
+    const imagesRefetch = page.waitForResponse(
+      (r) => r.url().includes(`/api/listings/${agriId}/images`) && r.request().method() === 'GET',
+      { timeout: 15_000 },
+    );
+    const listingRefetch = page.waitForResponse(
+      (r) => r.url().endsWith(`/api/listings/${agriId}`) && r.request().method() === 'GET',
+      { timeout: 15_000 },
+    );
+    await page.reload();
+    const [imagesRefetchResp, listingRefetchResp] = await Promise.all([imagesRefetch, listingRefetch]);
+    expect(imagesRefetchResp.ok(), 'post-reload GET .../images must respond 2xx').toBe(true);
+    expect(listingRefetchResp.ok(), 'post-reload GET /api/listings/{id} must respond 2xx').toBe(true);
+
+    await expect(page.getByRole('heading', { name: 'Create a listing' })).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('#title')).toHaveValue(UNIQUE_TITLE, { timeout: 10_000 });
+    await expect(page.locator('#landArea')).toHaveValue('2');
+    await expect(page.getByTestId('map-pin-status')).toHaveText('Pin confirmed — Rajarajeshwari Nagar', { timeout: 10_000 });
+
+    // Open Review again: the real PUT now preserves hydrated locality/fields (never overwrites with empty state),
+    // and the Submit for review button flips from DISABLED -> ENABLED.
+    const unblockedReviewPut = page.waitForResponse(
+      (r) => r.url().endsWith(`/api/listings/${agriId}`) && r.request().method() === 'PUT',
+      { timeout: 15_000 },
+    );
+    await page.getByRole('button', { name: 'Review', exact: true }).click();
+    const unblockedReviewResp = await unblockedReviewPut;
+    expect(unblockedReviewResp.ok(), 'post-hydration Review save (PUT) must respond 2xx').toBe(true);
+    await expect(page.getByRole('heading', { name: 'Review your listing' })).toBeVisible({ timeout: 10_000 });
+
+    const submitButton = page.getByRole('button', { name: 'Submit for review', exact: true });
+    await expect(submitButton).toBeVisible({ timeout: 10_000 });
+    await expect(submitButton, 'submit must be enabled once hydrated gates are satisfied').toBeEnabled();
+    await expect(page.getByText('Published', { exact: false })).toHaveCount(0);
+
+    // Real UI submit click -> POST /api/listings/{id}/submit -> PENDING_REVIEW -> agricultural-submitted-panel.
+    const submitPromise = page.waitForResponse(
+      (r) => r.url().endsWith(`/api/listings/${agriId}/submit`) && r.request().method() === 'POST',
+      { timeout: 15_000 },
+    );
+    await submitButton.click();
+    const submitResp = await submitPromise;
+    expect(submitResp.ok(), `POST /api/listings/{id}/submit must respond 2xx - got ${submitResp.status()}: ${await submitResp.text()}`).toBe(true);
+    expect(((await submitResp.json()) as { status?: string }).status).toBe('PENDING_REVIEW');
+
+    const submittedPanel = page.getByTestId('agricultural-submitted-panel');
+    await expect(submittedPanel).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: 'Submitted for review' })).toBeVisible();
+    await expect(submittedPanel.getByText('Pending admin approval.', { exact: false })).toBeVisible();
 
     // And the broker sees it as Under Review.
     const mine = page.waitForResponse((r) => r.url().includes('/api/listings/mine') && r.request().method() === 'GET', { timeout: 15_000 });

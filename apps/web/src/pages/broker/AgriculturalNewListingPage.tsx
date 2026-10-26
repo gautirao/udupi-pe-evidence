@@ -19,13 +19,28 @@ import { Loader2 } from 'lucide-react';
 export default function AgriculturalNewListingPage() {
   const { userRole, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const role = userRole as string | null;
 
   // #1748 — Agricultural itself seeds no fields (fixed type, sale-only), but
   // "Switch flow" must still carry the demand-gap prefill back to the selector so
   // its recommendation/params survive switching away and back (parity with Back).
   const prefillSearch = buildPrefillSearch(parseDemandPrefill(searchParams));
+
+  // #2811 — refresh-safe draft continuity: read `draftId` from the URL so a
+  // browser refresh (or shared/bookmarked link) rehydrates the existing draft
+  // instead of stranding the broker on a blank form. Mirrors NewListing.tsx
+  // (#2053) and CommercialNewListingPage.tsx (#2215): REPLACE (not push) so
+  // browser Back returns to the page before `/broker/listings/new/agricultural`,
+  // and `new URLSearchParams(searchParams)` so any existing demand-gap prefill
+  // params stay intact alongside `draftId`.
+  const initialDraftId = searchParams.get('draftId');
+  const handleDraftPersisted = (id: string) => {
+    if (searchParams.get('draftId') === id) return;
+    const next = new URLSearchParams(searchParams);
+    next.set('draftId', id);
+    setSearchParams(next, { replace: true });
+  };
 
   if (authLoading) {
     return (
@@ -46,6 +61,8 @@ export default function AgriculturalNewListingPage() {
       <AgriculturalListingForm
         onSwitchToGenericFlow={() => navigate(`/broker/listings/new${prefillSearch}`)}
         navigate={navigate}
+        initialDraftId={initialDraftId}
+        onDraftPersisted={handleDraftPersisted}
       />
     </AppLayout>
   );

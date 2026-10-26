@@ -22,7 +22,9 @@ const mockUpdateMutate = vi.hoisted(() => vi.fn());
 const mockSubmitMutate = vi.hoisted(() => vi.fn());
 const mockToast = vi.hoisted(() => vi.fn());
 const mockListingData = vi.hoisted(() => ({
-  current: undefined as { id: string; addressConfirmed: boolean; latitude: number | null; longitude: number | null } | undefined,
+  current: undefined as Record<string, unknown> | undefined,
+  isLoading: false,
+  isError: false,
 }));
 const mockImageCount = vi.hoisted(() => ({ current: 0 }));
 
@@ -37,7 +39,11 @@ vi.mock('@/hooks/useBrokerListings', async (importOriginal) => {
     useCreateListing: () => ({ mutate: mockCreateMutate, isPending: false }),
     useUpdateListing: () => ({ mutate: mockUpdateMutate, isPending: false }),
     useSubmitListing: () => ({ mutate: mockSubmitMutate, isPending: false }),
-    useGetListing: () => ({ data: mockListingData.current }),
+    useGetListing: () => ({
+      data: mockListingData.current,
+      isLoading: mockListingData.isLoading,
+      isError: mockListingData.isError,
+    }),
   };
 });
 
@@ -112,15 +118,21 @@ import { AgriculturalListingForm } from '../AgriculturalListingForm';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function renderForm() {
+function renderForm(props?: { initialDraftId?: string | null; onDraftPersisted?: (id: string) => void }) {
   const navigate = vi.fn();
   const onSwitchToGenericFlow = vi.fn();
+  const onDraftPersisted = props?.onDraftPersisted ?? vi.fn();
   render(
     <MemoryRouter>
-      <AgriculturalListingForm onSwitchToGenericFlow={onSwitchToGenericFlow} navigate={navigate} />
+      <AgriculturalListingForm
+        initialDraftId={props?.initialDraftId}
+        onDraftPersisted={onDraftPersisted}
+        onSwitchToGenericFlow={onSwitchToGenericFlow}
+        navigate={navigate}
+      />
     </MemoryRouter>,
   );
-  return { navigate, onSwitchToGenericFlow };
+  return { navigate, onSwitchToGenericFlow, onDraftPersisted };
 }
 
 function mockCreateSucceedsWithAddressConfirmed() {
@@ -139,6 +151,8 @@ async function resolveLocation(user: ReturnType<typeof userEvent.setup>) {
 beforeEach(() => {
   vi.clearAllMocks();
   mockListingData.current = undefined;
+  mockListingData.isLoading = false;
+  mockListingData.isError = false;
   mockImageCount.current = 0;
   mockCreateMutate.mockReset();
   mockUpdateMutate.mockReset();
@@ -420,5 +434,187 @@ describe('AgriculturalListingForm — positive submit lifecycle (PR #2405 eviden
     // the success state is a real terminal UI, not just an unasserted toast.
     await user.click(screen.getByRole('button', { name: /back to dashboard/i }));
     expect(navigate).toHaveBeenCalledWith('/broker/listings');
+  });
+});
+
+describe('AgriculturalListingForm — URL-seeded draft hydration & recovery (issue #2811)', () => {
+  it('invokes onDraftPersisted exactly once on initial draft create, and never on later updates', async () => {
+    mockCreateSucceedsWithAddressConfirmed();
+    const user = userEvent.setup();
+    const { onDraftPersisted } = renderForm();
+
+    await resolveLocation(user);
+    await user.type(screen.getByLabelText(/price \(inr\)/i), '45 lakh');
+    await user.click(screen.getAllByRole('button', { name: /save draft/i })[0]);
+
+    expect(mockCreateMutate).toHaveBeenCalledTimes(1);
+    expect(onDraftPersisted).toHaveBeenCalledTimes(1);
+    expect(onDraftPersisted).toHaveBeenCalledWith('listing-1');
+
+    // Subsequent Save draft issues PUT and does NOT re-fire onDraftPersisted
+    await user.click(screen.getAllByRole('button', { name: /save draft/i })[0]);
+    expect(mockUpdateMutate).toHaveBeenCalledTimes(1);
+    expect(onDraftPersisted).toHaveBeenCalledTimes(1);
+  });
+
+  it('hydrates all persisted agricultural fields and gate state from initialDraftId, preserves them on PUT round-trip, and never fabricates UI-only rtc/crops/features', async () => {
+    mockListingData.current = {
+      id: 'agri-draft-2811',
+      propertyType: 'agricultural_land',
+      listingPurpose: 'sale',
+      title: 'Hydrated 3 Acre Areca Farm',
+      locality: 'Rajarajeshwari Nagar',
+      price: 4_500_000,
+      description: 'Well-irrigated agricultural parcel near RR Nagar.',
+      landArea: 3,
+      landAreaUnit: 'acre',
+      facing: 'EAST',
+      waterSource: 'BOREWELL',
+      soilType: 'RED_LATERITE',
+      roadAccess: 'TAR_ROAD',
+      cultivationStatus: 'CULTIVATED',
+      landCategory: 'DRY',
+      agriConversionStatus: 'AGRICULTURAL_ONLY',
+      ownershipType: 'FREEHOLD',
+      surveyNumber: 'SY-2811/4A',
+      farmhouseAvailable: true,
+      fencingDone: false,
+      addressConfirmed: true,
+      latitude: 12.9255,
+      longitude: 77.5176,
+    };
+    mockImageCount.current = 3;
+    mockUpdateMutate.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+
+    const user = userEvent.setup();
+    renderForm({ initialDraftId: 'agri-draft-2811' });
+
+    // Core inputs hydrated
+    await waitFor(() => expect(document.getElementById('title')).toHaveValue('Hydrated 3 Acre Areca Farm'));
+    expect(document.getElementById('landArea')).toHaveValue(3);
+    await waitFor(() => expect(document.getElementById('price')).toHaveValue('45 lakh'));
+    expect(screen.getByTestId('agri-price-breakdown')).toBeInTheDocument();
+
+    // Location & confirmed pin hydrated
+    await waitFor(() => expect(screen.getByLabelText(/search for a location/i)).toHaveValue('Rajarajeshwari Nagar'));
+    expect(screen.getByText('Location confirmed — Rajarajeshwari Nagar')).toBeInTheDocument();
+    expect(screen.getByText('Pin confirmed — Rajarajeshwari Nagar')).toBeInTheDocument();
+
+    // UI-only crops/features are not fabricated from ListingResponse
+    expect(screen.getByRole('button', { name: 'Coconut' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Areca / supari' })).toHaveAttribute('aria-pressed', 'false');
+
+    // Hydrated description shown in ready textarea
+    const descReady = await screen.findByTestId('agri-description-assistant-ready');
+    expect(descReady.querySelector('textarea')).toHaveValue('Well-irrigated agricultural parcel near RR Nagar.');
+
+    // Expand Section 4 ("Land record details") and verify surveyNumber hydrated while UI-only RTC stays empty
+    await user.click(screen.getByText(/land record details/i));
+    expect(document.getElementById('surveyNumber')).toHaveValue('SY-2811/4A');
+    expect(document.getElementById('rtc')).toHaveValue('');
+
+    // Save draft issues PUT with all hydrated fields preserved
+    await user.click(screen.getAllByRole('button', { name: /save draft/i })[0]);
+    expect(mockCreateMutate).not.toHaveBeenCalled();
+    expect(mockUpdateMutate).toHaveBeenCalledTimes(1);
+    const [putPayload] = mockUpdateMutate.mock.calls[0] as [Record<string, unknown>, unknown];
+    expect(putPayload).toMatchObject({
+      propertyType: 'agricultural_land',
+      title: 'Hydrated 3 Acre Areca Farm',
+      locality: 'Rajarajeshwari Nagar',
+      price: 4_500_000,
+      description: 'Well-irrigated agricultural parcel near RR Nagar.',
+      landArea: 3,
+      landAreaUnit: 'acre',
+      facing: 'EAST',
+      waterSource: 'BOREWELL',
+      soilType: 'RED_LATERITE',
+      roadAccess: 'TAR_ROAD',
+      cultivationStatus: 'CULTIVATED',
+      landCategory: 'DRY',
+      agriConversionStatus: 'AGRICULTURAL_ONLY',
+      ownershipType: 'FREEHOLD',
+      surveyNumber: 'SY-2811/4A',
+      farmhouseAvailable: true,
+      fencingDone: false,
+      crops: [],
+    });
+    expect(putPayload).not.toHaveProperty('rtc');
+    expect(putPayload).not.toHaveProperty('features');
+  });
+
+  it('survives edit -> review -> edit -> review mode switch on a hydrated draft and submits through the real UI button', async () => {
+    mockListingData.current = {
+      id: 'agri-draft-submit',
+      propertyType: 'agricultural_land',
+      listingPurpose: 'sale',
+      title: 'Submittable Hydrated Parcel',
+      locality: 'Rajarajeshwari Nagar',
+      price: 4_200_000,
+      landArea: 2,
+      landAreaUnit: 'acre',
+      addressConfirmed: true,
+      latitude: 12.9255,
+      longitude: 77.5176,
+    };
+    mockImageCount.current = 3;
+    mockUpdateMutate.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+    mockSubmitMutate.mockImplementation((_vars: unknown, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+
+    const user = userEvent.setup();
+    renderForm({ initialDraftId: 'agri-draft-submit' });
+
+    await waitFor(() => expect(document.getElementById('title')).toHaveValue('Submittable Hydrated Parcel'));
+    await waitFor(() => expect(screen.getByText('Pin confirmed — Rajarajeshwari Nagar')).toBeInTheDocument());
+
+    // Enter review mode
+    await user.click(screen.getByRole('button', { name: /^review$/i }));
+    expect(await screen.findByRole('heading', { name: /review your listing/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /submit for review/i })).toBeEnabled();
+
+    // Switch back to edit mode — restored location and price must still be intact
+    await user.click(screen.getAllByRole('button', { name: /back to editing/i })[0]);
+    expect(screen.getByText('Pin confirmed — Rajarajeshwari Nagar')).toBeInTheDocument();
+    expect(screen.getByLabelText(/search for a location/i)).toHaveValue('Rajarajeshwari Nagar');
+
+    // Re-enter review mode and click Submit for review
+    await user.click(screen.getByRole('button', { name: /^review$/i }));
+    const submitBtn = await screen.findByRole('button', { name: /submit for review/i });
+    expect(submitBtn).toBeEnabled();
+    await user.click(submitBtn);
+
+    expect(mockSubmitMutate).toHaveBeenCalledTimes(1);
+    expect(await screen.findByTestId('agricultural-submitted-panel')).toBeInTheDocument();
+  });
+
+  it('shows loading state while recovering a URL-seeded draft and degrades to a recoverable blank form on 403/404 error', async () => {
+    mockListingData.isLoading = true;
+    const { unmount } = render(
+      <MemoryRouter>
+        <AgriculturalListingForm
+          initialDraftId="stale-draft-404"
+          onSwitchToGenericFlow={vi.fn()}
+          navigate={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId('draft-recovery-loading')).toBeInTheDocument();
+    expect(document.getElementById('title')).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^save draft$/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^review$/i })).toBeDisabled();
+    unmount();
+
+    // Now simulate 403/404 error on draft recovery
+    mockListingData.isLoading = false;
+    mockListingData.isError = true;
+    renderForm({ initialDraftId: 'stale-draft-404' });
+
+    const alert = await screen.findByTestId('draft-recovery-error');
+    expect(alert).toHaveAttribute('role', 'alert');
+    expect(alert).toHaveTextContent(/couldn't load your saved draft/i);
+    expect(screen.queryByTestId('draft-recovery-loading')).not.toBeInTheDocument();
+    expect(document.getElementById('title')).toBeEnabled();
+    expect(document.getElementById('title')).toHaveValue('');
   });
 });
