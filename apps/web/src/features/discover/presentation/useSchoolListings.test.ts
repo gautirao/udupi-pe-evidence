@@ -463,4 +463,211 @@ describe('useSchoolListings', () => {
       expect(result.current.schoolRadiusFallbackMarkers).toEqual([]);
     });
   });
+
+  // ── Issue #2816: anonymous School-first property filter parity between cards and map markers ──
+  describe('Issue #2816 — anonymous School-first property filters narrow both cards (schoolListings) and map markers (schoolRadiusFallbackMarkers)', () => {
+    const ACTIVE_RADIUS_FILTERS: PropertyFilters = {
+      ...EMPTY_FILTERS,
+      schoolLat: 13.35,
+      schoolLon: 74.79,
+      schoolRadiusKm: 2,
+    };
+
+    const twoTypeFixture: SchoolRadiusListingItem[] = [
+      makeSchoolRadiusListing({
+        id: 'A',
+        propertyType: 'apartment',
+        lat: 13.351,
+        lon: 74.791,
+        areaKey: 'area:manipal',
+        scopedAreaKey: 'area:manipal',
+      }),
+      makeSchoolRadiusListing({
+        id: 'H',
+        propertyType: 'house',
+        lat: 13.352,
+        lon: 74.792,
+        areaKey: 'area:manipal',
+        scopedAreaKey: 'area:manipal',
+      }),
+    ];
+
+    it('pure School-first (no selectedArea): cards and markers match across no-filter, apartment, house, and nonmatching propertyTypes', () => {
+      // 1. No property-type filter -> both [A, H]
+      const noFilter = renderHook(() =>
+        useSchoolListings(
+          makeParams({
+            isAuthenticated: false,
+            journey: 'school-first',
+            schoolId: 'school-1',
+            selectedArea: null,
+            schoolRadiusListings: twoTypeFixture,
+            filters: ACTIVE_RADIUS_FILTERS,
+          }),
+        ),
+      );
+      expect(noFilter.result.current.schoolListings.map((l) => l.id)).toEqual(['A', 'H']);
+      expect(noFilter.result.current.schoolRadiusFallbackMarkers.map((m) => m.id)).toEqual(['A', 'H']);
+
+      // 2. propertyTypes=['apartment'] -> both [A]
+      const onlyApartment = renderHook(() =>
+        useSchoolListings(
+          makeParams({
+            isAuthenticated: false,
+            journey: 'school-first',
+            schoolId: 'school-1',
+            selectedArea: null,
+            schoolRadiusListings: twoTypeFixture,
+            filters: { ...ACTIVE_RADIUS_FILTERS, propertyTypes: ['apartment'] },
+          }),
+        ),
+      );
+      expect(onlyApartment.result.current.schoolListings.map((l) => l.id)).toEqual(['A']);
+      expect(onlyApartment.result.current.schoolRadiusFallbackMarkers.map((m) => m.id)).toEqual(['A']);
+
+      // 3. propertyTypes=['house'] -> both [H]
+      const onlyHouse = renderHook(() =>
+        useSchoolListings(
+          makeParams({
+            isAuthenticated: false,
+            journey: 'school-first',
+            schoolId: 'school-1',
+            selectedArea: null,
+            schoolRadiusListings: twoTypeFixture,
+            filters: { ...ACTIVE_RADIUS_FILTERS, propertyTypes: ['house'] },
+          }),
+        ),
+      );
+      expect(onlyHouse.result.current.schoolListings.map((l) => l.id)).toEqual(['H']);
+      expect(onlyHouse.result.current.schoolRadiusFallbackMarkers.map((m) => m.id)).toEqual(['H']);
+
+      // 4. Nonmatching propertyTypes=['villa'] -> both []
+      const nonMatching = renderHook(() =>
+        useSchoolListings(
+          makeParams({
+            isAuthenticated: false,
+            journey: 'school-first',
+            schoolId: 'school-1',
+            selectedArea: null,
+            schoolRadiusListings: twoTypeFixture,
+            filters: { ...ACTIVE_RADIUS_FILTERS, propertyTypes: ['villa'] },
+          }),
+        ),
+      );
+      expect(nonMatching.result.current.schoolListings.map((l) => l.id)).toEqual([]);
+      expect(nonMatching.result.current.schoolRadiusFallbackMarkers.map((m) => m.id)).toEqual([]);
+    });
+
+    it('combined Area+School (valid scopedAreaKey) + #2806 out-of-Area guard + coordinate-less matching row', () => {
+      const selectedArea = makeSelectedAreaContaining({
+        areaKey: 'area:manipal',
+        bbox: [[13.3, 74.7], [13.4, 74.9]],
+      });
+
+      // Includes:
+      // - A (apartment, in-area, has coords)
+      // - A_NO_COORDS (apartment, in-area, null coords -> card kept, pin excluded)
+      // - H (house, in-area, has coords)
+      // - OUT_OF_AREA (apartment, far outside bbox & mismatched scopedAreaKey -> excluded by #2806/#2183 area scope)
+      const combinedFixture: SchoolRadiusListingItem[] = [
+        ...twoTypeFixture,
+        makeSchoolRadiusListing({
+          id: 'A_NO_COORDS',
+          propertyType: 'apartment',
+          lat: null,
+          lon: null,
+          areaKey: 'area:manipal',
+          scopedAreaKey: 'area:manipal',
+        }),
+      ];
+
+      // Valid server-scoped Area+School with apartment filter:
+      // Cards include coordinate-less matching row ['A', 'A_NO_COORDS'], while pins include only coordinate-bearing ['A'].
+      const serverScopedApt = renderHook(() =>
+        useSchoolListings(
+          makeParams({
+            isAuthenticated: false,
+            journey: 'school-first',
+            schoolId: 'school-1',
+            selectedArea,
+            schoolRadiusListings: combinedFixture,
+            filters: { ...ACTIVE_RADIUS_FILTERS, propertyTypes: ['apartment'] },
+          }),
+        ),
+      );
+      expect(serverScopedApt.result.current.schoolListings.map((l) => l.id)).toEqual(['A', 'A_NO_COORDS']);
+      expect(serverScopedApt.result.current.schoolRadiusFallbackMarkers.map((m) => m.id)).toEqual(['A']);
+
+      // When an out-of-area stale row is present (mismatched scopedAreaKey), #2806 falls back to bbox filter,
+      // excluding both the out-of-area row and the null-coord row, while still filtering H out by propertyType:
+      const withOutOfAreaRow: SchoolRadiusListingItem[] = [
+        ...twoTypeFixture,
+        makeSchoolRadiusListing({
+          id: 'OUT_OF_AREA_APT',
+          propertyType: 'apartment',
+          lat: 12.91,
+          lon: 77.59,
+          areaKey: 'area:other',
+          scopedAreaKey: 'area:other',
+        }),
+      ];
+      const bboxScopedApt = renderHook(() =>
+        useSchoolListings(
+          makeParams({
+            isAuthenticated: false,
+            journey: 'school-first',
+            schoolId: 'school-1',
+            selectedArea,
+            schoolRadiusListings: withOutOfAreaRow,
+            filters: { ...ACTIVE_RADIUS_FILTERS, propertyTypes: ['apartment'] },
+          }),
+        ),
+      );
+      expect(bboxScopedApt.result.current.schoolListings.map((l) => l.id)).toEqual(['A']);
+      expect(bboxScopedApt.result.current.schoolRadiusFallbackMarkers.map((m) => m.id)).toEqual(['A']);
+    });
+
+    it('zero-match anonymous filter through resolveMarkerListings with markersLoading=false yields [] (no phantom area markers)', async () => {
+      const { resolveMarkerListings } = await import('@/features/discover/map/resolveMarkerListings');
+      const selectedArea = makeSelectedAreaContaining({ areaKey: 'area:manipal' });
+      const { result } = renderHook(() =>
+        useSchoolListings(
+          makeParams({
+            isAuthenticated: false,
+            journey: 'school-first',
+            schoolId: 'school-1',
+            selectedArea,
+            schoolRadiusListings: twoTypeFixture,
+            filters: { ...ACTIVE_RADIUS_FILTERS, propertyTypes: ['villa'] },
+          }),
+        ),
+      );
+      expect(result.current.schoolListings).toEqual([]);
+      expect(result.current.schoolRadiusFallbackMarkers).toEqual([]);
+
+      const resolvedMarkers = resolveMarkerListings({
+        mapLayerCategory: 'all-areas',
+        selectedArea,
+        isGroupResultsState: false,
+        isNodeListingsState: false,
+        mapZoom: 14,
+        areaLayerMaxZoom: 11,
+        isAuthenticated: false,
+        journey: 'school-first',
+        schoolId: 'school-1',
+        groupResultsMarkers: [],
+        nodeListingsMarkers: [],
+        markerListings: [],
+        areaMarkerListings: [makeFilteredListing({ id: 'phantom-area-pin' })],
+        schoolRadiusFallbackMarkers: result.current.schoolRadiusFallbackMarkers,
+        isLoadingAreaListings: false,
+        isErrorAreaListings: false,
+        markersLoading: false,
+        isAnonViewport: false,
+        anonViewportMarkerListings: [],
+      });
+      expect(resolvedMarkers).toEqual([]);
+    });
+  });
 });
+

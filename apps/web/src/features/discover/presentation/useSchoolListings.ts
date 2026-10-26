@@ -81,6 +81,29 @@ export function useSchoolListings({
         : filterSchoolRadiusListingsByAreaBbox(schoolRadiusListings, selectedArea?.bbox),
     [isServerScopedBySchoolAreaKey, schoolRadiusListings, selectedArea],
   );
+
+  // Issue #2816 — single shared post-Area-scope, property-filtered anonymous
+  // school-radius source consumed by BOTH `schoolListings` (cards) and
+  // `schoolRadiusFallbackMarkers` (map pins) so a client-side PropertyFilter
+  // (e.g. `propertyTypes=['apartment']`) narrows both surfaces identically.
+  //
+  // Issue #1261 — anon school-radius sources from the PUBLIC
+  // /school-radius-listings endpoint (cross-area, server-side ST_DWithin),
+  // replacing the old single-area haversine over areaListings.
+  // DECISION-1 (Option A): the active PropertyFilters are NOT sent to this
+  // endpoint (it has no filter params), so apply them CLIENT-SIDE here for
+  // parity with the auth path. Only filters whose backing fields exist in the
+  // 20-field anon contract are honoured. reraRegistered and sellerTypes rely on
+  // server-EXCLUDED fields (reraNumber/sellerType) and are intentionally NOT
+  // applied — anon never sees those fields (AC6).
+  const filteredAnonSchoolRadiusListings = useMemo(
+    (): SchoolRadiusListingItem[] => {
+      if (isAuthenticated) return [];
+      return applyAnonPropertyFilters(areaScopedSchoolRadiusListings, filters);
+    },
+    [isAuthenticated, areaScopedSchoolRadiusListings, filters],
+  );
+
   // Convert filteredListings (PropertyListing[]) to DiscoverCityListingItem[] for
   // SchoolSelectedPanel card list. filteredListings is the school-proximity-filtered
   // set when schoolLat/Lon/RadiusKm filters are active.
@@ -102,18 +125,7 @@ export function useSchoolListings({
         // listing; the anon path mirrors the auth haversine filter's clamp.
         const radius = filters.schoolRadiusKm != null ? clampSchoolRadiusKm(filters.schoolRadiusKm) : null;
         if (sLat != null && sLon != null && radius != null) {
-          // Issue #1261 — anon school-radius now sources from the PUBLIC
-          // /school-radius-listings endpoint (cross-area, server-side ST_DWithin),
-          // replacing the old single-area haversine over areaListings. The radius
-          // circle now matches the listing set across area boundaries.
-          //
-          // DECISION-1 (Option A): the active PropertyFilters are NOT sent to this
-          // endpoint (it has no filter params), so apply them CLIENT-SIDE here for
-          // parity with the auth path. Only filters whose backing fields exist in the
-          // 20-field anon contract are honoured. reraRegistered and sellerTypes rely on
-          // server-EXCLUDED fields (reraNumber/sellerType) and are intentionally NOT
-          // applied — anon never sees those fields (AC6).
-          return applyAnonPropertyFilters(areaScopedSchoolRadiusListings, filters);
+          return filteredAnonSchoolRadiusListings;
         }
         // No active school radius — fall back to area-scoped public browse.
         return areaListings;
@@ -149,7 +161,15 @@ export function useSchoolListings({
         lon: l.longitude,
       }));
     },
-    [isAuthenticated, areaListings, areaScopedSchoolRadiusListings, filteredListings, filters],
+    [
+      isAuthenticated,
+      areaListings,
+      filteredAnonSchoolRadiusListings,
+      filteredListings,
+      filters.schoolLat,
+      filters.schoolLon,
+      filters.schoolRadiusKm,
+    ],
   );
 
   // Issue #1261 rev2 (AC11) — radius-filtered marker pins, active for both auth and
@@ -184,19 +204,18 @@ export function useSchoolListings({
   // the map's pre-CTA fallback marker count agrees with the panel's listing
   // count, for both the combined (area+school) and pure school-first states.
   //
-  // Anon users keep the pre-existing area-bbox-scoped public-endpoint derivation
-  // (deriveAnonSchoolRadiusMarkers over areaScopedSchoolRadiusListings) — there is
-  // no authenticated-only combined backend query available to anon callers, so
-  // the public endpoint remains the best available source for them.
+  // Issue #2816 — anon users derive markers from `filteredAnonSchoolRadiusListings`
+  // (post-Area-scope AND post-`applyAnonPropertyFilters`) so cards and pins share
+  // the exact same filtered listing set.
   const schoolRadiusFallbackMarkers = useMemo(
     () => {
       if (journey !== 'school-first' || !schoolId) return [];
       if (isAuthenticated) {
         return filteredListings.filter((l) => l.latitude != null && l.longitude != null);
       }
-      return deriveAnonSchoolRadiusMarkers(areaScopedSchoolRadiusListings);
+      return deriveAnonSchoolRadiusMarkers(filteredAnonSchoolRadiusListings);
     },
-    [journey, schoolId, isAuthenticated, filteredListings, areaScopedSchoolRadiusListings],
+    [journey, schoolId, isAuthenticated, filteredListings, filteredAnonSchoolRadiusListings],
   );
 
   return { schoolListings, schoolRadiusFallbackMarkers };
