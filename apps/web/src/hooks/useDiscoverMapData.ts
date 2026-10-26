@@ -666,6 +666,44 @@ export function useDiscoverMapData({
   // ── Paginated discover listings (auth-only) ────────────────────────────────
   // Issue #1655: gated by listingsEnabled so top-grouped journey states avoid fetching
   // individual listing data that the UI does not consume (right panel shows groups).
+  // Issue #2809 (Q13 from #2807): thread the active geographic scope into
+  // `useDiscoverListings` so `GET /api/discover/listings` carries server-enforced
+  // `areaKeys` or `nodeKey` at an Area-first leaf/group instead of asking city-wide
+  // while `scopeFingerprint` and the UI claim an area, and gate on
+  // `scope.kind !== 'unresolved'` so mid-resolution states never fall back to an
+  // unscoped city request. Candidate scopes (`POLYGON` / `VIEWPORT`) suppress
+  // `areaKeys`/`nodeKey` to respect backend `ResultScopeExclusivity`.
+  const hasExclusiveCandidateScope =
+    resultScope != null && resultScope.kind !== 'AREA_SET';
+  const isAreaFirstListingScope =
+    !urlSchoolId &&
+    journey !== 'school-first' &&
+    journey !== 'agri-first';
+  const committedAreaSetKeys =
+    isAreaFirstListingScope &&
+    resultScope?.kind === 'AREA_SET' &&
+    resultScope.areaKeys.length > 0
+      ? resultScope.areaKeys
+      : null;
+  const legacySelectedAreaKey =
+    isAreaFirstListingScope && selectedArea?.areaKey
+      ? [selectedArea.areaKey]
+      : undefined;
+  const listingsAreaKeys: string[] | undefined = hasExclusiveCandidateScope
+    ? undefined
+    : committedAreaSetKeys != null
+      ? committedAreaSetKeys
+      : scope.kind === 'areas'
+        ? scope.areaKeys
+        : scope.kind === 'node'
+          ? undefined
+          : legacySelectedAreaKey;
+  const listingsNodeKey: string | undefined =
+    hasExclusiveCandidateScope || committedAreaSetKeys != null
+      ? undefined
+      : scope.kind === 'node'
+        ? scope.nodeKey
+        : undefined;
   const {
     data: discoverListingsPage,
     isLoading: discoverListingsLoading,
@@ -680,10 +718,12 @@ export function useDiscoverMapData({
     size: 50,
     filters,
     includeAggregates: true,
-    enabled: isAuthenticated && listingsEnabled,
+    enabled: isAuthenticated && listingsEnabled && scope.kind !== 'unresolved',
     bbox,
     q: debouncedSearch || undefined,
     listingPurpose,
+    areaKeys: listingsAreaKeys,
+    nodeKey: listingsNodeKey,
     // Issue #2016 — shared query identity across cards/markers/totals.
     resultScope,
   });

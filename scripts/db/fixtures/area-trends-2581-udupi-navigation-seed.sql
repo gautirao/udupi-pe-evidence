@@ -150,6 +150,20 @@ BEGIN
     )
   ON CONFLICT (city_id, node_key) DO NOTHING;
 
+  -- Issue #2809 (Q13 from #2807): curated area_alias rows for Udupi's non-Manipal seeded areas
+  -- (Brahmavar, Kaup, Malpe) so a broker-submitted out-of-Manipal Udupi control listing in CC4
+  -- resolves its area_key synchronously via ListingAreaResolutionService -> AreaResolutionService.resolveByAliasAnyCity
+  -- without requiring a live Nominatim geocoder (mirrors #2750 C2 in navigation-hierarchy-schools-agri-fixture-seed.sql).
+  INSERT INTO public.area_alias (city_id, area_key, alias, alias_normalised, source)
+  SELECT v_city_id, v.area_key, v.alias, v.alias_normalised, v.source
+  FROM (VALUES
+    ('IN|KA|Udupi|Brahmavar', 'Brahmavar', 'brahmavar', 'e2e_2809_fixture_alias'),
+    ('IN|KA|Udupi|Kaup',      'Kaup',      'kaup',      'e2e_2809_fixture_alias'),
+    ('IN|KA|Udupi|Malpe',     'Malpe',     'malpe',     'e2e_2809_fixture_alias')
+  ) AS v(area_key, alias, alias_normalised, source)
+  JOIN public.areas a ON a.area_key = v.area_key AND a.city_id = v_city_id
+  ON CONFLICT (city_id, alias_normalised) DO NOTHING;
+
   ASSERT (SELECT COUNT(*) FROM public.navigation_nodes WHERE city_id = v_city_id AND node_type = 'AREA') >= 3,
     'area-trends-2581-udupi-navigation-seed: expected >=3 Udupi AREA navigation_nodes rows after seed';
   RAISE NOTICE 'area-trends-2581-udupi-navigation-seed: assertions passed — Udupi (city_id=%) has PROMOTED revision and 3 DIRECTION/AREA pairs (Manipal/Brahmavar/Kaup)', v_city_id;

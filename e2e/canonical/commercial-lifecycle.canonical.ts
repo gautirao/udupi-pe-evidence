@@ -171,10 +171,27 @@ const UNIQUE_TITLE_B = `${UNIQUE_TITLE} (B)`;
 // the same collision that made CC4 unpassable for four rounds.
 const UNIQUE_DESCRIPTION_B = `Second canonical Commercial parity fixture for ${UNIQUE_TITLE} (B).`;
 const UNIQUE_DESCRIPTION = `Canonical Commercial lifecycle fixture for ${UNIQUE_TITLE}. Ground-floor shop unit, for rent, entered by the canonical E2E broker.`;
-// The OFF-SCOPE row — see CC1c. Same dedupe reasoning as B: distinct
+// The OFF-SCOPE SUBTYPE row — see CC1c. Same dedupe reasoning as B: distinct
 // description, because it shares Manipal and a null price with A and B.
 const UNIQUE_TITLE_C = `${UNIQUE_TITLE} (C-OFFICE)`;
 const UNIQUE_DESCRIPTION_C = `Third canonical Commercial fixture for ${UNIQUE_TITLE} (C). Deliberately an OFFICE, not a SHOP, so CC4's subtype narrowing has something it must exclude.`;
+// Issue #2809 (Q13 from #2807) — the OUT-OF-MANIPAL Udupi SHOP/rent geographic negative control.
+// Identical to CC1/CC1b on every non-geographic axis (Udupi, Commercial, SHOP, rent), but located
+// in Brahmavar (IN|KA|Udupi|Brahmavar) rather than Manipal (IN|KA|Udupi|Manipal). Without this row,
+// an unscoped city-wide GET /api/discover/listings?city=udupi&propertyTypes=commercial&commercialSubtypes=SHOP&listingPurpose=rent
+// returned the exact same two Manipal rows as a Manipal-scoped query, letting Q13 pass undetected.
+const UNIQUE_TITLE_OUT_OF_MANIPAL = `${UNIQUE_TITLE} (D-BRAHMAVAR-SHOP)`;
+const UNIQUE_DESCRIPTION_OUT_OF_MANIPAL = `Fourth canonical Commercial fixture for ${UNIQUE_TITLE} (D). Deliberately a SHOP in Brahmavar (outside Manipal) so CC4's Manipal area-leaf scoping must exclude an out-of-Manipal Udupi SHOP/rent row (#2809).`;
+const MANIPAL_LOCATION = {
+  locality: 'Manipal',
+  latitude: 13.3522,
+  longitude: 74.7873,
+} as const;
+const OUT_OF_MANIPAL_LOCATION = {
+  locality: 'Brahmavar',
+  latitude: 13.4534,
+  longitude: 74.7402,
+} as const;
 
 const adminEmail = process.env.ADMIN_EMAIL ?? '';
 const adminPassword = process.env.ADMIN_PASSWORD ?? '';
@@ -257,6 +274,10 @@ let listingIdB: string | null = null;
 // CC1c's OFFICE row. Named for what it does, not for its creation order: it is
 // asserted ABSENT from the SHOP scope and PRESENT in the unfiltered control.
 let listingIdC: string | null = null;
+// Issue #2809: out-of-Manipal Udupi SHOP/rent row (in Brahmavar). Asserted
+// PRESENT in the unfiltered Udupi city control and ABSENT from the Manipal
+// area-leaf SHOP/rent results.
+let listingIdOutOfManipal: string | null = null;
 let bearerToken: string | null = null;
 let brokerUserId: string | null = null;
 
@@ -274,6 +295,7 @@ async function arrangeSubmitGatesOutOfBand(
   id: string,
   token: string,
   ownerId: string,
+  location: { readonly locality: string; readonly latitude: number; readonly longitude: number } = MANIPAL_LOCATION,
 ): Promise<void> {
   for (let i = 1; i <= 3; i++) {
     const imageResp = await request.post(`${backendBaseUrl}/api/listings/${id}/images`, {
@@ -299,9 +321,9 @@ async function arrangeSubmitGatesOutOfBand(
     headers: { Authorization: `Bearer ${token}` },
     data: {
       addressConfirmed: true,
-      latitude: 13.3522,
-      longitude: 74.7873,
-      locality: 'Manipal',
+      latitude: location.latitude,
+      longitude: location.longitude,
+      locality: location.locality,
     },
   });
   expect(putResp.status(), 'addressConfirmed/lat/lon/locality PUT should be 2xx').toBeLessThan(300);
@@ -313,10 +335,10 @@ async function arrangeSubmitGatesOutOfBand(
  * single-sourced: CC1 proves the journey, and CC1b/CC1c reuse the identical
  * path rather than a second set of selectors that could drift away from it.
  *
- * `subtype` is the ONLY axis that varies between callers. Everything else —
- * purpose, built area, floor, rent, deposit — is identical by construction,
- * which is what makes CC1c's exclusion from CC4's SHOP scope attributable to
- * the subtype and to nothing else.
+ * `subtype` and `location` are the ONLY axes that vary between callers. Everything
+ * else — purpose, built area, floor, rent, deposit — is identical by construction,
+ * which is what makes CC1c's exclusion attributable to subtype and
+ * `listingIdOutOfManipal`'s exclusion attributable to geographic area scope (#2809).
  */
 async function createSubmittedCommercialRentListing(
   page: import('@playwright/test').Page,
@@ -324,6 +346,7 @@ async function createSubmittedCommercialRentListing(
   title: string,
   description: string,
   subtype: { readonly value: string; readonly optionLabel: string },
+  location: { readonly locality: string; readonly latitude: number; readonly longitude: number } = MANIPAL_LOCATION,
 ): Promise<{ id: string; token: string; ownerId: string }> {
   await page.goto('/broker/listings/new/commercial');
   await page.waitForLoadState('domcontentloaded');
@@ -387,7 +410,7 @@ async function createSubmittedCommercialRentListing(
   // gate — `#locality` is an AddressSearch query box whose value commits only
   // by selecting a geocoder result. T13 does the same and says so. The
   // gate-satisfying value is set by the arranged PUT below.
-  await page.locator('#locality').fill('Manipal');
+  await page.locator('#locality').fill(location.locality);
 
   // C4 — floor. Required, not decorative: for SHOP/OFFICE the commercial
   // strength model's typeSpecific gate is
@@ -436,7 +459,7 @@ async function createSubmittedCommercialRentListing(
   const createdOwnerId = decodeJwtSub(createdToken);
 
   // C5/C6 — see ARRANGED OUT OF BAND above.
-  await arrangeSubmitGatesOutOfBand(page.request, backendBaseUrl, createdId, createdToken, createdOwnerId);
+  await arrangeSubmitGatesOutOfBand(page.request, backendBaseUrl, createdId, createdToken, createdOwnerId, location);
 
   // ── Reload so the form re-observes the arranged state ──────────────────
   // The photos and pin were written through the API, so the mounted form's
@@ -570,6 +593,22 @@ test('[role:broker] CC1b — a SECOND Commercial SHOP rent listing, so C16 compa
 
   expect(listingIdB, 'CC1b must produce a second listing id').toBeTruthy();
   expect(listingIdB, 'CC1b must be a DISTINCT listing from CC1').not.toBe(listingId);
+
+  // Issue #2809 (Q13 from #2807) — also create an OUT-OF-MANIPAL Udupi SHOP/rent
+  // control listing in Brahmavar (IN|KA|Udupi|Brahmavar) so CC4's Manipal area-leaf
+  // scoping has a real Udupi SHOP/rent negative geographic control it must exclude.
+  const createdOutOfManipal = await createSubmittedCommercialRentListing(
+    page,
+    backendBaseUrl,
+    UNIQUE_TITLE_OUT_OF_MANIPAL,
+    UNIQUE_DESCRIPTION_OUT_OF_MANIPAL,
+    FIXTURE.subtype,
+    OUT_OF_MANIPAL_LOCATION,
+  );
+  listingIdOutOfManipal = createdOutOfManipal.id;
+  expect(listingIdOutOfManipal, 'CC1b must produce an out-of-Manipal Udupi SHOP/rent control listing id').toBeTruthy();
+  expect(listingIdOutOfManipal, 'out-of-Manipal control must be distinct from CC1').not.toBe(listingId);
+  expect(listingIdOutOfManipal, 'out-of-Manipal control must be distinct from CC1b').not.toBe(listingIdB);
 });
 
 test('[role:broker] CC1c — a THIRD Commercial rent listing, an OFFICE, so CC4 subtype narrowing can fail', async ({ page }) => {
@@ -768,6 +807,44 @@ test('[role:broker] CC2 — admin approves the submitted Commercial listing thro
     (await stateCResp.json()).status,
     'the OFFICE listing must reach LIVE, or CC4 absence proves status rather than subtype',
   ).toBe('LIVE');
+
+  // ── Approve CC1b's out-of-Manipal Udupi SHOP/rent control row (#2809) ──
+  // Must also reach LIVE through the same real moderation drawer so its absence
+  // from CC4's Manipal leaf is attributable strictly to geographic scoping, not status.
+  expect(
+    listingIdOutOfManipal,
+    'CC2 needs CC1b to have produced the out-of-Manipal Udupi SHOP/rent control listing',
+  ).toBeTruthy();
+
+  const queueOutOfManipalPromise = page.waitForResponse(
+    (r) => r.url().includes('/api/admin/listings/pending') && r.request().method() === 'GET',
+    { timeout: 15_000 },
+  );
+  await page.goto('/admin/listings/pending');
+  expect((await queueOutOfManipalPromise).status(), 'pending queue reload should be 2xx').toBeLessThan(300);
+
+  const rowOutOfManipal = page.getByTestId(`pending-row-${listingIdOutOfManipal}`);
+  await expect(rowOutOfManipal).toBeVisible({ timeout: 15_000 });
+  await rowOutOfManipal.click();
+  await expect(page.getByTestId('listing-review-drawer')).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: 'Approve', exact: true }).click();
+
+  const approveOutOfManipalPromise = page.waitForResponse(
+    (r) => r.url().endsWith(`/api/admin/listings/${listingIdOutOfManipal}/approve`) && r.request().method() === 'POST',
+    { timeout: 15_000 },
+  );
+  await page.getByTestId('confirm-approve-action').click();
+  expect((await approveOutOfManipalPromise).status(), 'fourth approve should be 2xx').toBeLessThan(300);
+
+  const stateOutOfManipalResp = await page.request.get(
+    `${backendBaseUrl}/api/listings/${listingIdOutOfManipal}`,
+    { headers: { Authorization: `Bearer ${bearerToken}` } },
+  );
+  expect(stateOutOfManipalResp.status()).toBeLessThan(300);
+  expect(
+    (await stateOutOfManipalResp.json()).status,
+    'the out-of-Manipal Udupi SHOP/rent control listing must reach LIVE, or CC4 absence proves status rather than geographic area scope',
+  ).toBe('LIVE');
 });
 
 test('[role:broker] CC4 — the created Commercial listing is discoverable under Commercial + Shop, and list and marker membership agree', async ({ page }) => {
@@ -800,72 +877,39 @@ test('[role:broker] CC4 — the created Commercial listing is discoverable under
   // 7f2b5c9f (Commercial facts on buyer detail). A deferral justified by an
   // EXPIRED reason reads as pending work and is simply false.
   //
-  // THE CARD -> DETAIL LINK IS NOT ASSERTED HERE, AND THE REASON IS A LIMIT OF
-  // THE CANONICAL FIXTURE — NOT A PRODUCT PROPERTY. The distinction is
-  // load-bearing and an earlier version of this comment got it wrong: it said
-  // "Udupi's LEGACY city surface renders no listing cards at all", which reads
-  // as a claim about the product and is NOT supported by anything measured
-  // here. A fixture limitation recorded as a product defect is exactly the
-  // class this file's own standard rejects.
-  //
-  // Measured on THIS exact URL against a real stack:
-  //   - the backend serves this scope: totalElements=2, returned=2;
-  //   - the app DOES fire listings?city=udupi&page=0&size=50 — so this is NOT
-  //     the listingsEnabled / isTopGroupedLevel gate; the query runs;
-  //   - and ZERO [data-testid="listing-card"] render;
-  //   - positive control, same probe/session/selector/CORS origin:
-  //     bangalore + node= returns 4 cards — so the zero is a measurement, not
-  //     a broken instrument.
-  //
-  // THE CAUSE IS FIXTURE DATA, read straight from the fixture database:
-  //     city        navigation_nodes   promoted revisions   city_regions
-  //     bangalore                 20                    1              0
-  //     udupi                      0                    0              0
-  // The canonical fixture carries navigation data for BANGALORE ONLY, which
-  // matches the backend's own startup line "preloaded 1 public-active city ...
-  // citySlug=bangalore nodeCount=20". With no Udupi navigation graph there is
-  // no area-scoped Udupi journey to drive, so no card panel renders — and CC1
-  // creates in Udupi (Manipal), so there is no card to click IN THIS STACK.
-  //
-  // THIS SAYS NOTHING ABOUT PRODUCTION. Evidence points the other way: an
-  // anonymous probe of GET /api/discover/cities/udupi/listings?commercialSubtypes=SHOP
-  // returned 3 rows across two areas there. If you are reading this because you
-  // suspect a buyer-facing card bug, this comment is not your evidence.
-  //
-  // NOT "fixed" by adding node=/rscope= to the URL above: that changes what C13
-  // asserts, trading a membership proof for a navigation one. NOT fixed by
-  // seeding a Udupi canonical node either — a standing owner ruling forbids
-  // exactly that (it flips ~15 assertion sites in specs the pre-push gate does
-  // not run). Recorded as a NAMED GAP on the PR rather than worked around.
-  //
-  // CARD SUMMARY COPY stays unasserted too, but now for COUPLING rather than
-  // availability: the AREA journey renders no Commercial summary (that gap is
-  // #2516's, in flight), and pinning another lane's wording produces an arm
-  // that fails when someone improves a label — which gets it deleted rather
-  // than fixed. Where these DO work they are already covered, non-canonically:
-  // card summary by e2e/discover-commercial-card-summary.spec.ts (Bangalore,
-  // authenticated VIEWPORT) and buyer-detail facts by
+  // CARD SUMMARY COPY stays unasserted for COUPLING: the AREA journey renders
+  // no Commercial summary (that gap is #2516's), and pinning another lane's
+  // wording produces an arm that fails when someone improves a label — which
+  // gets it deleted rather than fixed. Where these DO work they are already
+  // covered, non-canonically: card summary by e2e/discover-commercial-card-summary.spec.ts
+  // (Bangalore, authenticated VIEWPORT) and buyer-detail facts by
   // e2e/commercial-detail-facts-2432.spec.ts.
   //
-  // Uses the listing CC1 CREATED, never a seeded row — a binding requirement
-  // of this issue, and what makes this row independent of #2517's seed.
-  // Note #2517's commercial seed is entirely BENGALURU: there is no seeded
-  // Udupi commercial row, so this row can only ever pass on the listing CC1
-  // creates. Do not assume fixture coverage backs it up.
+  // Uses the listings CC1/CC1b/CC1c CREATED, never a seeded row — a binding
+  // requirement of this issue, and what makes this row independent of #2517's
+  // seed. Note #2517's commercial seed is entirely BENGALURU: there is no seeded
+  // Udupi commercial row, so this row can only ever pass on the listings this
+  // spec creates. Do not assume fixture coverage backs it up.
   //
-  // THAT SAME FACT IS WHY CC1c EXISTS. With no seeded Udupi commercial row,
-  // every row in this city scope was one this file created, and every one of
-  // them was a SHOP — so the SHOP-scoped set and the unfiltered set coincided
-  // and the subtype predicate was load-bearing for nothing. CC1c's OFFICE row
-  // breaks that coincidence deliberately.
+  // THAT SAME FACT IS WHY BOTH DISCRIMINATING CONTROLS EXIST:
+  //   1. `listingIdC` (Manipal OFFICE/rent): breaks subtype coincidence so
+  //      removing `commercialSubtypes=SHOP` fails CC4.
+  //   2. `listingIdOutOfManipal` (Brahmavar SHOP/rent, #2809): breaks geographic
+  //      coincidence so an unscoped city-wide Udupi SHOP/rent query fails CC4.
   expect(listingId, 'CC4 requires CC1/CC2 to have produced a LIVE listing').toBeTruthy();
+  expect(listingIdB, 'CC4 requires CC1b/CC2 to have produced a second in-Manipal LIVE listing').toBeTruthy();
+  expect(listingIdC, 'CC4 requires CC1c/CC2 to have produced the LIVE OFFICE listing').toBeTruthy();
+  expect(
+    listingIdOutOfManipal,
+    'CC4 requires CC1b/CC2 to have produced the LIVE out-of-Manipal Udupi SHOP/rent control listing',
+  ).toBeTruthy();
   expect(bearerToken, 'CC4 needs the broker token CC1 captured').toBeTruthy();
 
   const backendBaseUrl = requireBackendBaseUrl();
   const auth = { Authorization: `Bearer ${bearerToken}` };
   const idsOf = (b: { content?: Array<{ id?: string }> }) => new Set((b.content ?? []).map((x) => x.id));
 
-  // ── INTERMEDIATE CONTROL — is the listing SERVABLE at all? ────────────
+  // ── INTERMEDIATE CONTROL — are all four listings SERVABLE in Udupi? ────
   // Asked BEFORE any filtered assertion, and separately, because a filtered
   // zero has two very different causes that look identical: "the filter
   // excluded it" and "it is LIVE but not servable". The second is what
@@ -880,8 +924,12 @@ test('[role:broker] CC4 — the created Commercial listing is discoverable under
     { headers: auth },
   );
   expect(servableResp.status(), 'unfiltered city query should be 2xx').toBeLessThan(300);
-  const servableBody = (await servableResp.json()) as { content?: Array<{ id?: string }>, totalElements?: number };
+  const servableBody = (await servableResp.json()) as {
+    content?: Array<{ id?: string; areaKey?: string | null; commercialSubtype?: string | null }>;
+    totalElements?: number;
+  };
   const servableIds = idsOf(servableBody);
+  const servableById = new Map((servableBody.content ?? []).map((item) => [item.id, item]));
 
   // EXHAUSTIVE, asserted. At the previous size=50 with no check, a city whose
   // results outgrew one page would drop the listing for PAGINATION reasons
@@ -894,18 +942,21 @@ test('[role:broker] CC4 — the created Commercial listing is discoverable under
 
   expect(
     Array.from(servableIds),
-    'CONTROL: the listing is LIVE but absent from the UNFILTERED city query, which is proven exhaustive above — '
+    'CONTROL: CC1 listing is LIVE but absent from the UNFILTERED city query, which is proven exhaustive above — '
       + 'so it is not servable at all (is_duplicate, archived, or excluded by the base predicate), and any filtered result below would be meaningless',
   ).toContain(listingId);
+  expect(
+    Array.from(servableIds),
+    'CONTROL: CC1b listing must be present in the UNFILTERED city query',
+  ).toContain(listingIdB);
+  expect(servableById.get(listingId ?? '')?.areaKey, 'CC1 listing must resolve to IN|KA|Udupi|Manipal').toBe(
+    'IN|KA|Udupi|Manipal',
+  );
+  expect(servableById.get(listingIdB ?? '')?.areaKey, 'CC1b listing must resolve to IN|KA|Udupi|Manipal').toBe(
+    'IN|KA|Udupi|Manipal',
+  );
 
-  // ── THE OFFICE ROW IS SERVABLE — half one of the discriminating control ──
-  // Absence from the SHOP scope below only means "the subtype filter excluded
-  // it" if the row is otherwise there to be excluded. This arm is what
-  // distinguishes that from the three ways the negative could go green for
-  // free: the row never reached LIVE (CC2 forgot it), it was marked duplicate,
-  // or it was archived. Same query, same page, same exhaustiveness proof as
-  // CC1's — only the id differs.
-  expect(listingIdC, 'CC4 requires CC1c to have produced the OFFICE listing').toBeTruthy();
+  // ── THE OFFICE ROW IS SERVABLE — half one of the subtype discriminating control ──
   expect(
     Array.from(servableIds),
     'CONTROL: the OFFICE listing must be present in the UNFILTERED city query. If it is not, its '
@@ -913,34 +964,28 @@ test('[role:broker] CC4 — the created Commercial listing is discoverable under
       + '(never approved to LIVE, duplicate, or archived), and the discriminating arm is vacuous',
   ).toContain(listingIdC);
 
-  // ── C13 — the product's OWN Discover query returns this listing ────────
+  // ── THE OUT-OF-MANIPAL SHOP ROW IS SERVABLE — half one of the geographic discriminating control (#2809) ──
+  expect(
+    Array.from(servableIds),
+    'CONTROL (#2809): the out-of-Manipal Udupi SHOP/rent listing must be present in the UNFILTERED city query. '
+      + 'If it is not, its absence from the Manipal leaf below proves nothing about geographic scoping',
+  ).toContain(listingIdOutOfManipal);
+  expect(
+    servableById.get(listingIdOutOfManipal ?? '')?.areaKey,
+    'CONTROL (#2809): the out-of-Manipal Udupi SHOP/rent listing must resolve to IN|KA|Udupi|Brahmavar (outside Manipal)',
+  ).toBe('IN|KA|Udupi|Brahmavar');
+  expect(
+    servableById.get(listingIdOutOfManipal ?? '')?.commercialSubtype,
+    'CONTROL (#2809): the out-of-Manipal control listing must be a SHOP so only geography excludes it',
+  ).toBe('SHOP');
+
+  // ── C13 — the product's OWN Discover query returns the in-Manipal listings ──
   // ── `intent=rent` IS LOAD-BEARING — do not drop it ────────────────────
   // Without it this test asks Discover for Commercial SHOP *for sale*, while
   // CC1 creates one *for rent*, and zero is the CORRECT answer.
   //
-  // `sale` never appears in the URL and is on the wire anyway: the URL
-  // contract DEFAULTS intent to `buy` (features/discover/state/url/city.ts:36-37),
-  // every Discover surface maps that to listingPurpose 'sale'
-  // (DiscoverAreasJourneyPanel.tsx:833, NodeListingsSurface.tsx:54 —
-  // `nav.intent === 'rent' ? 'rent' : 'sale'`), and the backend applies
-  // `AND pl.listing_purpose = ?` in DiscoverListingPredicateBuilder (by SYMBOL,
-  // not line — the previous line citation had already drifted).
-  // Verified on the wire: the intent-less URL produced
-  // `...?city=udupi&propertyTypes=commercial&listingPurpose=sale`.
-  //
-  // CC1 creates a RENT listing because `lease` is not persistable
-  // (chk_listing_purpose, V32:5) — see decision D1 above. So the purpose axis
-  // has to be stated here or the two halves of this test disagree silently.
-  //
-  // MUST also match the FILTERED query, not merely any Discover query.
-  // Navigating fires an /api/discover/listings BEFORE the URL filters apply,
-  // and a predicate accepting any matching URL captures that one — an empty
-  // pre-filter body then reads as "Commercial+Shop returns nothing".
-  // MEASURED (fix cycle r2, evidence/fix-r2/diag-cc4-all-listings-requests.txt): navigating to the Manipal leaf fires THREE
-  // SHOP+rent listings requests, in this order: (0) scopeFingerprint scope:null (before the area set commits), (1) scope AREA_SET
-  // [IN|KA|Udupi|Manipal], (2) the same plus a map bbox. Only (1) is the committed, un-bbox'd, area-scoped query, and a predicate
-  // that accepted any of them made the arm that was compared depend on response arrival order (a bbox'd response has a smaller
-  // totalElements). The predicate therefore selects (1) explicitly: it must carry an AREA_SET scopeFingerprint and no bbox.
+  // MUST also match the FILTERED query with committed AREA_SET scopeFingerprint
+  // and no bbox.
   const listingsPromise = page.waitForResponse(
     (r) => {
       if (!r.url().includes('/api/discover/listings') || r.request().method() !== 'GET') return false;
@@ -954,148 +999,73 @@ test('[role:broker] CC4 — the created Commercial listing is discoverable under
     },
     { timeout: 20_000 },
   );
-  // `type` and `subtype` are the URL contract, read and written in
-  // features/discover/state/url/filters.ts (by FILE, not line — the previous
-  // `:61,202` citation had drifted; 202 landed on an unrelated param delete).
-  //
-  // #2750 R2 DRIFT NOTE — THE URL BELOW NOW CARRIES node=. The long note further down says the bare city URL fires
-  // /api/discover/listings because Udupi had no navigation graph. That stopped being true when #2707 (c93f9191) made
-  // the Udupi hierarchy reachable (scripts/db/fixtures/area-trends-2581-udupi-navigation-seed.sql, loaded by
-  // restore-test-fixture.sh): the bare city URL is now the area-first city root, which fires nearby-candidates and
-  // navigation/root/counts and NEVER /api/discover/listings (measured, 12 s capture; the 20 s waitForResponse below
-  // timed out on exactly that, in a gate run that is independent of where auth lives). The area LEAF is where the
-  // product asks for listings, so the deep link goes to the Manipal AREA node (where CC1/CC1b/CC1c create their
-  // rows). The waitForResponse predicate ABOVE (listingsPromise) was changed in r2 to match this deep link; it still has to
-  // be the app's own GET /api/discover/listings carrying SHOP and listingPurpose=rent.
-  //
-  // CR r2 SHOULD-1 (the earlier version of this note said "every C13/C16/C17 assertion after it is untouched", which was
-  // FALSE, see below): the reference SCOPE (the exhaustive list fetch AND the markers fetch, further down) must ask the SAME
-  // geography question as the app arm, otherwise C17 `shopBody.totalElements === fullListBody.totalElements` can only hold
-  // because every Udupi SHOP/rent row happens to sit in Manipal.
-  //
-  // MEASURED (fix cycle r2, evidence/fix-r2/diag-cc4-all-listings-requests.txt): the reviewer's premise "the app arm sends
-  // nodeKey" is NOT what the wire shows for this URL - NONE of the three SHOP+rent listings requests carries nodeKey or areaKeys.
-  // The committed-scope one (the one selected above) is
-  //   ?city=udupi&page=0&size=50&includeAggregates=true&propertyTypes=commercial&commercialSubtypes=SHOP&listingPurpose=rent
-  //   &scopeFingerprint={"filters":{...},"listingPurpose":"rent","scope":{"areaKeys":["IN|KA|Udupi|Manipal"],"kind":"AREA_SET"}}
-  // i.e. NO nodeKey and NO areaKeys param; the Manipal AREA_SET scope travels only inside the opaque scopeFingerprint (the
-  // surface that fires it is the area-set results controller, not NodeListingsSurface). So asserting nodeKey on that request is
-  // red for a reason that is not a regression. What this test does instead is DERIVE the reference geography from the app
-  // request itself (nodeKey / areaKeys params exactly as sent, none when none were sent) so the two arms can never silently
-  // differ, and it asserts the scope the app CLAIMS (the fingerprint) is the Manipal area set. That the area-first leaf fetches
-  // without sending its scope on the wire is recorded as an open product question (see the QA transcript).
-  const NODE_KEY = 'a:IN|KA|Udupi|Manipal';
+  const MANIPAL_AREA_KEY = 'IN|KA|Udupi|Manipal';
+  const NODE_KEY = `a:${MANIPAL_AREA_KEY}`;
   const NODE = encodeURIComponent(NODE_KEY);
   await page.goto(`/discover?city=udupi&node=${NODE}&type=commercial&subtype=SHOP&intent=rent`);
   const listingsResp = await listingsPromise;
   expect(listingsResp.status(), 'the app own Discover query should be 2xx').toBeLessThan(300);
 
-  // DEFENCE-IN-DEPTH, NOT TODAY'S PROTECTION — and the previous comment here
-  // claimed otherwise, which was false. The `waitForResponse` predicate above
-  // ALREADY requires SHOP and listingPurpose=rent in the URL, so these two
-  // assertions restate properties of the response that predicate selected and
-  // cannot fail as written. If a default moved, the predicate would simply
-  // stop matching and the wait would time out loudly at 20s — that, not these
-  // lines, is what protects C13 today.
-  //
-  // Kept deliberately: they become load-bearing the moment anyone relaxes the
-  // predicate (a tempting "fix" when this row goes red), and they document the
-  // two axes that must hold. Do not cite them as the guard.
   expect(listingsResp.url(), 'C13: must assert on the SUBTYPE-FILTERED query').toMatch(/SHOP/i);
   expect(listingsResp.url(), 'C13: must assert on the RENT-scoped query, matching what CC1 created').toMatch(/listingPurpose=rent/i);
-  // The geography the app arm asks for, exactly as sent on the wire (see the SHOULD-1 note above). The reference SCOPE below
-  // repeats these params verbatim, so the two arms cannot differ in geography.
+
   const appUrl = new URL(listingsResp.url());
-  const scopeParams = new URLSearchParams();
-  // And the scope the app CLAIMS for this fetch (its own cache identity) must be the Manipal area set: a navigation that landed
-  // on another node, or lost the scope, goes red here rather than being compared against a differently-scoped reference.
   const fingerprintRaw = appUrl.searchParams.get('scopeFingerprint');
   expect(fingerprintRaw, `C17 scope: the app's /api/discover/listings call must carry its scopeFingerprint. Query was: ${listingsResp.url()}`).toBeTruthy();
   const fingerprint = JSON.parse(fingerprintRaw ?? '{}') as { scope?: { kind?: string; areaKeys?: string[] } };
   expect(
     fingerprint.scope,
     `C17 scope: the app arm's committed scope must be the Manipal AREA_SET (the node we deep-linked to). Query was: ${listingsResp.url()}`,
-  ).toEqual({ kind: 'AREA_SET', areaKeys: ['IN|KA|Udupi|Manipal'] });
-  // CR r2 cycle2 MEDIUM-A: never copy the app's wire geography into the reference unvalidated (a drifted app param would then
-  // silently drag the reference with it). Validate BEFORE copying. Today neither param is on the wire (branch 'none'); the
-  // params are NOT required to be present, but if one ever appears it must be inside the claimed scope / the deep-linked node.
-  const claimedAreaKeys = fingerprint.scope?.areaKeys ?? [];
+  ).toEqual({ kind: 'AREA_SET', areaKeys: [MANIPAL_AREA_KEY] });
+
+  // Issue #2809 (Q13 from #2807): when the app claims a Manipal AREA_SET in scopeFingerprint,
+  // it MUST send server-enforced geographic scope (`areaKeys` or `nodeKey`) on the actual wire
+  // request. Never accept an unscoped request (`areaKeys:none/nodeKey:none`), and never copy the
+  // app request's wire scope into the reference query below.
   const wireAreaKeys = appUrl.searchParams.getAll('areaKeys');
   const wireNodeKeys = appUrl.searchParams.getAll('nodeKey');
-  for (const v of wireAreaKeys) {
-    expect(claimedAreaKeys, `C17 scope: wire areaKeys value ${v} must be a member of the fingerprint scope. Query was: ${listingsResp.url()}`).toContain(v);
-  }
-  for (const v of wireNodeKeys) {
-    expect(v, `C17 scope: wire nodeKey must equal the deep-linked node. Query was: ${listingsResp.url()}`).toBe(NODE_KEY);
-  }
   const scopeBranch = `areaKeys:${wireAreaKeys.length ? 'wire' : 'none'}/nodeKey:${wireNodeKeys.length ? 'wire' : 'none'}`;
-  expect(['areaKeys:none/nodeKey:none', 'areaKeys:wire/nodeKey:none', 'areaKeys:none/nodeKey:wire', 'areaKeys:wire/nodeKey:wire'], 'C17 scope: branch recorded').toContain(scopeBranch);
+  expect(
+    ['areaKeys:wire/nodeKey:none', 'areaKeys:none/nodeKey:wire'],
+    `C13/C17 (#2809): GET /api/discover/listings at the Manipal leaf must carry server-enforced geographic scope (areaKeys or nodeKey) on the wire — got ${scopeBranch} on ${listingsResp.url()}`,
+  ).toContain(scopeBranch);
+  if (wireAreaKeys.length > 0) {
+    expect(
+      wireAreaKeys,
+      `C13/C17 (#2809): wire areaKeys must equal the Manipal AREA_SET. Query was: ${listingsResp.url()}`,
+    ).toEqual([MANIPAL_AREA_KEY]);
+  }
+  if (wireNodeKeys.length > 0) {
+    expect(
+      wireNodeKeys,
+      `C13/C17 (#2809): wire nodeKey must equal the Manipal nodeKey. Query was: ${listingsResp.url()}`,
+    ).toEqual([NODE_KEY]);
+  }
   test.info().annotations.push({ type: 'c17-scope-branch', description: scopeBranch });
-  for (const k of ['nodeKey', 'areaKeys']) for (const v of appUrl.searchParams.getAll(k)) scopeParams.append(k, v);
 
   const shopBody = (await listingsResp.json()) as { content?: Array<{ id?: string }>, totalElements?: number };
   const shopIds = idsOf(shopBody);
 
-  // POSITIVE CONTROL before concluding anything: an empty result set makes
-  // every containment and agreement assertion below vacuous.
-  // The failure message carries the QUERY, not just the count. A bare
-  // "expected > 0, received 0" sends the reader hunting a product defect;
-  // the URL says which scope actually produced the zero, which is the single
-  // most useful fact when this row goes red.
+  // POSITIVE CONTROLS on the app's own response: both in-Manipal SHOP/rent listings are present.
   expect(
     shopIds.size,
     `C13 control: the Commercial+SHOP result set must be non-empty. Query was: ${listingsResp.url()}`,
   ).toBeGreaterThan(0);
-  expect(Array.from(shopIds), 'C13: Commercial+SHOP must return the created listing').toContain(listingId);
+  expect(Array.from(shopIds), 'C13: Commercial+SHOP at Manipal leaf must return CC1\'s in-Manipal listing').toContain(listingId);
+  expect(Array.from(shopIds), 'C13: Commercial+SHOP at Manipal leaf must return CC1b\'s in-Manipal listing').toContain(listingIdB);
 
-  // ── C17 — the count agrees with the membership it reports ─────────────
-  // Asserted below against the EXHAUSTIVE fetch, not against the app's own
-  // single default-size page. Over one page `totalElements === content.length`
-  // is a statement about pagination, not about counts agreeing with
-  // membership, and it would fail the moment the scope outgrew a page.
+  // NEGATIVE GEOGRAPHIC CONTROL on the app's own response (#2809): the out-of-Manipal Udupi SHOP/rent
+  // listing (proven LIVE and servable in Udupi above) MUST be excluded by the Manipal leaf query.
+  expect(
+    Array.from(shopIds),
+    'C13 (#2809): the query the APP fires at the Manipal leaf must EXCLUDE the out-of-Manipal Udupi SHOP/rent listing',
+  ).not.toContain(listingIdOutOfManipal);
 
-
-  // ── C16 — list and marker membership agree ─────────────────────────────
-  // page.request is fine here: the guard is already satisfied by the real
-  // navigation above, and this is a direct comparison of two server feeds.
-  // Both feeds are fetched in the SAME scope, including listingPurpose=rent.
-  // Omitting purpose on either side compares two DIFFERENTLY-SCOPED feeds —
-  // the app's marker hook sends the same intent-derived purpose — so the
-  // comparison would pass or fail for reasons unrelated to membership.
-  // The geography params are COPIED from the app's own request (CR r2 SHOULD-1, see the note above): list and markers fetches
-  // below ask the same geography question as the app arm, whatever that is on the wire.
-  const geo = scopeParams.toString();
-  const SCOPE = `city=udupi${geo ? `&${geo}` : ''}&propertyTypes=commercial&commercialSubtypes=SHOP&listingPurpose=rent`;
-
-  // THERE IS NO IDENTITY SPLIT. A long note here used to claim one, and it
-  // was wrong — corrected rather than trimmed, because it was the first thing
-  // anyone would read when C17 went red and it sent them after two causes that
-  // cannot occur.
-  //
-  // What it got wrong: Playwright's `page`/`context` are TEST-scoped, and
-  // playwright.canonical.config.ts:329 sets `storageState` on the
-  // canonical-broker project — so every test in this file starts in a FRESH,
-  // BROKER-authenticated context. CC2's admin sign-in happens in CC2's own
-  // context and cannot reach here. The sibling file says the same of its own
-  // default page — see the comment above T14's `page.goto('/broker/listings')`
-  // + `localStorage.clear()` preamble in listing-lifecycle.canonical.ts (by
-  // ANCHOR, not line: this PR is still editing that file, so any line number
-  // written here drifts by whatever this branch adds above it — which is
-  // exactly how the previous citation here broke). So C13 and C16 run
-  // under the SAME principal; the explicit bearer header on C16's arms exists
-  // only because page.request does not carry the Supabase session (it lives in
-  // localStorage, not cookies) — same principal, different transport.
-  //
-  // THE TWO SIDES DO DIFFER IN QUERY SHAPE, and that part was and is true.
-  // The app-fired side is produced by the frontend's URL-to-API translation
-  // (/discover?type=…&subtype=…&intent=rent); the direct side sends API params.
-  // That is bonus coverage — it pins the translation too — but it means a RED
-  // HAS TWO CANDIDATE CAUSES, not one:
-  //     1. the reported count genuinely disagrees with membership;
-  //     2. the URL-to-API translation drifted, so the two sides are no longer
-  //        asking the same question.
-  // Rule out (2) first by comparing the two request URLs — it is the cheapest
-  // to check and the easiest to mistake for (1).
+  // ── C16 / C17 — reference list and marker feeds pinned independently to Manipal ──
+  // Issue #2809: pin the reference SCOPE independently to Manipal (`areaKeys=IN|KA|Udupi|Manipal`)
+  // rather than copying `appUrl`'s params, so an unscoped or wrongly-scoped app request can never
+  // drag the reference along and pass C17 by comparing two identically wrong queries.
+  const SCOPE = `city=udupi&areaKeys=${encodeURIComponent(MANIPAL_AREA_KEY)}&propertyTypes=commercial&commercialSubtypes=SHOP&listingPurpose=rent`;
 
   // EXHAUSTIVE list side. The app-fired response above is one default-size
   // page, and one page is not the set: comparing a page against a full marker
@@ -1117,18 +1087,9 @@ test('[role:broker] CC4 — the created Commercial listing is discoverable under
   ).toBe(fullListIds.size);
 
   // C17, second half — THE COUNT THE PRODUCT REPORTS TO THE USER.
-  // Moving the exhaustiveness check onto this direct fetch left the app-fired
-  // response's own totalElements parsed and asserted by NOTHING: only the
-  // count from a broker-token fetch was checked, while the number a buyer
-  // actually sees was not. A field that is parsed but never asserted reads as
-  // covered and is not.
   expect(
     shopBody.totalElements,
-    'C17: the count the APP reports must equal the exhaustive count. The two sides differ in QUERY '
-      + 'SHAPE — the app-fired side comes from the URL-to-API translation, the direct side sends API '
-      + 'params — so a failure here does NOT by itself mean the count is wrong; rule out translation '
-      + 'drift by comparing the two request URLs first. (Both sides run as the SAME principal, the '
-      + 'broker; an earlier version of this message claimed an admin-vs-broker split that does not exist.)',
+    'C17: the count the APP reports at the Manipal leaf must equal the exhaustive Manipal-scoped count.',
   ).toBe(fullListBody.totalElements);
 
   const markersResp = await page.request.get(
@@ -1144,73 +1105,43 @@ test('[role:broker] CC4 — the created Commercial listing is discoverable under
   };
   const markerIds = new Set((markersBody.markers ?? []).map((m) => m.id));
 
-  // EXHAUSTIVE, asserted — the list arm's equivalent is asserted above and
-  // this side had no counterpart, which left the comparison half-guarded: a
-  // marker feed CAPPED below the true set would look like a membership
-  // mismatch, and nothing in the file would say it was the cap.
-  // DiscoverMarkersResponse documents `truncated` as true when the filtered
-  // set exceeded `limit`, and that totalFilteredElements == returnedElements
-  // exactly when truncated is false.
   expect(
     markersBody.truncated,
     `C16: the marker arm must be EXHAUSTIVE — truncated=true means the feed was capped at limit, so any difference from the list is the cap, not membership`,
   ).toBe(false);
-  // NOT a second exhaustiveness check — `truncated === false` above is that,
-  // and on the non-truncated path the server ASSIGNS
-  // totalFilteredElements = returnedElements rather than counting, so
-  // comparing them would be true by construction. What this DOES catch is
-  // DUPLICATE IDS in the feed: markerIds is a Set, so a feed returning the
-  // same id twice has size < returnedElements and fails here. Labelled for
-  // what it proves, because the previous label claimed the exhaustiveness the
-  // line above already establishes.
   expect(
     markersBody.totalFilteredElements,
     `C16: the marker feed must carry no DUPLICATE ids — totalFilteredElements ${markersBody.totalFilteredElements} vs ${markerIds.size} distinct ids returned`,
   ).toBe(markerIds.size);
 
-  // CONTROLS FIRST, and they are load-bearing: two EMPTY sets are equal, so
-  // the equality assertion below would go green on a completely dead marker
-  // feed paired with a completely dead list. Neither may be empty, and both
-  // must contain the listing this run created.
-  // NON-EMPTY, and specifically MULTI-ELEMENT. At N=1 an equality assertion
-  // is indistinguishable from containment, so a green would prove nothing an
-  // `includes` would not. CC1b exists to make N=2; asserting the size here is
-  // what stops a future fixture change quietly collapsing it back to 1 and
-  // leaving C16 green but toothless.
+  // POSITIVE CONTROLS on Manipal-scoped list and marker feeds:
   expect(markerIds.size, 'C16 control: marker set must be non-empty').toBeGreaterThan(0);
   expect(fullListIds.size, 'C16 control: list set must be non-empty').toBeGreaterThan(0);
   expect(
     fullListIds.size,
-    `C16 control: the list arm must hold BOTH created listings for equality to discriminate — got ${fullListIds.size}`,
+    `C16 control: the list arm must hold BOTH created in-Manipal listings for equality to discriminate — got ${fullListIds.size}`,
   ).toBeGreaterThanOrEqual(2);
   expect(
     markerIds.size,
-    `C16 control: the marker arm must hold BOTH created listings — got ${markerIds.size}`,
+    `C16 control: the marker arm must hold BOTH created in-Manipal listings — got ${markerIds.size}`,
   ).toBeGreaterThanOrEqual(2);
 
-  expect(Array.from(fullListIds), 'C16 control: the list must contain CC1\'s listing').toContain(listingId);
-  expect(Array.from(markerIds), 'C16 control: the marker feed must contain CC1\'s listing').toContain(listingId);
-  expect(Array.from(fullListIds), 'C16 control: the list must contain CC1b\'s listing').toContain(listingIdB);
-  expect(Array.from(markerIds), 'C16 control: the marker feed must contain CC1b\'s listing').toContain(listingIdB);
+  expect(Array.from(fullListIds), 'C16 control: the list must contain CC1\'s in-Manipal listing').toContain(listingId);
+  expect(Array.from(markerIds), 'C16 control: the marker feed must contain CC1\'s in-Manipal listing').toContain(listingId);
+  expect(Array.from(fullListIds), 'C16 control: the list must contain CC1b\'s in-Manipal listing').toContain(listingIdB);
+  expect(Array.from(markerIds), 'C16 control: the marker feed must contain CC1b\'s in-Manipal listing').toContain(listingIdB);
 
-  // ── THE DISCRIMINATING ARM — subtype narrowing actually narrows ─────────
-  // Half two. The OFFICE row was proven SERVABLE above, so its absence here is
-  // attributable to `commercialSubtypes=SHOP` and to nothing else. Everything
-  // else about it is identical to CC1's row by construction: same helper, same
-  // purpose, same city, same locality, same built area, floor, rent and
-  // deposit — subtype is the only axis that varies.
-  //
-  // WITHOUT THIS ARM, deleting the commercialSubtypes predicate from
-  // DiscoverListingPredicateBuilder changed NOTHING in this test. Every other
-  // CC4 assertion — the C13 containment, the C16 equality, the C17 count —
-  // held, because the SHOP-scoped set and the set of all Udupi commercial rent
-  // rows were the same two rows. This is the one assertion that turns red.
-  //
-  // Asserted on BOTH feeds deliberately. The C16 equality would propagate a
-  // list-side leak into the marker side and read as a parity failure rather
-  // than as a narrowing failure; naming each arm sends the reader to the right
-  // place. The marker endpoint validates commercialSubtypes independently
-  // (DiscoverMarkersController), so it is a separate claim, not a restatement.
+  // ── DISCRIMINATING ARM 1 — geographic area narrowing actually narrows (#2809) ──
+  expect(
+    Array.from(fullListIds),
+    'C13/C16 (#2809): Manipal area scoping must EXCLUDE the out-of-Manipal Udupi SHOP/rent listing from the list',
+  ).not.toContain(listingIdOutOfManipal);
+  expect(
+    Array.from(markerIds),
+    'C16 (#2809): Manipal area scoping must EXCLUDE the out-of-Manipal Udupi SHOP/rent listing from the marker feed',
+  ).not.toContain(listingIdOutOfManipal);
+
+  // ── DISCRIMINATING ARM 2 — subtype narrowing actually narrows ─────────
   expect(
     Array.from(fullListIds),
     'C13/C16: subtype narrowing must EXCLUDE the OFFICE listing from the SHOP-scoped list. It is '
@@ -1222,22 +1153,12 @@ test('[role:broker] CC4 — the created Commercial listing is discoverable under
     'C16: subtype narrowing must EXCLUDE the OFFICE listing from the SHOP-scoped MARKER feed too — '
       + 'the markers endpoint applies commercialSubtypes independently of the list endpoint',
   ).not.toContain(listingIdC);
-
-  // The APP-FIRED query as well, not just the two direct fetches. This is the
-  // set the product itself asked for via its URL-to-API translation, and it is
-  // exhaustive for this scope because its totalElements is asserted equal to
-  // the exhaustive count at C17 below. A narrowing bug living in the
-  // translation rather than the backend would show up ONLY here.
   expect(
     Array.from(shopIds),
     'C13: the query the APP fires for Commercial+Shop must exclude the OFFICE listing',
   ).not.toContain(listingIdC);
 
   // ── C16 — EXACT SET EQUALITY, not containment ──────────────────────────
-  // Containment on both sides is what this row used to assert, and it passes
-  // when the list holds {created, A} and the markers hold {created, B} — the
-  // exact parity regression this row exists to catch. Sorted arrays so the
-  // failure output names the differing ids instead of "Set !== Set".
   const sortedList = Array.from(fullListIds).sort();
   const sortedMarkers = Array.from(markerIds).sort();
   expect(sortedMarkers, 'C16: marker membership must EQUAL list membership for the same scope').toEqual(sortedList);
@@ -1343,16 +1264,16 @@ test('[role:broker] CC3 — anonymous visitor sees the now-LIVE Commercial listi
 // row per run. That is not retrofitted here (out of scope, and that file is
 // untouched by this issue) but it is why every id match above is by id.
 test.afterAll(async ({ playwright }) => {
-  // Guard shape matches the loop below, which archives BOTH rows: keying on
+  // Guard shape matches the loop below, which archives ALL FOUR rows: keying on
   // `listingId` alone returned early while CC1b's row was still live, leaking
   // exactly the row this cleanup exists to remove.
   // Say WHY when skipping. A silent early return here leaves LIVE rows in the
   // fixture and looks identical in the log to a clean run with nothing to do —
   // so the leak that poisons the next run is invisible at the moment it happens.
-  if (!bearerToken || (!listingId && !listingIdB && !listingIdC)) {
+  if (!bearerToken || (!listingId && !listingIdB && !listingIdC && !listingIdOutOfManipal)) {
     console.warn(
       `[#2434] cleanup SKIPPED — bearerToken=${bearerToken ? 'present' : 'null'}, `
-        + `ids=[${[listingId, listingIdB, listingIdC].map((i) => i ?? 'null').join(', ')}]. `
+        + `ids=[${[listingId, listingIdB, listingIdC, listingIdOutOfManipal].map((i) => i ?? 'null').join(', ')}]. `
         + 'Any row that WAS created is now leaking as LIVE in the fixture.',
     );
     return;
@@ -1360,10 +1281,9 @@ test.afterAll(async ({ playwright }) => {
 
   const ctx = await playwright.request.newContext();
   try {
-    // All three rows, or CC1b's and CC1c's accumulate in the fixture run after
-    // run — and a leaked LIVE OFFICE row would sit inside CC4's unfiltered
-    // control on every subsequent run.
-    for (const id of [listingId, listingIdB, listingIdC].filter(Boolean)) {
+    // All four rows, or CC1b's, CC1c's, and the out-of-Manipal control row accumulate
+    // in the fixture run after run.
+    for (const id of [listingId, listingIdB, listingIdC, listingIdOutOfManipal].filter(Boolean)) {
       const r = await ctx.post(`${requireBackendBaseUrl()}/api/listings/${id}/archive`, {
         headers: { Authorization: `Bearer ${bearerToken}` },
       });
