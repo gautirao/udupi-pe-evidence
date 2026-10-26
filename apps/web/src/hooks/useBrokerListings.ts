@@ -42,6 +42,7 @@ interface CreateListingRequest {
   agriConversionStatus?: string | null;
   farmhouseAvailable?: boolean | null;
   fencingDone?: boolean | null;
+  crops?: string[];
   // M38-13A (#1626) — residential typed-listing fields (additive, all nullable).
   bathrooms?: number;
   balconies?: number;
@@ -167,6 +168,7 @@ export interface UpdateListingRequest {
   agriConversionStatus?: string | null;
   farmhouseAvailable?: boolean | null;
   fencingDone?: boolean | null;
+  crops?: string[];
   // M38-13A (#1626) — residential typed-listing fields (additive, all nullable).
   bathrooms?: number;
   balconies?: number;
@@ -301,6 +303,7 @@ export interface ListingResponse {
   agriConversionStatus?: string | null;
   farmhouseAvailable?: boolean | null;
   fencingDone?: boolean | null;
+  crops?: string[];
   /**
    * Boundary-derived area in acres (ST_Area, 2dp) for agri listings with a saved
    * boundary; absent/null when no boundary or non-agri. Distinct from broker-declared

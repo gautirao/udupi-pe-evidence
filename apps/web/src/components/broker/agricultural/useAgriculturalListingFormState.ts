@@ -16,10 +16,11 @@ export type AgriculturalPropertyType = 'agricultural_land';
  * `onPublicLoc` callback or one-shot by `hydrateFrom(listing)` during URL
  * draft recovery (#2811) — same pattern as Residential/Commercial.
  *
- * Honesty invariant (#1627 / #2044 / #2811): `rtc`, `crops`, and `features`
- * have no structured read-back column on `ListingResponse`, so `hydrateFrom`
- * restores only real server-persisted `ListingResponse` fields and never
- * fabricates structured persistence for UI-only state.
+ * Honesty invariant (#1627 / #2044 / #2811): `rtc` and `features` remain
+ * FE-only (no backend structured columns on `ListingResponse`), so
+ * `hydrateFrom` restores only real server-persisted `ListingResponse` fields
+ * (including `crops: string[]`, persisted since #2044) and never fabricates
+ * structured persistence for UI-only state.
  */
 export function useAgriculturalListingFormState() {
   const propertyType: AgriculturalPropertyType = 'agricultural_land';
@@ -69,8 +70,9 @@ export function useAgriculturalListingFormState() {
    * #2811 — one-shot hydration from a server-fetched `ListingResponse` when
    * the page mounts with `?draftId=<id>`. Mirrors Residential (#2053) and
    * Commercial (#2215/#2348). Only server-persisted `ListingResponse` fields
-   * are restored; UI-only `rtc`, `crops`, and `features` have no structured
-   * read-back columns on `ListingResponse` and are never fabricated here.
+   * are restored (including `crops`); FE-only `rtc` and `features` have no
+   * structured read-back columns on `ListingResponse` and are never
+   * fabricated here.
    */
   const hydrateFrom = (d: ListingResponse) => {
     if (d.title != null) setTitle(d.title);
@@ -93,6 +95,7 @@ export function useAgriculturalListingFormState() {
     if (d.surveyNumber != null) setSurveyNumber(d.surveyNumber);
     if (d.farmhouseAvailable != null) setFarmhouseAvailable(String(d.farmhouseAvailable));
     if (d.fencingDone != null) setFencingDone(String(d.fencingDone));
+    if (Array.isArray(d.crops)) setCrops(d.crops);
   };
 
   return {

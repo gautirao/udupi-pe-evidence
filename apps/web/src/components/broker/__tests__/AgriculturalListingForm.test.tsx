@@ -457,7 +457,7 @@ describe('AgriculturalListingForm — URL-seeded draft hydration & recovery (iss
     expect(onDraftPersisted).toHaveBeenCalledTimes(1);
   });
 
-  it('hydrates all persisted agricultural fields and gate state from initialDraftId, preserves them on PUT round-trip, and never fabricates UI-only rtc/crops/features', async () => {
+  it('hydrates all persisted agricultural fields (including crops) and gate state from initialDraftId, preserves them on PUT round-trip, and never fabricates UI-only rtc/features', async () => {
     mockListingData.current = {
       id: 'agri-draft-2811',
       propertyType: 'agricultural_land',
@@ -479,6 +479,7 @@ describe('AgriculturalListingForm — URL-seeded draft hydration & recovery (iss
       surveyNumber: 'SY-2811/4A',
       farmhouseAvailable: true,
       fencingDone: false,
+      crops: ['COCONUT', 'ARECA_SUPARI'],
       addressConfirmed: true,
       latitude: 12.9255,
       longitude: 77.5176,
@@ -500,9 +501,9 @@ describe('AgriculturalListingForm — URL-seeded draft hydration & recovery (iss
     expect(screen.getByText('Location confirmed — Rajarajeshwari Nagar')).toBeInTheDocument();
     expect(screen.getByText('Pin confirmed — Rajarajeshwari Nagar')).toBeInTheDocument();
 
-    // UI-only crops/features are not fabricated from ListingResponse
-    expect(screen.getByRole('button', { name: 'Coconut' })).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByRole('button', { name: 'Areca / supari' })).toHaveAttribute('aria-pressed', 'false');
+    // Persisted crops hydrated
+    expect(screen.getByRole('button', { name: 'Coconut' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Areca / supari' })).toHaveAttribute('aria-pressed', 'true');
 
     // Hydrated description shown in ready textarea
     const descReady = await screen.findByTestId('agri-description-assistant-ready');
@@ -537,7 +538,7 @@ describe('AgriculturalListingForm — URL-seeded draft hydration & recovery (iss
       surveyNumber: 'SY-2811/4A',
       farmhouseAvailable: true,
       fencingDone: false,
-      crops: [],
+      crops: ['COCONUT', 'ARECA_SUPARI'],
     });
     expect(putPayload).not.toHaveProperty('rtc');
     expect(putPayload).not.toHaveProperty('features');
